@@ -10,6 +10,3 @@
 [submodule "submodules/climax"]
 	path = submodules/climax
 	url = https://github.com/microsoft/ClimaX.git
-[submodule "submodules/eccodes_cython"]
-	path = submodules/eccodes_cython
-	url = https://git.meteo.fr/dampy/eccodes-cython.git
