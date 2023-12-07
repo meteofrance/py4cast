@@ -17,7 +17,7 @@ RUN ( test $INJECT_MF_CERT -eq 1 && update-ca-certificates ) || echo "MF certifi
 ENV MY_APT='apt -o "Acquire::https::Verify-Peer=false" -o "Acquire::AllowInsecureRepositories=true" -o "Acquire::AllowDowngradeToInsecureRepositories=true" -o "Acquire::https::Verify-Host=false"'
 
 RUN $MY_APT update && $MY_APT install -y software-properties-common && add-apt-repository ppa:ubuntugis/ppa
-RUN $MY_APT update && $MY_APT install -y curl gdal-bin libgdal-dev libgeos-dev git vim nano sudo libx11-dev tk python3-tk tk-dev libpng-dev libffi-dev dvipng texlive-latex-base texlive-latex-extra  texlive-fonts-recommended cm-super openssh-server netcat libeccodes-dev libeccodes-tools
+RUN $MY_APT update && $MY_APT install -y curl gdal-bin libgdal-dev libgeos-dev git vim nano sudo libx11-dev tk python3-tk tk-dev libpng-dev libffi-dev dvipng texlive-latex-base texlive-latex-extra  texlive-fonts-recommended cm-super openssh-server netcat libeccodes-dev libeccodes-tools openssh-server
 
 ENV CPLUS_INCLUDE_PATH=/usr/include/gdal
 ENV C_INCLUDE_PATH=/usr/include/gdal
@@ -33,12 +33,13 @@ RUN set -eux && groupadd --gid $USER_GUID $GROUPNAME \
     && chown $USERNAME:$GROUPNAME $HOME_DIR \
     && echo $USERNAME ALL=\(root\) NOPASSWD:ALL > /etc/sudoers.d/$USERNAME \
     && chmod 0440 /etc/sudoers.d/$USERNAME \
-    && echo "$USERNAME:$USERNAME" | chpasswd
+    && echo "$USERNAME:$USERNAME" | chpasswd \
+    && mkdir /run/sshd
 
 RUN set -eux && pip install pyg-lib==0.2.0 torch-scatter==2.1.1 torch-sparse==0.6.17 torch-cluster==1.6.1\
-    torch-geometric==2.3.1 -f https://data.pyg.org/whl/torch-2.0.1+cpu.html  
+    torch-geometric==2.3.1 -f https://data.pyg.org/whl/torch-2.0.1+cpu.html
 
-#RUN set -eux && pip install --default-timeout=100 --trusted-host files.pythonhosted.org plotly>=5.15.0 
+#RUN set -eux && pip install --default-timeout=100 --trusted-host files.pythonhosted.org plotly>=5.15.0
 WORKDIR $HOME_DIR
 RUN curl -fsSL https://code-server.dev/install.sh | sh
 
