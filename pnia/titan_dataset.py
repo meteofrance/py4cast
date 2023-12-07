@@ -36,6 +36,9 @@ class TitanDataset(AbstractDataset, Dataset):
         self.init_metadata()
         self.weather_params = weather_params
         self.isobaric_levels = isobaric_levels
+        self.shape = 256
+        self.min_x = 500
+        self.min_y = 500
 
     def __len__(self):
         pass
@@ -83,12 +86,12 @@ class TitanDataset(AbstractDataset, Dataset):
         conf_ds = xr.load_dataset(self.ROOT_DIR / "conf.grib")
         latitudes = conf_ds.latitude
         longitudes = conf_ds.longitude
-        return np.meshgrid(longitudes, latitudes)
+        return np.meshgrid(longitudes, latitudes)[self.min_x: self.min_x + self.shape, self.min_y: self.min_y + self.shape]
 
     @property
     def geopotential_info(self) -> np.array:
         conf_ds = xr.load_dataset(self.ROOT_DIR / "conf.grib")
-        return conf_ds.h.values
+        return conf_ds.h.values[self.min_x: self.min_x + self.shape, self.min_y: self.min_y + self.shape]
 
     @property
     def limited_area(self) -> bool:
@@ -101,3 +104,5 @@ class TitanDataset(AbstractDataset, Dataset):
 if __name__=="__main__":
     dataset = TitanDataset(["aro_t2m", "aro_r2"], [1000, 850])
     print(dataset)
+
+    
