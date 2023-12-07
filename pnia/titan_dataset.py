@@ -10,16 +10,16 @@ import yaml
 from typing import List
 from pathlib import Path
 
-def read_grib(path_grib: Path, grid, names=None, levels=None):
+def read_grib(path_grib: Path, names=None, levels=None):
     try:
         if names or levels:
             include_filters={k:v for k,v in [("cfVarName", names), ("level", levels)] if v is not None}
         else:
             include_filters = None
-        print('include_filters : ', include_filters)
         _, results = get_multi_messages_from_file(path_grib, storage_keys=("cfVarName", "level"), include_filters=include_filters, metadata_keys=("missingValue", "Ni", "Nj"), include_latlon = False)
     except Exception as e:
         print(e)
+    grib_dict = {}
     for metakey, result in nested_dd_iterator(results):
         array = result["values"]
         grid = (result["metadata"]["Ni"], result["metadata"]["Nj"])
@@ -28,8 +28,9 @@ def read_grib(path_grib: Path, grid, names=None, levels=None):
         array = np.where(array == mv, np.nan, array)
         name, level = metakey.split("-")
         level = int(level)
-        results[name][level] = array
-    return results
+        grib_dict[name] = {}
+        grib_dict[name][level] = array
+    return grib_dict
 
 
 class TitanDataset(AbstractDataset, Dataset):
@@ -67,8 +68,6 @@ class TitanDataset(AbstractDataset, Dataset):
     def load_one_time_step(self, date:datetime):
         sample = {}
         date_str = date.strftime("%Y-%m-%d_%Hh%M")
-        print('date_str : ', date_str)
-        print('self.grib_params : ', self.grib_params)
         for grib_name, grib_keys in self.grib_params.items():
             names_wp = [key for key in grib_keys if key in self.weather_params]
             names_wp = [name.split("_")[1] for name in names_wp]
@@ -76,8 +75,8 @@ class TitanDataset(AbstractDataset, Dataset):
                 continue
             levels = self.isobaric_levels if "ISOBARE" in grib_name else None
             path_grib = self.ROOT_DIR / "grib" / date_str / grib_name
-            grid, prefix = self.get_grid_and_prefix(grib_name)
-            dico_grib = read_grib(path_grib, grid, names_wp, levels)
+            _, prefix = self.get_grid_and_prefix(grib_name)
+            dico_grib = read_grib(path_grib, names_wp, levels)
             for key in dico_grib.keys():
                 sample[f"{prefix}_{key}"] = dico_grib[key]
         return sample
@@ -112,6 +111,5 @@ if __name__=="__main__":
     dataset = TitanDataset(["aro_t2m", "aro_r2"], [1000, 850])
     date  = datetime(2023, 3, 19, 12, 0)
     sample = dataset.load_one_time_step(date)
+    print("sample")
     print(sample)
-
-
