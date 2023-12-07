@@ -1,7 +1,8 @@
 import numpy as np
 from torch.utils.data import DataLoader, Dataset
+from pnia.base import AbstractDataset
 
-class TitanDataset(Dataset):
+class TitanDataset(AbstractDataset, Dataset):
     def __init__(self) -> None:
         pass
 
