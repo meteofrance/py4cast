@@ -28,7 +28,7 @@ class AbstractDataset(ABCMeta):
         """"
         Returns True if the dataset is
         compatible with Limited area models
-        """"
+        """
     
     @abstractproperty
     def border_mask(self) -> np.array:
