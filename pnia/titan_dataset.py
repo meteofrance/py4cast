@@ -34,7 +34,7 @@ def read_grib(path_grib: Path, grid, names=None, levels=None):
 
 class TitanDataset(AbstractDataset, Dataset):
     def __init__(self, weather_params:List[str], isobaric_levels:List[int]) -> None:
-        self.ROOT_DIR = Path("/scratch/shared/Titan/")
+        self.root_dir = Path("/scratch/shared/Titan/")
         self.init_metadata()
         self.weather_params = weather_params
         self.isobaric_levels = isobaric_levels
@@ -47,7 +47,7 @@ class TitanDataset(AbstractDataset, Dataset):
         pass
 
     def init_metadata(self):
-        with open(self.ROOT_DIR / 'metadata.yaml', 'r') as file:
+        with open(self.root_dir / 'metadata.yaml', 'r') as file:
             metadata = yaml.safe_load(file)
         self.grib_params = metadata["GRIB_PARAMS"]
         self.all_isobaric_levels = metadata["ISOBARIC_LEVELS_HPA"]
@@ -113,5 +113,3 @@ if __name__=="__main__":
     date  = datetime(2023, 3, 19, 12, 0)
     sample = dataset.load_one_time_step(date)
     print(sample)
-
-
