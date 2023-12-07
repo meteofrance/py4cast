@@ -1,4 +1,3 @@
-from pathlib import Path
 import numpy as np
 import xarray as xr
 from torch.utils.data import DataLoader, Dataset
@@ -31,15 +30,11 @@ def read_grib(path_grib: Path, grid, names=None, levels=None):
 
 
 class TitanDataset(AbstractDataset, Dataset):
-<<<<<<< HEAD
     def __init__(self, weather_params:List[str], isobaric_levels:List[int]) -> None:
+        self.ROOT_DIR = Path("/scratch/shared/Titan/")
         self.init_metadata()
         self.weather_params = weather_params
         self.isobaric_levels = isobaric_levels
-=======
-    def __init__(self) -> None:
-        self.ROOT_DIR = Path("/scratch/shared/Titan/")
->>>>>>> 14999368cdafcea191fb46a5bc15d7fcfc2b7884
 
     def __len__(self):
         pass
