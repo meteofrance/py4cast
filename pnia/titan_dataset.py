@@ -5,10 +5,25 @@ from pnia.base import AbstractDataset
 from cyeccodes import nested_dd_iterator
 from cyeccodes.eccodes import get_multi_messages_from_file
 from datetime import datetime, timedelta
-from pnia.settings import TITAN_DIR
+from dataclasses import dataclass, field
 import yaml
-from typing import List
+from typing import List, Tuple
 from pathlib import Path
+
+
+@dataclass
+class TitanParams:
+
+    weather_params: Tuple[str] = ("aro_t2m", "aro_r2", "aro_z")
+    isobaric_levels: Tuple[int] = (1000, 850)  # hPa
+    nb_input_steps: int = 2
+    input_step: int = 1  # hours
+    nb_pred_steps: int = 4
+    pred_step: int = 1  # hours
+    sub_grid: Tuple[int] = (1000, 1256, 1200, 1456)  # grid corners (pixel), lat lon
+    border_size: int = 10  # pixels
+    # TODO : date_begining
+
 
 def read_grib(path_grib: Path, names=None, levels=None):
     try:
@@ -34,15 +49,14 @@ def read_grib(path_grib: Path, names=None, levels=None):
 
 
 class TitanDataset(AbstractDataset, Dataset):
-    def __init__(self, weather_params:List[str], isobaric_levels:List[int]) -> None:
+    def __init__(self, hparams: TitanParams) -> None:
         self.root_dir = Path("/scratch/shared/Titan/")
+        self.data_dir = self.root_dir / "grib"
         self.init_metadata()
-        self.weather_params = weather_params
-        self.isobaric_levels = isobaric_levels
-        self.shape = 256
-        self.min_x = 500
-        self.min_y = 500
-        self.border_size = 10
+        self.hparams = hparams
+        corners = self.hparams.sub_grid
+        self.shape = (corners[1] - corners[0], corners[3] - corners[2])
+
 
     def __len__(self):
         pass
@@ -55,27 +69,18 @@ class TitanDataset(AbstractDataset, Dataset):
         self.all_weather_params = metadata["PARAMETERS"]
         self.all_grids = metadata["GRIDS"]
 
-    def get_grid_and_prefix(self, grib):
-        if "ANTJP7" in grib:
-            return self.all_grids["Antilope"]["size"], "ant"
-        if "PAAROME_1S100" in grib:
-            return self.all_grids["Arome 1S100"]["size"], "aro"
-        if "PAAROME_1S40" in grib:
-            return self.all_grids["Arome 1S40"]["size"], "aro"
-        if "PA_" in grib:
-            return self.all_grids["Arpege"]["size"], "arp"
-
     def load_one_time_step(self, date:datetime):
         sample = {}
         date_str = date.strftime("%Y-%m-%d_%Hh%M")
         for grib_name, grib_keys in self.grib_params.items():
-            names_wp = [key for key in grib_keys if key in self.weather_params]
+            names_wp = [key for key in grib_keys if key in self.hparams.weather_params]
             names_wp = [name.split("_")[1] for name in names_wp]
             if names_wp == []:
                 continue
-            levels = self.isobaric_levels if "ISOBARE" in grib_name else None
-            path_grib = self.ROOT_DIR / "grib" / date_str / grib_name
-            _, prefix = self.get_grid_and_prefix(grib_name)
+            levels = self.hparams.isobaric_levels if "ISOBARE" in grib_name else None
+            path_grib = self.root_dir / "grib" / date_str / grib_name
+            grib_plit = grib_name.split("_")
+            prefix = self.all_grids[f"{grib_plit[0]}_{grib_plit[1]}"]["prefix"]
             dico_grib = read_grib(path_grib, names_wp, levels)
             for key in dico_grib.keys():
                 sample[f"{prefix}_{key}"] = dico_grib[key]
@@ -86,16 +91,18 @@ class TitanDataset(AbstractDataset, Dataset):
 
     @property
     def grid_info(self) -> np.array:
-        conf_ds = xr.load_dataset(self.ROOT_DIR / "conf.grib")
-        latitudes = conf_ds.latitude[self.min_x: self.min_x + self.shape]
-        longitudes = conf_ds.longitude[self.min_y: self.min_y + self.shape]
+        conf_ds = xr.load_dataset(self.root_dir / "conf.grib")
+        corners = self.hparams.sub_grid
+        latitudes = conf_ds.latitude[corners[0]: corners[1]]
+        longitudes = conf_ds.longitude[corners[2]: corners[3]]
         grid = np.meshgrid(longitudes, latitudes)
         return grid
 
     @property
     def geopotential_info(self) -> np.array:
-        conf_ds = xr.load_dataset(self.ROOT_DIR / "conf.grib")
-        return conf_ds.h.values[:, self.min_x: self.min_x + self.shape, self.min_y: self.min_y + self.shape]
+        conf_ds = xr.load_dataset(self.root_dir / "conf.grib")
+        corners = self.hparams.sub_grid
+        return conf_ds.h.values[:, corners[0]: corners[1], corners[2]: corners[3]]
 
     @property
     def limited_area(self) -> bool:
@@ -103,13 +110,16 @@ class TitanDataset(AbstractDataset, Dataset):
 
     @property
     def border_mask(self) -> np.array:
-        border_mask = np.ones((self.shape, self.shape)).astype(bool)
-        border_mask[self.border_size: -self.border_size, self.border_size: -self.border_size]*=False
+        border_mask = np.ones((self.shape[0], self.shape[1])).astype(bool)
+        size = self.border_size
+        border_mask[size: -size, size: -size]*=False
         return border_mask
 
 if __name__=="__main__":
-    dataset = TitanDataset(["aro_t2m", "aro_r2"], [1000, 850])
+    hparams = TitanParams()
+    dataset = TitanDataset(TitanParams)
     date  = datetime(2023, 3, 19, 12, 0)
     sample = dataset.load_one_time_step(date)
     print("sample")
     print(sample)
+    print('dataset.grid_info : ', dataset.grid_info)
