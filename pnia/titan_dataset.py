@@ -85,14 +85,15 @@ class TitanDataset(AbstractDataset, Dataset):
     @property
     def grid_info(self) -> np.array:
         conf_ds = xr.load_dataset(self.ROOT_DIR / "conf.grib")
-        latitudes = conf_ds.latitude
-        longitudes = conf_ds.longitude
-        return np.meshgrid(longitudes, latitudes)[self.min_x: self.min_x + self.shape, self.min_y: self.min_y + self.shape]
+        latitudes = conf_ds.latitude[self.min_x: self.min_x + self.shape]
+        longitudes = conf_ds.longitude[self.min_y: self.min_y + self.shape]
+        grid = np.meshgrid(longitudes, latitudes)
+        return grid
 
     @property
     def geopotential_info(self) -> np.array:
         conf_ds = xr.load_dataset(self.ROOT_DIR / "conf.grib")
-        return conf_ds.h.values[self.min_x: self.min_x + self.shape, self.min_y: self.min_y + self.shape]
+        return conf_ds.h.values[:, self.min_x: self.min_x + self.shape, self.min_y: self.min_y + self.shape]
 
     @property
     def limited_area(self) -> bool:
