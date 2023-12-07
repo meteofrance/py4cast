@@ -80,13 +80,23 @@ class TitanDataset(AbstractDataset, Dataset):
 
     @property
     def grid_info(self) -> np.array:
-        conf_ds = xr.load_dataset(self.ROOT_DIR / "conf.grib", engine='cfgrib')
-        print(conf_ds)
+        conf_ds = xr.load_dataset(self.ROOT_DIR / "conf.grib")
+        latitudes = conf_ds.latitude
+        longitudes = conf_ds.longitude
+        return np.meshgrid(longitudes, latitudes)
 
     @property
     def geopotential_info(self) -> np.array:
+        conf_ds = xr.load_dataset(self.ROOT_DIR / "conf.grib")
+        return conf_ds.h.values
+
+    @property
+    def limited_area(self) -> bool:
         pass
 
+    @property
+    def border_mask(self) -> bool:
+        pass
 
 if __name__=="__main__":
     dataset = TitanDataset(["aro_t2m", "aro_r2"], [1000, 850])
