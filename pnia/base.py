@@ -25,7 +25,7 @@ class AbstractDataset(ABCMeta):
     
     @abstractproperty
     def limited_area(self) -> bool:
-        """"
+        """
         Returns True if the dataset is
         compatible with Limited area models
         """
