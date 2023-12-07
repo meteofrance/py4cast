@@ -7,8 +7,10 @@ from cyeccodes.eccodes import get_multi_messages_from_file
 from datetime import datetime, timedelta
 from dataclasses import dataclass, field
 import yaml
-from typing import List, Tuple
+from typing import List, Tuple, Union
 from pathlib import Path
+
+FORMATSTR = "%Y-%m-%d_%Hh%M"
 
 
 @dataclass
@@ -20,9 +22,17 @@ class TitanParams:
     input_step: int = 1  # hours
     nb_pred_steps: int = 4
     pred_step: int = 1  # hours
+    step_btw_samples: int = 6  # hours
     sub_grid: Tuple[int] = (1000, 1256, 1200, 1456)  # grid corners (pixel), lat lon
     border_size: int = 10  # pixels
-    # TODO : date_begining
+    date_begining: Union[str, datetime] = datetime(2023, 3, 1, 0)
+    date_end: Union[str, datetime] = datetime(2023, 3, 31, 23)
+
+    def __post_init__(self):
+        if isinstance(self.date_begining, str):
+            self.date_begining = datetime.strptime(self.date_begining, FORMATSTR)
+        if isinstance(self.date_end, str):
+            self.date_end = datetime.strptime(self.date_end, FORMATSTR)
 
 
 def read_grib(path_grib: Path, names=None, levels=None):
@@ -51,15 +61,23 @@ def read_grib(path_grib: Path, names=None, levels=None):
 class TitanDataset(AbstractDataset, Dataset):
     def __init__(self, hparams: TitanParams) -> None:
         self.root_dir = Path("/scratch/shared/Titan/")
-        self.data_dir = self.root_dir / "grib"
         self.init_metadata()
         self.hparams = hparams
-        corners = self.hparams.sub_grid
-        self.shape = (corners[1] - corners[0], corners[3] - corners[2])
+        self.data_dir = self.root_dir / "grib"
+        self.init_list_samples_dates()
 
+    def init_list_samples_dates(self):
+        sample_step = self.hparams.step_btw_samples
+        timerange = self.hparams.date_end - self.hparams.date_begining
+        timerange = timerange.days * 24 + timerange.seconds // 3600  # convert hours
+        nb_samples = timerange // sample_step
+        self.samples_dates = [self.hparams.date_begining + i * timedelta(hours=sample_step) for i in range(nb_samples)]
+
+    def __str__(self) -> str:
+        return "TitanDataset"
 
     def __len__(self):
-        pass
+        return len(self.samples_dates)
 
     def init_metadata(self):
         with open(self.root_dir / 'metadata.yaml', 'r') as file:
@@ -71,7 +89,7 @@ class TitanDataset(AbstractDataset, Dataset):
 
     def load_one_time_step(self, date:datetime):
         sample = {}
-        date_str = date.strftime("%Y-%m-%d_%Hh%M")
+        date_str = date.strftime(FORMATSTR)
         for grib_name, grib_keys in self.grib_params.items():
             names_wp = [key for key in grib_keys if key in self.hparams.weather_params]
             names_wp = [name.split("_")[1] for name in names_wp]
@@ -88,6 +106,12 @@ class TitanDataset(AbstractDataset, Dataset):
 
     def __getitem__(self, index):
         pass
+
+    @property
+    def shape(self) -> Tuple[int]:
+        corners = self.hparams.sub_grid
+        shape = (corners[1] - corners[0], corners[3] - corners[2])
+        return shape
 
     @property
     def grid_info(self) -> np.array:
@@ -123,3 +147,4 @@ if __name__=="__main__":
     print("sample")
     print(sample)
     print('dataset.grid_info : ', dataset.grid_info)
+    print(dataset.samples_dates)
