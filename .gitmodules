@@ -1,0 +1,12 @@
+[submodule "submodules/nlam_suede"]
+	path = submodules/nlam_suede
+	url = https://github.com/joeloskarsson/neural-lam.git
+[submodule "submodules/nlam_swiss"]
+	path = submodules/nlam_swiss
+	url = https://github.com/MeteoSwiss/neural-lam.git
+[submodule "submodules/pangu"]
+	path = submodules/pangu
+	url = https://github.com/198808xc/Pangu-Weather.git
+[submodule "submodules/climax"]
+	path = submodules/climax
+	url = https://github.com/microsoft/ClimaX.git
