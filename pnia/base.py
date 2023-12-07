@@ -4,10 +4,10 @@ and their interfaces
 """
 
 import numpy as np
-from abc import ABCMeta, abstractmethod, abstractproperty
+from abc import ABC, abstractmethod, abstractproperty
 
 
-class AbstractDataset(ABCMeta):
+class AbstractDataset(ABC):
 
     @abstractproperty
     def grid_info(self) -> np.array:

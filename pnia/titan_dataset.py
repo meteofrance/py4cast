@@ -39,6 +39,7 @@ class TitanDataset(AbstractDataset, Dataset):
         self.shape = 256
         self.min_x = 500
         self.min_y = 500
+        self.border_size = 10
 
     def __len__(self):
         pass
@@ -95,14 +96,15 @@ class TitanDataset(AbstractDataset, Dataset):
 
     @property
     def limited_area(self) -> bool:
-        pass
+        return True
 
     @property
-    def border_mask(self) -> bool:
-        pass
+    def border_mask(self) -> np.array:
+        border_mask = np.ones((self.shape, self.shape)).astype(bool)
+        border_mask[self.border_size: -self.border_size, self.border_size: -self.border_size]*=False
+        return border_mask
 
 if __name__=="__main__":
     dataset = TitanDataset(["aro_t2m", "aro_r2"], [1000, 850])
-    print(dataset)
 
     
