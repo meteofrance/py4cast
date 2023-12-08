@@ -7,13 +7,13 @@ import matplotlib.pyplot as plt
 
 from pnia.base import AbstractDataset
 from pnia.settings import CACHE_DIR
-from pnia.nlam_suede.create_mesh import plot_graph, sort_nodes_internally, save_edges, save_edges_list, from_networkx_with_start_index, mk_2d_graph, prepend_node_index
+from submodules.nlam_suede.create_mesh import plot_graph, sort_nodes_internally, save_edges, save_edges_list, from_networkx_with_start_index, mk_2d_graph, prepend_node_index
 from pnia.titan_dataset import TitanParams, TitanDataset
 
-def prepare(dataset: AbstractDataset, plot: bool, levels: int = None, hierarchical: int = 0):
+def prepare(dataset: AbstractDataset, plot: bool = False, levels: int = None, hierarchical: int = 0):
     """
     dataset: Dataset to load grid point coordinates from.
-    plot: If graphs should be plotted during generation.
+    plot: If graphs should be plotted during generation (default: False).
     levels: Limit multi-scale mesh to given number of levels, from bottom up (default: None (no limit)).
     hierarchical: Generate hierarchical mesh graph (default: 0, no).
     """
