@@ -1,7 +1,7 @@
 import numpy as np
 import xarray as xr
 from torch.utils.data import DataLoader, Dataset
-from pnia.base import AbstractDataset, AbstractHyperParams
+from pnia.base import AbstractDataset
 from cyeccodes import nested_dd_iterator
 from cyeccodes.eccodes import get_multi_messages_from_file
 from datetime import datetime, timedelta
@@ -18,7 +18,7 @@ FORMATSTR = "%Y-%m-%d_%Hh%M"
 
 
 @dataclass
-class TitanParams(AbstractHyperParams):
+class TitanParams():
 
     weather_params: Tuple[str] = ("aro_t2m", "aro_r2", "aro_u10", "aro_v10")
     isobaric_levels: Tuple[int] = (1000, 850)  # hPa
@@ -175,7 +175,7 @@ class TitanDataset(AbstractDataset, Dataset):
         corners = self.hparams.sub_grid
         latitudes = conf_ds.latitude[corners[0]: corners[1]]
         longitudes = conf_ds.longitude[corners[2]: corners[3]]
-        grid = np.meshgrid(longitudes, latitudes)
+        grid = np.array(np.meshgrid(longitudes, latitudes))
         return grid
 
     @property

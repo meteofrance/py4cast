@@ -6,7 +6,7 @@ and their interfaces
 import numpy as np
 from abc import ABC, abstractmethod, abstractproperty
 from dataclasses import dataclass
-from typing import Literal
+from typing import Literal, List
 
 
 class AbstractDataset(ABC):

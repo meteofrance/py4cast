@@ -18,8 +18,8 @@ def prepare(dataset: AbstractDataset, plot: bool = False, levels: int = None, hi
     hierarchical: Generate hierarchical mesh graph (default: 0, no).
     """
     # Load grid positions
-    graph_dir_path = CACHE_DIR / 'neural_lam' / dataset.__str__
-    graph_dir_path.mkdir(parents=True, exist_ok=True)
+    cache_dir_path = CACHE_DIR / 'neural_lam' / str(dataset)
+    cache_dir_path.mkdir(parents=True, exist_ok=True)
 
     xy = dataset.grid_info
 
@@ -123,8 +123,8 @@ def prepare(dataset: AbstractDataset, plot: bool = False, levels: int = None, hi
                 plt.show()
 
         # Save up and down edges
-        save_edges_list(up_graphs, "mesh_up", graph_dir_path)
-        save_edges_list(down_graphs, "mesh_down", graph_dir_path)
+        save_edges_list(up_graphs, "mesh_up", cache_dir_path)
+        save_edges_list(down_graphs, "mesh_down", cache_dir_path)
 
         # Extract intra-level edges for m2m
         m2m_graphs = [from_networkx_with_start_index(
@@ -172,13 +172,13 @@ def prepare(dataset: AbstractDataset, plot: bool = False, levels: int = None, hi
             plt.show()
 
     # Save m2m edges
-    save_edges_list(m2m_graphs, "m2m", graph_dir_path)
+    save_edges_list(m2m_graphs, "m2m", cache_dir_path)
 
     # Divide mesh node pos by max coordinate of grid cell
     mesh_pos = [pos/pos_max for pos in  mesh_pos]
 
     # Save mesh positions
-    torch.save(mesh_pos, graph_dir_path / "mesh_features.pt") # mesh pos, in float32
+    torch.save(mesh_pos, cache_dir_path / "mesh_features.pt") # mesh pos, in float32
 
     #
     # Grid2Mesh
@@ -280,12 +280,15 @@ def prepare(dataset: AbstractDataset, plot: bool = False, levels: int = None, hi
 
     # Save g2m and m2g everything
     # g2m
-    save_edges(pyg_g2m, "g2m", graph_dir_path)
+    save_edges(pyg_g2m, "g2m", cache_dir_path)
     # m2g
-    save_edges(pyg_m2g, "m2g", graph_dir_path)
+    save_edges(pyg_m2g, "m2g", cache_dir_path)
 
 if __name__ == "__main__":
     # Load Dataset
     hparams = TitanParams()
-    dataset = TitanDataset(TitanParams)
+    dataset = TitanDataset(hparams)
+
+    print(np.shape(dataset.grid_info))
+
     prepare(dataset)
