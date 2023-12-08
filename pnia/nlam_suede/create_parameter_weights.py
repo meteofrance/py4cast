@@ -10,7 +10,7 @@ from tqdm import tqdm
 
 
 def create_parameter_weights(
-    batch_size: int = 4, n_workers: int = 10, step_length: int = 3
+    batch_size: int = 4, n_workers: int = 5, step_length: int = 3
 ):
     """
     dataset: Dataset to compute weights for
@@ -18,34 +18,27 @@ def create_parameter_weights(
     step_length: Step length in hours to consider single time step (default: 3)
     n_workers: Number of workers in data loader (default: 4)
     """
-
-    hparams = TitanParams(
-        {"split": "train", "nb_pred_steps": step_length, "standardize": False}
-    )
+    hparams = TitanParams(split='train', nb_pred_steps=step_length, standardize=False)
     dataset = TitanDataset(hparams)
 
     # create folders
-    graph_dir_path = CACHE_DIR / "neural_lam" / str(dataset)
-    graph_dir_path.mkdir(parents=True, exist_ok=True)
-    static_dir_path = graph_dir_path / "static"
-    static_dir_path.mkdir(parents=True, exist_ok=True)
+    cache_dir_path = CACHE_DIR / "neural_lam" / str(dataset)
+    cache_dir_path.mkdir(parents=True, exist_ok=True)
 
     create_parameter_weights_step1(
         dataset,
         batch_size=batch_size,
         n_workers=n_workers,
-        static_dir_path=static_dir_path,
+        static_dir_path=cache_dir_path,
     )
 
-    hparams = TitanParams(
-        {"split": "train", "nb_pred_steps": step_length, "standardize": True}
-    )
+    hparams = TitanParams(split='train', nb_pred_steps=step_length, standardize=True)
     dataset = TitanDataset(hparams)
     create_paramter_weights_step2(
         dataset,
         batch_size=batch_size,
         n_workers=n_workers,
-        static_dir_path=static_dir_path,
+        static_dir_path=cache_dir_path,
     )
 
     return
@@ -66,9 +59,9 @@ def create_parameter_weights_step1(
 
     # Create parameter weights based on height
     # based on fig A.1 in graph cast paper
-    w_par = np.zeros((len(dataset.weather_params),))
-    w_dict = {"2": 1.0, "0": 0.1, "65": 0.065, "1000": 0.1, "850": 0.05, "500": 0.03}
-    w_list = np.array([w_dict[par.split("_")[-2]] for par in dataset.weather_params])
+    w_par = np.zeros((len(dataset.hparams.weather_params),))
+    w_dict = {"2": 1.0, "10": 0.5}  # Les poids originaux {"2": 1.0, "0": 0.1, "65": 0.065, "1000": 0.1, "850": 0.05, "500": 0.03}
+    w_list = np.array([w_dict[param_value["height"]] for param_value in dataset.hparams.weather_params.values()])
     print("Saving parameter weights...")
     np.save(static_dir_path / "parameter_weights.npy", w_list.astype("float32"))
 
@@ -84,7 +77,8 @@ def create_parameter_weights_step1(
     squares = []
     flux_means = []
     flux_squares = []
-    for init_batch, target_batch, _, forcing_batch in tqdm(loader):
+    # for init_batch, target_batch, _, forcing_batch in tqdm(loader):
+    for init_batch, target_batch in tqdm(loader):
         batch = torch.cat(
             (init_batch, target_batch), dim=1
         )  # (N_batch, N_t, N_grid, d_features)
@@ -168,4 +162,4 @@ def create_paramter_weights_step2(
 
 
 if __name__ == "__main__":
-    create_parameter_weights(batch_size=4, n_workers=10, step_length=3)
+    create_parameter_weights(batch_size=4, n_workers=5, step_length=3)
