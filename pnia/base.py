@@ -5,6 +5,8 @@ and their interfaces
 
 import numpy as np
 from abc import ABC, abstractmethod, abstractproperty
+from dataclasses import dataclass
+from typing import Literal
 
 
 class AbstractDataset(ABC):
@@ -34,3 +36,14 @@ class AbstractDataset(ABC):
     def border_mask(self) -> np.array:
         pass
     
+    @abstractproperty
+    def split(self) -> Literal['train', 'valid', 'test']:
+        pass
+    
+    @abstractproperty
+    def standardize(self) -> bool:
+        pass
+    
+    @abstractproperty
+    def nb_pred_steps(self) -> AbstractParams:
+        pass
