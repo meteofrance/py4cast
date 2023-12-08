@@ -288,7 +288,4 @@ if __name__ == "__main__":
     # Load Dataset
     hparams = TitanParams()
     dataset = TitanDataset(hparams)
-
-    print(np.shape(dataset.grid_info))
-
     prepare(dataset)
