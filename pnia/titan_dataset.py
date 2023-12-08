@@ -2,7 +2,8 @@ import time
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import List, Literal, Tuple, Union
+from typing import List, Literal, Tuple, Union, Dict
+from types import MappingProxyType
 
 import numpy as np
 import torch
@@ -21,7 +22,14 @@ FORMATSTR = "%Y-%m-%d_%Hh%M"
 @dataclass
 class TitanParams:
 
-    weather_params: Tuple[str] = ("aro_t2m", "aro_r2", "aro_u10", "aro_v10")
+    weather_params: MappingProxyType[dict] = MappingProxyType(  # TODO definir un type de dict pour les champs météos
+        {
+        "aro_t2m": {"model": "AROME", "parameter": "T", "height": "2"},
+        "aro_r2": {"model": "AROME", "parameter": "R", "height": "2"},
+        "aro_u10": {"model": "AROME", "parameter": "U", "height": "10"},
+        "aro_v10": {"model": "AROME", "parameter": "V", "height": "10"},
+        }
+    )
     isobaric_levels: Tuple[int] = (1000, 850)  # hPa
     nb_input_steps: int = 2
     input_step: int = 1  # hours
@@ -30,12 +38,13 @@ class TitanParams:
     step_btw_samples: int = 6  # hours
     sub_grid: Tuple[int] = (1000, 1256, 1200, 1456)  # grid corners (pixel), lat lon
     border_size: int = 10  # pixels
-    date_begining: Union[str, datetime] = datetime(2023, 3, 1, 0)
+    date_begining: Union[str, datetime] = datetime(2023, 3, 1, 1)
     date_end: Union[str, datetime] = datetime(2023, 3, 31, 23)
     split: Literal["train", "valid", "test"] = "train"
     batch_size: int = 4
     shuffle: bool = True
     num_workers: int = 2
+    standardize: bool = False  # TODO réflchir si ce paramètre est pertinent ici ? je ne suis pas sur car utile que pour neural_lam
 
     def __post_init__(self):
         if isinstance(self.date_begining, str):
@@ -81,6 +90,7 @@ class TitanDataset(AbstractDataset, Dataset):
         self.data_dir = self.root_dir / "grib"
         self.init_list_samples_dates()
 
+
     def init_list_samples_dates(self):
         # TODO : split train et test
         sample_step = self.hparams.step_btw_samples
@@ -110,7 +120,7 @@ class TitanDataset(AbstractDataset, Dataset):
         sample = {}
         date_str = date.strftime(FORMATSTR)
         for grib_name, grib_keys in self.grib_params.items():
-            names_wp = [key for key in grib_keys if key in self.hparams.weather_params]
+            names_wp = [key for key in grib_keys if key in self.hparams.weather_params.keys()]
             names_wp = [name.split("_")[1] for name in names_wp]
             if names_wp == []:
                 continue
@@ -125,7 +135,7 @@ class TitanDataset(AbstractDataset, Dataset):
 
     def timestep_dict_to_array(self, dico: dict) -> torch.Tensor:
         tensors = []
-        for wparam in self.hparams.weather_params:  # to keep order of params
+        for wparam in self.hparams.weather_params.keys():  # to keep order of params
             levels_dict = dico[wparam]
             if len(levels_dict.keys()) == 1:
                 key0 = list(levels_dict.keys())[0]
@@ -214,16 +224,16 @@ class TitanDataset(AbstractDataset, Dataset):
         return self.hparams.split
 
     @property
-    def standardize(self) -> bool:
-        return self.hparams.standardize
-
-    @property
     def nb_pred_steps(self) -> int:
         return self.hparams.nb_pred_steps
 
     @property
     def weather_params(self) -> List[str]:
-        return self.hparams.weather_params
+        return self.hparams.weather_params.keys()
+
+    @property
+    def standardize(self) -> bool:
+        return self.hparams.standardize
 
 
 if __name__ == "__main__":
