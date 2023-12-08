@@ -3,14 +3,14 @@ Base classes defining our software components
 and their interfaces
 """
 
-import numpy as np
 from abc import ABC, abstractmethod, abstractproperty
 from dataclasses import dataclass
-from typing import Literal, List
+from typing import List, Literal
+
+import numpy as np
 
 
 class AbstractDataset(ABC):
-
     @abstractproperty
     def grid_info(self) -> np.array:
         """
@@ -24,26 +24,26 @@ class AbstractDataset(ABC):
         array of shape (num_lat, num_lon)
         with geopotential value for each datapoint
         """
-    
+
     @abstractproperty
     def limited_area(self) -> bool:
         """
         Returns True if the dataset is
         compatible with Limited area models
         """
-    
+
     @abstractproperty
     def border_mask(self) -> np.array:
         pass
-    
+
     @abstractproperty
-    def split(self) -> Literal['train', 'valid', 'test']:
+    def split(self) -> Literal["train", "valid", "test"]:
         pass
-    
+
     @abstractproperty
     def standardize(self) -> bool:
         pass
-    
+
     @abstractproperty
     def nb_pred_steps(self) -> int:
         pass
