@@ -45,5 +45,5 @@ class AbstractDataset(ABC):
         pass
     
     @abstractproperty
-    def nb_pred_steps(self) -> AbstractParams:
+    def nb_pred_steps(self) -> int:
         pass
