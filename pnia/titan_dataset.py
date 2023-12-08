@@ -7,8 +7,12 @@ from cyeccodes.eccodes import get_multi_messages_from_file
 from datetime import datetime, timedelta
 from dataclasses import dataclass, field
 import yaml
-from typing import List, Tuple, Union
+from typing import List, Tuple, Union, Literal
 from pathlib import Path
+from torchvision import transforms
+from mfai.torch.transforms import ToTensor
+import torch
+import time
 
 FORMATSTR = "%Y-%m-%d_%Hh%M"
 
@@ -16,7 +20,7 @@ FORMATSTR = "%Y-%m-%d_%Hh%M"
 @dataclass
 class TitanParams:
 
-    weather_params: Tuple[str] = ("aro_t2m", "aro_r2", "aro_z")
+    weather_params: Tuple[str] = ("aro_t2m", "aro_r2", "aro_u10", "aro_v10")
     isobaric_levels: Tuple[int] = (1000, 850)  # hPa
     nb_input_steps: int = 2
     input_step: int = 1  # hours
@@ -27,6 +31,10 @@ class TitanParams:
     border_size: int = 10  # pixels
     date_begining: Union[str, datetime] = datetime(2023, 3, 1, 0)
     date_end: Union[str, datetime] = datetime(2023, 3, 31, 23)
+    split: Literal["train", "valid", "test"] = "train"
+    batch_size: int = 4
+    shuffle: bool = True
+    num_workers: int = 2
 
     def __post_init__(self):
         if isinstance(self.date_begining, str):
@@ -36,14 +44,12 @@ class TitanParams:
 
 
 def read_grib(path_grib: Path, names=None, levels=None):
-    try:
-        if names or levels:
-            include_filters={k:v for k,v in [("cfVarName", names), ("level", levels)] if v is not None}
-        else:
-            include_filters = None
-        _, results = get_multi_messages_from_file(path_grib, storage_keys=("cfVarName", "level"), include_filters=include_filters, metadata_keys=("missingValue", "Ni", "Nj"), include_latlon = False)
-    except Exception as e:
-        print(e)
+    if names or levels:
+        include_filters={k:v for k,v in [("cfVarName", names), ("level", levels)] if v is not None}
+    else:
+        include_filters = None
+    _, results = get_multi_messages_from_file(path_grib, storage_keys=("cfVarName", "level"), include_filters=include_filters, metadata_keys=("missingValue", "Ni", "Nj"), include_latlon = False)
+
     grib_dict = {}
     for metakey, result in nested_dd_iterator(results):
         array = result["values"]
@@ -67,6 +73,7 @@ class TitanDataset(AbstractDataset, Dataset):
         self.init_list_samples_dates()
 
     def init_list_samples_dates(self):
+        # TODO : split train et test
         sample_step = self.hparams.step_btw_samples
         timerange = self.hparams.date_end - self.hparams.date_begining
         timerange = timerange.days * 24 + timerange.seconds // 3600  # convert hours
@@ -87,7 +94,7 @@ class TitanDataset(AbstractDataset, Dataset):
         self.all_weather_params = metadata["PARAMETERS"]
         self.all_grids = metadata["GRIDS"]
 
-    def load_one_time_step(self, date:datetime):
+    def load_one_time_step(self, date:datetime) -> dict:
         sample = {}
         date_str = date.strftime(FORMATSTR)
         for grib_name, grib_keys in self.grib_params.items():
@@ -104,8 +111,57 @@ class TitanDataset(AbstractDataset, Dataset):
                 sample[f"{prefix}_{key}"] = dico_grib[key]
         return sample
 
+    def timestep_dict_to_array(self, dico:dict) -> torch.Tensor:
+        tensors = []
+        for wparam in self.hparams.weather_params:  # to keep order of params
+            levels_dict = dico[wparam]
+            if len(levels_dict.keys()) == 1:
+                key0 = list(levels_dict.keys())[0]
+                tensors.append(torch.from_numpy(levels_dict[key0]).float())
+            else:
+                for lvl in self.hparams.isobaric_levels:  # to keep order of levels
+                    tensors.append(torch.from_numpy(levels_dict[lvl]).float())
+        return torch.stack(tensors, dim=-1)
+
     def __getitem__(self, index):
-        pass
+        date_t0 = self.samples_dates[index]
+
+        # ------- State features -------
+
+        input_step, pred_step = self.hparams.input_step, self.hparams.pred_step
+
+        input_dates = []
+        for i in range(self.hparams.nb_input_steps):
+            input_dates = [date_t0 - i * timedelta(hours=input_step)] + input_dates
+        input_dicts = [self.load_one_time_step(date) for date in input_dates]
+        input_tensors = [self.timestep_dict_to_array(dico) for dico in input_dicts]
+        init_states = torch.stack(input_tensors, dim=0) # (steps, Nx, Ny, features)
+
+        pred_dates = []
+        for i in range(1, self.hparams.nb_pred_steps + 1):
+            pred_dates.append(date_t0 + i * timedelta(hours=pred_step))
+        pred_dicts = [self.load_one_time_step(date) for date in pred_dates]
+        pred_tensors = [self.timestep_dict_to_array(dico) for dico in pred_dicts]
+        target_states = torch.stack(pred_tensors, dim=0) # (steps, Nx, Ny, features)
+
+        # TODO : stacker toutes les steps puis spliter en input et target
+        # TODO : apply subgrid
+        # TODO : accumuler variables cumulatives dans initstates et targetstates
+        # TODO : flatten spatial dim dans initstates et targetstates
+        # TODO : standardisation des variables
+
+        # ------- Static features : only water coverage, on s'en fout ?
+
+        # ------- Forcing features -------
+        # TODO : flux, hour and year angles
+
+        return init_states, target_states #, static_features, forcing_windowed
+
+
+    def get_dataloader(self):
+        return DataLoader(
+            self, self.hparams.batch_size, num_workers=self.hparams.num_workers, shuffle=self.hparams.shuffle
+        )
 
     @property
     def shape(self) -> Tuple[int]:
@@ -139,12 +195,17 @@ class TitanDataset(AbstractDataset, Dataset):
         border_mask[size: -size, size: -size]*=False
         return border_mask
 
+
+
 if __name__=="__main__":
     hparams = TitanParams()
     dataset = TitanDataset(TitanParams)
     date  = datetime(2023, 3, 19, 12, 0)
-    sample = dataset.load_one_time_step(date)
-    print("sample")
-    print(sample)
     print('dataset.grid_info : ', dataset.grid_info)
-    print(dataset.samples_dates)
+    beg = time.time()
+    x, y = dataset.__getitem__(3)
+    print("time : ", time.time() - beg)
+    print('x.shape : ', x.shape)
+    print('y.shape : ', y.shape)
+    loader = dataset.get_dataloader()
+    print(loader)
