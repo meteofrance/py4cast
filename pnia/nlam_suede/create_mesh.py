@@ -22,7 +22,7 @@ def prepare(
     dataset: AbstractDataset,
     plot: bool = False,
     levels: int = None,
-    hierarchical: int = 0,
+    hierarchical: bool = False,
 ):
     """
     dataset: Dataset to load grid point coordinates from.
@@ -320,4 +320,4 @@ if __name__ == "__main__":
     # Load Dataset
     hparams = TitanParams()
     dataset = TitanDataset(hparams)
-    prepare(dataset)
+    prepare(dataset, hierarchical=True)
