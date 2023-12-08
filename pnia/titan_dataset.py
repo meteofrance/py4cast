@@ -195,6 +195,22 @@ class TitanDataset(AbstractDataset, Dataset):
         border_mask[size: -size, size: -size]*=False
         return border_mask
 
+    @property
+    def split(self) -> Literal['train', 'valid', 'test']:
+        return self.hparams.split
+
+    @property
+    def standardize(self) -> bool:
+        return self.hparams.standardize
+
+    @property
+    def nb_pred_steps(self) -> int:
+        return self.hparams.nb_pred_steps
+
+    @property
+    def weather_params(self) -> List[str]:
+        return self.hparams.weather_params
+
 
 
 if __name__=="__main__":

@@ -56,9 +56,9 @@ def create_parameter_weights_step1(dataset: AbstractDataset, batch_size: int = 4
 
     # Create parameter weights based on height
     # based on fig A.1 in graph cast paper
-    w_par = np.zeros((len(dataset.hparams.weather_params),))
+    w_par = np.zeros((len(dataset.weather_params),))
     w_dict = {'2': 1.0, '0': 0.1, '65': 0.065, '1000': 0.1, '850': 0.05, '500': 0.03}
-    w_list = np.array([w_dict[par.split('_')[-2]] for par in dataset.hparams.weather_params])
+    w_list = np.array([w_dict[par.split('_')[-2]] for par in dataset.weather_params])
     print("Saving parameter weights...")
     np.save(static_dir_path / 'parameter_weights.npy',
             w_list.astype('float32'))
@@ -106,7 +106,7 @@ def create_paramter_weights_step2(dataset: AbstractDataset, batch_size: int = 4,
     n_workers: Number of workers in data loader (default: 4)
     static_dir_path : path to save parameter weights
     """
-    step_length = dataset.hparams.nb_pred_steps
+    step_length = dataset.nb_pred_steps
     # Compute mean and std.-dev. of one-step differences across the dataset
     print("Computing mean and std.-dev. for one-step differences...")
     #ds_standard = WeatherDataset(args.dataset, split="train", subsample_step=1,

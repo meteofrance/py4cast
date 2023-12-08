@@ -47,3 +47,7 @@ class AbstractDataset(ABC):
     @abstractproperty
     def nb_pred_steps(self) -> int:
         pass
+
+    @abstractproperty
+    def weather_params(self) -> List[str]:
+        pass
