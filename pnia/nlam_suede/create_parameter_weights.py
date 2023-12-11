@@ -1,4 +1,3 @@
-import os
 from pathlib import Path
 
 import numpy as np
@@ -18,7 +17,7 @@ def create_parameter_weights(
     step_length: Step length in hours to consider single time step (default: 3)
     n_workers: Number of workers in data loader (default: 4)
     """
-    hparams = TitanParams(split='train', nb_pred_steps=step_length, standardize=False)
+    hparams = TitanParams(split="train", nb_pred_steps=step_length, standardize=False)
     dataset = TitanDataset(hparams)
 
     # create folders
@@ -32,7 +31,7 @@ def create_parameter_weights(
         static_dir_path=cache_dir_path,
     )
 
-    hparams = TitanParams(split='train', nb_pred_steps=step_length, standardize=True)
+    hparams = TitanParams(split="train", nb_pred_steps=step_length, standardize=True)
     dataset = TitanDataset(hparams)
     create_paramter_weights_step2(
         dataset,
@@ -59,9 +58,17 @@ def create_parameter_weights_step1(
 
     # Create parameter weights based on height
     # based on fig A.1 in graph cast paper
-    w_par = np.zeros((len(dataset.hparams.weather_params),))
-    w_dict = {"2": 1.0, "10": 0.5}  # Les poids originaux {"2": 1.0, "0": 0.1, "65": 0.065, "1000": 0.1, "850": 0.05, "500": 0.03}
-    w_list = np.array([w_dict[param_value["height"]] for param_value in dataset.hparams.weather_params.values()])
+    # w_par = np.zeros((len(dataset.hparams.weather_params),))
+    w_dict = {
+        "2": 1.0,
+        "10": 0.5,
+    }  # Les poids originaux {"2": 1.0, "0": 0.1, "65": 0.065, "1000": 0.1, "850": 0.05, "500": 0.03}
+    w_list = np.array(
+        [
+            w_dict[param_value["height"]]
+            for param_value in dataset.hparams.weather_params.values()
+        ]
+    )
     print("Saving parameter weights...")
     np.save(static_dir_path / "parameter_weights.npy", w_list.astype("float32"))
 
@@ -75,8 +82,8 @@ def create_parameter_weights_step1(
     print("Computing mean and std.-dev. for parameters...")
     means = []
     squares = []
-    flux_means = []
-    flux_squares = []
+    # flux_means = []
+    # flux_squares = []
     # for init_batch, target_batch, _, forcing_batch in tqdm(loader):
     for init_batch, target_batch in tqdm(loader):
         batch = torch.cat(
@@ -85,23 +92,23 @@ def create_parameter_weights_step1(
         means.append(torch.mean(batch, dim=(1, 2)))  # (N_batch, d_features,)
         squares.append(torch.mean(batch**2, dim=(1, 2)))  # (N_batch, d_features,)
 
-        flux_batch = forcing_batch[:, :, :, 0]  # Flux is first index
-        flux_means.append(torch.mean(flux_batch))  # (,)
-        flux_squares.append(torch.mean(flux_batch**2))  # (,)
+        # flux_batch = forcing_batch[:, :, :, 0]  # Flux is first index
+        # flux_means.append(torch.mean(flux_batch))  # (,)
+        # flux_squares.append(torch.mean(flux_batch**2))  # (,)
 
     mean = torch.mean(torch.cat(means, dim=0), dim=0)  # (d_features)
     second_moment = torch.mean(torch.cat(squares, dim=0), dim=0)
     std = torch.sqrt(second_moment - mean**2)  # (d_features)
 
-    flux_mean = torch.mean(torch.stack(flux_means))  # (,)
-    flux_second_moment = torch.mean(torch.stack(flux_squares))  # (,)
-    flux_std = torch.sqrt(flux_second_moment - flux_mean**2)  # (,)
-    flux_stats = torch.stack((flux_mean, flux_std))
+    # flux_mean = torch.mean(torch.stack(flux_means))  # (,)
+    # flux_second_moment = torch.mean(torch.stack(flux_squares))  # (,)
+    # flux_std = torch.sqrt(flux_second_moment - flux_mean**2)  # (,)
+    # flux_stats = torch.stack((flux_mean, flux_std))
 
     print("Saving mean, std.-dev, flux_stats...")
     torch.save(mean, static_dir_path / "parameter_mean.pt")
     torch.save(std, static_dir_path / "parameter_std.pt")
-    torch.save(flux_stats, static_dir_path / "flux_stats.pt")
+    # torch.save(flux_stats, static_dir_path / "flux_stats.pt")
 
 
 def create_paramter_weights_step2(

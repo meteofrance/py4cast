@@ -1,9 +1,9 @@
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import List, Literal, Tuple, Union, Dict
 from types import MappingProxyType
+from typing import List, Literal, Tuple, Union
 
 import numpy as np
 import torch
@@ -11,10 +11,8 @@ import xarray as xr
 import yaml
 from cyeccodes import nested_dd_iterator
 from cyeccodes.eccodes import get_multi_messages_from_file
-from mfai.torch.transforms import ToTensor
 from pnia.base import AbstractDataset
 from torch.utils.data import DataLoader, Dataset
-from torchvision import transforms
 
 FORMATSTR = "%Y-%m-%d_%Hh%M"
 
@@ -22,12 +20,14 @@ FORMATSTR = "%Y-%m-%d_%Hh%M"
 @dataclass
 class TitanParams:
 
-    weather_params: MappingProxyType[dict] = MappingProxyType(  # TODO definir un type de dict pour les champs météos
+    weather_params: MappingProxyType[
+        dict
+    ] = MappingProxyType(  # TODO definir un type de dict pour les champs météos
         {
-        "aro_t2m": {"model": "AROME", "parameter": "T", "height": "2"},
-        "aro_r2": {"model": "AROME", "parameter": "R", "height": "2"},
-        "aro_u10": {"model": "AROME", "parameter": "U", "height": "10"},
-        "aro_v10": {"model": "AROME", "parameter": "V", "height": "10"},
+            "aro_t2m": {"model": "AROME", "parameter": "T", "height": "2"},
+            "aro_r2": {"model": "AROME", "parameter": "R", "height": "2"},
+            "aro_u10": {"model": "AROME", "parameter": "U", "height": "10"},
+            "aro_v10": {"model": "AROME", "parameter": "V", "height": "10"},
         }
     )
     isobaric_levels: Tuple[int] = (1000, 850)  # hPa
@@ -44,7 +44,8 @@ class TitanParams:
     batch_size: int = 4
     shuffle: bool = True
     num_workers: int = 2
-    standardize: bool = False  # TODO réflchir si ce paramètre est pertinent ici ? je ne suis pas sur car utile que pour neural_lam
+    standardize: bool = False  # TODO réflchir si ce paramètre est pertinent ici ?
+    # je ne suis pas sur car utile que pour neural_lam
 
     def __post_init__(self):
         if isinstance(self.date_begining, str):
@@ -90,7 +91,6 @@ class TitanDataset(AbstractDataset, Dataset):
         self.data_dir = self.root_dir / "grib"
         self.init_list_samples_dates()
 
-
     def init_list_samples_dates(self):
         # TODO : split train et test
         sample_step = self.hparams.step_btw_samples
@@ -120,7 +120,9 @@ class TitanDataset(AbstractDataset, Dataset):
         sample = {}
         date_str = date.strftime(FORMATSTR)
         for grib_name, grib_keys in self.grib_params.items():
-            names_wp = [key for key in grib_keys if key in self.hparams.weather_params.keys()]
+            names_wp = [
+                key for key in grib_keys if key in self.hparams.weather_params.keys()
+            ]
             names_wp = [name.split("_")[1] for name in names_wp]
             if names_wp == []:
                 continue

@@ -1,4 +1,3 @@
-import numpy as np
 import torch
 from pnia.base import AbstractDataset
 from pnia.settings import CACHE_DIR

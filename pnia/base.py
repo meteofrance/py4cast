@@ -3,8 +3,7 @@ Base classes defining our software components
 and their interfaces
 """
 
-from abc import ABC, abstractmethod, abstractproperty
-from dataclasses import dataclass
+from abc import ABC, abstractproperty
 from typing import List, Literal
 
 import numpy as np
