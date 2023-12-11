@@ -1,26 +1,35 @@
+import time
+from dataclasses import dataclass, field
+from datetime import datetime, timedelta
+from pathlib import Path
+from typing import List, Literal, Tuple, Union, Dict
+from types import MappingProxyType
+
 import numpy as np
+import torch
 import xarray as xr
-from torch.utils.data import DataLoader, Dataset
-from pnia.base import AbstractDataset
+import yaml
 from cyeccodes import nested_dd_iterator
 from cyeccodes.eccodes import get_multi_messages_from_file
-from datetime import datetime, timedelta
-from dataclasses import dataclass, field
-import yaml
-from typing import List, Tuple, Union, Literal
-from pathlib import Path
-from torchvision import transforms
 from mfai.torch.transforms import ToTensor
-import torch
-import time
+from pnia.base import AbstractDataset
+from torch.utils.data import DataLoader, Dataset
+from torchvision import transforms
 
 FORMATSTR = "%Y-%m-%d_%Hh%M"
 
 
 @dataclass
-class TitanParams():
+class TitanParams:
 
-    weather_params: Tuple[str] = ("aro_t2m", "aro_r2", "aro_u10", "aro_v10")
+    weather_params: MappingProxyType[dict] = MappingProxyType(  # TODO definir un type de dict pour les champs météos
+        {
+        "aro_t2m": {"model": "AROME", "parameter": "T", "height": "2"},
+        "aro_r2": {"model": "AROME", "parameter": "R", "height": "2"},
+        "aro_u10": {"model": "AROME", "parameter": "U", "height": "10"},
+        "aro_v10": {"model": "AROME", "parameter": "V", "height": "10"},
+        }
+    )
     isobaric_levels: Tuple[int] = (1000, 850)  # hPa
     nb_input_steps: int = 2
     input_step: int = 1  # hours
@@ -29,12 +38,13 @@ class TitanParams():
     step_btw_samples: int = 6  # hours
     sub_grid: Tuple[int] = (1000, 1256, 1200, 1456)  # grid corners (pixel), lat lon
     border_size: int = 10  # pixels
-    date_begining: Union[str, datetime] = datetime(2023, 3, 1, 0)
+    date_begining: Union[str, datetime] = datetime(2023, 3, 1, 1)
     date_end: Union[str, datetime] = datetime(2023, 3, 31, 23)
     split: Literal["train", "valid", "test"] = "train"
     batch_size: int = 4
     shuffle: bool = True
     num_workers: int = 2
+    standardize: bool = False  # TODO réflchir si ce paramètre est pertinent ici ? je ne suis pas sur car utile que pour neural_lam
 
     def __post_init__(self):
         if isinstance(self.date_begining, str):
@@ -45,10 +55,18 @@ class TitanParams():
 
 def read_grib(path_grib: Path, names=None, levels=None):
     if names or levels:
-        include_filters={k:v for k,v in [("cfVarName", names), ("level", levels)] if v is not None}
+        include_filters = {
+            k: v for k, v in [("cfVarName", names), ("level", levels)] if v is not None
+        }
     else:
         include_filters = None
-    _, results = get_multi_messages_from_file(path_grib, storage_keys=("cfVarName", "level"), include_filters=include_filters, metadata_keys=("missingValue", "Ni", "Nj"), include_latlon = False)
+    _, results = get_multi_messages_from_file(
+        path_grib,
+        storage_keys=("cfVarName", "level"),
+        include_filters=include_filters,
+        metadata_keys=("missingValue", "Ni", "Nj"),
+        include_latlon=False,
+    )
 
     grib_dict = {}
     for metakey, result in nested_dd_iterator(results):
@@ -72,13 +90,17 @@ class TitanDataset(AbstractDataset, Dataset):
         self.data_dir = self.root_dir / "grib"
         self.init_list_samples_dates()
 
+
     def init_list_samples_dates(self):
         # TODO : split train et test
         sample_step = self.hparams.step_btw_samples
         timerange = self.hparams.date_end - self.hparams.date_begining
         timerange = timerange.days * 24 + timerange.seconds // 3600  # convert hours
         nb_samples = timerange // sample_step
-        self.samples_dates = [self.hparams.date_begining + i * timedelta(hours=sample_step) for i in range(nb_samples)]
+        self.samples_dates = [
+            self.hparams.date_begining + i * timedelta(hours=sample_step)
+            for i in range(nb_samples)
+        ]
 
     def __str__(self) -> str:
         return "TitanDataset"
@@ -87,18 +109,18 @@ class TitanDataset(AbstractDataset, Dataset):
         return len(self.samples_dates)
 
     def init_metadata(self):
-        with open(self.root_dir / 'metadata.yaml', 'r') as file:
+        with open(self.root_dir / "metadata.yaml", "r") as file:
             metadata = yaml.safe_load(file)
         self.grib_params = metadata["GRIB_PARAMS"]
         self.all_isobaric_levels = metadata["ISOBARIC_LEVELS_HPA"]
         self.all_weather_params = metadata["PARAMETERS"]
         self.all_grids = metadata["GRIDS"]
 
-    def load_one_time_step(self, date:datetime) -> dict:
+    def load_one_time_step(self, date: datetime) -> dict:
         sample = {}
         date_str = date.strftime(FORMATSTR)
         for grib_name, grib_keys in self.grib_params.items():
-            names_wp = [key for key in grib_keys if key in self.hparams.weather_params]
+            names_wp = [key for key in grib_keys if key in self.hparams.weather_params.keys()]
             names_wp = [name.split("_")[1] for name in names_wp]
             if names_wp == []:
                 continue
@@ -111,9 +133,9 @@ class TitanDataset(AbstractDataset, Dataset):
                 sample[f"{prefix}_{key}"] = dico_grib[key]
         return sample
 
-    def timestep_dict_to_array(self, dico:dict) -> torch.Tensor:
+    def timestep_dict_to_array(self, dico: dict) -> torch.Tensor:
         tensors = []
-        for wparam in self.hparams.weather_params:  # to keep order of params
+        for wparam in self.hparams.weather_params.keys():  # to keep order of params
             levels_dict = dico[wparam]
             if len(levels_dict.keys()) == 1:
                 key0 = list(levels_dict.keys())[0]
@@ -135,14 +157,14 @@ class TitanDataset(AbstractDataset, Dataset):
             input_dates = [date_t0 - i * timedelta(hours=input_step)] + input_dates
         input_dicts = [self.load_one_time_step(date) for date in input_dates]
         input_tensors = [self.timestep_dict_to_array(dico) for dico in input_dicts]
-        init_states = torch.stack(input_tensors, dim=0) # (steps, Nx, Ny, features)
+        init_states = torch.stack(input_tensors, dim=0)  # (steps, Nx, Ny, features)
 
         pred_dates = []
         for i in range(1, self.hparams.nb_pred_steps + 1):
             pred_dates.append(date_t0 + i * timedelta(hours=pred_step))
         pred_dicts = [self.load_one_time_step(date) for date in pred_dates]
         pred_tensors = [self.timestep_dict_to_array(dico) for dico in pred_dicts]
-        target_states = torch.stack(pred_tensors, dim=0) # (steps, Nx, Ny, features)
+        target_states = torch.stack(pred_tensors, dim=0)  # (steps, Nx, Ny, features)
 
         # TODO : stacker toutes les steps puis spliter en input et target
         # TODO : apply subgrid
@@ -155,12 +177,14 @@ class TitanDataset(AbstractDataset, Dataset):
         # ------- Forcing features -------
         # TODO : flux, hour and year angles
 
-        return init_states, target_states #, static_features, forcing_windowed
-
+        return init_states, target_states  # , static_features, forcing_windowed
 
     def get_dataloader(self):
         return DataLoader(
-            self, self.hparams.batch_size, num_workers=self.hparams.num_workers, shuffle=self.hparams.shuffle
+            self,
+            self.hparams.batch_size,
+            num_workers=self.hparams.num_workers,
+            shuffle=self.hparams.shuffle,
         )
 
     @property
@@ -173,8 +197,8 @@ class TitanDataset(AbstractDataset, Dataset):
     def grid_info(self) -> np.array:
         conf_ds = xr.load_dataset(self.root_dir / "conf.grib")
         corners = self.hparams.sub_grid
-        latitudes = conf_ds.latitude[corners[0]: corners[1]]
-        longitudes = conf_ds.longitude[corners[2]: corners[3]]
+        latitudes = conf_ds.latitude[corners[0] : corners[1]]
+        longitudes = conf_ds.longitude[corners[2] : corners[3]]
         grid = np.array(np.meshgrid(longitudes, latitudes))
         return grid
 
@@ -182,7 +206,7 @@ class TitanDataset(AbstractDataset, Dataset):
     def geopotential_info(self) -> np.array:
         conf_ds = xr.load_dataset(self.root_dir / "conf.grib")
         corners = self.hparams.sub_grid
-        return conf_ds.h.values[:, corners[0]: corners[1], corners[2]: corners[3]]
+        return conf_ds.h.values[:, corners[0] : corners[1], corners[2] : corners[3]]
 
     @property
     def limited_area(self) -> bool:
@@ -192,16 +216,12 @@ class TitanDataset(AbstractDataset, Dataset):
     def border_mask(self) -> np.array:
         border_mask = np.ones((self.shape[0], self.shape[1])).astype(bool)
         size = self.border_size
-        border_mask[size: -size, size: -size]*=False
+        border_mask[size:-size, size:-size] *= False
         return border_mask
 
     @property
-    def split(self) -> Literal['train', 'valid', 'test']:
+    def split(self) -> Literal["train", "valid", "test"]:
         return self.hparams.split
-
-    @property
-    def standardize(self) -> bool:
-        return self.hparams.standardize
 
     @property
     def nb_pred_steps(self) -> int:
@@ -209,19 +229,22 @@ class TitanDataset(AbstractDataset, Dataset):
 
     @property
     def weather_params(self) -> List[str]:
-        return self.hparams.weather_params
+        return self.hparams.weather_params.keys()
+
+    @property
+    def standardize(self) -> bool:
+        return self.hparams.standardize
 
 
-
-if __name__=="__main__":
+if __name__ == "__main__":
     hparams = TitanParams()
     dataset = TitanDataset(TitanParams)
-    date  = datetime(2023, 3, 19, 12, 0)
-    print('dataset.grid_info : ', dataset.grid_info)
+    date = datetime(2023, 3, 19, 12, 0)
+    print("dataset.grid_info : ", dataset.grid_info)
     beg = time.time()
     x, y = dataset.__getitem__(3)
     print("time : ", time.time() - beg)
-    print('x.shape : ', x.shape)
-    print('y.shape : ', y.shape)
+    print("x.shape : ", x.shape)
+    print("y.shape : ", y.shape)
     loader = dataset.get_dataloader()
     print(loader)
