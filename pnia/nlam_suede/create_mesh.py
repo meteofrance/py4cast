@@ -5,7 +5,7 @@ import scipy.spatial
 import torch
 from pnia.base import AbstractDataset
 from pnia.settings import CACHE_DIR
-from pnia.titan_dataset import TitanDataset, TitanParams
+from pnia.titan_dataset import TitanDataset, TitanHyperParams
 from submodules.nlam_suede.create_mesh import (
     from_networkx_with_start_index,
     mk_2d_graph,
@@ -39,6 +39,7 @@ def prepare(
     grid_xy = torch.tensor(xy)
     pos_max = torch.max(torch.abs(grid_xy))
 
+    ####################################################################################
     #
     # Mesh
     #
@@ -210,6 +211,7 @@ def prepare(
     # Save mesh positions
     torch.save(mesh_pos, cache_dir_path / "mesh_features.pt")  # mesh pos, in float32
 
+    ####################################################################################
     #
     # Grid2Mesh
     #
@@ -274,6 +276,7 @@ def prepare(
         plot_graph(pyg_g2m, title="Grid-to-mesh")
         plt.show()
 
+    ####################################################################################
     #
     # Mesh2Grid
     #
@@ -317,7 +320,10 @@ def prepare(
 
 
 if __name__ == "__main__":
-    # Load Dataset
-    hparams = TitanParams()
+    from argparse_dataclass import ArgumentParser
+
+    parser = ArgumentParser(TitanHyperParams)
+    hparams = parser.parse_args()
+    print("hparams : ", hparams)
     dataset = TitanDataset(hparams)
     prepare(dataset, hierarchical=True)

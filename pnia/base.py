@@ -7,9 +7,14 @@ from abc import ABC, abstractproperty
 from typing import List, Literal
 
 import numpy as np
+from torch.utils.data import DataLoader
 
 
 class AbstractDataset(ABC):
+    @abstractproperty
+    def loader(self) -> DataLoader:
+        pass
+
     @abstractproperty
     def grid_info(self) -> np.array:
         """

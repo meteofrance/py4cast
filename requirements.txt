@@ -13,3 +13,4 @@ tornado>=6.3.3
 cython>=3
 cfgrib
 xarray
+argparse-dataclass==2.0.0
