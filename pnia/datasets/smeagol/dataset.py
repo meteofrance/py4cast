@@ -2,7 +2,7 @@
 import datetime as dt
 from functools import partial
 from pathlib import Path
-from typing import List, Literal, Tuple, Union
+from typing import List, Literal, Tuple
 from collections.abc import Callable
 import json
 import numpy as np
@@ -11,11 +11,9 @@ import xarray as xr
 from torch.utils.data import DataLoader, Dataset
 from dataclasses import dataclass, field
 import torch
-from tqdm import tqdm
 
 from pnia.settings import CACHE_DIR
-from projects.pnia.pnia.datasets.base import AbstractDataset
-from projects.pnia.pnia.datasets import create_parameter_weights
+from pnia.datasets.base import AbstractDataset
 
 torch.set_num_threads(8)
 priam_path = Path("/scratch/shared/smeagol")
@@ -570,8 +568,8 @@ class SmeagolDataset(AbstractDataset, Dataset):
             self.sample_list = self.sample_list[:self.subset]
 
 if __name__ == "__main__":
-    from projects.pnia.pnia.models.nlam import create_mesh
-    from projects.pnia.pnia.datasets import create_grid_features
+    from pnia.models.nlam import create_mesh
+    from pnia.datasets import create_grid_features
 
     import time
     dataset = SmeagolDataset.from_json(

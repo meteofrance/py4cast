@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 from submodules.nlam_suede.neural_lam import vis, constants
 # A noter que vis depend de constant ... qui n'a donc pas les bonnes choses (car portées par le dataset).
 
-from projects.pnia.pnia.datasets.base import AbstractDataset
+from pnia.datasets.base import AbstractDataset
 from dataclasses import dataclass, field
 
 
@@ -417,7 +417,7 @@ class ARModel(pl.LightningModule):
                 del loaded_state_dict[old_key]
 
 if __name__ == "__main__":
-    from projects.pnia.pnia.datasets.smeagol.dataset import SmeagolDataset
+    from pnia.datasets.smeagol.dataset import SmeagolDataset
     dataset = SmeagolDataset.from_json(
         "/home/mrpa/chabotv/pnia/pnia/xp_conf/smeagol.json")
     hp=HyperParam(dataset=dataset )

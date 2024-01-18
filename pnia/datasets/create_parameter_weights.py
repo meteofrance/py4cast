@@ -2,7 +2,7 @@ from pathlib import Path
 
 import numpy as np
 import torch
-from projects.pnia.pnia.datasets.base import AbstractDataset
+from pnia.datasets.base import AbstractDataset
 from pnia.settings import CACHE_DIR
 
 from tqdm import tqdm
@@ -106,7 +106,7 @@ def create_parameter_weights(dataset: AbstractDataset):
 
 
 if __name__ == "__main__":
-    from projects.pnia.pnia.datasets.titan.dataset import TitanDataset, TitanHyperParams
+    from pnia.datasets.titan.dataset import TitanDataset, TitanHyperParams
     from argparse_dataclass import ArgumentParser
 
     parser = ArgumentParser(TitanHyperParams)
