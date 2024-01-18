@@ -14,8 +14,8 @@ import torch
 from tqdm import tqdm
 
 from pnia.settings import CACHE_DIR
-from pnia.base import AbstractDataset
-from pnia.nlam_suede import create_parameter_weights
+from projects.pnia.pnia.datasets.base import AbstractDataset
+from projects.pnia.pnia.datasets import create_parameter_weights
 
 torch.set_num_threads(8)
 priam_path = Path("/scratch/shared/smeagol")
@@ -29,7 +29,7 @@ def constant_fname(domain, model, geometry):
 
 def smeagol_forecast_namer(date: dt.datetime, member: int, var, model, geometry, domain, **kwargs):
     """
-    use to find local files 
+    use to find local files
     """
     return f"{domain}/{model}_{geometry}/{date.strftime('%Y%m%dH%H')}/mb_{str(member).zfill(3)}_{var}.nc"
 
@@ -123,16 +123,16 @@ class Grid:
 @dataclass
 class Param:
     name: str
-    shortname:str # To be read in nc File ? 
+    shortname:str # To be read in nc File ?
     levels: Tuple[int]
     grid: Grid
     # Function which can return the filenames. It should accept member and date as argument (as well as term).
     fnamer: Callable[[], [str]]
-    level_type: str = "hPa" # To be read in nc file ? 
+    level_type: str = "hPa" # To be read in nc file ?
     # Defini le statut du parametre. Les forcage sont seulement en input. Les variables diagnostiques seulement en output.
     kind: Literal["input", "output", "input_output"] = "input_output"
-    unit:str = "FakeUnit" # To be read in nc FIle  ? 
-    
+    unit:str = "FakeUnit" # To be read in nc FIle  ?
+
 
     @property
     def parameter_weights(self) -> list:
@@ -147,18 +147,18 @@ class Param:
         return [f"{self.name}_{level}" for level in self.levels]
 
 
-    @property 
-    def parameter_short_name(self) -> list: 
+    @property
+    def parameter_short_name(self) -> list:
         return [f"{self.shortname}_{level}" for level in self.levels]
 #st
 
-    @property 
-    def units(self) -> list: 
+    @property
+    def units(self) -> list:
         return [self.unit for level in self.levels]
 
     def filename(self, member: int, date: dt.datetime, term: float) -> str:
         """
-        Return the filename. Even if term is not used for this example it could be (e.g. for radars). 
+        Return the filename. Even if term is not used for this example it could be (e.g. for radars).
         """
         return priam_path / "nc" / self.fnamer(date=date, member=member, term=term)
 
@@ -167,8 +167,8 @@ class Param:
         for term in terms:
             flist.append(self.filename(member=member, date=date, term=term))
         files = list(set(flist))
-        # TO DO : change it in order to be more generic. Here we postpone that there is only one file. 
-        # However it may not be the case (e.g when speaking of radars multiple files could be used). 
+        # TO DO : change it in order to be more generic. Here we postpone that there is only one file.
+        # However it may not be the case (e.g when speaking of radars multiple files could be used).
         ds = xr.open_dataset(files[0], decode_times=False)
         return ds
 
@@ -184,7 +184,7 @@ class Sample:
 
     def __post_init__(self):
         self.terms = self.input_terms + self.output_terms
-    
+
     @property
     def hours_of_day(self) -> np.array:
         hours = []
@@ -206,7 +206,7 @@ class HyperParam:
     batch_size: int = 4  # Nombre d'élément par batch
     num_workers: int = 2  # Worker pour charger les données
     standardize: bool = False
-    subset:int = 0 # Positive integer. If subset is less than 1 it means full set. Otherwise describe the number of sample. 
+    subset:int = 0 # Positive integer. If subset is less than 1 it means full set. Otherwise describe the number of sample.
     # Pas vraiment a mettre ici. Voir où le mettre
     members: Tuple[int] = (0,)
 
@@ -227,10 +227,10 @@ class SmeagolDataset(AbstractDataset, Dataset):
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self.sample_list = self.init_sample_list()
 
-        if self.hp.subset > 1: 
+        if self.hp.subset > 1:
             self.sample_list = self.sample_list[:self.subset]
-        
-        if self.standardize: 
+
+        if self.standardize:
             ds_stats = self.load_dataset_stats()
             self.data_mean, self.data_std, self.flux_mean, self.flux_std =\
                 ds_stats["data_mean"], ds_stats["data_std"], ds_stats["flux_mean"], \
@@ -284,40 +284,40 @@ class SmeagolDataset(AbstractDataset, Dataset):
     @property
     def static_feature_dim(self):
         """
-        Only landSeaMask currently 
+        Only landSeaMask currently
         """
-        return 1 
+        return 1
 
     @property
-    def forcing_dim(self): 
-        res = 4 # Pour la date 
+    def forcing_dim(self):
+        res = 4 # Pour la date
         for param in self.params:
-            if param.kind =="input": 
+            if param.kind =="input":
                 res +=1
-        return res 
+        return res
 
-    @property 
-    def weather_dim(self): 
+    @property
+    def weather_dim(self):
         """
-        Retourne la dimensions des variables présentes en entrée et en sortie. 
+        Retourne la dimensions des variables présentes en entrée et en sortie.
         """
-        res = 0 
+        res = 0
         for param in self.params:
-            if param.kind =="input_output": 
+            if param.kind =="input_output":
                 res +=1
-        return res 
+        return res
 
     @property
     def diagnostic_dim(self):
         """
-        Return dimensions of output variable only 
+        Return dimensions of output variable only
         Not used yet
-        """ 
-        res = 0 
+        """
+        res = 0
         for param in self.params:
-            if param.kind =="output": 
+            if param.kind =="output":
                 res +=1
-        return res 
+        return res
 
 
     def __getitem__(self, index):
@@ -375,9 +375,9 @@ class SmeagolDataset(AbstractDataset, Dataset):
         state_in = torch.from_numpy(ini)
         state_out = torch.from_numpy(outi)
 
-        if self.standardize: 
-            # May be rething the way we save mean and std in order to be consistent in standardization. 
-            # Saving npz with variable name may be better (the file is very small and load only one time)? 
+        if self.standardize:
+            # May be rething the way we save mean and std in order to be consistent in standardization.
+            # Saving npz with variable name may be better (the file is very small and load only one time)?
             print("Standardization is not implemented yet.")
 
         # Adjust the forcing. Add datetime to forcing.
@@ -478,16 +478,16 @@ class SmeagolDataset(AbstractDataset, Dataset):
     @property
     def weather_params(self) -> List[str]:
         """
-        Return the name of the parameters in the dataset. 
-        Does not make the difference between inputs, outputs and forcing. 
-        Does not include grid information (such as geopotentiel and LandSeaMask). 
+        Return the name of the parameters in the dataset.
+        Does not make the difference between inputs, outputs and forcing.
+        Does not include grid information (such as geopotentiel and LandSeaMask).
         """
         return self.__get_params_attr("parameter_name", "all")
 
     def __get_params_attr(self, attribute:str, kind:Literal["all","input","output"] = "all") -> List[str]:
         out_list = []
         for param in self.params:
-            if kind == "all": 
+            if kind == "all":
                 out_list += getattr(param, attribute)
             elif kind == "input" and param.kind in  ["input", "input_output"]:
                 out_list += getattr(param, attribute)
@@ -497,16 +497,16 @@ class SmeagolDataset(AbstractDataset, Dataset):
 
     def shortnames(self,kind:Literal["all","input","output"]='all') -> List[str]:
         """
-        Return the name of the parameters in the dataset. 
-        Does not include grid information (such as geopotentiel and LandSeaMask). 
+        Return the name of the parameters in the dataset.
+        Does not include grid information (such as geopotentiel and LandSeaMask).
         Make the difference between inputs, outputs.
         """
         return self.__get_params_attr("parameter_short_name", kind)
 
     def units(self,kind:Literal["all","input","output"]='all') -> List[str]:
         """
-        Return the name of the parameters in the dataset. 
-        Does not include grid information (such as geopotentiel and LandSeaMask). 
+        Return the name of the parameters in the dataset.
+        Does not include grid information (such as geopotentiel and LandSeaMask).
         Make the difference between inputs, outputs.
         """
         return self.__get_params_attr("units", kind)
@@ -514,10 +514,10 @@ class SmeagolDataset(AbstractDataset, Dataset):
 
     def create_parameter_weights(self):
         """
-        Create parameter weights (for the loss function). 
-        Each variable has is own weight. 
+        Create parameter weights (for the loss function).
+        Each variable has is own weight.
 
-        May evolve to have a weight dependent of the situation ? 
+        May evolve to have a weight dependent of the situation ?
         """
         w_list = []
         for param in self.params:
@@ -553,26 +553,26 @@ class SmeagolDataset(AbstractDataset, Dataset):
     @standardize.setter
     def standardize(self, value:bool):
         self.hp.standardize = value
-    
+
     @property
     def nb_pred_steps(self) -> int:
         return self.hp.nb_pred_steps
 
-    @property 
-    def members(self): 
+    @property
+    def members(self):
         return self.hp.members
 
     @members.setter
-    def members(self, value:tuple): 
-        self.hp.members = value 
+    def members(self, value:tuple):
+        self.hp.members = value
         self.sample_list = self.init_sample_list()
-        if self.hp.subset > 1: 
+        if self.hp.subset > 1:
             self.sample_list = self.sample_list[:self.subset]
 
 if __name__ == "__main__":
-    from pnia.nlam_suede import create_mesh
-    from pnia.nlam_suede import create_grid_features
-    
+    from projects.pnia.pnia.models.nlam import create_mesh
+    from projects.pnia.pnia.datasets import create_grid_features
+
     import time
     dataset = SmeagolDataset.from_json(
         "/home/mrpa/chabotv/pnia/pnia/xp_conf/smeagol.json")
@@ -581,7 +581,7 @@ if __name__ == "__main__":
     dataset.create_parameter_weights()
     print(dataset.parameter_weights)
     print(dataset.weather_params)
-    
+
 
     #print(dataset.parameter_weights)
     #dataset.create_parameter_weights()
@@ -589,14 +589,14 @@ if __name__ == "__main__":
     #x, y, static, forcing = dataset.__getitem__(0)
     #print("time : ", time.time() - beg)
     #print(dataset.loader)
-    # 
+    #
     #dataset.members=(0,)
-    #dataset.shuffle = False 
+    #dataset.shuffle = False
     #dataset.compute_parameters_stats()
     #dataset.compute_timestep_stats()
     #create_mesh.prepare(dataset)
     #create_grid_features.prepare(dataset)
     #print(dataset.load_dataset_stats())
     print(dataset.load_static_data())
-    
+
 

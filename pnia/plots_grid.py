@@ -4,7 +4,7 @@ from datetime import datetime
 import cartopy.crs as ccrs
 import matplotlib.pyplot as plt
 import numpy as np
-import titan_dataset
+import projects.pnia.pnia.datasets.titan.dataset as dataset
 
 ssl._create_default_https_context = ssl._create_unverified_context
 
@@ -43,8 +43,8 @@ def plot_grid(sample, dataset):
     plt.savefig("/scratch/labia/ferreiram/test2.png")
 
 
-hparams = titan_dataset.TitanHyperParams()
-dataset = titan_dataset.TitanDataset(hparams)
+hparams = dataset.TitanHyperParams()
+dataset = dataset.TitanDataset(hparams)
 date = datetime(2023, 3, 19, 12, 0)
 sample = dataset.load_one_time_step(date)
 print(sample)
