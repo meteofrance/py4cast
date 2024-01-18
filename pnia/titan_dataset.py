@@ -294,7 +294,7 @@ class TitanDataset(AbstractDataset, Dataset):
     def geopotential_info(self) -> np.array:
         conf_ds = xr.load_dataset(self.root_dir / "conf.grib")
         corners = self.hp.sub_grid
-        return conf_ds.h.values[:, corners[0] : corners[1], corners[2] : corners[3]]
+        return conf_ds.h.values[corners[0] : corners[1], corners[2] : corners[3]]
 
     @property
     def limited_area(self) -> bool:
@@ -303,7 +303,7 @@ class TitanDataset(AbstractDataset, Dataset):
     @property
     def border_mask(self) -> np.array:
         border_mask = np.ones((self.shape[0], self.shape[1])).astype(bool)
-        size = self.border_size
+        size = self.hp.border_size
         border_mask[size:-size, size:-size] *= False
         return border_mask
 
@@ -323,6 +323,10 @@ class TitanDataset(AbstractDataset, Dataset):
     def standardize(self) -> bool:
         return self.hp.standardize
 
+    @property
+    def timestep(self) -> int: 
+        return self.hp.timestep 
+        
     @property
     def sample_length(self) -> int:
         return self.hp.nb_input_steps + self.hp.nb_pred_steps

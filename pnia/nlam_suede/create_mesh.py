@@ -5,7 +5,7 @@ import scipy.spatial
 import torch
 from pnia.base import AbstractDataset
 from pnia.settings import CACHE_DIR
-from pnia.titan_dataset import TitanDataset, TitanHyperParams
+
 from submodules.nlam_suede.create_mesh import (
     from_networkx_with_start_index,
     mk_2d_graph,
@@ -321,7 +321,7 @@ def prepare(
 
 if __name__ == "__main__":
     from argparse_dataclass import ArgumentParser
-
+    from pnia.titan_dataset import TitanDataset, TitanHyperParams
     parser = ArgumentParser(TitanHyperParams)
     hparams = parser.parse_args()
     print("hparams : ", hparams)

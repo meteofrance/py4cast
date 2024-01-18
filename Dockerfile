@@ -42,6 +42,7 @@ RUN set -eux && pip install pyg-lib==0.2.0 torch-scatter==2.1.1 torch-sparse==0.
 #RUN set -eux && pip install --default-timeout=100 --trusted-host files.pythonhosted.org plotly>=5.15.0
 WORKDIR $HOME_DIR
 RUN curl -fsSL https://code-server.dev/install.sh | sh
+RUN set -eux && pip install --default-timeout=100 netCDF4
 
 
 
