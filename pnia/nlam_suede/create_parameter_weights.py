@@ -4,7 +4,7 @@ import numpy as np
 import torch
 from pnia.base import AbstractDataset
 from pnia.settings import CACHE_DIR
-from pnia.titan_dataset import TitanDataset, TitanHyperParams
+
 from tqdm import tqdm
 
 
@@ -15,8 +15,10 @@ def compute_parameters_stats(dataset: AbstractDataset, static_dir_path: Path = N
     # based on fig A.1 in graph cast paper
     # w_par = np.zeros((len(dataset.hparams.weather_params),))
     # TODO : WTF les poids selon les niveaux, à adapter ?
-    w_dict = {"2": 1.0, "10": 0.5}
+    # A migrer dans le dataset  ? 
+   
     # Les poids originaux {"2": 1.0, "0": 0.1, "65": 0.065, "1000": 0.1, "850": 0.05, "500": 0.03}
+    w_dict = {"2": 1.0, "10": 0.5}
     w_list = np.array(
         [w_dict[str(param.levels)] for param in dataset.hp.weather_params]
     )
@@ -32,6 +34,7 @@ def compute_parameters_stats(dataset: AbstractDataset, static_dir_path: Path = N
         batch = torch.cat(
             (init_batch, target_batch), dim=1
         )  # (N_batch, N_t, N_grid, d_features)
+        
         means.append(torch.mean(batch, dim=(1, 2)))  # (N_batch, d_features,)
         squares.append(torch.mean(batch**2, dim=(1, 2)))  # (N_batch, d_features,)
 
@@ -57,7 +60,7 @@ def compute_parameters_stats(dataset: AbstractDataset, static_dir_path: Path = N
 def compute_timestep_stats(dataset: AbstractDataset, static_dir_path: Path = None):
     """Computes stats on the difference between 2 timesteps."""
 
-    if dataset.hp.timestep != 1:
+    if dataset.timestep != 1:
         # Pour la version timestep > 1 : s'inspirer de ce que font les suedois
         raise NotImplementedError("Case with step_len > 1 not implemented")
 
@@ -69,6 +72,7 @@ def compute_timestep_stats(dataset: AbstractDataset, static_dir_path: Path = Non
         batch = torch.cat(
             (init_batch, target_batch), dim=1
         )  # (Nbatch, Nt, Ngrid, d_features)
+
         batch_diffs = batch[:, 1:] - batch[:, :-1]  # (Nbatch, N_t-1, Ngrid, d_features)
 
         diff_means.append(torch.mean(batch_diffs, dim=(1, 2)))  # (Nbatch, d_features)
@@ -85,7 +89,7 @@ def compute_timestep_stats(dataset: AbstractDataset, static_dir_path: Path = Non
     torch.save(diff_std, static_dir_path / "diff_std.pt")
 
 
-def create_parameter_weights(dataset: TitanDataset):
+def create_parameter_weights(dataset: AbstractDataset):
 
     assert hparams.split == "train", "Dataset must be a training set"
 
@@ -102,6 +106,7 @@ def create_parameter_weights(dataset: TitanDataset):
 
 
 if __name__ == "__main__":
+    from pnia.titan_dataset import TitanDataset, TitanHyperParams
     from argparse_dataclass import ArgumentParser
 
     parser = ArgumentParser(TitanHyperParams)
