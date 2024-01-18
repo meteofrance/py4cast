@@ -2,7 +2,7 @@ from pathlib import Path
 
 import numpy as np
 import torch
-from pnia.base import AbstractDataset
+from pnia.datasets.base import AbstractDataset
 from pnia.settings import CACHE_DIR
 
 from tqdm import tqdm
@@ -15,8 +15,8 @@ def compute_parameters_stats(dataset: AbstractDataset, static_dir_path: Path = N
     # based on fig A.1 in graph cast paper
     # w_par = np.zeros((len(dataset.hparams.weather_params),))
     # TODO : WTF les poids selon les niveaux, à adapter ?
-    # A migrer dans le dataset  ? 
-   
+    # A migrer dans le dataset  ?
+
     # Les poids originaux {"2": 1.0, "0": 0.1, "65": 0.065, "1000": 0.1, "850": 0.05, "500": 0.03}
     w_dict = {"2": 1.0, "10": 0.5}
     w_list = np.array(
@@ -34,7 +34,7 @@ def compute_parameters_stats(dataset: AbstractDataset, static_dir_path: Path = N
         batch = torch.cat(
             (init_batch, target_batch), dim=1
         )  # (N_batch, N_t, N_grid, d_features)
-        
+
         means.append(torch.mean(batch, dim=(1, 2)))  # (N_batch, d_features,)
         squares.append(torch.mean(batch**2, dim=(1, 2)))  # (N_batch, d_features,)
 
@@ -106,7 +106,7 @@ def create_parameter_weights(dataset: AbstractDataset):
 
 
 if __name__ == "__main__":
-    from pnia.titan_dataset import TitanDataset, TitanHyperParams
+    from pnia.datasets.titan.dataset import TitanDataset, TitanHyperParams
     from argparse_dataclass import ArgumentParser
 
     parser = ArgumentParser(TitanHyperParams)

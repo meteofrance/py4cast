@@ -7,13 +7,13 @@ import wandb
 import matplotlib.pyplot as plt
 
 from submodules.nlam_suede.neural_lam import vis, constants
-# A noter que vis depend de constant ... qui n'a donc pas les bonnes choses (car portées par le dataset). 
+# A noter que vis depend de constant ... qui n'a donc pas les bonnes choses (car portées par le dataset).
 
-from pnia.base import AbstractDataset
+from pnia.datasets.base import AbstractDataset
 from dataclasses import dataclass, field
 
 
-@dataclass 
+@dataclass
 class HyperParam:
     dataset:AbstractDataset
     lr:float = 0.1
@@ -22,19 +22,19 @@ class HyperParam:
     step_length:float=0.25
 
 # Par rapport à la classe des Suédois, On ne change que le init
-# Cependant comme on va de toute façon dire qu'on importe le notre le choix est de copier. 
-# A voir avec le Lab s'il existe une meilleure solution 
+# Cependant comme on va de toute façon dire qu'on importe le notre le choix est de copier.
+# A voir avec le Lab s'il existe une meilleure solution
 class ARModel(pl.LightningModule):
     def __init__(self, hparams:HyperParam):
-        super().__init__() 
-    
+        super().__init__()
+
         self.save_hyperparameters()
         self.lr = hparams.lr
-        self.dataset = hparams.dataset 
+        self.dataset = hparams.dataset
 
         # Some constants useful for sub-classes
         self.batch_static_feature_dim = self.dataset.static_feature_dim # Only open water?
-        # TODO Understand the 3 timestep Before. Linked to __get_item__ (concatenation). 
+        # TODO Understand the 3 timestep Before. Linked to __get_item__ (concatenation).
         self.grid_forcing_dim = self.dataset.forcing_dim*1 # 5 features for 3 time-step window
         self.grid_state_dim = self.dataset.weather_dim
 
@@ -46,7 +46,7 @@ class ARModel(pl.LightningModule):
         # MSE loss, need to do reduction ourselves to get proper weighting
         if hparams.loss == "mse":
             self.loss = nn.MSELoss(reduction="none")
-            # Essai d'avoir quelque chose qui se rapproche un peu de l'assimilation de donnée en divisant par une variance. 
+            # Essai d'avoir quelque chose qui se rapproche un peu de l'assimilation de donnée en divisant par une variance.
             inv_var = self.step_diff_std**-2. # Comes from static_data_dict and buffer registration
             state_weight = self.param_weights*inv_var # (d_f,)
         elif hparams.loss == "mae":
@@ -416,8 +416,8 @@ class ARModel(pl.LightningModule):
                 loaded_state_dict[new_key] = loaded_state_dict[old_key]
                 del loaded_state_dict[old_key]
 
-if __name__ == "__main__": 
-    from pnia.smeagol_dataset import SmeagolDataset
+if __name__ == "__main__":
+    from pnia.datasets.smeagol.dataset import SmeagolDataset
     dataset = SmeagolDataset.from_json(
         "/home/mrpa/chabotv/pnia/pnia/xp_conf/smeagol.json")
     hp=HyperParam(dataset=dataset )

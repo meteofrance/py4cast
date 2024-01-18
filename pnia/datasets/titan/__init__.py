@@ -10,7 +10,7 @@ import xarray as xr
 import yaml
 from cyeccodes import nested_dd_iterator
 from cyeccodes.eccodes import get_multi_messages_from_file
-from pnia.base import AbstractDataset
+from pnia.datasets.base import AbstractDataset
 from torch.utils.data import DataLoader, Dataset
 
 FORMATSTR = "%Y-%m-%d_%Hh%M"
@@ -324,9 +324,9 @@ class TitanDataset(AbstractDataset, Dataset):
         return self.hp.standardize
 
     @property
-    def timestep(self) -> int: 
-        return self.hp.timestep 
-        
+    def timestep(self) -> int:
+        return self.hp.timestep
+
     @property
     def sample_length(self) -> int:
         return self.hp.nb_input_steps + self.hp.nb_pred_steps
