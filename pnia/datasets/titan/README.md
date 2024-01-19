@@ -74,7 +74,7 @@ Ecrire un fichier `.netrc` avec vos creds pour Hendrix.
 Ajoutez le dossier `pnia` au PYTHONPATH :
 
 ```
-export PYTHONPATH=/home/labia/berthomierl/pnia/
+export PYTHONPATH=/home/labia/berthomierl/pnia/pnia/datasets/titan/
 ```
 
 Lancer :

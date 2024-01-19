@@ -3,11 +3,10 @@ from argparse import ArgumentParser
 from ftplib import FTP
 from pathlib import Path
 
-from mfai.log_utils import get_logger
-from settings import BASE_PATH, HENDRIX, HENDRIX_PATH, NETRC_PATH
 
-this_module_name = Path(__file__).name
-LOGGER = get_logger(this_module_name)
+NETRC_PATH = Path.home() / ".netrc"
+HENDRIX = "hendrix.meteo.fr"
+HENDRIX_PATH = Path("/home/berthomierl/Titan")
 
 
 def login_hendrix(ftp: FTP):
@@ -43,6 +42,7 @@ if __name__ == "__main__":
     parser = ArgumentParser()
     parser.add_argument("filename", type=str, help="Filename on Hendrix")
     args = parser.parse_args()
+    pwd = Path(__file__).parents[0]
 
-    print(f"Retrieving file from hendrix : {BASE_PATH / args.filename}")
+    print(f"Retrieving file from hendrix : {pwd / args.filename}")
     retrieve_from_hendrix(args.filename)

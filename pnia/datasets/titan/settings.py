@@ -1,12 +1,12 @@
 from pathlib import Path
 
-BASE_PATH = Path.home() / "monorepo4ai/projects/titan"
-REQUESTS_PATH = BASE_PATH / "bdap_requests"
-GRIB_PATH = BASE_PATH / "grib"
-TAR_PATH = BASE_PATH / "tar"
-NETRC_PATH = Path.home() / ".netrc"
-HENDRIX = "hendrix.meteo.fr"
-HENDRIX_PATH = Path("/home/berthomierl/Titan")
+# BASE_PATH = Path.home() / "monorepo4ai/projects/titan"
+# REQUESTS_PATH = BASE_PATH / "bdap_requests"
+# GRIB_PATH = BASE_PATH / "grib"
+# TAR_PATH = BASE_PATH / "tar"
+# NETRC_PATH = Path.home() / ".netrc"
+# HENDRIX = "hendrix.meteo.fr"
+# HENDRIX_PATH = Path("/home/berthomierl/Titan")
 SCRATCH_PATH = Path("/scratch/shared/Titan")
 
 ANTILOPE_GRID = (1051, 1651)

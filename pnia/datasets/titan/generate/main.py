@@ -5,10 +5,10 @@ import tarfile
 from argparse import ArgumentParser
 from datetime import datetime, timedelta
 
-from pnia.datasets.titan.utils import get_list_file_hendrix, upload_to_hendrix
+from utils import get_list_file_hendrix, upload_to_hendrix
 from joblib import Parallel, delayed
-from settings import BASE_PATH, GRIB_PATH, REQUESTS_PATH, TAR_PATH
 from tqdm import trange
+from pathlib import Path
 
 
 class EmptyGribFile(Exception):
@@ -16,7 +16,7 @@ class EmptyGribFile(Exception):
     pass
 
 
-def download_1_bdap_request(request, date):
+def download_1_bdap_request(request, date, working_dir, grib_dir):
     subprocess_kwargs = {
         "shell": True,
         "stdout": subprocess.PIPE,
@@ -43,45 +43,50 @@ def download_1_bdap_request(request, date):
         process_dap3.wait(timeout=600)
 
     # Check file exists and not empty
-    grib_file = BASE_PATH / request.with_suffix(".grib").name
+    grib_file = working_dir / request.with_suffix(".grib").name
     if not grib_file.exists():
-        raise FileNotFoundError()
+        raise FileNotFoundError(grib_file.name)
     if grib_file.stat().st_size < 1000:
         raise EmptyGribFile()
 
     # Move to grib folder
-    shutil.move(grib_file, GRIB_PATH / grib_file.name)
+    shutil.move(grib_file, grib_dir / grib_file.name)
 
 
-def download_1h_gribs(date):
-    requests_arp = list(REQUESTS_PATH.glob("PA_*.txt"))
-    requests_other = list(REQUESTS_PATH.glob("*.txt"))
+def download_1h_gribs(date, working_dir, grib_dir):
+    request_path = working_dir / "bdap_requests"
+    requests_arp = list(request_path.glob("PA_*.txt"))
+    requests_other = list(request_path.glob("*.txt"))
     requests_other = [req for req in requests_other if req not in requests_arp]
     Parallel(n_jobs=2)(
-        delayed(download_1_bdap_request)(request, date) for request in requests_other
+        delayed(download_1_bdap_request)(request, date, working_dir, grib_dir) for request in requests_other
     )
     # As env_var DMT_DATE_PIVOT changes for ARPEGE, we do not parallelize
     for request in requests_arp:
-        download_1_bdap_request(request, date)
-    (BASE_PATH / "DIAG_BDAP").unlink()
+        download_1_bdap_request(request, date, working_dir, grib_dir)
+    (working_dir / "DIAG_BDAP").unlink()
 
 
-def compress_1h(output_file: str):
+def compress_1h(output_file: str, grib_dir):
     with tarfile.open(output_file, "w:gz") as tar:
-        tar.add(GRIB_PATH, arcname=".")
-    for f in GRIB_PATH.glob("*.grib"):
+        tar.add(grib_dir, arcname=".")
+    for f in grib_dir.glob("*.grib"):
         f.unlink()  # Remove grib files
 
 
-def tar_1day(day_filename):
+def tar_1day(day_filename, tar_dir):
     with tarfile.open(day_filename, "w") as tar:
-        tar.add(TAR_PATH, arcname=".")
-    for f in TAR_PATH.glob("*.tar.gz"):
+        tar.add(tar_dir, arcname=".")
+    for f in tar_dir.glob("*.tar.gz"):
         f.unlink()
 
 
-def main(list_days):
+def main(list_days, working_dir):
     """Downloads data for a list of days and send archive to Hendirx"""
+    grib_dir = pwd / "grib"
+    tar_dir = pwd / "tar"
+    grib_dir.mkdir(exist_ok=True)
+    tar_dir.mkdir(exist_ok=True)
     for date in list_days:
         print("date : ", date)
 
@@ -94,18 +99,18 @@ def main(list_days):
         for hour in trange(24):
             dateh = date + hour * timedelta(hours=1)
             filename_targz_1h = dateh.strftime("%Y-%m-%d_%Hh%M.tar.gz")
-            if (TAR_PATH / filename_targz_1h).exists():
+            if (tar_dir / filename_targz_1h).exists():
                 continue
-            download_1h_gribs(dateh)
-            compress_1h(filename_targz_1h)
-            shutil.move(filename_targz_1h, TAR_PATH / filename_targz_1h)
+            download_1h_gribs(dateh, working_dir, grib_dir)
+            compress_1h(filename_targz_1h, working_dir / "grib")
+            shutil.move(filename_targz_1h, tar_dir / filename_targz_1h)
 
         # Tar all 24 files for one day
-        tar_1day(day_filename)
+        tar_1day(day_filename, tar_dir)
 
         print(f"Sending file {day_filename} to Hendrix...")
-        upload_to_hendrix(BASE_PATH / day_filename)
-        (BASE_PATH / day_filename).unlink()
+        upload_to_hendrix(working_dir / day_filename)
+        (working_dir / day_filename).unlink()
 
 
 if __name__ == "__main__":
@@ -124,8 +129,12 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    GRIB_PATH.mkdir(exist_ok=True)
-    TAR_PATH.mkdir(exist_ok=True)
+    pwd = Path(__file__).parents[0]
+
+    grib_dir = pwd / "grib"
+    tar_dir = pwd / "tar"
+    grib_dir.mkdir(exist_ok=True)
+    tar_dir.mkdir(exist_ok=True)
 
     # Get list of dates
     d_start = datetime.strptime(args.start, "%Y%m%d")
@@ -134,4 +143,4 @@ if __name__ == "__main__":
     list_days = [d_start + i * timedelta(days=1) for i in range(nb_days)]
     print(f"Downloading data for {nb_days} days : {d_start} to {d_end}")
 
-    main(list_days)
+    main(list_days, pwd)
