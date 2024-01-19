@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import List, Literal, Tuple, Union
 
 import numpy as np
+from joblib import Parallel, delayed
 import torch
 import xarray as xr
 import yaml
@@ -86,7 +87,7 @@ class TitanHyperParams:
         self.weather_params = tuple(params)
 
 
-def read_grib(path_grib: Path, names=None, levels=None):
+def read_grib(params, path_grib: Path, names=None, levels=None):
     if names or levels:
         include_filters = {
             k: v for k, v in [("cfVarName", names), ("level", levels)] if v is not None
@@ -112,7 +113,7 @@ def read_grib(path_grib: Path, names=None, levels=None):
         level = int(level)
         grib_dict[name] = {}
         grib_dict[name][level] = array
-    return grib_dict
+    return params, grib_dict
 
 
 class TitanDataset(AbstractDataset, Dataset):
@@ -145,9 +146,7 @@ class TitanDataset(AbstractDataset, Dataset):
         self.all_weather_params = METADATA["WEATHER_PARAMS"]
         self.all_grids = METADATA["GRIDS"]
 
-    def load_one_time_step(self, date: datetime) -> dict:
-        sample = {}
-        date_str = date.strftime(FORMATSTR)
+    def grib_iterator(self, date_str: str):
         for grib_name, grib_keys in self.grib_params.items():
             params = [
                 param for param in self.hp.weather_params if param.name in grib_keys
@@ -157,7 +156,17 @@ class TitanDataset(AbstractDataset, Dataset):
                 continue
             levels = self.hp.isobaric_levels if "ISOBARE" in grib_name else None
             path_grib = self.root_dir / "grib" / date_str / grib_name
-            dico_grib = read_grib(path_grib, names_wp, levels)
+            yield (params, path_grib, names_wp, levels)  
+
+    def load_one_time_step(self, date: datetime) -> dict:
+        sample = {}
+        date_str = date.strftime(FORMATSTR)
+        # r = Parallel(n_jobs=10, prefer="threads")(delayed(read_grib)(params, path_grib, names_wp, levels) for params, path_grib, names_wp, levels in self.grib_iterator(date_str))
+        # for params, dico_grib in r:
+        #     for param in params:
+        #         sample[param.name] = dico_grib[param.param]
+        for params, path_grib, names_wp, levels in self.grib_iterator(date_str):
+            _, dico_grib = read_grib(params, path_grib, names_wp, levels)
             for param in params:
                 sample[param.name] = dico_grib[param.param]
         return sample
@@ -330,6 +339,39 @@ class TitanDataset(AbstractDataset, Dataset):
     @property
     def sample_length(self) -> int:
         return self.hp.nb_input_steps + self.hp.nb_pred_steps
+
+    # TODO: fix and implement those
+    @property
+    def forcing_dim(self)->int: 
+        """
+        Return the number of the forcing features (including date)
+        """
+        return 0
+
+    @property 
+    def weather_dim(self)-> int:
+        """
+        Return the number of weather parameter features 
+        """
+        return 0
+
+    @property
+    def diagnostic_dim(self)-> int:
+        """
+        Return the number of diagnostic variables (output only)
+        """
+        return 0
+
+    @property
+    def static_feature_dim(self)->int:
+        """
+        Return the number of static feature of the dataset
+        """
+        return 0
+
+    @property
+    def parameter_weights(self)->np.array:
+        pass
 
 
 if __name__ == "__main__":
