@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Literal, Tuple, Union
-from dataclasses import dataclass, field, fields, MISSING
+from dataclasses import dataclass, field, fields, MISSING, is_dataclass
 from pathlib import Path
 import yaml
 import getpass
@@ -88,40 +88,35 @@ class TitanHyperParams:
                 params.append(param)
         self.weather_params = tuple(params)
 
+class MergeDataclassMixin:
+    """
+    A mixin to create one attribute per inherited
+    dataclass with the field populated based
+    on name matching
+    Always inherit FIRST from this Mixin (and other mixins)
+    
+    @dataclass
+    class(MergeDataclassMixin, Dataclass1, Dataclass2, ...):
+        pass
+    
+    """
+    def __post_init__(self):
+        super().__post_init__()
+        list_vars = []
+        for parent in self.__class__.__bases__:
+            if is_dataclass(parent):
+                list_vars += [f.name for f in fields(parent)]
+                attr_name = str(parent.__name__).lower()
+                attrs = {f.name: getattr(self, f.name) for f in fields(parent)}
+                setattr(self, attr_name, parent(**attrs))
+
+        duplicate_fields = set([x for x in list_vars if list_vars.count(x) > 1])
+        if len(duplicate_fields) != 0:
+            raise AttributeError(f"Duplicate fields (same names) in inherited dataclasses : {duplicate_fields}")
 
 @dataclass
-class CLIArgs(Split, Grid, TitanHyperParams, TrainingHyperParams):
-
-    def __post_init__(self):
-
-        list_vars = []
-        list_vars += [f.name for f in fields(Split)]
-        list_vars += [f.name for f in fields(Grid)]
-        list_vars += [f.name for f in fields(TrainingHyperParams)]
-        list_vars += [f.name for f in fields(TitanHyperParams)]
-        dupes = set([x for x in list_vars if list_vars.count(x) > 1])
-        if len(dupes) != 0:
-            raise AttributeError(f"Duplicate fields in CLI arguments : {dupes}")
-
-    @property
-    def grid(self):
-        attrs = {f.name: getattr(self, f.name) for f in fields(Grid)}
-        return Grid(**attrs)
-
-    @property
-    def split(self):
-        attrs = {f.name: getattr(self, f.name) for f in fields(Split)}
-        return Split(**attrs)
-
-    @property
-    def titanhparams(self):
-        attrs = {f.name: getattr(self, f.name) for f in fields(TitanHyperParams)}
-        return TitanHyperParams(**attrs)
-
-    @property
-    def traininghparams(self):
-        attrs = {f.name: getattr(self, f.name) for f in fields(TrainingHyperParams)}
-        return TrainingHyperParams(**attrs)
+class CLIArgs(MergeDataclassMixin, Split, Grid, TitanHyperParams, TrainingHyperParams):
+    pass
 
 
 if __name__ == "__main__":
@@ -133,10 +128,10 @@ if __name__ == "__main__":
     params, _ = parser.parse_known_args()
 
     print('params : ', params)
-    #print('params.grid : ', params.grid)
-    #print('params.split : ', params.split)
-    #print('params.titanhparams : ', params.titanhparams)
-    #print('params.traininghparams : ', params.traininghparams)
+    print('params.grid : ', params.grid)
+    print('params.split : ', params.split)
+    print('params.titanhyperparams : ', params.titanhyperparams)
+    print('params.traininghyperparams : ', params.traininghyperparams)
 
 
     # OUTPUT
