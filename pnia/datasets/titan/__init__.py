@@ -331,6 +331,39 @@ class TitanDataset(AbstractDataset, Dataset):
     def sample_length(self) -> int:
         return self.hp.nb_input_steps + self.hp.nb_pred_steps
 
+    # TODO: fix and implement those
+    @property
+    def forcing_dim(self)->int: 
+        """
+        Return the number of the forcing features (including date)
+        """
+        return 0
+
+    @property 
+    def weather_dim(self)-> int:
+        """
+        Return the number of weather parameter features 
+        """
+        return 0
+
+    @property
+    def diagnostic_dim(self)-> int:
+        """
+        Return the number of diagnostic variables (output only)
+        """
+        return 0
+
+    @property
+    def static_feature_dim(self)->int:
+        """
+        Return the number of static feature of the dataset
+        """
+        return 0
+
+    @property
+    def parameter_weights(self)->np.array:
+        pass
+
 
 if __name__ == "__main__":
     from argparse_dataclass import ArgumentParser
