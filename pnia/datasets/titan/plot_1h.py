@@ -5,7 +5,7 @@ import cartopy.crs as ccrs
 import cartopy.feature as cfeature
 import matplotlib.pyplot as plt
 import xarray as xr
-from settings import GRIB_PATH
+from settings import SCRATCH_PATH
 
 ulat, llat, llon, ulon = 55.4, 37.5, -12, 16
 EXTENT = (llon, ulon, llat, ulat)
@@ -167,7 +167,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--folder",
         type=Path,
-        default=GRIB_PATH,
+        default=SCRATCH_PATH / "grib",
         help="Folder where 1h gribs are stored.",
     )
     args = parser.parse_args()

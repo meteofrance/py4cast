@@ -8,8 +8,7 @@ import numpy as np
 import xarray as xr
 from pnia.datasets.titan.utils import get_list_file_hendrix, retrieve_from_hendrix
 from mfai.log_utils import get_logger
-from pnia.datasets.titan.settings import GRIB_PARAMS, PARAMETERS, SCRATCH_PATH
-
+from pnia.datasets.titan.settings import GRIB_PARAMS, SCRATCH_PATH
 this_module_name = Path(__file__).name
 LOGGER = get_logger(this_module_name)
 
@@ -20,18 +19,29 @@ npy_dir = SCRATCH_PATH / "npy"
 list_files_hendrix = get_list_file_hendrix()
 
 
-def check_hour_done(date: datetime):
+def check_hour_done(date: datetime, convert=False):
     hour_str = date.strftime("%Y-%m-%d_%Hh%M")
-    hourly_npy_dir = npy_dir / hour_str
-    if not hourly_npy_dir.exists():
-        return False
-    npy_files = hourly_npy_dir.glob("*.npy")
-    nb_files = len(list(npy_files))
-    nb_params = len(list(PARAMETERS.keys()))
-    return nb_files == nb_params
+    if convert:
+        hourly_npy_dir = npy_dir / hour_str
+        if not hourly_npy_dir.exists():
+            return False
+        npy_files = hourly_npy_dir.glob("*.npy")
+        nb_files = len(list(npy_files))
+        params = []
+        for k in GRIB_PARAMS.keys():
+            params += GRIB_PARAMS[k]
+        return nb_files == len(params)
+    else:
+        hourly_grib_dir = grib_dir / hour_str
+        if not hourly_grib_dir.exists():
+            return False
+        grib_files = hourly_grib_dir.glob("*.grib")
+        nb_files = len(list(grib_files))
+        nb_files_wanted = len(list(GRIB_PARAMS.keys()))
+        return nb_files == nb_files_wanted
 
 
-def check_day_done(date: datetime):
+def check_day_done(date: datetime, convert=False):
     for hour in range(24):
         hour_date = date + hour * timedelta(hours=1)
         if not check_hour_done(hour_date):
@@ -101,7 +111,7 @@ def process_day(date: datetime, convert=False):
     """Downloads data from Hendrix for a day and convert it to npy"""
     LOGGER.info(f"Processing day {date}...")
 
-    if check_day_done(date):
+    if check_day_done(date, convert):
         LOGGER.info(f"Day {date} already done !")
         return
     tar = download_daily_archive(date)
@@ -109,7 +119,7 @@ def process_day(date: datetime, convert=False):
 
     for hour in range(24):
         hour_date = date + hour * timedelta(hours=1)
-        if not check_hour_done(hour_date):
+        if not check_hour_done(hour_date, convert):
             process_hour(hour_date, convert)
         else:
             LOGGER.info(f"Hour {hour_date} already done !")
