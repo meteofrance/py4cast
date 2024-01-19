@@ -22,7 +22,7 @@ if __name__ == "__main__":
 
     loader = DataLoader(
             dataset,
-            batch_size=8,
+            batch_size=batch_size,
             num_workers=hparams.num_workers,
             shuffle=True,
             # https://discuss.pytorch.org/t/error-expected-more-than-1-value-per-channel-when-training/26274/2
