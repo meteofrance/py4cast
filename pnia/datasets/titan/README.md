@@ -102,30 +102,6 @@ Chaque fichier npy correspond à un paramètre pour une grille. L'ensemble de ce
 * Poids d'un dossier pour un an : ~ 11.4 To
 
 
-### Test de dataloading
+```runai python write_metadata.py```
 
-La lecture des GRIBs en python avec xarray et cfgrib est très lente. On peut diviser la vitesse de lecture par 4, en utilisant le module `eccodes-cython`.
-
-Pour se faire, il faut une première fois compiler le module cython (à refaire à chaque modification de la lib eccodes-cython):
-
-```runai exec bash```
-
-```cd ../../libs/eccodes-cython/```
-
-```python setup.py build_ext -i```
-
-Example d'utilisation dans `test_dataloader.py` :
-
-```bash
-Read 1 grib PAAROME_1S40_ECH0_ISOBARE.grib, extract 4 params and 2 levels
-time fast (eccodes-cython) :  0.7981712818145752
-time slow (xarray-cfgrib) :  3.6338307857513428
-
-Chargement de tous les params disponibles, sur 3 niveaux, pour 100 échantillons
---> NPY
-67.29507660865784
---> GRIB eccodes-cython
-39.533979654312134
---> GRIB xarray-cfgrib
-358.0716278553009
-```
+Ce script va générer un fichier `metadata.yaml` qui contient toutes les infos sur les grilles et les paramètres météo (shortname, units, etc).
