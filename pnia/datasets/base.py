@@ -132,7 +132,8 @@ class AbstractDataset(ABC):
 
     def load_static_data(self, device="cpu")->Statics:
         grid_static_features = self.load_file("grid_features.pt") # (N_grid, d_grid_static)
-        border_mask = grid_static_features[:,3]
+        border_mask = grid_static_features[:,3].unsqueeze(1)
+
 
         # Load step diff stats
         step_diff_mean = self.load_file("diff_mean.pt") # (d_f,)
@@ -145,13 +146,13 @@ class AbstractDataset(ABC):
         # Load loss weighting vectors
         param_weights = torch.tensor(self.parameter_weights, dtype=torch.float32, device=device) # (d_f,)
         return Statics(**{
-            "border_mask": border_mask,
-            "grid_static_features": grid_static_features,
-            "step_diff_mean": step_diff_mean,
-            "step_diff_std": step_diff_std,
-            "data_mean": data_mean,
-            "data_std": data_std,
-            "param_weights": param_weights,
+            "border_mask": border_mask.type(torch.float32),
+            "grid_static_features": grid_static_features.type(torch.float32),
+            "step_diff_mean": step_diff_mean.type(torch.float32),
+            "step_diff_std": step_diff_std.type(torch.float32),
+            "data_mean": data_mean.type(torch.float32),
+            "data_std": data_std.type(torch.float32),
+            "param_weights": param_weights.type(torch.float32)
         })
    
     @abstractproperty

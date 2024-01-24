@@ -34,7 +34,6 @@ def compute_parameters_stats(dataset: AbstractDataset, static_dir_path: Path = N
         batch = torch.cat(
             (init_batch, target_batch), dim=1
         )  # (N_batch, N_t, N_grid, d_features)
-
         means.append(torch.mean(batch, dim=(1, 2)))  # (N_batch, d_features,)
         squares.append(torch.mean(batch**2, dim=(1, 2)))  # (N_batch, d_features,)
 

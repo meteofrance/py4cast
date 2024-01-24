@@ -20,7 +20,8 @@
         "geometry":"franmgsp32", 
         "border_size":10, 
         "domain":"france",
-        "model":"arome"
+        "model":"arome",
+        "subgrid":[0,50,0,50]
     }, 
     "dataset": {
         "arome": {
