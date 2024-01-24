@@ -5,48 +5,142 @@ from torch import nn
 import pytorch_lightning as pl
 import wandb
 import matplotlib.pyplot as plt
-
+from neural_lam.utils import BufferList
 from submodules.nlam_suede.neural_lam import vis, constants
-# A noter que vis depend de constant ... qui n'a donc pas les bonnes choses (car portées par le dataset).
-
+# A noter que vis depend de constant ... qui n'a donc pas les bonnes choses (car portées par le dataset). 
 from pnia.datasets.base import AbstractDataset
+
+
 from dataclasses import dataclass, field
 
+@dataclass 
+class Graph: 
+    model:str= "graph_lam"
+    name:str = "multiscale"
+    hidden_dim:int = 64
+    hidden_layers:int = 1
+    mesh_aggr:str="sum"
+    processor_layers:int=4
 
-@dataclass
+@dataclass 
 class HyperParam:
     dataset:AbstractDataset
+    graph: Graph = Graph()
     lr:float = 0.1
     loss:str = "mse"
     n_example_pred:int=2
     step_length:float=0.25
 
+
+
+def load_graph(hp, device="cpu"):
+    # Define helper lambda function
+    graph_dir_path = hp.dataset.cache_dir #os.path.join("graphs", graph_name)
+    loads_file = lambda fn: torch.load(os.path.join(graph_dir_path, fn),
+            map_location=device)
+
+    # Load edges (edge_index)
+    m2m_edge_index = BufferList(loads_file("m2m_edge_index.pt"),
+            persistent=False) # List of (2, M_m2m[l])
+    g2m_edge_index = loads_file("g2m_edge_index.pt")  # (2, M_g2m)
+    m2g_edge_index = loads_file("m2g_edge_index.pt")  # (2, M_m2g)
+
+    n_levels = len(m2m_edge_index)
+    hierarchical = n_levels > 1 # Nor just single level mesh graph
+
+    # Load static edge features
+    m2m_features = loads_file("m2m_features.pt")  # List of (M_m2m[l], d_edge_f)
+    g2m_features = loads_file("g2m_features.pt")  # (M_g2m, d_edge_f)
+    m2g_features = loads_file("m2g_features.pt")  # (M_m2g, d_edge_f)
+
+    # Normalize by dividing with longest edge (found in m2m)
+    longest_edge = max([torch.max(level_features[:,0])
+        for level_features in m2m_features]) # Col. 0 is length
+    m2m_features = BufferList([level_features / longest_edge
+        for level_features in m2m_features], persistent=False)
+    g2m_features = g2m_features / longest_edge
+    m2g_features = m2g_features / longest_edge
+
+    # Load static node features
+    mesh_static_features = loads_file("mesh_features.pt"
+            ) # List of (N_mesh[l], d_mesh_static)
+
+    # Some checks for consistency
+    assert len(m2m_features) == n_levels, "Inconsistent number of levels in mesh"
+    assert len(mesh_static_features) == n_levels, "Inconsistent number of levels in mesh"
+
+    if hierarchical:
+        # Load up and down edges and features
+        mesh_up_edge_index = BufferList(loads_file("mesh_up_edge_index.pt"),
+                persistent=False) # List of (2, M_up[l])
+        mesh_down_edge_index = BufferList(loads_file("mesh_down_edge_index.pt"),
+                persistent=False) # List of (2, M_down[l])
+
+        mesh_up_features = loads_file("mesh_up_features.pt"
+                ) # List of (M_up[l], d_edge_f)
+        mesh_down_features = loads_file("mesh_down_features.pt"
+                ) # List of (M_down[l], d_edge_f)
+
+        # Rescale
+        mesh_up_features = BufferList([edge_features / longest_edge
+                for edge_features in mesh_up_features], persistent=False)
+        mesh_down_features = BufferList([edge_features / longest_edge
+                for edge_features in mesh_down_features], persistent=False)
+
+        mesh_static_features = BufferList(mesh_static_features, persistent=False)
+    else:
+        # Extract single mesh level
+        m2m_edge_index = m2m_edge_index[0]
+        m2m_features = m2m_features[0]
+        mesh_static_features = mesh_static_features[0]
+
+        mesh_up_edge_index, mesh_down_edge_index, mesh_up_features, mesh_down_features =\
+                [], [], [], []
+
+    print(f"Graph is hierarchical {hierarchical}")
+    return hierarchical, {
+            "g2m_edge_index": g2m_edge_index,
+            "m2g_edge_index": m2g_edge_index,
+            "m2m_edge_index": m2m_edge_index,
+            "mesh_up_edge_index": mesh_up_edge_index,
+            "mesh_down_edge_index": mesh_down_edge_index,
+            "g2m_features": g2m_features,
+            "m2g_features": m2g_features,
+            "m2m_features": m2m_features,
+            "mesh_up_features": mesh_up_features,
+            "mesh_down_features": mesh_down_features,
+            "mesh_static_features": mesh_static_features,
+    }
+
 # Par rapport à la classe des Suédois, On ne change que le init
-# Cependant comme on va de toute façon dire qu'on importe le notre le choix est de copier.
-# A voir avec le Lab s'il existe une meilleure solution
+# Cependant comme on va de toute façon dire qu'on importe le notre le choix est de copier. 
+# A voir avec le Lab s'il existe une meilleure solution 
 class ARModel(pl.LightningModule):
     def __init__(self, hparams:HyperParam):
-        super().__init__()
-
+        super().__init__() 
+    
         self.save_hyperparameters()
         self.lr = hparams.lr
-        self.dataset = hparams.dataset
+        self.dataset = hparams.dataset 
 
         # Some constants useful for sub-classes
         self.batch_static_feature_dim = self.dataset.static_feature_dim # Only open water?
-        # TODO Understand the 3 timestep Before. Linked to __get_item__ (concatenation).
+        # TODO Understand the 3 timestep Before. Linked to __get_item__ (concatenation). 
+        # 3 replace by 1. How to have something more modular ? 
         self.grid_forcing_dim = self.dataset.forcing_dim*1 # 5 features for 3 time-step window
         self.grid_state_dim = self.dataset.weather_dim
+        print('ARModel',  self.dataset.weather_dim)
 
         # Load static features for grid/data
         static_data_dict = self.dataset.load_static_data()
-        for static_data_name, static_data_tensor in static_data_dict.items():
+        
+        for static_data_name, static_data_tensor in vars(static_data_dict).items():
             self.register_buffer(static_data_name, static_data_tensor, persistent=False)
 
         # MSE loss, need to do reduction ourselves to get proper weighting
         if hparams.loss == "mse":
             self.loss = nn.MSELoss(reduction="none")
-            # Essai d'avoir quelque chose qui se rapproche un peu de l'assimilation de donnée en divisant par une variance.
+            # Essai d'avoir quelque chose qui se rapproche un peu de l'assimilation de donnée en divisant par une variance. 
             inv_var = self.step_diff_std**-2. # Comes from static_data_dict and buffer registration
             state_weight = self.param_weights*inv_var # (d_f,)
         elif hparams.loss == "mae":
@@ -115,14 +209,15 @@ class ARModel(pl.LightningModule):
         prev_state = init_states[:,1]
         prediction_list = []
         pred_steps = forcing_features.shape[1]
-
+        
         for i in range(pred_steps):
             forcing = forcing_features[:, i]
             border_state = true_states[:, i]
-
+            #
+            # TODO c'est ici qu'il faudra charger le forceur sur les côtés. 
+            #
             predicted_state = self.predict_step(prev_state, prev_prev_state,
                     batch_static_features, forcing) # (B, N_grid, d_f)
-
             # Overwrite border with true state
             new_state = self.border_mask*border_state +\
                     self.interior_mask*predicted_state
@@ -244,12 +339,12 @@ class ARModel(pl.LightningModule):
             val_mae_total = torch.mean(val_mae_tensor, dim=0) # (pred_steps, d_f)
             val_mae_rescaled = val_mae_total * self.data_std # (pred_steps, d_f)
 
-            if not self.trainer.sanity_checking:
+            #if not self.trainer.sanity_checking:
                 # Don't log this during sanity checking
-                mae_fig = vis.plot_error_map(val_mae_rescaled, title="Validation MAE",
-                        step_length=self.step_length)
-                wandb.log({"val_mae": wandb.Image(mae_fig)})
-                plt.close("all") # Close all figs
+            #    mae_fig = vis.plot_error_map(val_mae_rescaled, title="Validation MAE",
+            #            step_length=self.step_length)
+            #    wandb.log({"val_mae": wandb.Image(mae_fig)})
+            #    plt.close("all") # Close all figs
 
         self.val_maes.clear() # Free memory
 
@@ -415,10 +510,3 @@ class ARModel(pl.LightningModule):
                 new_key = old_key.replace("g2m_gnn.grid_mlp", "encoding_grid_mlp")
                 loaded_state_dict[new_key] = loaded_state_dict[old_key]
                 del loaded_state_dict[old_key]
-
-if __name__ == "__main__":
-    from pnia.datasets.smeagol.dataset import SmeagolDataset
-    dataset = SmeagolDataset.from_json(
-        "/home/mrpa/chabotv/pnia/pnia/xp_conf/smeagol.json")
-    hp=HyperParam(dataset=dataset )
-    arm = ARModel(hp)

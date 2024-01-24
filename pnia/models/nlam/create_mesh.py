@@ -5,7 +5,7 @@ import scipy.spatial
 import torch
 from pnia.datasets.base import AbstractDataset
 from pnia.settings import CACHE_DIR
-
+from pathlib import Path 
 from submodules.nlam_suede.create_mesh import (
     from_networkx_with_start_index,
     mk_2d_graph,
@@ -16,6 +16,8 @@ from submodules.nlam_suede.create_mesh import (
     sort_nodes_internally,
 )
 from torch_geometric.utils.convert import from_networkx
+
+
 
 
 def prepare(
@@ -31,6 +33,7 @@ def prepare(
     hierarchical: Generate hierarchical mesh graph (default: 0, no).
     """
     # Load grid positions
+    # To Do Add something about the kind of graph (to make the distinction between hierachical and not ? )
     cache_dir_path = CACHE_DIR / "neural_lam" / str(dataset)
     cache_dir_path.mkdir(parents=True, exist_ok=True)
 
@@ -38,7 +41,7 @@ def prepare(
 
     grid_xy = torch.tensor(xy)
     pos_max = torch.max(torch.abs(grid_xy))
-
+    print(f"Size of xy {xy.shape}, size of grid_xy {grid_xy.shape}")
     ####################################################################################
     #
     # Mesh
@@ -208,6 +211,7 @@ def prepare(
     # Divide mesh node pos by max coordinate of grid cell
     mesh_pos = [pos / pos_max for pos in mesh_pos]
 
+    print("In create grid_mesh mesh_pos",mesh_pos[0].shape)
     # Save mesh positions
     torch.save(mesh_pos, cache_dir_path / "mesh_features.pt")  # mesh pos, in float32
 
@@ -222,12 +226,16 @@ def prepare(
 
     # mesh nodes on lowest level
     vm = G_bottom_mesh.nodes
+    print("Bottom_mesh nodes",len(vm))
     vm_xy = np.array([xy for _, xy in vm.data("pos")])
     # distance between mesh nodes
     dm = np.sqrt(np.sum((vm.data("pos")[(0, 1, 0)] - vm.data("pos")[(0, 0, 0)]) ** 2))
 
+    print(f"Distance between mesh node {dm}, {DM_SCALE}")
     # grid nodes
     Ny, Nx = xy.shape[1:]
+
+    print(f"In create Mesh Ny and Nx shape {Ny}, {Nx}")
 
     G_grid = networkx.grid_2d_graph(Ny, Nx)
     G_grid.clear_edges()
@@ -237,6 +245,7 @@ def prepare(
         # pos is in feature but here explicit for convenience
         G_grid.nodes[node]["pos"] = np.array([xy[0][node], xy[1][node]])
 
+    print(f"Len G_grid {len(G_grid.nodes)}")
     # add 1000 to node key to separate grid nodes (1000,i,j) from mesh nodes (i,j)
     # and impose sorting order such that vm are the first nodes
     G_grid = prepend_node_index(G_grid, 1000)
@@ -326,4 +335,4 @@ if __name__ == "__main__":
     hparams = parser.parse_args()
     print("hparams : ", hparams)
     dataset = TitanDataset(hparams)
-    prepare(dataset, hierarchical=True)
+    prepare(dataset, hierarchical=False)

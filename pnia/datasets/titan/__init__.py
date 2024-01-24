@@ -12,6 +12,7 @@ import yaml
 from cyeccodes import nested_dd_iterator
 from cyeccodes.eccodes import get_multi_messages_from_file
 from pnia.datasets.base import AbstractDataset
+from pnia.settings import CACHE_DIR
 from torch.utils.data import DataLoader, Dataset
 
 FORMATSTR = "%Y-%m-%d_%Hh%M"
@@ -51,7 +52,7 @@ class TitanHyperParams:
     isobaric_levels: Tuple[int] = (1000, 850)  # hPa
     timestep: int = 1  # hours
     nb_input_steps: int = 2
-    nb_pred_steps: int = 4
+    nb_pred_steps: int = 19
     step_btw_samples: int = 6  # hours
     sub_grid: Tuple[int] = (
         1000,
@@ -60,7 +61,7 @@ class TitanHyperParams:
         1456,
     )  # grid corners (pixel), lat lon grille AROME 1S100
     border_size: int = 10  # pixels
-    batch_size: int = 4
+    batch_size: int = 2
     num_workers: int = 2
     standardize: bool = False  # TODO réflechir si ce paramètre est pertinent ici ?
     # pas sur car utile que pour neural_lam
@@ -122,6 +123,7 @@ class TitanDataset(AbstractDataset, Dataset):
         self.init_metadata()
         self.hp = hparams
         self.data_dir = self.root_dir / "grib"
+        self.cache_dir = CACHE_DIR / "neural_lam" / str(self)
         self.init_list_samples_dates()
 
     def init_list_samples_dates(self):
@@ -263,17 +265,17 @@ class TitanDataset(AbstractDataset, Dataset):
 
         # TODO : WTF ?!
         # Combine forcing over each window of 3 time steps
-        forcing_windowed = torch.cat(
-            (
-                forcing_features[:-2],
-                forcing_features[1:-1],
-                forcing_features[2:],
-            ),
-            dim=2,
-        )  # (sample_len-2, N_grid, 3*d_forcing)
+      #  forcing_windowed = torch.cat(
+      #      (
+      #          forcing_features[:-2],
+      #          forcing_features[1:-1],
+      #          forcing_features[2:],
+      #      ),
+      #     dim=2,
+      #  )  # (sample_len-2, N_grid, 3*d_forcing)
         # Now index 0 of ^ corresponds to forcing at index 0-2 of sample
-
-        return init_states, target_states, static_features, forcing_windowed
+        print("In Titan __get_item__ ", init_states.shape, target_states.shape, static_features.shape, forcing_features.shape )
+        return init_states, target_states, static_features, forcing_features[2:]#windowed
 
     @property
     def loader(self):
@@ -346,14 +348,14 @@ class TitanDataset(AbstractDataset, Dataset):
         """
         Return the number of the forcing features (including date)
         """
-        return 0
+        return 5
 
     @property 
     def weather_dim(self)-> int:
         """
         Return the number of weather parameter features 
         """
-        return 0
+        return 2
 
     @property
     def diagnostic_dim(self)-> int:
@@ -367,11 +369,11 @@ class TitanDataset(AbstractDataset, Dataset):
         """
         Return the number of static feature of the dataset
         """
-        return 0
+        return 1
 
     @property
     def parameter_weights(self)->np.array:
-        pass
+        return np.load(self.cache_dir / "parameter_weights.npy")
 
 
 if __name__ == "__main__":
