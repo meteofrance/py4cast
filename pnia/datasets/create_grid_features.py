@@ -33,6 +33,7 @@ def prepare(dataset: AbstractDataset):
     )  # (N_grid, 4)
 
     torch.save(grid_features, graph_dir_path / "grid_features.pt")
+    (graph_dir_path / "grid_features.pt").chmod(0o666)
 
 
 if __name__ == "__main__":

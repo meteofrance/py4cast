@@ -1,5 +1,5 @@
 import random
-from argparse import ArgumentParser
+from argparse import ArgumentParser,BooleanOptionalAction
 import time
 from pathlib import Path
 from dataclasses import dataclass, field, fields, MISSING, is_dataclass
@@ -82,6 +82,7 @@ if __name__ == "__main__":
     path = Path(__file__)
     
     parser = ArgumentParser(description="Train or evaluate models for LAM")
+    # For our implementation
     parser.add_argument(
         "--dataset",
         type=str,
@@ -98,6 +99,8 @@ if __name__ == "__main__":
 
     parser.add_argument('--model', type=str, default="graph_lam",
         help='Model architecture to train/evaluate (default: graph_lam)')
+    
+    # Old arguments from nlam 
     parser.add_argument('--seed', type=int, default=42,
         help='random seed (default: 42)')
 
@@ -139,7 +142,11 @@ if __name__ == "__main__":
     # Evaluation options
     parser.add_argument('--eval', type=str,
         help='Eval model on given data split (val/test) (default: None (train model))')
-    args,other = parser.parse_known_args()
+
+    # New arguments 
+    parser.add_argument("--standardize", action=BooleanOptionalAction, default=False, help="Do we need to standardize")
+    parser.add_argument("--diagnose", action=BooleanOptionalAction, default=False, help="Do we need to show extra print ?")
+    args, other = parser.parse_known_args()
 
     # Asserts for arguments
     assert args.model in MODELS, f"Unknown model: {args.model}"
@@ -151,7 +158,10 @@ if __name__ == "__main__":
 
     # Initialisation du dataset 
     if args.dataset == "smeagol":
-        training_dataset, validation_dataset, test_dataset = SmeagolDataset.from_json(args.data_conf, args = {"valid":{"nb_pred_steps":19}, "test":{"nb_pred_steps":19}})
+        training_dataset, validation_dataset, test_dataset = SmeagolDataset.from_json(args.data_conf, args = {
+            "train":{"nb_pred_steps":1,"diagnose":args.diagnose, "standardize":args.standardize},
+            "valid":{"nb_pred_steps":19, "standardize":args.standardize}, 
+            "test":{"nb_pred_steps":19, "standardize":args.standardize}})
     elif args.dataset == "titan": 
         hparams_train_dataset = TitanHyperParams(**{"nb_pred_steps":1})
         training_dataset = DATASETS["titan"]["dataset"](hparams_train_dataset)
@@ -159,8 +169,6 @@ if __name__ == "__main__":
         validation_dataset = DATASETS["titan"]["dataset"](hparams_val_dataset)
         hparams_test_dataset =TitanHyperParams(**{"nb_pred_steps":19, "split":"test"})
         test_dataset = DATASETS["titan"]["dataset"](hparams_test_dataset)
-  
- 
 
     # Lie uniquement au modele choisi 
     graph = Graph(model=args.model, name=args.graph, hidden_dim=args.hidden_dim, hidden_layers=args.hidden_layers,processor_layers=args.processor_layers, mesh_aggr = args.mesh_aggr)

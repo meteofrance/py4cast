@@ -11,14 +11,29 @@ from submodules.nlam_suede.create_mesh import (
     mk_2d_graph,
     plot_graph,
     prepend_node_index,
-    save_edges,
-    save_edges_list,
     sort_nodes_internally,
 )
 from torch_geometric.utils.convert import from_networkx
 
 
+def save_edges(graph, name, base_path):
+    torch.save(graph.edge_index, base_path/ f"{name}_edge_index.pt")
+    (base_path / f"{name}_edge_index.pt").chmod(0o666)
 
+    edge_features = torch.cat((graph.len.unsqueeze(1), graph.vdiff),
+            dim=1).to(torch.float32) # Save as float32
+    torch.save(edge_features, base_path/ f"{name}_features.pt")
+    (base_path/ f"{name}_features.pt").chmod(0o666)
+
+
+def save_edges_list(graphs, name, base_path):
+    torch.save([graph.edge_index for graph in graphs],
+            base_path/ f"{name}_edge_index.pt")
+    (base_path/ f"{name}_edge_index.pt").chmod(0o666)
+    edge_features = [torch.cat((graph.len.unsqueeze(1), graph.vdiff),
+            dim=1).to(torch.float32) for graph in graphs] # Save as float32
+    torch.save(edge_features, base_path/ f"{name}_features.pt")
+    (base_path/ f"{name}_features.pt").chmod(0o666)
 
 def prepare(
     dataset: AbstractDataset,
@@ -214,7 +229,7 @@ def prepare(
     print("In create grid_mesh mesh_pos",mesh_pos[0].shape)
     # Save mesh positions
     torch.save(mesh_pos, cache_dir_path / "mesh_features.pt")  # mesh pos, in float32
-
+    (cache_dir_path / "mesh_features.pt").chmod(0o666)
     ####################################################################################
     #
     # Grid2Mesh

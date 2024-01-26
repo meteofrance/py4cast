@@ -303,7 +303,7 @@ class TitanDataset(AbstractDataset, Dataset):
 
     @property
     def geopotential_info(self) -> np.array:
-        conf_ds = xr.load_dataset(self.root_dir / "conf.grib")
+        conf_ds = xr.load_dataset(self.root_dir / "conf.grib") 
         corners = self.hp.sub_grid
         return conf_ds.h.values[corners[0] : corners[1], corners[2] : corners[3]]
 
@@ -329,6 +329,13 @@ class TitanDataset(AbstractDataset, Dataset):
     @property
     def weather_params(self) -> List[str]:
         return [param.name for param in self.hp.weather_params]
+
+    def shortnames(self, kind:Literal["all","input","output","forcing", "diagnostic", "input_output"]='all')-> List[str]:
+        # ToDo : Separation des noms en fonction de ce qu'on veut avoir
+        if kind == "forcing": 
+            return ["FakeFlux"]
+        else:
+            return self.weather_params
 
     @property
     def standardize(self) -> bool:

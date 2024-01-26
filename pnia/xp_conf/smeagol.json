@@ -21,7 +21,7 @@
         "border_size":10, 
         "domain":"france",
         "model":"arome",
-        "subgrid":[0,50,0,50]
+        "subgrid":[50,550,50,550]
     }, 
     "dataset": {
         "arome": {
@@ -122,7 +122,6 @@
                         1
                     ]
                 },
-                "SURFRESERV.NEIGE":{"shortname":"surf_snow"}, 
                 "SURFTEMPERATURE":{"shortname":"surf_t"},
                 "CLSTEMPERATURE":{"shortname":"2t"},
                 "CLSHUMI.RELATIVE":{"shortname":"2hu"},
@@ -132,8 +131,6 @@
                 "CLSV.RAF60M.XFU":{"shortname":"v_raf"},
                 "SURFPRESSION":{"shortname":"psurf"},
                 "SURFACCPLUIE":{"shortname":"rain"},
-                "SURFACCNEIGE":{"shortname":"snow"},
-                "SURFACCGRAUPEL":{"shortname":"graupel"},
                 "SOMMFLU.RAY.SOLA":{"shortname":"Rad_Flux", "kind":"input"},
                 "SOMMRAYT.SOLAIRE":{"shortname":"Rad","kind":"input"}
                 }
