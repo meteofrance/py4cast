@@ -14,3 +14,5 @@ cython>=3
 cfgrib
 xarray
 argparse-dataclass==2.0.0
+typer==0.9.0
+netCDF4==1.6.5

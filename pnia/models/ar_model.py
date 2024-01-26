@@ -143,6 +143,8 @@ class ARModel(pl.LightningModule):
             # Essai d'avoir quelque chose qui se rapproche un peu de l'assimilation de donnée en divisant par une variance. 
             inv_var = self.step_diff_std**-2. # Comes from static_data_dict and buffer registration
             state_weight = self.param_weights*inv_var # (d_f,)
+            #for x,y in enumerate(zip(state_weight, self.dataset.weather_params)): 
+            #    print(x,y)
         elif hparams.loss == "mae":
             self.loss = nn.L1Loss(reduction="none")
             # Weight states with inverse std instead in this case
