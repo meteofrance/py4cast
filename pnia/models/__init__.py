@@ -1,1 +1,1 @@
-from .nlam.models import HiLAM, GraphLAM, HiLAMParallel
+from .nlam.models import GraphLAM, HiLAM, HiLAMParallel  # noqa: F401

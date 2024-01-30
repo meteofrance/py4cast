@@ -5,7 +5,6 @@ from pathlib import Path
 from typing import List, Literal, Tuple, Union
 
 import numpy as np
-from joblib import Parallel, delayed
 import torch
 import xarray as xr
 import yaml
@@ -123,7 +122,7 @@ class TitanDataset(AbstractDataset, Dataset):
         self.init_metadata()
         self.hp = hparams
         self.data_dir = self.root_dir / "grib"
-        self.cache_dir = CACHE_DIR / "neural_lam" / str(self)
+        self._cache_dir = CACHE_DIR / "neural_lam" / str(self)
         self.init_list_samples_dates()
 
     def init_list_samples_dates(self):
@@ -158,12 +157,14 @@ class TitanDataset(AbstractDataset, Dataset):
                 continue
             levels = self.hp.isobaric_levels if "ISOBARE" in grib_name else None
             path_grib = self.root_dir / "grib" / date_str / grib_name
-            yield (params, path_grib, names_wp, levels)  
+            yield (params, path_grib, names_wp, levels)
 
     def load_one_time_step(self, date: datetime) -> dict:
         sample = {}
         date_str = date.strftime(FORMATSTR)
-        # r = Parallel(n_jobs=10, prefer="threads")(delayed(read_grib)(params, path_grib, names_wp, levels) for params, path_grib, names_wp, levels in self.grib_iterator(date_str))
+        # r = Parallel(n_jobs=10, prefer="threads")(delayed(read_grib)
+        # (params, path_grib, names_wp, levels)
+        # for params, path_grib, names_wp, levels in self.grib_iterator(date_str))
         # for params, dico_grib in r:
         #     for param in params:
         #         sample[param.name] = dico_grib[param.param]
@@ -265,17 +266,28 @@ class TitanDataset(AbstractDataset, Dataset):
 
         # TODO : WTF ?!
         # Combine forcing over each window of 3 time steps
-      #  forcing_windowed = torch.cat(
-      #      (
-      #          forcing_features[:-2],
-      #          forcing_features[1:-1],
-      #          forcing_features[2:],
-      #      ),
-      #     dim=2,
-      #  )  # (sample_len-2, N_grid, 3*d_forcing)
+        #  forcing_windowed = torch.cat(
+        #      (
+        #          forcing_features[:-2],
+        #          forcing_features[1:-1],
+        #          forcing_features[2:],
+        #      ),
+        #     dim=2,
+        #  )  # (sample_len-2, N_grid, 3*d_forcing)
         # Now index 0 of ^ corresponds to forcing at index 0-2 of sample
-        print("In Titan __get_item__ ", init_states.shape, target_states.shape, static_features.shape, forcing_features.shape )
-        return init_states, target_states, static_features, forcing_features[2:]#windowed
+        # print(
+        #     "In Titan __get_item__ ",
+        #     init_states.shape,
+        #     target_states.shape,
+        #     static_features.shape,
+        #     forcing_features.shape,
+        # )
+        return (
+            init_states,
+            target_states,
+            static_features,
+            forcing_features[2:],
+        )  # windowed
 
     @property
     def loader(self):
@@ -303,7 +315,7 @@ class TitanDataset(AbstractDataset, Dataset):
 
     @property
     def geopotential_info(self) -> np.array:
-        conf_ds = xr.load_dataset(self.root_dir / "conf.grib") 
+        conf_ds = xr.load_dataset(self.root_dir / "conf.grib")
         corners = self.hp.sub_grid
         return conf_ds.h.values[corners[0] : corners[1], corners[2] : corners[3]]
 
@@ -330,9 +342,14 @@ class TitanDataset(AbstractDataset, Dataset):
     def weather_params(self) -> List[str]:
         return [param.name for param in self.hp.weather_params]
 
-    def shortnames(self, kind:Literal["all","input","output","forcing", "diagnostic", "input_output"]='all')-> List[str]:
+    def shortnames(
+        self,
+        kind: Literal[
+            "all", "input", "output", "forcing", "diagnostic", "input_output"
+        ] = "all",
+    ) -> List[str]:
         # ToDo : Separation des noms en fonction de ce qu'on veut avoir
-        if kind == "forcing": 
+        if kind == "forcing":
             return ["FakeFlux"]
         else:
             return self.weather_params
@@ -351,36 +368,40 @@ class TitanDataset(AbstractDataset, Dataset):
 
     # TODO: fix and implement those
     @property
-    def forcing_dim(self)->int: 
+    def forcing_dim(self) -> int:
         """
         Return the number of the forcing features (including date)
         """
         return 5
 
-    @property 
-    def weather_dim(self)-> int:
+    @property
+    def weather_dim(self) -> int:
         """
-        Return the number of weather parameter features 
+        Return the number of weather parameter features
         """
         return 2
 
     @property
-    def diagnostic_dim(self)-> int:
+    def diagnostic_dim(self) -> int:
         """
         Return the number of diagnostic variables (output only)
         """
         return 0
 
     @property
-    def static_feature_dim(self)->int:
+    def static_feature_dim(self) -> int:
         """
         Return the number of static feature of the dataset
         """
         return 1
 
     @property
-    def parameter_weights(self)->np.array:
+    def parameter_weights(self) -> np.array:
         return np.load(self.cache_dir / "parameter_weights.npy")
+
+    @property
+    def cache_dir(self) -> Path:
+        return self._cache_dir
 
 
 if __name__ == "__main__":

@@ -1,39 +1,140 @@
+import matplotlib
 import matplotlib.pyplot as plt
 import networkx
 import numpy as np
 import scipy.spatial
 import torch
+import torch_geometric as pyg
 from pnia.datasets.base import AbstractDataset
 from pnia.settings import CACHE_DIR
-from pathlib import Path 
-from submodules.nlam_suede.create_mesh import (
-    from_networkx_with_start_index,
-    mk_2d_graph,
-    plot_graph,
-    prepend_node_index,
-    sort_nodes_internally,
-)
+from pnia.utils import torch_save
 from torch_geometric.utils.convert import from_networkx
 
 
-def save_edges(graph, name, base_path):
-    torch.save(graph.edge_index, base_path/ f"{name}_edge_index.pt")
-    (base_path / f"{name}_edge_index.pt").chmod(0o666)
+def sort_nodes_internally(nx_graph):
+    # For some reason the networkx .nodes() return list can not be sorted,
+    # but this is the ordering used by pyg when converting. This function fixes this
+    H = networkx.DiGraph()
+    H.add_nodes_from(sorted(nx_graph.nodes(data=True)))
+    H.add_edges_from(nx_graph.edges(data=True))
+    return H
 
-    edge_features = torch.cat((graph.len.unsqueeze(1), graph.vdiff),
-            dim=1).to(torch.float32) # Save as float32
-    torch.save(edge_features, base_path/ f"{name}_features.pt")
-    (base_path/ f"{name}_features.pt").chmod(0o666)
+
+def prepend_node_index(graph, new_index):
+    # Relabel node indices in graph, insert (graph_level, i, j)
+    ijk = [tuple((new_index,) + x) for x in graph.nodes]
+    to_mapping = dict(zip(graph.nodes, ijk))
+    return networkx.relabel_nodes(graph, to_mapping, copy=True)
+
+
+def plot_graph(graph, title=None):
+    fig, axis = plt.subplots(figsize=(8, 8), dpi=200)  # W,H
+    edge_index = graph.edge_index
+    pos = graph.pos
+
+    # Fix for re-indexed edge indices only containing mesh nodes at
+    # higher levels in hierarchy
+    edge_index = edge_index - edge_index.min()
+
+    if pyg.utils.is_undirected(edge_index):
+        # Keep only 1 direction of edge_index
+        edge_index = edge_index[:, edge_index[0] < edge_index[1]]  # (2, M/2)
+    # TODO: indicate direction of directed edges
+
+    # Move all to cpu and numpy, compute (in)-degrees
+    degrees = pyg.utils.degree(edge_index[1], num_nodes=pos.shape[0]).cpu().numpy()
+    edge_index = edge_index.cpu().numpy()
+    pos = pos.cpu().numpy()
+
+    # Plot edges
+    from_pos = pos[edge_index[0]]  # (M/2, 2)
+    to_pos = pos[edge_index[1]]  # (M/2, 2)
+    edge_lines = np.stack((from_pos, to_pos), axis=1)
+    axis.add_collection(
+        matplotlib.collections.LineCollection(
+            edge_lines, lw=0.4, colors="black", zorder=1
+        )
+    )
+
+    # Plot nodes
+    node_scatter = axis.scatter(
+        pos[:, 0],
+        pos[:, 1],
+        c=degrees,
+        s=3,
+        marker="o",
+        zorder=2,
+        cmap="viridis",
+        clim=None,
+    )
+
+    plt.colorbar(node_scatter, aspect=50)
+
+    if title is not None:
+        axis.set_title(title)
+
+    return fig, axis
+
+
+def from_networkx_with_start_index(nx_graph, start_index):
+    pyg_graph = from_networkx(nx_graph)
+    pyg_graph.edge_index += start_index
+    return pyg_graph
+
+
+def mk_2d_graph(xy, nx, ny):
+    xm, xM = np.amin(xy[0][0, :]), np.amax(xy[0][0, :])
+    ym, yM = np.amin(xy[1][:, 0]), np.amax(xy[1][:, 0])
+
+    # avoid nodes on border
+    dx = (xM - xm) / nx
+    dy = (yM - ym) / ny
+    lx = np.linspace(xm + dx / 2, xM - dx / 2, nx)
+    ly = np.linspace(ym + dy / 2, yM - dy / 2, ny)
+
+    mg = np.meshgrid(lx, ly)
+    g = networkx.grid_2d_graph(len(ly), len(lx))
+
+    for node in g.nodes:
+        g.nodes[node]["pos"] = np.array([mg[0][node], mg[1][node]])
+
+    # add diagonal edges
+    g.add_edges_from(
+        [((x, y), (x + 1, y + 1)) for x in range(nx - 1) for y in range(ny - 1)]
+        + [((x + 1, y), (x, y + 1)) for x in range(nx - 1) for y in range(ny - 1)]
+    )
+
+    # turn into directed graph
+    dg = networkx.DiGraph(g)
+    for (u, v) in g.edges():
+        d = np.sqrt(np.sum((g.nodes[u]["pos"] - g.nodes[v]["pos"]) ** 2))
+        dg.edges[u, v]["len"] = d
+        dg.edges[u, v]["vdiff"] = g.nodes[u]["pos"] - g.nodes[v]["pos"]
+        dg.add_edge(v, u)
+        dg.edges[v, u]["len"] = d
+        dg.edges[v, u]["vdiff"] = g.nodes[v]["pos"] - g.nodes[u]["pos"]
+
+    return dg
+
+
+def save_edges(graph, name, base_path):
+    torch_save(graph.edge_index, base_path / f"{name}_edge_index.pt")
+
+    edge_features = torch.cat((graph.len.unsqueeze(1), graph.vdiff), dim=1).to(
+        torch.float32
+    )  # Save as float32
+    torch_save(edge_features, base_path / f"{name}__features.pt")
 
 
 def save_edges_list(graphs, name, base_path):
-    torch.save([graph.edge_index for graph in graphs],
-            base_path/ f"{name}_edge_index.pt")
-    (base_path/ f"{name}_edge_index.pt").chmod(0o666)
-    edge_features = [torch.cat((graph.len.unsqueeze(1), graph.vdiff),
-            dim=1).to(torch.float32) for graph in graphs] # Save as float32
-    torch.save(edge_features, base_path/ f"{name}_features.pt")
-    (base_path/ f"{name}_features.pt").chmod(0o666)
+    list_edge_index = [graph.edge_index for graph in graphs]
+    torch_save(list_edge_index, base_path / f"{name}_edge_index.pt")
+    edge_features = [
+        torch.cat((graph.len.unsqueeze(1), graph.vdiff), dim=1).to(torch.float32)
+        for graph in graphs
+    ]  # Save as float32
+    torch_save(edge_features, base_path / f"{name}_features.pt")
+
 
 def prepare(
     dataset: AbstractDataset,
@@ -226,10 +327,10 @@ def prepare(
     # Divide mesh node pos by max coordinate of grid cell
     mesh_pos = [pos / pos_max for pos in mesh_pos]
 
-    print("In create grid_mesh mesh_pos",mesh_pos[0].shape)
+    print("In create grid_mesh mesh_pos", mesh_pos[0].shape)
     # Save mesh positions
-    torch.save(mesh_pos, cache_dir_path / "mesh_features.pt")  # mesh pos, in float32
-    (cache_dir_path / "mesh_features.pt").chmod(0o666)
+    torch_save(mesh_pos, cache_dir_path / "mesh_features.pt")  # mesh pos, in float32
+
     ####################################################################################
     #
     # Grid2Mesh
@@ -241,7 +342,7 @@ def prepare(
 
     # mesh nodes on lowest level
     vm = G_bottom_mesh.nodes
-    print("Bottom_mesh nodes",len(vm))
+    print("Bottom_mesh nodes", len(vm))
     vm_xy = np.array([xy for _, xy in vm.data("pos")])
     # distance between mesh nodes
     dm = np.sqrt(np.sum((vm.data("pos")[(0, 1, 0)] - vm.data("pos")[(0, 0, 0)]) ** 2))
@@ -345,7 +446,8 @@ def prepare(
 
 if __name__ == "__main__":
     from argparse_dataclass import ArgumentParser
-    from pnia.datasets.titan.dataset import TitanDataset, TitanHyperParams
+    from pnia.datasets.titan import TitanDataset, TitanHyperParams
+
     parser = ArgumentParser(TitanHyperParams)
     hparams = parser.parse_args()
     print("hparams : ", hparams)

@@ -3,7 +3,6 @@ from argparse import ArgumentParser
 from ftplib import FTP
 from pathlib import Path
 
-
 NETRC_PATH = Path.home() / ".netrc"
 HENDRIX = "hendrix.meteo.fr"
 HENDRIX_PATH = Path("/home/berthomierl/Titan")

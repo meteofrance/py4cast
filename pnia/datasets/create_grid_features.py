@@ -1,6 +1,8 @@
 import torch
 from pnia.datasets.base import AbstractDataset
 from pnia.settings import CACHE_DIR
+from pnia.utils import torch_save
+
 
 def prepare(dataset: AbstractDataset):
     """
@@ -32,13 +34,13 @@ def prepare(dataset: AbstractDataset):
         (grid_xy, geopotential, grid_border_mask), dim=1
     )  # (N_grid, 4)
 
-    torch.save(grid_features, graph_dir_path / "grid_features.pt")
-    (graph_dir_path / "grid_features.pt").chmod(0o666)
+    torch_save(grid_features, graph_dir_path / "grid_features.pt")
 
 
 if __name__ == "__main__":
     from argparse_dataclass import ArgumentParser
     from pnia.datasets.titan.dataset import TitanDataset, TitanHyperParams
+
     parser = ArgumentParser(TitanHyperParams)
     hparams = parser.parse_args()
     print("hparams : ", hparams)

@@ -1,2 +1,2 @@
-from .titan import TitanDataset
-from .smeagol import SmeagolDataset
+from .smeagol import SmeagolDataset  # noqa: F401
+from .titan import TitanDataset  # noqa: F401
