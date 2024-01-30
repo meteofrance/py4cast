@@ -3,6 +3,7 @@ wandb>=0.13.10
 matplotlib>=3.7.0
 scipy>=1.10.0
 pytorch-lightning>=2.0.3
+lightning==2.0.1.post
 shapely>=2.0.1
 networkx>=3.0
 Cartopy>=0.22.0
@@ -14,5 +15,6 @@ cython>=3
 cfgrib
 xarray
 argparse-dataclass==2.0.0
+tensorboard==2.13.0
 typer==0.9.0
 netCDF4==1.6.5

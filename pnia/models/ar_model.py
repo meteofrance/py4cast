@@ -1,91 +1,115 @@
 import os
-import torch
-import numpy as np
-from torch import nn
-import pytorch_lightning as pl
-import wandb
+from dataclasses import dataclass
+
 import matplotlib.pyplot as plt
-from neural_lam.utils import BufferList
-from submodules.nlam_suede.neural_lam import vis, constants
-# A noter que vis depend de constant ... qui n'a donc pas les bonnes choses (car portées par le dataset). 
+import numpy as np
+import pytorch_lightning as pl
+import torch
+import wandb
+
+# A noter que vis depend de constant ... qui n'a donc pas les bonnes choses (car portées par le dataset).
 from pnia.datasets.base import AbstractDataset
+from pnia.models.nlam import vis
+from pnia.models.nlam.utils import BufferList, val_step_log_errors
+from torch import nn
 
 
-from dataclasses import dataclass, field
+@dataclass
+class Graph:
+    model: str = "graph_lam"
+    name: str = "multiscale"
+    hidden_dim: int = 64
+    hidden_layers: int = 1
+    mesh_aggr: str = "sum"
+    processor_layers: int = 4
+    # Memory saving option
+    checkpoint=True
+    offload=True
 
-@dataclass 
-class Graph: 
-    model:str= "graph_lam"
-    name:str = "multiscale"
-    hidden_dim:int = 64
-    hidden_layers:int = 1
-    mesh_aggr:str="sum"
-    processor_layers:int=4
 
-@dataclass 
+@dataclass
 class HyperParam:
-    dataset:AbstractDataset
+    dataset: AbstractDataset
     graph: Graph = Graph()
-    lr:float = 0.1
-    loss:str = "mse"
-    n_example_pred:int=2
-    step_length:float=0.25
+    lr: float = 0.1
+    loss: str = "mse"
+    n_example_pred: int = 2
+    step_length: float = 0.25
 
-
-
-def load_graph(hp, device="cpu"):
+def load_graph(hp: HyperParam, device="cpu"):
     # Define helper lambda function
-    graph_dir_path = hp.dataset.cache_dir #os.path.join("graphs", graph_name)
-    loads_file = lambda fn: torch.load(os.path.join(graph_dir_path, fn),
-            map_location=device)
+    graph_dir = hp.dataset.cache_dir  # os.path.join("graphs", graph_name)
 
     # Load edges (edge_index)
-    m2m_edge_index = BufferList(loads_file("m2m_edge_index.pt"),
-            persistent=False) # List of (2, M_m2m[l])
-    g2m_edge_index = loads_file("g2m_edge_index.pt")  # (2, M_g2m)
-    m2g_edge_index = loads_file("m2g_edge_index.pt")  # (2, M_m2g)
+    m2m_edge_index = BufferList(
+        torch.load(graph_dir / "m2m_edge_index.pt", device), persistent=False
+    )  # List of (2, M_m2m[l])
+    g2m_edge_index = torch.load(graph_dir / "g2m_edge_index.pt", device)  # (2, M_g2m)
+    m2g_edge_index = torch.load(graph_dir / "m2g_edge_index.pt", device)  # (2, M_m2g)
 
     n_levels = len(m2m_edge_index)
-    hierarchical = n_levels > 1 # Nor just single level mesh graph
+    hierarchical = n_levels > 1  # Nor just single level mesh graph
 
     # Load static edge features
-    m2m_features = loads_file("m2m_features.pt")  # List of (M_m2m[l], d_edge_f)
-    g2m_features = loads_file("g2m_features.pt")  # (M_g2m, d_edge_f)
-    m2g_features = loads_file("m2g_features.pt")  # (M_m2g, d_edge_f)
+    m2m_features = torch.load(
+        graph_dir / "m2m_features.pt", device
+    )  # List of (M_m2m[l], d_edge_f)
+    g2m_features = torch.load(
+        graph_dir / "g2m_features.pt", device
+    )  # (M_g2m, d_edge_f)
+    m2g_features = torch.load(
+        graph_dir / "m2g_features.pt", device
+    )  # (M_m2g, d_edge_f)
 
     # Normalize by dividing with longest edge (found in m2m)
-    longest_edge = max([torch.max(level_features[:,0])
-        for level_features in m2m_features]) # Col. 0 is length
-    m2m_features = BufferList([level_features / longest_edge
-        for level_features in m2m_features], persistent=False)
+    longest_edge = max(
+        [torch.max(level_features[:, 0]) for level_features in m2m_features]
+    )  # Col. 0 is length
+    m2m_features = BufferList(
+        [level_features / longest_edge for level_features in m2m_features],
+        persistent=False,
+    )
     g2m_features = g2m_features / longest_edge
     m2g_features = m2g_features / longest_edge
 
     # Load static node features
-    mesh_static_features = loads_file("mesh_features.pt"
-            ) # List of (N_mesh[l], d_mesh_static)
+    mesh_static_features = torch.load(
+        graph_dir / "mesh_features.pt"
+    )  # List of (N_mesh[l], d_mesh_static)
 
     # Some checks for consistency
     assert len(m2m_features) == n_levels, "Inconsistent number of levels in mesh"
-    assert len(mesh_static_features) == n_levels, "Inconsistent number of levels in mesh"
+    assert (
+        len(mesh_static_features) == n_levels
+    ), "Inconsistent number of levels in mesh"
 
     if hierarchical:
         # Load up and down edges and features
-        mesh_up_edge_index = BufferList(loads_file("mesh_up_edge_index.pt"),
-                persistent=False) # List of (2, M_up[l])
-        mesh_down_edge_index = BufferList(loads_file("mesh_down_edge_index.pt"),
-                persistent=False) # List of (2, M_down[l])
+        mesh_up_edge_index = BufferList(
+            torch.load(graph_dir / "mesh_up_edge_index.pt", device),
+            persistent=False,
+        )  # List of (2, M_up[l])
+        mesh_down_edge_index = BufferList(
+            torch.load(graph_dir / "mesh_down_edge_index.pt", device),
+            persistent=False,
+        )  # List of (2, M_down[l])
 
-        mesh_up_features = loads_file("mesh_up_features.pt"
-                ) # List of (M_up[l], d_edge_f)
-        mesh_down_features = loads_file("mesh_down_features.pt"
-                ) # List of (M_down[l], d_edge_f)
+        mesh_up_features = torch.load(
+            graph_dir / "mesh_up_features.pt"
+        )  # List of (M_up[l], d_edge_f)
+        mesh_down_features = torch.load(
+            graph_dir / "mesh_down_features.pt"
+        )  # List of (M_down[l], d_edge_f)
 
         # Rescale
-        mesh_up_features = BufferList([edge_features / longest_edge
-                for edge_features in mesh_up_features], persistent=False)
-        mesh_down_features = BufferList([edge_features / longest_edge
-                for edge_features in mesh_down_features], persistent=False)
+        mesh_up_features = BufferList(
+            [edge_features / longest_edge for edge_features in mesh_up_features],
+            persistent=False,
+        )
+        mesh_down_features = BufferList(
+            [edge_features / longest_edge for edge_features in mesh_down_features],
+            persistent=False,
+        )
 
         mesh_static_features = BufferList(mesh_static_features, persistent=False)
     else:
@@ -94,72 +118,86 @@ def load_graph(hp, device="cpu"):
         m2m_features = m2m_features[0]
         mesh_static_features = mesh_static_features[0]
 
-        mesh_up_edge_index, mesh_down_edge_index, mesh_up_features, mesh_down_features =\
-                [], [], [], []
+        (
+            mesh_up_edge_index,
+            mesh_down_edge_index,
+            mesh_up_features,
+            mesh_down_features,
+        ) = ([], [], [], [])
 
     print(f"Graph is hierarchical {hierarchical}")
     return hierarchical, {
-            "g2m_edge_index": g2m_edge_index,
-            "m2g_edge_index": m2g_edge_index,
-            "m2m_edge_index": m2m_edge_index,
-            "mesh_up_edge_index": mesh_up_edge_index,
-            "mesh_down_edge_index": mesh_down_edge_index,
-            "g2m_features": g2m_features,
-            "m2g_features": m2g_features,
-            "m2m_features": m2m_features,
-            "mesh_up_features": mesh_up_features,
-            "mesh_down_features": mesh_down_features,
-            "mesh_static_features": mesh_static_features,
+        "g2m_edge_index": g2m_edge_index,
+        "m2g_edge_index": m2g_edge_index,
+        "m2m_edge_index": m2m_edge_index,
+        "mesh_up_edge_index": mesh_up_edge_index,
+        "mesh_down_edge_index": mesh_down_edge_index,
+        "g2m_features": g2m_features,
+        "m2g_features": m2g_features,
+        "m2m_features": m2m_features,
+        "mesh_up_features": mesh_up_features,
+        "mesh_down_features": mesh_down_features,
+        "mesh_static_features": mesh_static_features,
     }
 
+
 # Par rapport à la classe des Suédois, On ne change que le init
-# Cependant comme on va de toute façon dire qu'on importe le notre le choix est de copier. 
-# A voir avec le Lab s'il existe une meilleure solution 
+# Cependant comme on va de toute façon dire qu'on importe le notre le choix est de copier.
+# A voir avec le Lab s'il existe une meilleure solution
 class ARModel(pl.LightningModule):
-    def __init__(self, hparams:HyperParam):
-        super().__init__() 
-    
+    def __init__(self, hparams: HyperParam):
+        super().__init__()
+
         self.save_hyperparameters()
         self.lr = hparams.lr
-        self.dataset = hparams.dataset 
+        self.dataset = hparams.dataset
 
         # Some constants useful for sub-classes
-        self.batch_static_feature_dim = self.dataset.static_feature_dim # Only open water?
-        # TODO Understand the 3 timestep Before. Linked to __get_item__ (concatenation). 
-        # 3 replace by 1. How to have something more modular ? 
-        self.grid_forcing_dim = self.dataset.forcing_dim*1 # 5 features for 3 time-step window
+        self.batch_static_feature_dim = (
+            self.dataset.static_feature_dim
+        )  # Only open water?
+        # TODO Understand the 3 timestep Before. Linked to __get_item__ (concatenation).
+        # 3 replace by 1. How to have something more modular ?
+        self.grid_forcing_dim = (
+            self.dataset.forcing_dim * 1
+        )  # 5 features for 3 time-step window
         self.grid_state_dim = self.dataset.weather_dim
-        print('ARModel',  self.dataset.weather_dim)
+        print("ARModel", self.dataset.weather_dim)
 
         # Load static features for grid/data
         static_data_dict = self.dataset.load_static_data()
-        
+
         for static_data_name, static_data_tensor in vars(static_data_dict).items():
             self.register_buffer(static_data_name, static_data_tensor, persistent=False)
 
         # MSE loss, need to do reduction ourselves to get proper weighting
         if hparams.loss == "mse":
             self.loss = nn.MSELoss(reduction="none")
-            # Essai d'avoir quelque chose qui se rapproche un peu de l'assimilation de donnée en divisant par une variance. 
-            inv_var = self.step_diff_std**-2. # Comes from static_data_dict and buffer registration
-            state_weight = self.param_weights*inv_var # (d_f,)
-            #for x,y in enumerate(zip(state_weight, self.dataset.weather_params)): 
+            # Essai d'avoir quelque chose qui se rapproche un peu de l'assimilation de
+            # donnée en divisant par une variance.
+            inv_var = (
+                self.step_diff_std**-2.0
+            )  # Comes from static_data_dict and buffer registration
+            state_weight = self.param_weights * inv_var  # (d_f,)
+            # for x,y in enumerate(zip(state_weight, self.dataset.weather_params)):
             #    print(x,y)
         elif hparams.loss == "mae":
             self.loss = nn.L1Loss(reduction="none")
             # Weight states with inverse std instead in this case
-            state_weight = self.param_weights/self.step_diff_std # (d_f,)
+            state_weight = self.param_weights / self.step_diff_std  # (d_f,)
         else:
             assert False, f"Unknown loss function: {hparams.loss}"
         self.register_buffer("state_weight", state_weight, persistent=False)
 
         # Pre-compute interior mask for use in loss function
-        self.register_buffer("interior_mask", 1. - self.border_mask,
-                persistent=False) # (N_grid, 1), 1 for non-border
-        self.N_interior = torch.sum(self.interior_mask
-                ).item() # Number of grid nodes to predict
+        self.register_buffer(
+            "interior_mask", 1.0 - self.border_mask, persistent=False
+        )  # (N_grid, 1), 1 for non-border
+        self.N_interior = torch.sum(
+            self.interior_mask
+        ).item()  # Number of grid nodes to predict
 
-        self.step_length = hparams.step_length # Number of hours per pred. step
+        self.step_length = hparams.step_length  # Number of hours per pred. step
         self.val_maes = []
         self.test_maes = []
         self.test_mses = []
@@ -198,8 +236,9 @@ class ARModel(pl.LightningModule):
         """
         raise NotImplementedError("No prediction step implemented")
 
-    def unroll_prediction(self, init_states, batch_static_features, forcing_features,
-            true_states):
+    def unroll_prediction(
+        self, init_states, batch_static_features, forcing_features, true_states
+    ):
         """
         Roll out prediction taking multiple autoregressive steps with model
         init_states: (B, 2, N_grid, d_f)
@@ -207,29 +246,31 @@ class ARModel(pl.LightningModule):
         forcing_features: (B, pred_steps, N_grid, d_static_f)
         true_states: (B, pred_steps, N_grid, d_f)
         """
-        prev_prev_state = init_states[:,0]
-        prev_state = init_states[:,1]
+        prev_prev_state = init_states[:, 0]
+        prev_state = init_states[:, 1]
         prediction_list = []
         pred_steps = forcing_features.shape[1]
-        
+
         for i in range(pred_steps):
             forcing = forcing_features[:, i]
             border_state = true_states[:, i]
             #
-            # TODO c'est ici qu'il faudra charger le forceur sur les côtés. 
+            # TODO c'est ici qu'il faudra charger le forceur sur les côtés.
             #
-            predicted_state = self.predict_step(prev_state, prev_prev_state,
-                    batch_static_features, forcing) # (B, N_grid, d_f)
+            predicted_state = self.predict_step(
+                prev_state, prev_prev_state, batch_static_features, forcing
+            )  # (B, N_grid, d_f)
             # Overwrite border with true state
-            new_state = self.border_mask*border_state +\
-                    self.interior_mask*predicted_state
+            new_state = (
+                self.border_mask * border_state + self.interior_mask * predicted_state
+            )
             prediction_list.append(new_state)
 
             # Upate conditioning states
             prev_prev_state = prev_state
             prev_state = new_state
 
-        return torch.stack(prediction_list, dim=1) # (B, pred_steps, N_grid, d_f)
+        return torch.stack(prediction_list, dim=1)  # (B, pred_steps, N_grid, d_f)
 
     def weighted_loss(self, prediction, target, reduce_spatial_dim=True):
         """
@@ -237,17 +278,20 @@ class ARModel(pl.LightningModule):
         prediction/target: (B, pred_steps, N_grid, d_f)
         returns (B, pred_steps)
         """
-        entry_loss = self.loss(prediction, target) # (B, pred_steps, N_grid, d_f)
-        grid_node_loss = torch.sum(entry_loss*self.state_weight,
-                dim=-1) # (B, pred_steps, N_grid), weighted sum over features
+        entry_loss = self.loss(prediction, target)  # (B, pred_steps, N_grid, d_f)
+        grid_node_loss = torch.sum(
+            entry_loss * self.state_weight, dim=-1
+        )  # (B, pred_steps, N_grid), weighted sum over features
         if not reduce_spatial_dim:
-            return grid_node_loss # (B, pred_steps, N_grid)
+            return grid_node_loss  # (B, pred_steps, N_grid)
 
         # Take (unweighted) mean over only non-border (interior) grid nodes
-        time_step_loss = torch.sum(grid_node_loss*self.interior_mask[:,0],
-                dim=-1)/self.N_interior # (B, pred_steps)
+        time_step_loss = (
+            torch.sum(grid_node_loss * self.interior_mask[:, 0], dim=-1)
+            / self.N_interior
+        )  # (B, pred_steps)
 
-        return time_step_loss # (B, pred_steps)
+        return time_step_loss  # (B, pred_steps)
 
     def common_step(self, batch):
         """
@@ -262,8 +306,9 @@ class ARModel(pl.LightningModule):
         """
         init_states, target_states, batch_static_features, forcing_features = batch
 
-        prediction = self.unroll_prediction(init_states, batch_static_features,
-                forcing_features, target_states) # (B, pred_steps, N_grid, d_f)
+        prediction = self.unroll_prediction(
+            init_states, batch_static_features, forcing_features, target_states
+        )  # (B, pred_steps, N_grid, d_f)
 
         return prediction, target_states
 
@@ -274,12 +319,14 @@ class ARModel(pl.LightningModule):
         prediction, target = self.common_step(batch)
 
         # Compute loss
-        batch_loss = torch.mean(self.weighted_loss(
-            prediction, target)) # mean over unrolled times and batch
+        batch_loss = torch.mean(
+            self.weighted_loss(prediction, target)
+        )  # mean over unrolled times and batch
 
         log_dict = {"train_loss": batch_loss}
-        self.log_dict(log_dict, prog_bar=True, on_step=True, on_epoch=True,
-                sync_dist=True)
+        self.log_dict(
+            log_dict, prog_bar=True, on_step=True, on_epoch=True, sync_dist=True
+        )
         return batch_loss
 
     def per_var_error(self, prediction, target, error="mae"):
@@ -292,11 +339,13 @@ class ARModel(pl.LightningModule):
             loss_func = torch.nn.functional.mse_loss
         else:
             loss_func = torch.nn.functional.l1_loss
-        entry_loss = loss_func(prediction, target,
-                reduction="none") # (B, pred_steps, N_grid, d_f)
+        entry_loss = loss_func(
+            prediction, target, reduction="none"
+        )  # (B, pred_steps, N_grid, d_f)
 
-        mean_error = torch.sum(entry_loss*self.interior_mask,
-                dim=2)/self.N_interior # (B, pred_steps, d_f)
+        mean_error = (
+            torch.sum(entry_loss * self.interior_mask, dim=2) / self.N_interior
+        )  # (B, pred_steps, d_f)
         return mean_error
 
     def all_gather_cat(self, tensor_to_gather):
@@ -316,16 +365,19 @@ class ARModel(pl.LightningModule):
         """
         prediction, target = self.common_step(batch)
 
-        time_step_loss = torch.mean(self.weighted_loss(prediction,
-            target), dim=0) # (time_steps-1)
+        time_step_loss = torch.mean(
+            self.weighted_loss(prediction, target), dim=0
+        )  # (time_steps-1)
         mean_loss = torch.mean(time_step_loss)
 
         # Log loss per time step forward and mean
-        val_log_dict = {f"val_loss_unroll{step}": time_step_loss[step-1]
-                for step in constants.val_step_log_errors}
+        val_log_dict = {
+            f"val_loss_unroll{step}": time_step_loss[step - 1]
+            for step in val_step_log_errors
+        }
         val_log_dict["val_mean_loss"] = mean_loss
 
-        maes = self.per_var_error(prediction, target) # (B, pred_steps, d_f)
+        maes = self.per_var_error(prediction, target)  # (B, pred_steps, d_f)
         self.val_maes.append(maes)
 
         self.log_dict(val_log_dict, on_step=False, on_epoch=True, sync_dist=True)
@@ -334,21 +386,24 @@ class ARModel(pl.LightningModule):
         """
         Compute val metrics at the end of val epoch
         """
-        val_mae_tensor = self.all_gather_cat(torch.cat(
-            self.val_maes, dim=0)) # (N_val, pred_steps, d_f)
+        pass
+        # val_mae_tensor = self.all_gather_cat(
+        #     torch.cat(self.val_maes, dim=0)
+        # )  # (N_val, pred_steps, d_f)
 
         if self.trainer.is_global_zero:
-            val_mae_total = torch.mean(val_mae_tensor, dim=0) # (pred_steps, d_f)
-            val_mae_rescaled = val_mae_total * self.data_std # (pred_steps, d_f)
+            pass
+            # val_mae_total = torch.mean(val_mae_tensor, dim=0)  # (pred_steps, d_f)
+            # val_mae_rescaled = val_mae_total * self.data_std  # (pred_steps, d_f)
 
-            #if not self.trainer.sanity_checking:
-                # Don't log this during sanity checking
+            # if not self.trainer.sanity_checking:
+            # Don't log this during sanity checking
             #    mae_fig = vis.plot_error_map(val_mae_rescaled, title="Validation MAE",
             #            step_length=self.step_length)
             #    wandb.log({"val_mae": wandb.Image(mae_fig)})
             #    plt.close("all") # Close all figs
 
-        self.val_maes.clear() # Free memory
+        self.val_maes.clear()  # Free memory
 
     def test_step(self, batch, batch_idx):
         """
@@ -356,84 +411,120 @@ class ARModel(pl.LightningModule):
         """
         prediction, target = self.common_step(batch)
 
-        time_step_loss = torch.mean(self.weighted_loss(prediction,
-            target), dim=0) # (time_steps-1)
+        time_step_loss = torch.mean(
+            self.weighted_loss(prediction, target), dim=0
+        )  # (time_steps-1)
         mean_loss = torch.mean(time_step_loss)
 
         # Log loss per time step forward and mean
-        test_log_dict = {f"test_loss_unroll{step}": time_step_loss[step-1]
-                for step in constants.val_step_log_errors}
+        test_log_dict = {
+            f"test_loss_unroll{step}": time_step_loss[step - 1]
+            for step in val_step_log_errors
+        }
         test_log_dict["test_mean_loss"] = mean_loss
 
         self.log_dict(test_log_dict, on_step=False, on_epoch=True, sync_dist=True)
 
         # For error maps
-        maes = self.per_var_error(prediction, target) # (B, pred_steps, d_f)
+        maes = self.per_var_error(prediction, target)  # (B, pred_steps, d_f)
         self.test_maes.append(maes)
-        mses = self.per_var_error(prediction, target, error="mse") # (B, pred_steps, d_f)
+        mses = self.per_var_error(
+            prediction, target, error="mse"
+        )  # (B, pred_steps, d_f)
         self.test_mses.append(mses)
 
         # Save per-sample spatial loss for specific times
-        spatial_loss = self.weighted_loss(prediction, target,
-                reduce_spatial_dim=False) # (B, pred_steps, N_grid)
-        log_spatial_losses = spatial_loss[:,constants.val_step_log_errors-1]
-        self.spatial_loss_maps.append(log_spatial_losses) # (B, N_log, N_grid)
+        spatial_loss = self.weighted_loss(
+            prediction, target, reduce_spatial_dim=False
+        )  # (B, pred_steps, N_grid)
+        log_spatial_losses = spatial_loss[:, val_step_log_errors - 1]
+        self.spatial_loss_maps.append(log_spatial_losses)  # (B, N_log, N_grid)
 
         # Plot example predictions (on rank 0 only)
         if self.trainer.is_global_zero and self.plotted_examples < self.n_example_pred:
             # Need to plot more example predictions
-            n_additional_examples = min(prediction.shape[0], self.n_example_pred
-                    - self.plotted_examples)
+            n_additional_examples = min(
+                prediction.shape[0], self.n_example_pred - self.plotted_examples
+            )
 
             # Rescale to original data scale
-            prediction_rescaled = prediction*self.data_std + self.data_mean
-            target_rescaled = target*self.data_std + self.data_mean
+            prediction_rescaled = prediction * self.data_std + self.data_mean
+            target_rescaled = target * self.data_std + self.data_mean
 
             # Iterate over the examples
             for pred_slice, target_slice in zip(
-                    prediction_rescaled[:n_additional_examples],
-                    target_rescaled[:n_additional_examples]):
+                prediction_rescaled[:n_additional_examples],
+                target_rescaled[:n_additional_examples],
+            ):
                 # Each slice is (pred_steps, N_grid, d_f)
-                self.plotted_examples += 1 # Increment already here
+                self.plotted_examples += 1  # Increment already here
 
-                var_vmin = torch.minimum(
-                        pred_slice.flatten(0,1).min(dim=0)[0],
-                        target_slice.flatten(0,1).min(dim=0)[0]).cpu().numpy() # (d_f,)
-                var_vmax = torch.maximum(
-                        pred_slice.flatten(0,1).max(dim=0)[0],
-                        target_slice.flatten(0,1).max(dim=0)[0]).cpu().numpy() # (d_f,)
+                var_vmin = (
+                    torch.minimum(
+                        pred_slice.flatten(0, 1).min(dim=0)[0],
+                        target_slice.flatten(0, 1).min(dim=0)[0],
+                    )
+                    .cpu()
+                    .numpy()
+                )  # (d_f,)
+                var_vmax = (
+                    torch.maximum(
+                        pred_slice.flatten(0, 1).max(dim=0)[0],
+                        target_slice.flatten(0, 1).max(dim=0)[0],
+                    )
+                    .cpu()
+                    .numpy()
+                )  # (d_f,)
                 var_vranges = list(zip(var_vmin, var_vmax))
 
                 # Iterate over prediction horizon time steps
-                for t_i, (pred_t, target_t) in enumerate(zip(pred_slice, target_slice),
-                        start=1):
+                for t_i, (pred_t, target_t) in enumerate(
+                    zip(pred_slice, target_slice), start=1
+                ):
                     # Create one figure per variable at this time step
-                    var_figs = [vis.plot_prediction(
-                        pred_t[:,var_i], target_t[:,var_i],
-                        self.interior_mask[:,0],
-                        title=f"{var_name} ({var_unit}), "
+                    var_figs = [
+                        vis.plot_prediction(
+                            pred_t[:, var_i],
+                            target_t[:, var_i],
+                            self.interior_mask[:, 0],
+                            title=f"{var_name} ({var_unit}), "
                             f"t={t_i} ({self.step_length*t_i} h)",
-                        vrange=var_vrange)
-                            for var_i, (var_name, var_unit, var_vrange) in
-                            enumerate(zip(
+                            vrange=var_vrange,
+                        )
+                        for var_i, (var_name, var_unit, var_vrange) in enumerate(
+                            zip(
                                 self.dataset.shortnames(kind="output"),
                                 self.dataset.param_units(kind="output"),
-                                var_vranges
-                            ))
-                        ]
+                                var_vranges,
+                            )
+                        )
+                    ]
 
-                    wandb.log({
-                            f"{var_name}_example_{self.plotted_examples}":
-                                wandb.Image(fig)
-                        for var_name, fig in zip(self.dataset.shortnames(kind="output"), var_figs)
-                    })
-                    plt.close("all") # Close all figs for this time step, saves memory
+                    wandb.log(
+                        {
+                            f"{var_name}_example_{self.plotted_examples}": wandb.Image(
+                                fig
+                            )
+                            for var_name, fig in zip(
+                                self.dataset.shortnames(kind="output"), var_figs
+                            )
+                        }
+                    )
+                    plt.close("all")  # Close all figs for this time step, saves memory
 
                 # Save pred and target as .pt files
-                torch.save(pred_slice.cpu(),os.path.join(
-                    wandb.run.dir, f'example_pred_{self.plotted_examples}.pt'))
-                torch.save(target_slice.cpu(),os.path.join(
-                    wandb.run.dir, f'example_target_{self.plotted_examples}.pt'))
+                torch.save(
+                    pred_slice.cpu(),
+                    os.path.join(
+                        wandb.run.dir, f"example_pred_{self.plotted_examples}.pt"
+                    ),
+                )
+                torch.save(
+                    target_slice.cpu(),
+                    os.path.join(
+                        wandb.run.dir, f"example_target_{self.plotted_examples}.pt"
+                    ),
+                )
 
     def on_test_epoch_end(self):
         """
@@ -441,59 +532,87 @@ class ARModel(pl.LightningModule):
         Will gather stored tensors and perform plotting and logging on rank 0.
         """
         # Create error maps for RMSE and MAE
-        test_mae_tensor = self.all_gather_cat(torch.cat(self.test_maes,
-            dim=0)) # (N_test, pred_steps, d_f)
-        test_mse_tensor = self.all_gather_cat(torch.cat(self.test_mses,
-            dim=0)) # (N_test, pred_steps, d_f)
+        test_mae_tensor = self.all_gather_cat(
+            torch.cat(self.test_maes, dim=0)
+        )  # (N_test, pred_steps, d_f)
+        test_mse_tensor = self.all_gather_cat(
+            torch.cat(self.test_mses, dim=0)
+        )  # (N_test, pred_steps, d_f)
 
         if self.trainer.is_global_zero:
-            test_mae_rescaled = torch.mean(test_mae_tensor,
-                    dim=0) * self.data_std # (pred_steps, d_f)
-            test_rmse_rescaled = torch.sqrt(torch.mean(test_mse_tensor,
-                    dim=0)) * self.data_std # (pred_steps, d_f)
+            test_mae_rescaled = (
+                torch.mean(test_mae_tensor, dim=0) * self.data_std
+            )  # (pred_steps, d_f)
+            test_rmse_rescaled = (
+                torch.sqrt(torch.mean(test_mse_tensor, dim=0)) * self.data_std
+            )  # (pred_steps, d_f)
 
-            mae_fig = vis.plot_error_map(test_mae_rescaled, step_length=self.step_length)
-            rmse_fig = vis.plot_error_map(test_rmse_rescaled, step_length=self.step_length)
-            wandb.log({ # Log png:s
-                "test_mae": wandb.Image(mae_fig),
-                "test_rmse": wandb.Image(rmse_fig),
-                })
+            mae_fig = vis.plot_error_map(
+                test_mae_rescaled, step_length=self.step_length
+            )
+            rmse_fig = vis.plot_error_map(
+                test_rmse_rescaled, step_length=self.step_length
+            )
+            wandb.log(
+                {  # Log png:s
+                    "test_mae": wandb.Image(mae_fig),
+                    "test_rmse": wandb.Image(rmse_fig),
+                }
+            )
             # Save pdf:s
             mae_fig.savefig(os.path.join(wandb.run.dir, "test_mae.pdf"))
             rmse_fig.savefig(os.path.join(wandb.run.dir, "test_rmse.pdf"))
             # Save errors also as csv:s
-            np.savetxt(os.path.join(wandb.run.dir, "test_mae.csv"),
-                    test_mae_rescaled.cpu().numpy(), delimiter=",")
-            np.savetxt(os.path.join(wandb.run.dir, "test_rmse.csv"),
-                    test_rmse_rescaled.cpu().numpy(), delimiter=",")
+            np.savetxt(
+                os.path.join(wandb.run.dir, "test_mae.csv"),
+                test_mae_rescaled.cpu().numpy(),
+                delimiter=",",
+            )
+            np.savetxt(
+                os.path.join(wandb.run.dir, "test_rmse.csv"),
+                test_rmse_rescaled.cpu().numpy(),
+                delimiter=",",
+            )
 
-        self.test_maes.clear() # Free memory
+        self.test_maes.clear()  # Free memory
         self.test_mses.clear()
 
         # Plot spatial loss maps
-        spatial_loss_tensor = self.all_gather_cat(torch.cat(self.spatial_loss_maps,
-                dim=0)) # (N_test, N_log, N_grid)
+        spatial_loss_tensor = self.all_gather_cat(
+            torch.cat(self.spatial_loss_maps, dim=0)
+        )  # (N_test, N_log, N_grid)
         if self.trainer.is_global_zero:
-            mean_spatial_loss = torch.mean(spatial_loss_tensor, dim=0) # (N_log, N_grid)
+            mean_spatial_loss = torch.mean(
+                spatial_loss_tensor, dim=0
+            )  # (N_log, N_grid)
 
-            loss_map_figs = [vis.plot_spatial_error(loss_map, self.interior_mask[:,0],
-                    title=f"Test loss, t={t_i} ({self.step_length*t_i} h)")
-                for t_i, loss_map in zip(constants.val_step_log_errors, mean_spatial_loss)]
+            loss_map_figs = [
+                vis.plot_spatial_error(
+                    loss_map,
+                    self.interior_mask[:, 0],
+                    title=f"Test loss, t={t_i} ({self.step_length*t_i} h)",
+                )
+                for t_i, loss_map in zip(val_step_log_errors, mean_spatial_loss)
+            ]
 
             # log all to same wandb key, sequentially
             for fig in loss_map_figs:
                 wandb.log({"test_loss": wandb.Image(fig)})
 
             # also make without title and save as pdf
-            pdf_loss_map_figs = [vis.plot_spatial_error(loss_map, self.interior_mask[:,0])
-                for loss_map in mean_spatial_loss]
+            pdf_loss_map_figs = [
+                vis.plot_spatial_error(loss_map, self.interior_mask[:, 0])
+                for loss_map in mean_spatial_loss
+            ]
             pdf_loss_maps_dir = os.path.join(wandb.run.dir, "spatial_loss_maps")
             os.makedirs(pdf_loss_maps_dir, exist_ok=True)
-            for t_i, fig in zip(constants.val_step_log_errors,pdf_loss_map_figs):
+            for t_i, fig in zip(val_step_log_errors, pdf_loss_map_figs):
                 fig.savefig(os.path.join(pdf_loss_maps_dir, f"loss_t{t_i}.pdf"))
             # save mean spatial loss as .pt file also
-            torch.save(mean_spatial_loss.cpu(),os.path.join(
-                wandb.run.dir, 'mean_spatial_loss.pt'))
+            torch.save(
+                mean_spatial_loss.cpu(),
+                os.path.join(wandb.run.dir, "mean_spatial_loss.pt"),
+            )
 
         self.spatial_loss_maps.clear()
 
@@ -506,8 +625,12 @@ class ARModel(pl.LightningModule):
         # Fix for loading older models after IneractionNet refactoring, where the
         # grid MLP was moved outside the encoder InteractionNet class
         if "g2m_gnn.grid_mlp.0.weight" in loaded_state_dict:
-            replace_keys = list(filter(lambda key: key.startswith("g2m_gnn.grid_mlp"),
-                    loaded_state_dict.keys()))
+            replace_keys = list(
+                filter(
+                    lambda key: key.startswith("g2m_gnn.grid_mlp"),
+                    loaded_state_dict.keys(),
+                )
+            )
             for old_key in replace_keys:
                 new_key = old_key.replace("g2m_gnn.grid_mlp", "encoding_grid_mlp")
                 loaded_state_dict[new_key] = loaded_state_dict[old_key]

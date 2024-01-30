@@ -4,11 +4,11 @@ import subprocess
 import tarfile
 from argparse import ArgumentParser
 from datetime import datetime, timedelta
+from pathlib import Path
 
-from utils import get_list_file_hendrix, upload_to_hendrix
 from joblib import Parallel, delayed
 from tqdm import trange
-from pathlib import Path
+from utils import get_list_file_hendrix, upload_to_hendrix
 
 
 class EmptyGribFile(Exception):
@@ -59,7 +59,8 @@ def download_1h_gribs(date, working_dir, grib_dir):
     requests_other = list(request_path.glob("*.txt"))
     requests_other = [req for req in requests_other if req not in requests_arp]
     Parallel(n_jobs=2)(
-        delayed(download_1_bdap_request)(request, date, working_dir, grib_dir) for request in requests_other
+        delayed(download_1_bdap_request)(request, date, working_dir, grib_dir)
+        for request in requests_other
     )
     # As env_var DMT_DATE_PIVOT changes for ARPEGE, we do not parallelize
     for request in requests_arp:

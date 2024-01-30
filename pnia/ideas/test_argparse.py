@@ -1,9 +1,10 @@
-from datetime import datetime
-from typing import Literal, Tuple, Union
-from dataclasses import dataclass, field, fields, MISSING, is_dataclass
-from pathlib import Path
-import yaml
 import getpass
+from dataclasses import MISSING, dataclass, field, fields, is_dataclass
+from datetime import datetime
+from pathlib import Path
+from typing import Literal, Tuple, Union
+
+import yaml
 
 DATA_SPLIT = {
     "train": {"start": datetime(2023, 3, 1, 6), "end": datetime(2023, 3, 9, 18)},
@@ -48,6 +49,7 @@ class Grid:
     # Subgrid selection. If (0,0,0,0) the whole grid is kept.
     subgrid: Tuple[int] = (0, 0, 0, 0)
 
+
 @dataclass
 class TrainingHyperParams:
     experiment_name: str = field(
@@ -60,6 +62,7 @@ class TrainingHyperParams:
     num_workers: int = 2
     learning_rate: float = 0.001
     max_epochs: int = 5
+
 
 @dataclass
 class TitanHyperParams:
@@ -88,18 +91,20 @@ class TitanHyperParams:
                 params.append(param)
         self.weather_params = tuple(params)
 
+
 class MergeDataclassMixin:
     """
     A mixin to create one attribute per inherited
     dataclass with the field populated based
     on name matching
     Always inherit FIRST from this Mixin (and other mixins)
-    
+
     @dataclass
     class(MergeDataclassMixin, Dataclass1, Dataclass2, ...):
         pass
-    
+
     """
+
     def __post_init__(self):
         super().__post_init__()
         list_vars = []
@@ -112,7 +117,10 @@ class MergeDataclassMixin:
 
         duplicate_fields = set([x for x in list_vars if list_vars.count(x) > 1])
         if len(duplicate_fields) != 0:
-            raise AttributeError(f"Duplicate fields (same names) in inherited dataclasses : {duplicate_fields}")
+            raise AttributeError(
+                f"Duplicate fields (same names) in inherited dataclasses : {duplicate_fields}"
+            )
+
 
 @dataclass
 class CLIArgs(MergeDataclassMixin, Split, Grid, TitanHyperParams, TrainingHyperParams):
@@ -123,16 +131,15 @@ if __name__ == "__main__":
 
     from mfai.argparse_dataclass import MfaiArgumentParser
 
-    print('MISSING : ', MISSING)
+    print("MISSING : ", MISSING)
     parser = MfaiArgumentParser(CLIArgs)
     params, _ = parser.parse_known_args()
 
-    print('params : ', params)
-    print('params.grid : ', params.grid)
-    print('params.split : ', params.split)
-    print('params.titanhyperparams : ', params.titanhyperparams)
-    print('params.traininghyperparams : ', params.traininghyperparams)
-
+    print("params : ", params)
+    print("params.grid : ", params.grid)
+    print("params.split : ", params.split)
+    print("params.titanhyperparams : ", params.titanhyperparams)
+    print("params.traininghyperparams : ", params.traininghyperparams)
 
     # OUTPUT
 
@@ -153,11 +160,7 @@ if __name__ == "__main__":
     # params.grid :  Grid(border_size=10, subgrid=(0, 0, 0, 0))
     # params.split :  Split(split_name='valid', date_start=datetime.datetime(2023, 3, 10, 6, 0),
     #                       date_end=datetime.datetime(2023, 3, 19, 18, 0), shuffle=False)
-    # params.titanhparams :  TitanHyperParams(path=PosixPath('/scratch/shared/Titan'),
-    #                                         weather_params=(WeatherParam(name='aro_t2m', long_name='Arome 2 metre temperature', param='t2m', model='Arome', prefix_model='aro', unit='K', cumulative=False, type_level='heightAboveGround', levels=2, grib='PAAROME_1S100_ECH0_2M.grib', grid='PAAROME_1S100', shape=[1791, 2801], extend=[55.4, 37.5, -12.0, 16.0]),
-    #                                                         WeatherParam(name='aro_r2', long_name='Arome 2 metre relative humidity', param='r2', model='Arome', prefix_model='aro', unit='%', cumulative=False, type_level='heightAboveGround', levels=2, grib='PAAROME_1S100_ECH0_2M.grib', grid='PAAROME_1S100', shape=[1791, 2801], extend=[55.4, 37.5, -12.0, 16.0])),
-    #                                                         isobaric_levels=(1000, 850), timestep=1,
-    #                                                         nb_input_steps=2, nb_pred_steps=4, step_btw_samples=6)
+    # params.titanhparams :  TitanHyperParams(path=PosixPath('/scratch/shared/Titan'), ...
     # params.traininghparams :  TrainingHyperParams(experiment_name='exp0', run_name='my_run',
-    #                                               username='berthomierl', date='2024-01-18_12-29-03',
-    #                                               batch_size=4, num_workers=2, learning_rate=0.001, max_epochs=5)
+    #                              username='berthomierl', date='2024-01-18_12-29-03',
+    #                              batch_size=4, num_workers=2, learning_rate=0.001, max_epochs=5)
