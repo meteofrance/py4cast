@@ -1,4 +1,5 @@
 import torch
+
 from pnia.datasets.base import AbstractDataset
 from pnia.settings import CACHE_DIR
 from pnia.utils import torch_save
@@ -39,6 +40,7 @@ def prepare(dataset: AbstractDataset):
 
 if __name__ == "__main__":
     from argparse_dataclass import ArgumentParser
+
     from pnia.datasets.titan.dataset import TitanDataset, TitanHyperParams
 
     parser = ArgumentParser(TitanHyperParams)

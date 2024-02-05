@@ -2,6 +2,7 @@ import cartopy
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
+
 from pnia.models.nlam import utils
 
 param_names_short = [

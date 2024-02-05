@@ -10,13 +10,14 @@ import pytorch_lightning as pl
 import torch
 from lightning.pytorch.loggers import TensorBoardLogger
 from lightning_fabric.utilities import seed
+from torch.utils.data import Dataset
+
 from pnia.datasets import SmeagolDataset, TitanDataset
 from pnia.datasets.titan import TitanHyperParams
 from pnia.models import GraphLAM, HiLAM, HiLAMParallel
 
 # From the package
 from pnia.models.ar_model import Graph, HyperParam
-from torch.utils.data import Dataset
 
 DATASETS = {
     "titan": {"dataset": TitanDataset},
@@ -81,7 +82,7 @@ def main(
 
     # Logger
     logger = TensorBoardLogger(
-        save_dir="scratch/shared/pnia/logs",
+        save_dir="/scratch/shared/pnia/logs",
         name=f"{args.model}/{args.dataset}",
         default_hp_metric=False,
     )

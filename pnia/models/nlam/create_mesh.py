@@ -5,10 +5,11 @@ import numpy as np
 import scipy.spatial
 import torch
 import torch_geometric as pyg
+from torch_geometric.utils.convert import from_networkx
+
 from pnia.datasets.base import AbstractDataset
 from pnia.settings import CACHE_DIR
 from pnia.utils import torch_save
-from torch_geometric.utils.convert import from_networkx
 
 
 def sort_nodes_internally(nx_graph):
@@ -136,6 +137,152 @@ def save_edges_list(graphs, name, base_path):
     torch_save(edge_features, base_path / f"{name}_features.pt")
 
 
+########################################################################################
+
+
+def hierarchical_mesh(G, mesh_levels, plot, cache_dir_path):
+    # Relabel nodes of each level with level index first
+    G = [prepend_node_index(graph, level_i) for level_i, graph in enumerate(G)]
+
+    num_nodes_level = np.array([len(g_level.nodes) for g_level in G])
+    # First node index in each level in the hierarcical graph
+    first_index_level = np.concatenate(
+        (np.zeros(1, dtype=int), np.cumsum(num_nodes_level[:-1]))
+    )
+
+    # Create inter-level mesh edges
+    up_graphs = []
+    down_graphs = []
+    for from_level, to_level, G_from, G_to, start_index in zip(
+        range(1, mesh_levels),
+        range(0, mesh_levels - 1),
+        G[1:],
+        G[:-1],
+        first_index_level[: mesh_levels - 1],
+    ):
+
+        # start out from graph at from level
+        G_down = G_from.copy()
+        G_down.clear_edges()
+        G_down = networkx.DiGraph(G_down)
+
+        # Add nodes of to level
+        G_down.add_nodes_from(G_to.nodes(data=True))
+
+        # build kd tree for mesh point pos
+        # order in vm should be same as in vm_xy
+        v_to_list = list(G_to.nodes)
+        v_from_list = list(G_from.nodes)
+        v_from_xy = np.array([xy for _, xy in G_from.nodes.data("pos")])
+        kdt_m = scipy.spatial.KDTree(v_from_xy)
+
+        # add edges from mesh to grid
+        for v in v_to_list:
+            # find 1(?) nearest neighbours (index to vm_xy)
+            neigh_idx = kdt_m.query(G_down.nodes[v]["pos"], 1)[1]
+            u = v_from_list[neigh_idx]
+
+            # add edge from mesh to grid
+            G_down.add_edge(u, v)
+            d = np.sqrt(np.sum((G_down.nodes[u]["pos"] - G_down.nodes[v]["pos"]) ** 2))
+            G_down.edges[u, v]["len"] = d
+            G_down.edges[u, v]["vdiff"] = (
+                G_down.nodes[u]["pos"] - G_down.nodes[v]["pos"]
+            )
+
+        # relabel nodes to integers (sorted)
+        G_down_int = networkx.convert_node_labels_to_integers(
+            G_down, first_label=start_index, ordering="sorted"
+        )  # Issue with sorting here
+        G_down_int = sort_nodes_internally(G_down_int)
+        pyg_down = from_networkx_with_start_index(G_down_int, start_index)
+
+        # Create up graph, invert downwards edges
+        up_edges = torch.stack((pyg_down.edge_index[1], pyg_down.edge_index[0]), dim=0)
+        pyg_up = pyg_down.clone()
+        pyg_up.edge_index = up_edges
+
+        up_graphs.append(pyg_up)
+        down_graphs.append(pyg_down)
+
+        if plot:
+            plot_graph(pyg_down, title=f"Down graph, {from_level} -> {to_level}")
+            plt.show()
+
+            plot_graph(pyg_down, title=f"Up graph, {to_level} -> {from_level}")
+            plt.show()
+
+    # Save up and down edges
+    save_edges_list(up_graphs, "mesh_up", cache_dir_path)
+    save_edges_list(down_graphs, "mesh_down", cache_dir_path)
+
+    # Extract intra-level edges for m2m
+    m2m_graphs = [
+        from_networkx_with_start_index(
+            networkx.convert_node_labels_to_integers(
+                level_graph, first_label=start_index, ordering="sorted"
+            ),
+            start_index,
+        )
+        for level_graph, start_index in zip(G, first_index_level)
+    ]
+
+    mesh_pos = [graph.pos.to(torch.float32) for graph in m2m_graphs]
+
+    # For use in g2m and m2g
+    G_bottom_mesh = G[0]
+
+    joint_mesh_graph = networkx.union_all([graph for graph in G])
+    all_mesh_nodes = joint_mesh_graph.nodes(data=True)
+
+    return m2m_graphs, mesh_pos, G_bottom_mesh, all_mesh_nodes
+
+
+########################################################################################
+
+
+def monolevel_mesh(G, nx, plot):
+    # combine all levels to one graph
+    G_tot = G[0]
+    for lev in range(1, len(G)):
+        nodes = list(G[lev - 1].nodes)
+        n = int(np.sqrt(len(nodes)))
+        ij = (
+            np.array(nodes)
+            .reshape((n, n, 2))[1::nx, 1::nx, :]
+            .reshape(int(n / nx) ** 2, 2)
+        )
+        ij = [tuple(x) for x in ij]
+        G[lev] = networkx.relabel_nodes(G[lev], dict(zip(G[lev].nodes, ij)))
+        G_tot = networkx.compose(G_tot, G[lev])
+
+    # Relabel mesh nodes to start with 0
+    G_tot = prepend_node_index(G_tot, 0)
+
+    # relabel nodes to integers (sorted)
+    G_int = networkx.convert_node_labels_to_integers(
+        G_tot, first_label=0, ordering="sorted"
+    )
+
+    # Graph to use in g2m and m2g
+    G_bottom_mesh = G_tot
+    all_mesh_nodes = G_tot.nodes(data=True)
+
+    # export the nx graph to PyTorch geometric
+    pyg_m2m = from_networkx(G_int)
+    m2m_graphs = [pyg_m2m]
+    mesh_pos = [pyg_m2m.pos.to(torch.float32)]
+
+    if plot:
+        plot_graph(pyg_m2m, title="Mesh-to-mesh")
+        plt.show()
+
+    return m2m_graphs, mesh_pos, G_bottom_mesh, all_mesh_nodes
+
+
+########################################################################################
+
+
 def prepare(
     dataset: AbstractDataset,
     plot: bool = False,
@@ -158,10 +305,6 @@ def prepare(
     grid_xy = torch.tensor(xy)
     pos_max = torch.max(torch.abs(grid_xy))
     print(f"Size of xy {xy.shape}, size of grid_xy {grid_xy.shape}")
-    ####################################################################################
-    #
-    # Mesh
-    #
 
     # graph geometry
     nx = 3  # number of children = nx**2
@@ -187,139 +330,14 @@ def prepare(
         G.append(g)
 
     if hierarchical:
-        # Relabel nodes of each level with level index first
-        G = [prepend_node_index(graph, level_i) for level_i, graph in enumerate(G)]
-
-        num_nodes_level = np.array([len(g_level.nodes) for g_level in G])
-        # First node index in each level in the hierarcical graph
-        first_index_level = np.concatenate(
-            (np.zeros(1, dtype=int), np.cumsum(num_nodes_level[:-1]))
+        m2m_graphs, mesh_pos, G_bottom_mesh, all_mesh_nodes = hierarchical_mesh(
+            G, mesh_levels, plot, cache_dir_path
         )
-
-        # Create inter-level mesh edges
-        up_graphs = []
-        down_graphs = []
-        for from_level, to_level, G_from, G_to, start_index in zip(
-            range(1, mesh_levels),
-            range(0, mesh_levels - 1),
-            G[1:],
-            G[:-1],
-            first_index_level[: mesh_levels - 1],
-        ):
-
-            # start out from graph at from level
-            G_down = G_from.copy()
-            G_down.clear_edges()
-            G_down = networkx.DiGraph(G_down)
-
-            # Add nodes of to level
-            G_down.add_nodes_from(G_to.nodes(data=True))
-
-            # build kd tree for mesh point pos
-            # order in vm should be same as in vm_xy
-            v_to_list = list(G_to.nodes)
-            v_from_list = list(G_from.nodes)
-            v_from_xy = np.array([xy for _, xy in G_from.nodes.data("pos")])
-            kdt_m = scipy.spatial.KDTree(v_from_xy)
-
-            # add edges from mesh to grid
-            for v in v_to_list:
-                # find 1(?) nearest neighbours (index to vm_xy)
-                neigh_idx = kdt_m.query(G_down.nodes[v]["pos"], 1)[1]
-                u = v_from_list[neigh_idx]
-
-                # add edge from mesh to grid
-                G_down.add_edge(u, v)
-                d = np.sqrt(
-                    np.sum((G_down.nodes[u]["pos"] - G_down.nodes[v]["pos"]) ** 2)
-                )
-                G_down.edges[u, v]["len"] = d
-                G_down.edges[u, v]["vdiff"] = (
-                    G_down.nodes[u]["pos"] - G_down.nodes[v]["pos"]
-                )
-
-            # relabel nodes to integers (sorted)
-            G_down_int = networkx.convert_node_labels_to_integers(
-                G_down, first_label=start_index, ordering="sorted"
-            )  # Issue with sorting here
-            G_down_int = sort_nodes_internally(G_down_int)
-            pyg_down = from_networkx_with_start_index(G_down_int, start_index)
-
-            # Create up graph, invert downwards edges
-            up_edges = torch.stack(
-                (pyg_down.edge_index[1], pyg_down.edge_index[0]), dim=0
-            )
-            pyg_up = pyg_down.clone()
-            pyg_up.edge_index = up_edges
-
-            up_graphs.append(pyg_up)
-            down_graphs.append(pyg_down)
-
-            if plot:
-                plot_graph(pyg_down, title=f"Down graph, {from_level} -> {to_level}")
-                plt.show()
-
-                plot_graph(pyg_down, title=f"Up graph, {to_level} -> {from_level}")
-                plt.show()
-
-        # Save up and down edges
-        save_edges_list(up_graphs, "mesh_up", cache_dir_path)
-        save_edges_list(down_graphs, "mesh_down", cache_dir_path)
-
-        # Extract intra-level edges for m2m
-        m2m_graphs = [
-            from_networkx_with_start_index(
-                networkx.convert_node_labels_to_integers(
-                    level_graph, first_label=start_index, ordering="sorted"
-                ),
-                start_index,
-            )
-            for level_graph, start_index in zip(G, first_index_level)
-        ]
-
-        mesh_pos = [graph.pos.to(torch.float32) for graph in m2m_graphs]
-
-        # For use in g2m and m2g
-        G_bottom_mesh = G[0]
-
-        joint_mesh_graph = networkx.union_all([graph for graph in G])
-        all_mesh_nodes = joint_mesh_graph.nodes(data=True)
 
     else:
-        # combine all levels to one graph
-        G_tot = G[0]
-        for lev in range(1, len(G)):
-            nodes = list(G[lev - 1].nodes)
-            n = int(np.sqrt(len(nodes)))
-            ij = (
-                np.array(nodes)
-                .reshape((n, n, 2))[1::nx, 1::nx, :]
-                .reshape(int(n / nx) ** 2, 2)
-            )
-            ij = [tuple(x) for x in ij]
-            G[lev] = networkx.relabel_nodes(G[lev], dict(zip(G[lev].nodes, ij)))
-            G_tot = networkx.compose(G_tot, G[lev])
-
-        # Relabel mesh nodes to start with 0
-        G_tot = prepend_node_index(G_tot, 0)
-
-        # relabel nodes to integers (sorted)
-        G_int = networkx.convert_node_labels_to_integers(
-            G_tot, first_label=0, ordering="sorted"
+        m2m_graphs, mesh_pos, G_bottom_mesh, all_mesh_nodes = monolevel_mesh(
+            G, nx, plot
         )
-
-        # Graph to use in g2m and m2g
-        G_bottom_mesh = G_tot
-        all_mesh_nodes = G_tot.nodes(data=True)
-
-        # export the nx graph to PyTorch geometric
-        pyg_m2m = from_networkx(G_int)
-        m2m_graphs = [pyg_m2m]
-        mesh_pos = [pyg_m2m.pos.to(torch.float32)]
-
-        if plot:
-            plot_graph(pyg_m2m, title="Mesh-to-mesh")
-            plt.show()
 
     # Save m2m edges
     save_edges_list(m2m_graphs, "m2m", cache_dir_path)
@@ -331,11 +349,17 @@ def prepare(
     # Save mesh positions
     torch_save(mesh_pos, cache_dir_path / "mesh_features.pt")  # mesh pos, in float32
 
-    ####################################################################################
-    #
-    # Grid2Mesh
-    #
+    G_g2m, vm, vm_xy, vg_list = grid2mesh(
+        G_bottom_mesh, all_mesh_nodes, xy, plot, cache_dir_path
+    )
 
+    mesh2grid(G_g2m, vm, vm_xy, vg_list, plot, cache_dir_path)
+
+
+########################################################################################
+
+
+def grid2mesh(G_bottom_mesh, all_mesh_nodes, xy, plot, cache_dir_path):
     # radius within which grid nodes are associated with a mesh node
     # (in terms of mesh distance)
     DM_SCALE = 0.67
@@ -401,12 +425,16 @@ def prepare(
         plot_graph(pyg_g2m, title="Grid-to-mesh")
         plt.show()
 
-    ####################################################################################
-    #
-    # Mesh2Grid
-    #
+    save_edges(pyg_g2m, "g2m", cache_dir_path)
 
-    # start out from Grid2Mesh and then replace edges
+    return G_g2m, vm, vm_xy, vg_list
+
+
+########################################################################################
+
+
+def mesh2grid(G_g2m, vm, vm_xy, vg_list, plot, cache_dir_path):
+
     G_m2g = G_g2m.copy()
     G_m2g.clear_edges()
 
@@ -437,15 +465,15 @@ def prepare(
         plot_graph(pyg_m2g, title="Mesh-to-grid")
         plt.show()
 
-    # Save g2m and m2g everything
-    # g2m
-    save_edges(pyg_g2m, "g2m", cache_dir_path)
     # m2g
     save_edges(pyg_m2g, "m2g", cache_dir_path)
 
 
+########################################################################################
+
 if __name__ == "__main__":
     from argparse_dataclass import ArgumentParser
+
     from pnia.datasets.titan import TitanDataset, TitanHyperParams
 
     parser = ArgumentParser(TitanHyperParams)

@@ -6,12 +6,12 @@ import numpy as np
 import pytorch_lightning as pl
 import torch
 import wandb
+from torch import nn
 
 # A noter que vis depend de constant ... qui n'a donc pas les bonnes choses (car portées par le dataset).
 from pnia.datasets.base import AbstractDataset
 from pnia.models.nlam import vis
 from pnia.models.nlam.utils import BufferList, val_step_log_errors
-from torch import nn
 
 
 @dataclass
@@ -23,8 +23,8 @@ class Graph:
     mesh_aggr: str = "sum"
     processor_layers: int = 4
     # Memory saving option
-    checkpoint=True
-    offload=True
+    checkpoint = True
+    offload = True
 
 
 @dataclass
@@ -35,6 +35,7 @@ class HyperParam:
     loss: str = "mse"
     n_example_pred: int = 2
     step_length: float = 0.25
+
 
 def load_graph(hp: HyperParam, device="cpu"):
     # Define helper lambda function

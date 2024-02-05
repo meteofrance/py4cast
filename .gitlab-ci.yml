@@ -1,0 +1,16 @@
+stages:
+  - lint
+
+linting:
+  stage: lint
+  image: python:3.8.16
+  script:
+    - pip install --trusted-host pypi.org --trusted-host files.pythonhosted.org -r requirements_lint.txt
+    - ./lint.sh .
+
+complexity:
+  stage: lint
+  image: python:3.9.16
+  script:
+    - pip install --trusted-host pypi.org --trusted-host files.pythonhosted.org sourcery-analytics
+    - sourcery-analytics assess .

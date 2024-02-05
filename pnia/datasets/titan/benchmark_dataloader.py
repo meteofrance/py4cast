@@ -4,8 +4,9 @@ of our dataloader when using multiple CPU cores
 """
 import time
 
-from pnia.datasets.titan import TitanDataset, TitanHyperParams
 from torch.utils.data import DataLoader
+
+from pnia.datasets.titan import TitanDataset, TitanHyperParams
 
 if __name__ == "__main__":
 

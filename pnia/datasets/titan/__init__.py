@@ -10,9 +10,10 @@ import xarray as xr
 import yaml
 from cyeccodes import nested_dd_iterator
 from cyeccodes.eccodes import get_multi_messages_from_file
+from torch.utils.data import DataLoader, Dataset
+
 from pnia.datasets.base import AbstractDataset
 from pnia.settings import CACHE_DIR
-from torch.utils.data import DataLoader, Dataset
 
 FORMATSTR = "%Y-%m-%d_%Hh%M"
 DATA_SPLIT = {
