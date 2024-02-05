@@ -1,7 +1,8 @@
 import torch
 import torch_geometric as pyg
-from pnia.models.nlam import utils
 from torch import nn
+
+from pnia.models.nlam import utils
 
 
 class InteractionNet(pyg.nn.MessagePassing):

@@ -1,10 +1,11 @@
 import torch
 import torch_geometric as pyg
+from torch import nn
+from torch.distributed.algorithms._checkpoint.checkpoint_wrapper import offload_wrapper
+
 from pnia.models.ar_model import ARModel, HyperParam, load_graph  # Import ayant changé
 from pnia.models.nlam import utils
 from pnia.models.nlam.interaction_net import InteractionNet
-from torch import nn
-from torch.distributed.algorithms._checkpoint.checkpoint_wrapper import offload_wrapper
 
 
 def offload(model: nn.ModuleList):

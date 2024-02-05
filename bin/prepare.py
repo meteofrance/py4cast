@@ -2,6 +2,7 @@ from pathlib import Path
 
 import torch
 import typer
+
 from pnia.datasets import SmeagolDataset, TitanDataset, create_grid_features
 from pnia.datasets.titan import TitanHyperParams
 from pnia.models.nlam import create_mesh

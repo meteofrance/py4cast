@@ -10,9 +10,10 @@ from typing import List, Literal
 
 import numpy as np
 import torch
-from pnia.utils import torch_save
 from torch.utils.data import DataLoader
 from tqdm import tqdm
+
+from pnia.utils import torch_save
 
 
 @dataclass

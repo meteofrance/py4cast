@@ -10,9 +10,10 @@ import numpy as np
 import pandas as pd
 import torch
 import xarray as xr
+from torch.utils.data import DataLoader, Dataset
+
 from pnia.datasets.base import AbstractDataset
 from pnia.settings import CACHE_DIR
-from torch.utils.data import DataLoader, Dataset
 
 # torch.set_num_threads(8)
 priam_path = Path("/scratch/shared/smeagol")
