@@ -2,6 +2,7 @@ from pathlib import Path
 
 import torch
 import typer
+from tqdm import tqdm
 
 from pnia.datasets import SmeagolDataset, TitanDataset, create_grid_features
 from pnia.datasets.titan import TitanHyperParams
@@ -56,7 +57,7 @@ def testsmeagol(dataconf=path.parent.parent / "pnia/xp_conf/smeagol.json"):
     This function could change...
     """
     train_ds, _, _ = SmeagolDataset.from_json(
-        dataconf, {"train": {"standardize": True}}
+        dataconf, {"train": {"standardize": True, "nb_pred_steps": 1}}
     )
     train_ds.standardize = True
     print("Forcing", train_ds.shortnames("forcing"))
@@ -64,8 +65,9 @@ def testsmeagol(dataconf=path.parent.parent / "pnia/xp_conf/smeagol.json"):
     print("Weather", train_ds.shortnames("diagnostic"))
     print("Weather", train_ds.shortnames("input"))
     print("Weather", train_ds.shortnames("all"))
-    print("Weather", train_ds.shortnames("Toto"))
-    # datas = train_ds.load_dataset_stats()
+
+    for index in tqdm(range(len(train_ds.sample_list))):
+        train_ds.test_sample(index)
 
 
 @titan_app.command("all")

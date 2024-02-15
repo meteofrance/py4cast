@@ -3,7 +3,7 @@ import torch.nn as nn
 from torch.utils.checkpoint import checkpoint
 from tueplots import bundles, figsizes
 
-val_step_log_errors = np.array([1, 2, 3, 5, 10, 15, 19])
+val_step_log_errors = np.array([1, 2, 3])
 
 
 class CheckpointWrapper(nn.Module):

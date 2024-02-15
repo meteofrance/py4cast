@@ -1,11 +1,13 @@
 import datetime as dt
 import json
+import ssl
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from functools import partial
+from functools import cached_property, partial
 from pathlib import Path
 from typing import List, Literal, Tuple
 
+import cartopy
 import numpy as np
 import pandas as pd
 import torch
@@ -15,6 +17,7 @@ from torch.utils.data import DataLoader, Dataset
 from pnia.datasets.base import AbstractDataset
 from pnia.settings import CACHE_DIR
 
+ssl._create_default_https_context = ssl._create_unverified_context
 # torch.set_num_threads(8)
 priam_path = Path("/scratch/shared/smeagol")
 # Assuming no leap years in dataset (2024 is next)
@@ -40,7 +43,7 @@ def smeagol_forecast_namer(
 
 def get_weight(level: int, kind: str):
     if kind == "hPa":
-        return (level) / (90)
+        return 1 + (level) / (90)
     elif kind == "m":
         return 2
     else:
@@ -75,8 +78,8 @@ class Grid:
     border_size: int = 0
     # Subgrid selection. If (0,0,0,0) the whole grid is kept.
     subgrid: Tuple[int] = (0, 0, 0, 0)
-    lat: np.array = field(init=False)
-    lon: np.array = field(init=False)
+    # lat: np.array = field(init=False)
+    # lon: np.array = field(init=False)
     x: int = field(init=False)  # X dimension
     y: int = field(init=False)  # Y dimension
 
@@ -94,10 +97,23 @@ class Grid:
         self.x = self.subgrid[1] - self.subgrid[0]
         self.y = self.subgrid[3] - self.subgrid[2]
 
-        self.lat = ds.lat.values[
+    @cached_property
+    def lat(self) -> np.array:
+        grid_name = (
+            priam_path / "nc" / constant_fname(self.domain, self.model, self.geometry)
+        )
+        ds = xr.open_dataset(grid_name)
+        return ds.lat.values[
             self.subgrid[0] : self.subgrid[1], self.subgrid[2] : self.subgrid[3]
         ]
-        self.lon = ds.lon.values[
+
+    @cached_property
+    def lon(self) -> np.array:
+        grid_name = (
+            priam_path / "nc" / constant_fname(self.domain, self.model, self.geometry)
+        )
+        ds = xr.open_dataset(grid_name)
+        return ds.lon.values[
             self.subgrid[0] : self.subgrid[1], self.subgrid[2] : self.subgrid[3]
         ]
 
@@ -131,6 +147,25 @@ class Grid:
     @property
     def N_grid(self) -> int:
         return self.x * self.y
+
+    @cached_property
+    def grid_limits(self):
+        grid_name = (
+            priam_path / "nc" / constant_fname(self.domain, self.model, self.geometry)
+        )
+        ds = xr.open_dataset(grid_name)
+        grid_limits = [  # In projection
+            ds.x[self.subgrid[0]].values,  # min x
+            ds.x[self.subgrid[1]].values,  # max x
+            ds.y[self.subgrid[2]].values,  # min y
+            ds.y[self.subgrid[3]].values,  # max y
+        ]
+        return grid_limits
+
+    @cached_property
+    def projection(self):
+        # Create projection
+        return cartopy.crs.LambertConformal(central_longitude=2, central_latitude=46.7)
 
 
 @dataclass
@@ -187,6 +222,14 @@ class Param:
         ds = xr.open_dataset(files[0], decode_times=False)
         return ds
 
+    def exist(self, member: int, date: dt.datetime, terms: List):
+        flist = []
+        for term in terms:
+            flist.append(self.filename(member=member, date=date, term=term))
+        files = list(set(flist))
+        # TODO: change it in order to be more generic
+        return files[0].exists()
+
 
 @dataclass
 class Sample:
@@ -219,6 +262,13 @@ class Sample:
             ]
         )
 
+    def is_valid(self, param_list):
+        for param in param_list:
+            if not param.exist(self.member, self.date, self.terms):
+                return False
+            else:
+                return True
+
 
 @dataclass
 class HyperParam:
@@ -226,13 +276,14 @@ class HyperParam:
     nb_input_steps: int = 2  # Step en entrée
     nb_pred_steps: int = 1  # Step en sortie
     batch_size: int = 1  # Nombre d'élément par batch
-    num_workers: int = 6  # Worker pour charger les données
+    num_workers: int = 10  # Worker pour charger les données
     standardize: bool = False
     subset: int = 0  # Positive integer. If subset is less than 1 it means full set.
     # Otherwise describe the number of sample.
     # Pas vraiment a mettre ici. Voir où le mettre
     members: Tuple[int] = (0,)
     diagnose: bool = False  # Do we want extra diagnostic ? Do not use it for training
+    prefetch: int = 2
 
     @property
     def nb_steps(self):
@@ -248,13 +299,10 @@ class SmeagolDataset(AbstractDataset, Dataset):
         self.period = period
         self.params = params
         self.hp = hyper_params
+
         self._cache_dir = CACHE_DIR / "neural_lam" / str(self)
         self.shuffle = self.split == "train"
         self.cache_dir.mkdir(parents=True, exist_ok=True)
-        self.sample_list = self.init_sample_list()
-
-        if self.hp.subset > 1:
-            self.sample_list = self.sample_list[: self.subset]
 
         if self.standardize:
             ds_stats = self.load_dataset_stats()
@@ -265,7 +313,8 @@ class SmeagolDataset(AbstractDataset, Dataset):
                 ds_stats["flux_std"],
             )
 
-    def init_sample_list(self):
+    @cached_property
+    def sample_list(self):
         """
         Create a list of sample from information
         """
@@ -275,7 +324,8 @@ class SmeagolDataset(AbstractDataset, Dataset):
             )
         )
         sample_by_date = len(terms) // self.hp.nb_steps
-        sample_list = []
+        samples = []
+        number = 0
         for date in self.period.date_list:
             for member in self.hp.members:
                 for sample in range(0, sample_by_date):
@@ -295,8 +345,12 @@ class SmeagolDataset(AbstractDataset, Dataset):
                         input_terms=input_terms,
                         output_terms=output_terms,
                     )
-                    sample_list.append(samp)
-        return sample_list
+                    if samp.is_valid(self.params) and (
+                        number < self.hp.subset or self.hp.subset < 1
+                    ):
+                        samples.append(samp)
+                        number += 1
+        return samples
 
     def __len__(self):
         return len(self.sample_list)
@@ -368,6 +422,24 @@ class SmeagolDataset(AbstractDataset, Dataset):
                 res += param.number
         return res
 
+    def test_sample(self, index):
+        sample = self.sample_list[index]
+
+        # Reading parameters from files
+        for param in self.params:
+            ds = (
+                param.load_data(sample.member, sample.date, sample.terms)
+                .sel(X=range(self.grid.subgrid[0], self.grid.subgrid[1]))
+                .sel(Y=range(self.grid.subgrid[2], self.grid.subgrid[3]))
+            )
+            if "level" in ds.coords:
+                ds = ds.sel(level=param.levels)
+            # Read inputs. Separate forcing field from I/O
+            try:
+                _ = ds[param.name].sel(step=sample.input_terms)
+            except KeyError:
+                print(f"Problem in sample {sample}")
+
     def __getitem__(self, index):
         sample = self.sample_list[index]
         # Static features
@@ -396,26 +468,29 @@ class SmeagolDataset(AbstractDataset, Dataset):
             if "level" in ds.coords:
                 ds = ds.sel(level=param.levels)
             # Read inputs. Separate forcing field from I/O
-            if param.kind == "input_output":
-                tmp_in = ds[param.name].sel(step=sample.input_terms).values
-                if len(tmp_in.shape) != 4:
-                    tmp_in = np.expand_dims(tmp_in, axis=1)
-                inputs.append(tmp_in)
-            # On lit un forcage. On le prend pour tous les pas de temps de prevision
-            # Un peu etrange de prendre le forcage a l'instant de la prevision et
-            # non pas l'instant initial ... mais bon.
-            elif param.kind == "input":
-                tmp_in = ds[param.name].sel(step=sample.output_terms).values
-                if len(tmp_in.shape) != 4:
-                    tmp_in = np.expand_dims(tmp_in, axis=1)
-                forcing.append(tmp_in)
-            # Read outputs.
-            if param.kind in ["ouput", "input_output"]:
-                tmp_out = ds[param.name].sel(step=sample.output_terms).values
-                if len(tmp_out.shape) != 4:
-                    tmp_out = np.expand_dims(tmp_out, axis=1)
-                outputs.append(tmp_out)
-
+            try:
+                if param.kind == "input_output":
+                    tmp_in = ds[param.name].sel(step=sample.input_terms).values
+                    if len(tmp_in.shape) != 4:
+                        tmp_in = np.expand_dims(tmp_in, axis=1)
+                    inputs.append(tmp_in)
+                # On lit un forcage. On le prend pour tous les pas de temps de prevision
+                # Un peu etrange de prendre le forcage a l'instant de la prevision et
+                # non pas l'instant initial ... mais bon.
+                elif param.kind == "input":
+                    tmp_in = ds[param.name].sel(step=sample.output_terms).values
+                    if len(tmp_in.shape) != 4:
+                        tmp_in = np.expand_dims(tmp_in, axis=1)
+                    forcing.append(tmp_in)
+                # Read outputs.
+                if param.kind in ["ouput", "input_output"]:
+                    tmp_out = ds[param.name].sel(step=sample.output_terms).values
+                    if len(tmp_out.shape) != 4:
+                        tmp_out = np.expand_dims(tmp_out, axis=1)
+                    outputs.append(tmp_out)
+            except KeyError as e:
+                print("Error for param {param}")
+                raise e
         ini = np.concatenate(inputs, axis=1).transpose([0, 2, 3, 1])
         force = torch.from_numpy(
             np.concatenate(forcing, axis=1).transpose([0, 2, 3, 1])
@@ -426,7 +501,8 @@ class SmeagolDataset(AbstractDataset, Dataset):
 
         if self.standardize:
             # TO DO
-            # Fait ici l'hypothese que les donnes d'entree et de sortie sont les meme
+            # Fait ici l'hypothese implicite que les donnes d'entree et de sortie sont les memes.
+            # Rajouter un champ diagnose pour les sorties seules que l'on stackera plus tard ?
             # Trouver un truc plus logique pour faire la standardisation
             # (la faire parametre par parametre a la lecture ?) ?
             # Construire un tableau de normalisation pour la sortie different de pour
@@ -523,6 +599,7 @@ class SmeagolDataset(AbstractDataset, Dataset):
             self.hp.batch_size,
             num_workers=self.hp.num_workers,
             shuffle=self.shuffle,
+            prefetch_factor=self.hp.prefetch,
         )
 
     @property
@@ -667,13 +744,15 @@ class SmeagolDataset(AbstractDataset, Dataset):
     def members(self):
         return self.hp.members
 
-    @members.setter
-    def members(self, value: tuple):
-        self.hp.members = value
-        self.sample_list = self.init_sample_list()
-        if self.hp.subset > 1:
-            self.sample_list = self.sample_list[: self.subset]
-
     @property
     def cache_dir(self) -> Path:
         return self._cache_dir
+
+    # On va encoder les proprietes pour la visu
+    @property
+    def grid_limits(self) -> list:
+        return self.grid.grid_limits
+
+    @property
+    def projection(self):
+        return self.grid.projection

@@ -3,7 +3,7 @@ Base classes defining our software components
 and their interfaces
 """
 
-from abc import ABC, abstractproperty
+from abc import ABC, abstractmethod, abstractproperty
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Literal
@@ -38,6 +38,10 @@ class AbstractDataset(ABC):
         array of shape (2, num_lat, num_lon)
         of (lat, lon) values
         """
+
+    def grid_shape(self) -> tuple:
+        lat, lon = self.grid_info
+        return lat.shape
 
     @abstractproperty
     def geopotential_info(self) -> np.array:
@@ -299,5 +303,24 @@ class AbstractDataset(ABC):
     def diagnostic_dim(self) -> int:
         """
         Return the number of diagnostic variables (output only)
+        """
+        pass
+
+    @abstractmethod
+    def shortnames(self, kind) -> list:
+        pass
+
+    @abstractmethod
+    def units(self, kind) -> list:
+        pass
+
+    @abstractproperty
+    def grid_limits(self) -> list:
+        pass
+
+    @abstractproperty
+    def projection(self):
+        """
+        Return the cartopy projection of the dataset
         """
         pass
