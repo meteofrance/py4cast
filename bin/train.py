@@ -9,6 +9,7 @@ import pytorch_lightning as pl
 # Torch import
 import torch
 from lightning.pytorch.loggers import TensorBoardLogger
+from lightning.pytorch.profilers import PyTorchProfiler
 from lightning_fabric.utilities import seed
 from torch.utils.data import Dataset
 
@@ -37,6 +38,9 @@ class TrainingParams:
     precision: str = "32"
     val_interval: int = 1
     epochs: int = 200
+    devices: int = 1
+    profiler: str = "None"
+    run_id: int = 1
 
 
 def main(
@@ -47,9 +51,6 @@ def main(
     tp: TrainingParams,
     hp: HyperParam,
 ):
-
-    # Get an (actual) random run id as a unique identifier
-    random_run_id = random.randint(0, 9999)  # On doit toujours avoir le meme
 
     train_loader = training_dataset.loader
     val_loader = val_dataset.loader
@@ -69,9 +70,10 @@ def main(
         prefix += f"eval-{tp.evaluation}-"
 
     run_name = (
-        f"{prefix}{hp.graph.model}-{hp.graph.processor_layers}x{hp.graph.hidden_dim}-"
-        f"{time.strftime('%m_%d_%H')}-{random_run_id:04d}"
+        f"{prefix}{str(hp.dataset)}{hp.graph.model}-{hp.graph.processor_layers}x{hp.graph.hidden_dim}-"
+        f"{time.strftime('%m%d%H:%M')}-{tp.run_id}"
     )
+    print(f"Model and checkpoint will be saved in saved_models/{run_name}")
     checkpoint_callback = pl.callbacks.ModelCheckpoint(
         dirpath=f"saved_models/{run_name}",
         filename="min_val_loss",
@@ -87,12 +89,26 @@ def main(
         default_hp_metric=False,
     )
 
+    if tp.profiler == "pytorch":
+        profiler = PyTorchProfiler(
+            dirpath=f"/scratch/shared/pnia/logs/{args.model}/{args.dataset}",
+            filename=f"profile_{tp.run_id}",
+            export_to_chrome=True,
+        )
+        print("Initiate pytorchProfiler")
+    else:
+        profiler = None
+        print(f"No profiler set {tp.profiler}")
+
     trainer = pl.Trainer(
+        devices=tp.devices,
+        num_nodes=1,
         max_epochs=tp.epochs,
         deterministic=True,
         strategy="ddp",
         accelerator=device_name,
         logger=logger,
+        profiler=profiler,
         log_every_n_steps=1,
         callbacks=[checkpoint_callback],
         check_val_every_n_epoch=tp.val_interval,
@@ -102,6 +118,7 @@ def main(
     if tp.evaluation:
         if tp.evaluation == "val":
             eval_loader = val_loader
+        else:
             eval_loader = test_loader
         trainer.test(model=model, dataloaders=eval_loader)
     else:
@@ -199,6 +216,13 @@ if __name__ == "__main__":
     parser.add_argument(
         "--epochs", type=int, default=200, help="upper epoch limit (default: 200)"
     )
+    parser.add_argument("--gpus", type=int, default=1, help="Gpus asked.")
+    parser.add_argument(
+        "--profiler",
+        type=str,
+        default="None",
+        help="Profiler required. Possibilities are ['simple', 'pytorch', 'None']",
+    )
     parser.add_argument(
         "--batch_size", type=int, default=4, help="batch size (default: 4)"
     )
@@ -238,6 +262,24 @@ if __name__ == "__main__":
         default=False,
         help="Do we need to show extra print ?",
     )
+    parser.add_argument(
+        "--memory",
+        action=BooleanOptionalAction,
+        default=False,
+        help="Do we need to save memory ?",
+    )
+    parser.add_argument(
+        "--subset",
+        type=int,
+        default=0,
+        help="Do we select a subset ? 0 means Full dataset set is used. Otherwise, number of sample to use.",
+    )
+    parser.add_argument(
+        "--steps",
+        type=int,
+        default=1,
+        help="How many ARSteps do we use ? ",
+    )
     args, other = parser.parse_known_args()
 
     # Asserts for arguments
@@ -246,6 +288,7 @@ if __name__ == "__main__":
 
     args, others = parser.parse_known_args()
 
+    random_run_id = random.randint(0, 9999)
     seed.seed_everything(args.seed)
 
     # Initialisation du dataset
@@ -254,14 +297,16 @@ if __name__ == "__main__":
             args.data_conf,
             args={
                 "train": {
-                    "nb_pred_steps": 1,
+                    "nb_pred_steps": args.steps,
                     "diagnose": args.diagnose,
                     "standardize": args.standardize,
+                    "subset": args.subset,
                 },
-                "valid": {"nb_pred_steps": 19, "standardize": args.standardize},
-                "test": {"nb_pred_steps": 19, "standardize": args.standardize},
+                "valid": {"nb_pred_steps": 5, "standardize": args.standardize},
+                "test": {"nb_pred_steps": 5, "standardize": args.standardize},
             },
         )
+
     elif args.dataset == "titan":
         hparams_train_dataset = TitanHyperParams(**{"nb_pred_steps": 1})
         training_dataset = DATASETS["titan"]["dataset"](hparams_train_dataset)
@@ -274,6 +319,7 @@ if __name__ == "__main__":
         )
         test_dataset = DATASETS["titan"]["dataset"](hparams_test_dataset)
 
+    print(f"Activation of memory saving option {args.memory}")
     # Lie uniquement au modele choisi
     graph = Graph(
         model=args.model,
@@ -282,6 +328,8 @@ if __name__ == "__main__":
         hidden_layers=args.hidden_layers,
         processor_layers=args.processor_layers,
         mesh_aggr=args.mesh_aggr,
+        checkpoint=args.memory,
+        offload=args.memory,
     )
     # On rajoute le modele dedans
     hp = HyperParam(
@@ -297,6 +345,9 @@ if __name__ == "__main__":
         precision=args.precision,
         val_interval=args.val_interval,
         epochs=args.epochs,
+        devices=args.gpus,
+        profiler=args.profiler,
+        run_id=random_run_id,
     )
 
     model_class = MODELS[graph.model]

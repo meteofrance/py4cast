@@ -3,6 +3,12 @@ from pathlib import Path
 import torch
 
 
+def nullable_string(val: str):
+    if val == "None":
+        return None
+    return val
+
+
 def torch_save(data, path: Path):
     """Saving files with torch to be writeable by anyone"""
     if path.exists():

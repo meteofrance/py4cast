@@ -1,3 +1,5 @@
+import ssl
+
 import cartopy
 import matplotlib
 import matplotlib.pyplot as plt
@@ -5,48 +7,11 @@ import numpy as np
 
 from pnia.models.nlam import utils
 
-param_names_short = [
-    "pres_0g",
-    "pres_0s",
-    "nlwrs_0",
-    "nswrs_0",
-    "r_2",
-    "r_65",
-    "t_2",
-    "t_65",
-    "t_500",
-    "t_850",
-    "u_65",
-    "u_850",
-    "v_65",
-    "v_850",
-    "wvint_0",
-    "z_1000",
-    "z_500",
-]
-param_units = [
-    "Pa",
-    "Pa",
-    "W/m\\textsuperscript{2}",
-    "W/m\\textsuperscript{2}",
-    "-",  # unitless
-    "-",
-    "K",
-    "K",
-    "K",
-    "K",
-    "m/s",
-    "m/s",
-    "m/s",
-    "m/s",
-    "kg/m\\textsuperscript{2}",
-    "m\\textsuperscript{2}/s\\textsuperscript{2}",
-    "m\\textsuperscript{2}/s\\textsuperscript{2}",
-]
+ssl._create_default_https_context = ssl._create_unverified_context
 
 # Projection and grid
 # TODO Do not hard code this, make part of static dataset files
-grid_shape = (268, 238)  # (y, x)
+# grid_shape = (268, 238)  # (y, x)
 
 lambert_proj_params = {
     "a": 6367470,
@@ -74,7 +39,7 @@ lambert_proj = cartopy.crs.LambertConformal(
 
 
 @matplotlib.rc_context(utils.fractional_plot_bundle(1))
-def plot_error_map(errors, title=None, step_length=3):
+def plot_error_map(errors, dataset, title=None, step_length=3):
     """
     Plot a heatmap of errors of different variables at different predictions horizons
     errors: (pred_steps, d_f)
@@ -114,7 +79,8 @@ def plot_error_map(errors, title=None, step_length=3):
 
     ax.set_yticks(np.arange(d_f))
     y_ticklabels = [
-        f"{name} ({unit})" for name, unit in zip(param_names_short, param_units)
+        f"{name} ({unit})"
+        for name, unit in zip(dataset.shortnames("output"), dataset.units("output"))
     ]
     ax.set_yticklabels(y_ticklabels, rotation=30, size=label_size)
 
@@ -125,7 +91,16 @@ def plot_error_map(errors, title=None, step_length=3):
 
 
 @matplotlib.rc_context(utils.fractional_plot_bundle(1))
-def plot_prediction(pred, target, obs_mask, title=None, vrange=None):
+def plot_prediction(
+    pred,
+    target,
+    obs_mask,
+    grid_shape,
+    title=None,
+    vrange=None,
+    projection=lambert_proj,
+    grid_limits=grid_limits,
+):
     """
     Plot example prediction and grond truth.
     Each has shape (N_grid,)
@@ -142,7 +117,7 @@ def plot_prediction(pred, target, obs_mask, title=None, vrange=None):
     pixel_alpha = mask_reshaped.clamp(0.7, 1).cpu().numpy()  # Faded border region
 
     fig, axes = plt.subplots(
-        1, 2, figsize=(13, 7), subplot_kw={"projection": lambert_proj}
+        1, 2, figsize=(13, 7), subplot_kw={"projection": projection}
     )
 
     # Plot pred and target
@@ -172,7 +147,15 @@ def plot_prediction(pred, target, obs_mask, title=None, vrange=None):
 
 
 @matplotlib.rc_context(utils.fractional_plot_bundle(1))
-def plot_spatial_error(error, obs_mask, title=None, vrange=None):
+def plot_spatial_error(
+    error,
+    obs_mask,
+    grid_shape,
+    title=None,
+    vrange=None,
+    projection=lambert_proj,
+    grid_limits=grid_limits,
+):
     """
     Plot errors over spatial map
     Error and obs_mask has shape (N_grid,)
@@ -188,9 +171,10 @@ def plot_spatial_error(error, obs_mask, title=None, vrange=None):
     mask_reshaped = obs_mask.reshape(*grid_shape)
     pixel_alpha = mask_reshaped.clamp(0.7, 1).cpu().numpy()  # Faded border region
 
-    fig, ax = plt.subplots(figsize=(5, 4.8), subplot_kw={"projection": lambert_proj})
+    fig, ax = plt.subplots(figsize=(5, 4.8), subplot_kw={"projection": projection})
 
     ax.coastlines()  # Add coastline outlines
+    print(error.shape)
     error_grid = error.reshape(*grid_shape).cpu().numpy()
 
     im = ax.imshow(

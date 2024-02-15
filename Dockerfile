@@ -1,4 +1,4 @@
-FROM pytorch/pytorch:2.0.1-cuda11.7-cudnn8-runtime
+FROM pytorch/pytorch:2.1.0-cuda12.1-cudnn8-runtime
 
 ARG USERNAME
 ARG GROUPNAME
@@ -36,10 +36,9 @@ RUN set -eux && groupadd --gid $USER_GUID $GROUPNAME \
     && echo "$USERNAME:$USERNAME" | chpasswd \
     && mkdir /run/sshd
 
-RUN set -eux && pip install pyg-lib==0.2.0 torch-scatter==2.1.1 torch-sparse==0.6.17 torch-cluster==1.6.1\
-    torch-geometric==2.3.1 -f https://data.pyg.org/whl/torch-2.0.1+cpu.html
+RUN set -eux && pip install pyg-lib==0.4.0 torch-scatter==2.1.2 torch-sparse==0.6.18 torch-cluster==1.6.2\
+    torch-geometric==2.3.1 -f https://data.pyg.org/whl/torch-2.1.0+cpu.html
 
-#RUN set -eux && pip install --default-timeout=100 --trusted-host files.pythonhosted.org plotly>=5.15.0
 WORKDIR $HOME_DIR
 RUN curl -fsSL https://code-server.dev/install.sh | sh
 
