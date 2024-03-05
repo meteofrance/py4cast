@@ -4,7 +4,8 @@ and their interfaces
 """
 
 from abc import ABC, abstractmethod, abstractproperty
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from functools import cached_property
 from pathlib import Path
 from typing import List, Literal
 
@@ -13,11 +14,18 @@ import torch
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
+from pnia.base import RegisterFieldsMixin
 from pnia.utils import torch_save
 
 
 @dataclass
-class Statics:
+class Statics(RegisterFieldsMixin):
+    """
+    Static fields of the dataset.
+    Tensor can be registered as buffer in a lightning module
+    using the register_buffers method.
+    """
+
     border_mask: torch.Tensor
     grid_static_features: torch.Tensor
     step_diff_mean: torch.Tensor
@@ -25,6 +33,14 @@ class Statics:
     data_mean: torch.Tensor
     data_std: torch.Tensor
     param_weights: torch.Tensor
+    interior_mask: torch.Tensor = field(init=False)
+
+    def __post_init__(self):
+        self.interior_mask = 1.0 - self.border_mask
+
+    @cached_property
+    def N_interior(self):
+        return torch.sum(self.interior_mask).item()
 
 
 class AbstractDataset(ABC):
@@ -39,8 +55,9 @@ class AbstractDataset(ABC):
         of (lat, lon) values
         """
 
+    @cached_property
     def grid_shape(self) -> tuple:
-        lat, lon = self.grid_info
+        lat, _ = self.grid_info
         return lat.shape
 
     @abstractproperty
@@ -198,7 +215,8 @@ class AbstractDataset(ABC):
         print("Saving one-step difference mean and std.-dev...")
         torch_save(store_d, self.cache_dir / "diff_stats.pt")
 
-    def load_static_data(self, device="cpu") -> Statics:
+    @cached_property
+    def statics(self, device="cpu") -> Statics:
         # (N_grid, d_grid_static)
         grid_static_features = torch.load(self.cache_dir / "grid_features.pt", device)
         border_mask = grid_static_features[:, 3].unsqueeze(1)
@@ -241,7 +259,8 @@ class AbstractDataset(ABC):
             }
         )
 
-    def load_dataset_stats(self, device="cpu"):
+    @cached_property
+    def statistics(self, device="cpu"):
         stats = torch.load(self.cache_dir / "parameters_stats.pt", device)
 
         data_mean = []
