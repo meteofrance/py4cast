@@ -20,6 +20,13 @@ Les commandes `runai` doivent être lancées à la racine du dossier `pnia` :
 
 ```runai python_mpl pnia/plots_grid.py``` -> lancement d'un script python avec plot
 
+## Entrainement
+
+```bash
+runai gpu_play 4
+runai exec_gpu python bin/train.py --dataset smeagol --model hi_lam --standardize --gpus 4 
+```
+
 ## Architecture
 
 - Le dossier `submodules` contient des submodules (au sens git) de plusieurs répo open source de codes de PN par IA (Pangu, ClimaX, Neural-LAM,...). On peut ainsi facilement importer des fonctions issues de ces projets dans nos codes.

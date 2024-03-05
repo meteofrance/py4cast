@@ -45,15 +45,15 @@ class BaseGraphModel(ARModel):
 
         # grid_dim from data + static + batch_static
         grid_dim = (
-            2 * self.grid_state_dim
+            2 * self.dataset.weather_dim
             + grid_static_dim
-            + self.grid_forcing_dim
+            + self.dataset.forcing_dim
             + self.batch_static_feature_dim
         )
 
         print(
-            f"{grid_dim} comes from {2*self.grid_state_dim} + {grid_static_dim} + "
-            + f"{self.grid_forcing_dim} + {self.batch_static_feature_dim}"
+            f"{grid_dim} comes from {2*self.dataset.weather_dim} + {grid_static_dim} + "
+            + f"{self.dataset.forcing_dim} + {self.batch_static_feature_dim}"
         )
         self.g2m_edges, g2m_dim = self.g2m_features.shape
         self.m2g_edges, m2g_dim = self.m2g_features.shape
@@ -97,7 +97,7 @@ class BaseGraphModel(ARModel):
         # Output mapping (hidden_dim -> output_dim)
         self.output_map = utils.make_mlp(
             [hp.graph.hidden_dim] * (hp.graph.hidden_layers + 1)
-            + [self.grid_state_dim],
+            + [self.dataset.weather_dim],
             layer_norm=False,
             checkpoint=hp.graph.checkpoint,
         )  # No layer norm on this one

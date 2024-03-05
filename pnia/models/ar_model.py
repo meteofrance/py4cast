@@ -3,10 +3,10 @@ from dataclasses import dataclass
 import matplotlib.pyplot as plt
 import pytorch_lightning as pl
 import torch
-from torch import nn
 
 # A noter que vis depend de constant ... qui n'a donc pas les bonnes choses (car portées par le dataset).
 from pnia.datasets.base import AbstractDataset
+from pnia.losses import WeightedL1Loss, WeightedMSELoss
 from pnia.models.nlam import vis
 from pnia.models.nlam.utils import BufferList, val_step_log_errors
 
@@ -156,44 +156,21 @@ class ARModel(pl.LightningModule):
         )  # Only open water?
         # TODO Understand the 3 timestep Before. Linked to __get_item__ (concatenation).
         # 3 replace by 1. How to have something more modular ?
-        self.grid_forcing_dim = (
-            self.dataset.forcing_dim * 1
-        )  # 5 features for 3 time-step window
-        self.grid_state_dim = self.dataset.weather_dim
-        # print("ARModel", self.dataset.weather_dim)
 
         # Load static features for grid/data
-        static_data_dict = self.dataset.load_static_data()
-
-        for static_data_name, static_data_tensor in vars(static_data_dict).items():
-            self.register_buffer(static_data_name, static_data_tensor, persistent=False)
+        statics = self.dataset.statics
+        statics.register_buffers(self)
+        self.N_interior = statics.N_interior
 
         # MSE loss, need to do reduction ourselves to get proper weighting
         if hparams.loss == "mse":
-            self.loss = nn.MSELoss(reduction="none")
-            # Essai d'avoir quelque chose qui se rapproche un peu de l'assimilation de
-            # donnée en divisant par une variance.
-            inv_var = (
-                self.step_diff_std**-2.0
-            )  # Comes from static_data_dict and buffer registration
-            state_weight = self.param_weights * inv_var  # (d_f,)
-            # for x,y in enumerate(zip(state_weight, self.dataset.weather_params)):
-            #    print(x,y)
+            self.loss = WeightedMSELoss(reduction="none")
         elif hparams.loss == "mae":
-            self.loss = nn.L1Loss(reduction="none")
-            # Weight states with inverse std instead in this case
-            state_weight = self.param_weights / self.step_diff_std  # (d_f,)
+            self.loss = WeightedL1Loss(reduction="none")
         else:
             assert False, f"Unknown loss function: {hparams.loss}"
-        self.register_buffer("state_weight", state_weight, persistent=False)
 
-        # Pre-compute interior mask for use in loss function
-        self.register_buffer(
-            "interior_mask", 1.0 - self.border_mask, persistent=False
-        )  # (N_grid, 1), 1 for non-border
-        self.N_interior = torch.sum(
-            self.interior_mask
-        ).item()  # Number of grid nodes to predict
+        self.loss.prepare(statics)
 
         self.step_length = hparams.step_length  # Number of hours per pred. step
         self.val_maes = []
@@ -270,27 +247,6 @@ class ARModel(pl.LightningModule):
 
         return torch.stack(prediction_list, dim=1)  # (B, pred_steps, N_grid, d_f)
 
-    def weighted_loss(self, prediction, target, reduce_spatial_dim=True):
-        """
-        Computed weighted loss function.
-        prediction/target: (B, pred_steps, N_grid, d_f)
-        returns (B, pred_steps)
-        """
-        entry_loss = self.loss(prediction, target)  # (B, pred_steps, N_grid, d_f)
-        grid_node_loss = torch.sum(
-            entry_loss * self.state_weight, dim=-1
-        )  # (B, pred_steps, N_grid), weighted sum over features
-        if not reduce_spatial_dim:
-            return grid_node_loss  # (B, pred_steps, N_grid)
-
-        # Take (unweighted) mean over only non-border (interior) grid nodes
-        time_step_loss = (
-            torch.sum(grid_node_loss * self.interior_mask[:, 0], dim=-1)
-            / self.N_interior
-        )  # (B, pred_steps)
-
-        return time_step_loss  # (B, pred_steps)
-
     def common_step(self, batch):
         """
         Predict on single batch
@@ -318,7 +274,7 @@ class ARModel(pl.LightningModule):
 
         # Compute loss
         batch_loss = torch.mean(
-            self.weighted_loss(prediction, target)
+            self.loss(prediction, target)
         )  # mean over unrolled times and batch
 
         log_dict = {"train_loss": batch_loss}
@@ -367,7 +323,7 @@ class ARModel(pl.LightningModule):
         prediction, target = self.common_step(batch)
 
         time_step_loss = torch.mean(
-            self.weighted_loss(prediction, target), dim=0
+            self.loss(prediction, target), dim=0
         )  # (time_steps-1)
         mean_loss = torch.mean(time_step_loss)
 
@@ -419,7 +375,7 @@ class ARModel(pl.LightningModule):
         prediction, target = self.common_step(batch)
 
         time_step_loss = torch.mean(
-            self.weighted_loss(prediction, target), dim=0
+            self.loss(prediction, target), dim=0
         )  # (time_steps-1)
         mean_loss = torch.mean(time_step_loss)
 
@@ -441,7 +397,7 @@ class ARModel(pl.LightningModule):
         self.test_mses.append(mses)
 
         # Save per-sample spatial loss for specific times
-        spatial_loss = self.weighted_loss(
+        spatial_loss = self.loss(
             prediction, target, reduce_spatial_dim=False
         )  # (B, pred_steps, N_grid)
         log_spatial_losses = spatial_loss[:, val_step_log_errors - 1]
@@ -497,7 +453,7 @@ class ARModel(pl.LightningModule):
                         pred_t[:, var_i],
                         target_t[:, var_i],
                         self.interior_mask[:, 0],
-                        grid_shape=self.dataset.grid_shape(),
+                        grid_shape=self.dataset.grid_shape,
                         title=f"{var_name} ({var_unit}), "
                         f"t={t_i} ({self.step_length*t_i} h)",
                         vrange=var_vrange,
@@ -574,7 +530,7 @@ class ARModel(pl.LightningModule):
                 vis.plot_spatial_error(
                     loss_map,
                     self.interior_mask[:, 0],
-                    grid_shape=self.dataset.grid_shape(),
+                    grid_shape=self.dataset.grid_shape,
                     title=f"Test loss, t={t_i} ({self.step_length*t_i} h)",
                     projection=self.dataset.projection,
                     grid_limits=self.dataset.grid_limits,

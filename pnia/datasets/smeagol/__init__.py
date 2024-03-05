@@ -305,7 +305,7 @@ class SmeagolDataset(AbstractDataset, Dataset):
         self.cache_dir.mkdir(parents=True, exist_ok=True)
 
         if self.standardize:
-            ds_stats = self.load_dataset_stats()
+            ds_stats = self.statistics
             self.data_mean, self.data_std, self.flux_mean, self.flux_std = (
                 ds_stats["data_mean"],
                 ds_stats["data_std"],
@@ -377,21 +377,21 @@ class SmeagolDataset(AbstractDataset, Dataset):
         datetime_forcing = (datetime_forcing + 1) / 2  # Rescale to [0,1]
         return datetime_forcing
 
-    @property
+    @cached_property
     def subgrid(self):
         """
         Retourne les indices de la sous grille
         """
         return self.grid.subgrid
 
-    @property
+    @cached_property
     def static_feature_dim(self):
         """
         Only landSeaMask currently
         """
         return 1
 
-    @property
+    @cached_property
     def forcing_dim(self):
         res = 4  # Pour la date
         for param in self.params:
@@ -399,7 +399,7 @@ class SmeagolDataset(AbstractDataset, Dataset):
                 res += param.number
         return res
 
-    @property
+    @cached_property
     def weather_dim(self):
         """
         Retourne la dimensions des variables présentes en entrée et en sortie.
@@ -410,7 +410,7 @@ class SmeagolDataset(AbstractDataset, Dataset):
                 res += param.number
         return res
 
-    @property
+    @cached_property
     def diagnostic_dim(self):
         """
         Return dimensions of output variable only
@@ -728,7 +728,7 @@ class SmeagolDataset(AbstractDataset, Dataset):
     def standardize(self, value: bool):
         self.hp.standardize = value
         if self.standardize:
-            ds_stats = self.load_dataset_stats()
+            ds_stats = self.statistics
             self.data_mean, self.data_std, self.flux_mean, self.flux_std = (
                 ds_stats["data_mean"],
                 ds_stats["data_std"],
