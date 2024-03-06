@@ -26,6 +26,7 @@ Les commandes `runai` doivent être lancées à la racine du dossier `pnia` :
 runai gpu_play 4
 runai exec_gpu python bin/train.py --dataset smeagol --model hi_lam --standardize --gpus 4 
 ```
+[More information here](./bin/Readme.md)
 
 ## Architecture
 
