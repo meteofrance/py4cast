@@ -41,6 +41,7 @@ class TrainingParams:
     devices: int = 1
     profiler: str = "None"
     run_id: int = 1
+    no_log: bool = False
 
 
 def main(
@@ -73,21 +74,29 @@ def main(
         f"{prefix}{str(hp.dataset)}{hp.graph.model}-{hp.graph.processor_layers}x{hp.graph.hidden_dim}-"
         f"{time.strftime('%m%d%H:%M')}-{tp.run_id}"
     )
-    print(f"Model and checkpoint will be saved in saved_models/{run_name}")
-    checkpoint_callback = pl.callbacks.ModelCheckpoint(
-        dirpath=f"saved_models/{run_name}",
-        filename="min_val_loss",
-        monitor="val_mean_loss",
-        mode="min",
-        save_last=True,
-    )
+
+    callback_list = []
+    if not tp.no_log:
+        print(f"Model and checkpoint will be saved in saved_models/{run_name}")
+        callback_list.append(
+            pl.callbacks.ModelCheckpoint(
+                dirpath=f"saved_models/{run_name}",
+                filename="min_val_loss",
+                monitor="val_mean_loss",
+                mode="min",
+                save_last=True,
+            )
+        )
 
     # Logger
-    logger = TensorBoardLogger(
-        save_dir="/scratch/shared/pnia/logs",
-        name=f"{args.model}/{args.dataset}",
-        default_hp_metric=False,
-    )
+    if tp.no_log:
+        logger = None
+    else:
+        logger = TensorBoardLogger(
+            save_dir="/scratch/shared/pnia/logs",
+            name=f"{args.model}/{args.dataset}",
+            default_hp_metric=False,
+        )
 
     if tp.profiler == "pytorch":
         profiler = PyTorchProfiler(
@@ -110,7 +119,7 @@ def main(
         logger=logger,
         profiler=profiler,
         log_every_n_steps=1,
-        callbacks=[checkpoint_callback],
+        callbacks=callback_list,
         check_val_every_n_epoch=tp.val_interval,
         precision=tp.precision,
     )
@@ -280,6 +289,12 @@ if __name__ == "__main__":
         default=1,
         help="How many ARSteps do we use ? ",
     )
+    parser.add_argument(
+        "--no_log",
+        action=BooleanOptionalAction,
+        default=False,
+        help="When activated, log are not stored and models are not saved. Use in dev mode.",
+    )
     args, other = parser.parse_known_args()
 
     # Asserts for arguments
@@ -302,8 +317,16 @@ if __name__ == "__main__":
                     "standardize": args.standardize,
                     "subset": args.subset,
                 },
-                "valid": {"nb_pred_steps": 5, "standardize": args.standardize},
-                "test": {"nb_pred_steps": 5, "standardize": args.standardize},
+                "valid": {
+                    "nb_pred_steps": 5,
+                    "standardize": args.standardize,
+                    "subset": args.subset,
+                },
+                "test": {
+                    "nb_pred_steps": 5,
+                    "standardize": args.standardize,
+                    "subset": args.subset,
+                },
             },
         )
 
@@ -347,6 +370,7 @@ if __name__ == "__main__":
         epochs=args.epochs,
         devices=args.gpus,
         profiler=args.profiler,
+        no_log=args.no_log,
         run_id=random_run_id,
     )
 
