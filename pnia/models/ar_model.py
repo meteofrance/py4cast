@@ -123,6 +123,7 @@ class ARLightning(pl.LightningModule):
             # todo fix this it should decoupled
             if hasattr(model_settings, "graph_dir"):
                 model_settings.graph_dir = self.dataset.cache_dir
+                print(f"Model settings: {model_settings.graph_dir}")
 
         self.model = model_factory(model_settings, statics)
         summary(self.model)

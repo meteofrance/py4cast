@@ -18,6 +18,8 @@ Les commandes `runai` doivent être lancées à la racine du dossier `pnia` :
 
 ```runai exec_gpu python bin/prepare.py smeagol grid```  -> Préparation des statics smeagol
 
+```runai exec_gpu python bin/prepare.py nlam --dataset smeagol``` -> Construction des pré-requis pour les graphes
+
 ```runai python pnia/titan_dataset.py``` -> lancement d'un script python
 
 ```runai python_mpl pnia/plots_grid.py``` -> lancement d'un script python avec plot
