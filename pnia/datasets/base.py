@@ -34,6 +34,7 @@ class Statics(RegisterFieldsMixin):
     data_std: torch.Tensor
     param_weights: torch.Tensor
     grid_shape: Tuple[int, int]
+    grid_info: np.ndarray
 
     interior_mask: torch.Tensor = field(init=False)
 
@@ -188,6 +189,7 @@ class AbstractDataset(ABC):
     def compute_timestep_stats(self):
         """Computes stats on the difference between 2 timesteps."""
         # Not sure that it should be exactly like this for every dataset
+        print(f"Computing one-step difference mean and std.-dev for {self}...")
         diff_means = []
         diff_squares = []
         for init_batch, target_batch, _, _ in tqdm(self.loader):
@@ -218,13 +220,54 @@ class AbstractDataset(ABC):
         torch_save(store_d, self.cache_dir / "diff_stats.pt")
 
     @cached_property
-    def statics(self, device="cpu") -> Statics:
+    def timestep_stats(self):
+        if self.recompute_stats or not (self.cache_dir / "diff_stats.pt").exists():
+            self.compute_timestep_stats()
+        return torch.load(self.cache_dir / "diff_stats.pt")
+
+    @abstractproperty
+    def recompute_stats(self) -> bool:
+        """
+        If True, the stats will be recomputed
+        """
+
+    @cached_property
+    def grid_static_features(self):
+        """
+        Grid static features
+        """
+        # -- Static grid node features --
+        xy = self.grid_info  # (2, N_x, N_y)
+        grid_xy = torch.tensor(xy)
+        grid_xy = grid_xy.flatten(1, 2).T  # (N_grid, 2)
+        pos_max = torch.max(torch.abs(grid_xy))
+        grid_xy = grid_xy / pos_max  # Divide by maximum coordinate
+
+        geopotential = torch.tensor(self.geopotential_info)  # (N_x, N_y)
+        geopotential = geopotential.flatten(0, 1).unsqueeze(1)  # (N_grid,1)
+        gp_min = torch.min(geopotential)
+        gp_max = torch.max(geopotential)
+        # Rescale geopotential to [0,1]
+        geopotential = (geopotential - gp_min) / (gp_max - gp_min)  # (N_grid, 1)
+
+        grid_border_mask = torch.tensor(self.border_mask)  # (N_x, N_y)
+        grid_border_mask = (
+            grid_border_mask.flatten(0, 1).to(torch.float).unsqueeze(1)
+        )  # (N_grid, 1)
+
+        # Concatenate grid features
+        return torch.cat(
+            (grid_xy, geopotential, grid_border_mask), dim=1
+        )  # (N_grid, 4)
+
+    @cached_property
+    def statics(self) -> Statics:
         # (N_grid, d_grid_static)
-        grid_static_features = torch.load(self.cache_dir / "grid_features.pt", device)
+        grid_static_features = self.grid_static_features
         border_mask = grid_static_features[:, 3].unsqueeze(1)
 
         # Load step diff stats
-        diff_stats = torch.load(self.cache_dir / "diff_stats.pt", device)  # (d_f,)
+        diff_stats = self.timestep_stats  # (d_f,)
         step_diff_mean = []
         step_diff_std = []
         for name in self.shortnames("input_output"):
@@ -235,7 +278,7 @@ class AbstractDataset(ABC):
             step_diff_std.append(diff_stats[name]["std"])
 
         # Load parameter std for computing validation errors in original data scale
-        stats = torch.load(self.cache_dir / "parameters_stats.pt", device)
+        stats = torch.load(self.cache_dir / "parameters_stats.pt")
         data_mean = []
         data_std = []
         for name in self.shortnames("input_output"):
@@ -247,7 +290,7 @@ class AbstractDataset(ABC):
 
         # Load loss weighting vectors
         param_weights = torch.tensor(
-            self.parameter_weights, dtype=torch.float32, device=device
+            self.parameter_weights, dtype=torch.float32
         )  # (d_f,)
         return Statics(
             **{
@@ -258,6 +301,7 @@ class AbstractDataset(ABC):
                 "data_mean": torch.stack(data_mean).type(torch.float32),
                 "data_std": torch.stack(data_std).type(torch.float32),
                 "grid_shape": (self.grid.x, self.grid.y),
+                "grid_info": self.grid_info,
                 "param_weights": param_weights.type(torch.float32),
             }
         )

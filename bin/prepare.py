@@ -7,6 +7,7 @@ from tqdm import tqdm
 from pnia.datasets import SmeagolDataset, TitanDataset, create_grid_features
 from pnia.datasets.titan import TitanHyperParams
 from pnia.models.nlam import create_mesh
+from pnia.settings import CACHE_DIR
 
 torch.set_num_threads(8)
 path = Path(__file__)
@@ -97,7 +98,11 @@ def nlam(
         raise NotImplementedError(
             f"Nothing implemented for this dataset rightnow {dataset}"
         )
-    create_mesh.prepare(dataset=train_ds, hierarchical=hierarchical)
+    cache_dir_path = CACHE_DIR / "neural_lam" / str(dataset)
+    cache_dir_path.mkdir(parents=True, exist_ok=True)
+    create_mesh.build_graph_for_grid(
+        train_ds.statics.grid_info, cache_dir_path, hierarchical=hierarchical
+    )
 
 
 if __name__ == "__main__":
