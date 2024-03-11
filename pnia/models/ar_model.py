@@ -1,151 +1,60 @@
 from dataclasses import dataclass
+from pathlib import Path
+from typing import Union
 
 import matplotlib.pyplot as plt
 import pytorch_lightning as pl
 import torch
+from torchinfo import summary
 
 # A noter que vis depend de constant ... qui n'a donc pas les bonnes choses (car portées par le dataset).
 from pnia.datasets.base import AbstractDataset
 from pnia.losses import WeightedL1Loss, WeightedMSELoss
+from pnia.models.conv import ConvModel, ConvSettings
 from pnia.models.nlam import vis
-from pnia.models.nlam.utils import BufferList, val_step_log_errors
-
-
-@dataclass
-class Graph:
-    model: str = "graph_lam"
-    name: str = "multiscale"
-    hidden_dim: int = 64
-    hidden_layers: int = 1
-    mesh_aggr: str = "sum"
-    processor_layers: int = 4
-    checkpoint: bool = False
-    offload: bool = False
-    # Memory saving option
+from pnia.models.nlam.models import BaseGraphModel, GraphModelSettings
+from pnia.models.nlam.utils import val_step_log_errors
 
 
 @dataclass
 class HyperParam:
     dataset: AbstractDataset
-    graph: Graph = Graph()
+
+    model_conf: Union[Path, None] = None
+
+    model_name: str = "graph"
     lr: float = 0.1
     loss: str = "mse"
     n_example_pred: int = 2
     step_length: float = 0.25
 
-
-def load_graph(hp: HyperParam, device="cpu"):
-    # Define helper lambda function
-    graph_dir = hp.dataset.cache_dir  # os.path.join("graphs", graph_name)
-
-    # Load edges (edge_index)
-    m2m_edge_index = BufferList(
-        torch.load(graph_dir / "m2m_edge_index.pt", device), persistent=False
-    )  # List of (2, M_m2m[l])
-    g2m_edge_index = torch.load(graph_dir / "g2m_edge_index.pt", device)  # (2, M_g2m)
-    m2g_edge_index = torch.load(graph_dir / "m2g_edge_index.pt", device)  # (2, M_m2g)
-
-    n_levels = len(m2m_edge_index)
-    hierarchical = n_levels > 1  # Nor just single level mesh graph
-
-    # Load static edge features
-    m2m_features = torch.load(
-        graph_dir / "m2m_features.pt", device
-    )  # List of (M_m2m[l], d_edge_f)
-    g2m_features = torch.load(
-        graph_dir / "g2m_features.pt", device
-    )  # (M_g2m, d_edge_f)
-    m2g_features = torch.load(
-        graph_dir / "m2g_features.pt", device
-    )  # (M_m2g, d_edge_f)
-
-    # Normalize by dividing with longest edge (found in m2m)
-    longest_edge = max(
-        [torch.max(level_features[:, 0]) for level_features in m2m_features]
-    )  # Col. 0 is length
-    m2m_features = BufferList(
-        [level_features / longest_edge for level_features in m2m_features],
-        persistent=False,
-    )
-    g2m_features = g2m_features / longest_edge
-    m2g_features = m2g_features / longest_edge
-
-    # Load static node features
-    mesh_static_features = torch.load(
-        graph_dir / "mesh_features.pt"
-    )  # List of (N_mesh[l], d_mesh_static)
-
-    # Some checks for consistency
-    assert len(m2m_features) == n_levels, "Inconsistent number of levels in mesh"
-    assert (
-        len(mesh_static_features) == n_levels
-    ), "Inconsistent number of levels in mesh"
-
-    if hierarchical:
-        # Load up and down edges and features
-        mesh_up_edge_index = BufferList(
-            torch.load(graph_dir / "mesh_up_edge_index.pt", device),
-            persistent=False,
-        )  # List of (2, M_up[l])
-        mesh_down_edge_index = BufferList(
-            torch.load(graph_dir / "mesh_down_edge_index.pt", device),
-            persistent=False,
-        )  # List of (2, M_down[l])
-
-        mesh_up_features = torch.load(
-            graph_dir / "mesh_up_features.pt"
-        )  # List of (M_up[l], d_edge_f)
-        mesh_down_features = torch.load(
-            graph_dir / "mesh_down_features.pt"
-        )  # List of (M_down[l], d_edge_f)
-
-        # Rescale
-        mesh_up_features = BufferList(
-            [edge_features / longest_edge for edge_features in mesh_up_features],
-            persistent=False,
-        )
-        mesh_down_features = BufferList(
-            [edge_features / longest_edge for edge_features in mesh_down_features],
-            persistent=False,
-        )
-
-        mesh_static_features = BufferList(mesh_static_features, persistent=False)
-    else:
-        # Extract single mesh level
-        m2m_edge_index = m2m_edge_index[0]
-        m2m_features = m2m_features[0]
-        mesh_static_features = mesh_static_features[0]
-
-        (
-            mesh_up_edge_index,
-            mesh_down_edge_index,
-            mesh_up_features,
-            mesh_down_features,
-        ) = ([], [], [], [])
-
-    print(f"Graph is hierarchical {hierarchical}")
-    return hierarchical, {
-        "g2m_edge_index": g2m_edge_index,
-        "m2g_edge_index": m2g_edge_index,
-        "m2m_edge_index": m2m_edge_index,
-        "mesh_up_edge_index": mesh_up_edge_index,
-        "mesh_down_edge_index": mesh_down_edge_index,
-        "g2m_features": g2m_features,
-        "m2g_features": m2g_features,
-        "m2m_features": m2m_features,
-        "mesh_up_features": mesh_up_features,
-        "mesh_down_features": mesh_down_features,
-        "mesh_static_features": mesh_static_features,
-    }
+    # guess some of the model parameters using the dataset
+    shape_from_dataset: bool = True
 
 
-# Par rapport à la classe des Suédois, On ne change que le init
-# Cependant comme on va de toute façon dire qu'on importe le notre le choix est de copier.
-# A voir avec le Lab s'il existe une meilleure solution
-class ARModel(pl.LightningModule):
-    def __init__(self, hparams: HyperParam):
-        super().__init__()
+# each model type must provide a factory function to build the model and a settings class
+# as well as a defaut configuration file.
+MODELS = {
+    "graph": (
+        BaseGraphModel.build_from_settings,
+        GraphModelSettings,
+        Path(__file__).parents[1] / "xp_conf" / "graph.json",
+    ),
+    "conv": (
+        ConvModel.build_from_settings,
+        ConvSettings,
+        Path(__file__).parents[1] / "xp_conf" / "conv.json",
+    ),
+}
 
+
+class ARLightning(pl.LightningModule):
+    """
+    Auto-regressive lightning module for predicting meteorological fields.
+    """
+
+    def __init__(self, hparams: HyperParam, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self.save_hyperparameters()
         self.lr = hparams.lr
         self.dataset = hparams.dataset
@@ -187,29 +96,43 @@ class ARModel(pl.LightningModule):
         # For storing spatial loss maps during evaluation
         self.spatial_loss_maps = []
 
+        # instantiate the model with dataclass json schema validation for settings
+        model_factory, settings_class, default_settings = MODELS[hparams.model_name]
+
+        model_conf = hparams.model_conf if hparams.model_conf else default_settings
+
+        with open(model_conf, "r") as f:
+            model_settings = settings_class.schema().loads(f.read())
+
+        if hparams.shape_from_dataset:
+            # Set model input/output grid features based on dataset tensor shapes
+            (
+                _,
+                grid_static_dim,
+            ) = statics.grid_static_features.shape
+
+            input_features = (
+                2 * self.dataset.weather_dim
+                + grid_static_dim
+                + self.dataset.forcing_dim
+                + self.batch_static_feature_dim
+            )
+            model_settings.input_features = input_features
+            model_settings.output_features = self.dataset.weather_dim
+
+            # todo fix this it should decoupled
+            if hasattr(model_settings, "graph_dir"):
+                model_settings.graph_dir = self.dataset.cache_dir
+
+        self.model = model_factory(model_settings, statics)
+        summary(self.model)
+
     def configure_optimizers(self):
         opt = torch.optim.AdamW(self.parameters(), lr=self.lr, betas=(0.9, 0.95))
         if self.opt_state:
             opt.load_state_dict(self.opt_state)
 
         return opt
-
-    @staticmethod
-    def expand_to_batch(x, batch_size):
-        """
-        Expand tensor with initial batch dimension
-        """
-        return x.unsqueeze(0).expand(batch_size, -1, -1)
-
-    def predict_step(self, prev_state, prev_prev_state, batch_static_features, forcing):
-        """
-        Step state one step ahead using prediction model, X_{t-1}, X_t -> X_t+1
-        prev_state: (B, N_grid, feature_dim), X_t
-        prev_prev_state: (B, N_grid, feature_dim), X_{t-1}
-        batch_static_features: (B, N_grid, batch_static_feature_dim)
-        forcing: (B, N_grid, forcing_dim)
-        """
-        raise NotImplementedError("No prediction step implemented")
 
     def unroll_prediction(
         self, init_states, batch_static_features, forcing_features, true_states
@@ -232,8 +155,12 @@ class ARModel(pl.LightningModule):
             #
             # TODO c'est ici qu'il faudra charger le forceur sur les côtés.
             #
-            predicted_state = self.predict_step(
-                prev_state, prev_prev_state, batch_static_features, forcing
+            predicted_state = self.model.predict_step(
+                prev_state,
+                prev_prev_state,
+                batch_static_features,
+                self.grid_static_features,
+                forcing,
             )  # (B, N_grid, d_f)
             # Overwrite border with true state
             new_state = (
@@ -544,23 +471,3 @@ class ARModel(pl.LightningModule):
             ]
 
         self.spatial_loss_maps.clear()
-
-    def on_load_checkpoint(self, ckpt):
-        """
-        Perform any changes to state dict before loading checkpoint
-        """
-        loaded_state_dict = ckpt["state_dict"]
-
-        # Fix for loading older models after IneractionNet refactoring, where the
-        # grid MLP was moved outside the encoder InteractionNet class
-        if "g2m_gnn.grid_mlp.0.weight" in loaded_state_dict:
-            replace_keys = list(
-                filter(
-                    lambda key: key.startswith("g2m_gnn.grid_mlp"),
-                    loaded_state_dict.keys(),
-                )
-            )
-            for old_key in replace_keys:
-                new_key = old_key.replace("g2m_gnn.grid_mlp", "encoding_grid_mlp")
-                loaded_state_dict[new_key] = loaded_state_dict[old_key]
-                del loaded_state_dict[old_key]

@@ -16,6 +16,8 @@ Les commandes `runai` doivent être lancées à la racine du dossier `pnia` :
 
 ```runai build```  -> build de l'image Docker
 
+```runai exec_gpu python bin/prepare.py smeagol grid```  -> Préparation des statics smeagol
+
 ```runai python pnia/titan_dataset.py``` -> lancement d'un script python
 
 ```runai python_mpl pnia/plots_grid.py``` -> lancement d'un script python avec plot
@@ -24,7 +26,12 @@ Les commandes `runai` doivent être lancées à la racine du dossier `pnia` :
 
 ```bash
 runai gpu_play 4
-runai exec_gpu python bin/train.py --dataset smeagol --model hi_lam --standardize --gpus 4 
+
+# Avec un réseau de type Graphe
+runai exec_gpu python bin/train.py --dataset smeagol --model graph --standardize --gpus 4
+
+# Avec un réseau convolutif (par défaut HalfUnet)
+runai exec_gpu python bin/train.py --dataset smeagol --model conv --standardize --gpus 4
 ```
 [More information here](./bin/Readme.md)
 

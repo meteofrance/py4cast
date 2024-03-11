@@ -7,7 +7,7 @@ from abc import ABC, abstractmethod, abstractproperty
 from dataclasses import dataclass, field
 from functools import cached_property
 from pathlib import Path
-from typing import List, Literal
+from typing import List, Literal, Tuple
 
 import numpy as np
 import torch
@@ -33,6 +33,8 @@ class Statics(RegisterFieldsMixin):
     data_mean: torch.Tensor
     data_std: torch.Tensor
     param_weights: torch.Tensor
+    grid_shape: Tuple[int, int]
+
     interior_mask: torch.Tensor = field(init=False)
 
     def __post_init__(self):
@@ -255,6 +257,7 @@ class AbstractDataset(ABC):
                 "step_diff_std": torch.stack(step_diff_std).type(torch.float32),
                 "data_mean": torch.stack(data_mean).type(torch.float32),
                 "data_std": torch.stack(data_std).type(torch.float32),
+                "grid_shape": (self.grid.x, self.grid.y),
                 "param_weights": param_weights.type(torch.float32),
             }
         )

@@ -3,6 +3,7 @@ import time
 from argparse import ArgumentParser, BooleanOptionalAction
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Union
 
 import pytorch_lightning as pl
 
@@ -15,20 +16,13 @@ from torch.utils.data import Dataset
 
 from pnia.datasets import SmeagolDataset, TitanDataset
 from pnia.datasets.titan import TitanHyperParams
-from pnia.models import GraphLAM, HiLAM, HiLAMParallel
 
 # From the package
-from pnia.models.ar_model import Graph, HyperParam
+from pnia.models.ar_model import ARLightning, HyperParam
 
 DATASETS = {
     "titan": {"dataset": TitanDataset},
     "smeagol": {"dataset": SmeagolDataset},
-}
-
-MODELS = {
-    "graph_lam": GraphLAM,
-    "hi_lam": HiLAM,
-    "hi_lam_parallel": HiLAMParallel,
 }
 
 
@@ -45,7 +39,6 @@ class TrainingParams:
 
 
 def main(
-    model,
     training_dataset: Dataset,
     val_dataset: Dataset,
     test_dataset: Dataset,
@@ -71,7 +64,7 @@ def main(
         prefix += f"eval-{tp.evaluation}-"
 
     run_name = (
-        f"{prefix}{str(hp.dataset)}{hp.graph.model}-{hp.graph.processor_layers}x{hp.graph.hidden_dim}-"
+        f"{prefix}{str(hp.dataset)}{hp.model_name}-"
         f"{time.strftime('%m%d%H:%M')}-{tp.run_id}"
     )
 
@@ -124,16 +117,20 @@ def main(
         precision=tp.precision,
     )
 
+    lightning_module = ARLightning(hp)
+
     if tp.evaluation:
         if tp.evaluation == "val":
             eval_loader = val_loader
         else:
             eval_loader = test_loader
-        trainer.test(model=model, dataloaders=eval_loader)
+        trainer.test(model=lightning_module, dataloaders=eval_loader)
     else:
         # Train model
         trainer.fit(
-            model=model, train_dataloaders=train_loader, val_dataloaders=val_loader
+            model=lightning_module,
+            train_dataloaders=train_loader,
+            val_dataloaders=val_loader,
         )
 
 
@@ -160,45 +157,20 @@ if __name__ == "__main__":
     parser.add_argument(
         "--model",
         type=str,
-        default="graph_lam",
-        help="Model architecture to train/evaluate (default: graph_lam)",
+        default="graph",
+        help="Model architecture to train/evaluate (default: graph)",
+    )
+
+    parser.add_argument(
+        "--model_conf",
+        type=Union[Path, None],
+        default=None,
+        help="Configuration file for the model.",
     )
 
     # Old arguments from nlam
     parser.add_argument(
         "--seed", type=int, default=42, help="random seed (default: 42)"
-    )
-
-    # Model architecture
-    parser.add_argument(
-        "--graph",
-        type=str,
-        default="multiscale",
-        help="Graph to load and use in graph-based model (default: multiscale)",
-    )
-    parser.add_argument(
-        "--hidden_dim",
-        type=int,
-        default=64,
-        help="Dimensionality of all hidden representations (default: 64)",
-    )
-    parser.add_argument(
-        "--hidden_layers",
-        type=int,
-        default=1,
-        help="Number of hidden layers in all MLPs (default: 1)",
-    )
-    parser.add_argument(
-        "--processor_layers",
-        type=int,
-        default=4,
-        help="Number of GNN layers in processor GNN (default: 4)",
-    )
-    parser.add_argument(
-        "--mesh_aggr",
-        type=str,
-        default="sum",
-        help="Aggregation to use for m2m processor GNN layers (sum/mean) (default: sum)",
     )
 
     # Training options
@@ -298,7 +270,6 @@ if __name__ == "__main__":
     args, other = parser.parse_known_args()
 
     # Asserts for arguments
-    assert args.model in MODELS, f"Unknown model: {args.model}"
     assert args.eval in (None, "val", "test"), f"Unknown eval setting: {args.eval}"
 
     args, others = parser.parse_known_args()
@@ -342,26 +313,16 @@ if __name__ == "__main__":
         )
         test_dataset = DATASETS["titan"]["dataset"](hparams_test_dataset)
 
-    print(f"Activation of memory saving option {args.memory}")
-    # Lie uniquement au modele choisi
-    graph = Graph(
-        model=args.model,
-        name=args.graph,
-        hidden_dim=args.hidden_dim,
-        hidden_layers=args.hidden_layers,
-        processor_layers=args.processor_layers,
-        mesh_aggr=args.mesh_aggr,
-        checkpoint=args.memory,
-        offload=args.memory,
-    )
     # On rajoute le modele dedans
     hp = HyperParam(
         dataset=training_dataset,
-        graph=graph,
+        model_name=args.model,
+        model_conf=args.model_conf,
         lr=args.lr,
         loss=args.loss,
         n_example_pred=args.n_example_pred,
     )
+
     # Parametre pour le training uniquement
     tp = TrainingParams(
         evaluation=args.eval,
@@ -373,17 +334,4 @@ if __name__ == "__main__":
         no_log=args.no_log,
         run_id=random_run_id,
     )
-
-    model_class = MODELS[graph.model]
-
-    if args.load:
-        # Appel pas correct actuelement
-        model = model_class.load_from_checkpoint(args.load, args=args)
-        if args.restore_opt:
-            # Save for later
-            # Unclear if this works for multi-GPU
-            model.opt_state = torch.load(args.load)["optimizer_states"][0]
-    else:
-        model = model_class(hp)
-
-    main(model, training_dataset, validation_dataset, test_dataset, tp, hp)
+    main(training_dataset, validation_dataset, test_dataset, tp, hp)
