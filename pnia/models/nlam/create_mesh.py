@@ -124,7 +124,7 @@ def save_edges(graph, name, base_path):
     edge_features = torch.cat((graph.len.unsqueeze(1), graph.vdiff), dim=1).to(
         torch.float32
     )  # Save as float32
-    torch_save(edge_features, base_path / f"{name}__features.pt")
+    torch_save(edge_features, base_path / f"{name}_features.pt")
 
 
 def save_edges_list(graphs, name, base_path):
@@ -298,6 +298,7 @@ def prepare(
     # Load grid positions
     # To Do Add something about the kind of graph (to make the distinction between hierachical and not ? )
     cache_dir_path = CACHE_DIR / "neural_lam" / str(dataset)
+    print(cache_dir_path)
     cache_dir_path.mkdir(parents=True, exist_ok=True)
 
     xy = dataset.grid_info
