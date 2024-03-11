@@ -189,16 +189,23 @@ class BaseGraphModel(nn.Module):
             settings, statics, *args, **kwargs
         )
 
-    def __init__(self, settings: GraphModelSettings, statics: Statics, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.settings = settings
-
+    @staticmethod
+    def rank_zero_setup(settings: GraphModelSettings, statics: Statics):
+        """
+        This is a static method to allow multi-GPU
+        trainig frameworks to call this method once
+        on rank zero before instantiating the model.
+        """
         # this doesn't take long and it prevents discrepencies
         build_graph_for_grid(
             statics.grid_info,
-            self.settings.graph_dir,
+            settings.graph_dir,
             hierarchical=settings.hierarchical,
         )
+
+    def __init__(self, settings: GraphModelSettings, statics: Statics, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.settings = settings
         self.hierarchical, graph_ldict = load_graph(self.settings.graph_dir)
 
         for name, attr_value in graph_ldict.items():

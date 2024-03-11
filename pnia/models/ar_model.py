@@ -125,6 +125,10 @@ class ARLightning(pl.LightningModule):
                 model_settings.graph_dir = self.dataset.cache_dir
                 print(f"Model settings: {model_settings.graph_dir}")
 
+        if self.local_rank == 0:
+            if hasattr(model_factory, "rank_zero_setup"):
+                model_factory.rank_zero_setup(model_settings, statics)
+
         self.model = model_factory(model_settings, statics)
         summary(self.model)
 
