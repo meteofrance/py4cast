@@ -5,6 +5,7 @@ from typing import Union
 import matplotlib.pyplot as plt
 import pytorch_lightning as pl
 import torch
+from lightning.pytorch.utilities import rank_zero_only
 from torchinfo import summary
 
 # A noter que vis depend de constant ... qui n'a donc pas les bonnes choses (car portées par le dataset).
@@ -46,6 +47,12 @@ MODELS = {
         Path(__file__).parents[1] / "xp_conf" / "conv.json",
     ),
 }
+
+
+@rank_zero_only
+def rank_zero_init(model_kls, model_settings, statics):
+    if hasattr(model_kls, "rank_zero_setup"):
+        model_kls.rank_zero_setup(model_settings, statics)
 
 
 class ARLightning(pl.LightningModule):
@@ -126,10 +133,8 @@ class ARLightning(pl.LightningModule):
                 print(f"Model settings: {model_settings.graph_dir}")
 
         print(f"Distributed ranks: {self.local_rank} {self.global_rank}")
-        
-        if self.local_rank == 0:
-            if hasattr(model_kls, "rank_zero_setup"):
-                model_kls.rank_zero_setup(model_settings, statics)
+
+        rank_zero_init(model_kls, model_settings, statics)
 
         self.model = model_kls.build_from_settings(model_settings, statics)
         summary(self.model)
