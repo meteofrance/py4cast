@@ -126,7 +126,7 @@ def save_edges(graph, name, base_path):
     edge_features = torch.cat((graph.len.unsqueeze(1), graph.vdiff), dim=1).to(
         torch.float32
     )  # Save as float32
-    torch_save(edge_features, base_path / f"{name}__features.pt")
+    torch_save(edge_features, base_path / f"{name}_features.pt")
 
 
 def save_edges_list(graphs, name, base_path):
