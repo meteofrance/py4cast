@@ -1,5 +1,3 @@
-from typing import Tuple
-
 import matplotlib
 import matplotlib.pyplot as plt
 import networkx
@@ -9,8 +7,6 @@ import torch
 import torch_geometric as pyg
 from torch_geometric.utils.convert import from_networkx
 
-from pnia.datasets.base import AbstractDataset
-from pnia.settings import CACHE_DIR
 from pnia.utils import torch_save
 
 
@@ -342,7 +338,9 @@ def build_graph_for_grid(
 
     print("In create grid_mesh mesh_pos", mesh_features[0].shape)
     # Save mesh positions
-    torch_save(mesh_features, cache_dir_path / "mesh_features.pt")  # mesh pos, in float32
+    torch_save(
+        mesh_features, cache_dir_path / "mesh_features.pt"
+    )  # mesh pos, in float32
 
     G_g2m, vm, vm_xy, vg_list = grid2mesh(
         G_bottom_mesh, all_mesh_nodes, xy, plot, cache_dir_path
