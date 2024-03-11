@@ -125,6 +125,8 @@ class ARLightning(pl.LightningModule):
                 model_settings.graph_dir = self.dataset.cache_dir
                 print(f"Model settings: {model_settings.graph_dir}")
 
+        print(f"Distributed ranks: {self.local_rank} {self.global_rank}")
+        
         if self.local_rank == 0:
             if hasattr(model_kls, "rank_zero_setup"):
                 model_kls.rank_zero_setup(model_settings, statics)
