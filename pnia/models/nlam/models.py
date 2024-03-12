@@ -8,11 +8,11 @@ from dataclasses_json import dataclass_json
 from torch import nn
 from torch.distributed.algorithms._checkpoint.checkpoint_wrapper import offload_wrapper
 
-from pnia.datasets.base import Statics
-from pnia.models.nlam import utils
+from pnia.datasets.base import Item, Statics
 from pnia.models.nlam.create_mesh import build_graph_for_grid
 from pnia.models.nlam.interaction_net import InteractionNet
-from pnia.models.nlam.utils import BufferList
+from pnia.models.nlam.utils import make_mlp
+from pnia.models.utils import BufferList, expand_to_batch
 
 
 def offload_to_cpu(model: nn.ModuleList):
@@ -125,13 +125,6 @@ def load_graph(graph_dir: Path, device="cpu") -> Tuple[bool, dict]:
     }
 
 
-def expand_to_batch(x: torch.Tensor, batch_size: int):
-    """
-    Expand tensor with initial batch dimension
-    """
-    return x.unsqueeze(0).expand(batch_size, -1, -1)
-
-
 @dataclass_json
 @dataclass(slots=True)
 class GraphModelSettings:
@@ -207,7 +200,6 @@ class BaseGraphModel(nn.Module):
         super().__init__(*args, **kwargs)
         self.settings = settings
         self.hierarchical, graph_ldict = load_graph(self.settings.graph_dir)
-
         for name, attr_value in graph_ldict.items():
             # Make BufferLists module members and register tensors as buffers
             if isinstance(attr_value, torch.Tensor):
@@ -218,6 +210,7 @@ class BaseGraphModel(nn.Module):
                 setattr(self, name, attr_value)
 
         self.N_mesh, _ = self.get_num_mesh()
+        print(f"N_mesh : {self.N_mesh}")
 
         self.register_buffer("step_diff_std", statics.step_diff_std)
         self.register_buffer("step_diff_mean", statics.step_diff_mean)
@@ -230,21 +223,28 @@ class BaseGraphModel(nn.Module):
         self.mlp_blueprint_end = [self.settings.hidden_dims] * (
             self.settings.hidden_layers + 1
         )
-        self.grid_embedder = utils.make_mlp(
+        self.grid_embedder = make_mlp(
             [self.settings.input_features] + self.mlp_blueprint_end,
             checkpoint=self.settings.reduce_memory_usage,
         )
-        self.g2m_embedder = utils.make_mlp(
+        self.g2m_embedder = make_mlp(
             [g2m_dim] + self.mlp_blueprint_end,
             checkpoint=self.settings.reduce_memory_usage,
         )
-        self.m2g_embedder = utils.make_mlp(
+        self.m2g_embedder = make_mlp(
             [m2g_dim] + self.mlp_blueprint_end,
             checkpoint=self.settings.reduce_memory_usage,
         )
 
         # GNNs
         # encoder
+        print(len(self.g2m_edge_index))
+        print(
+            "Hideem_dims",
+            self.settings.hidden_dims,
+            "g2m_dim",
+            [g2m_dim] + self.mlp_blueprint_end,
+        )
         self.g2m_gnn = InteractionNet(
             self.g2m_edge_index,
             self.settings.hidden_dims,
@@ -252,7 +252,7 @@ class BaseGraphModel(nn.Module):
             update_edges=False,
             checkpoint=self.settings.reduce_memory_usage,
         )
-        self.encoding_grid_mlp = utils.make_mlp(
+        self.encoding_grid_mlp = make_mlp(
             [self.settings.hidden_dims] + self.mlp_blueprint_end,
             checkpoint=self.settings.reduce_memory_usage,
         )
@@ -267,7 +267,7 @@ class BaseGraphModel(nn.Module):
         )
 
         # Output mapping (hidden_dim -> output_dim)
-        self.output_map = utils.make_mlp(
+        self.output_map = make_mlp(
             [self.settings.hidden_dims] * (self.settings.hidden_layers + 1)
             + [self.settings.output_features],
             layer_norm=False,
@@ -276,6 +276,56 @@ class BaseGraphModel(nn.Module):
 
         # subclasses should override this method
         self.finalize_graph_model()
+
+    def transform_statics(self, statics: Statics) -> Statics:
+        """
+        Take the statics in inputs.
+        Return the statics as expected by the model.
+        """
+        # Ici on fait rien.
+        # C'est ici qu'on devra faire les flatten.
+        return statics
+
+    def transform_batch(
+        self, batch: Item
+    ) -> Tuple[torch.tensor, torch.tensor, torch.tensor, torch.tensor]:
+        """
+        Transform the batch to the need
+        We postpone here that files are order as in smeagol.
+
+        Going from dictionnary to torch tensor
+        """
+        # TODO Rendre plus generique cette fonction.
+        # On suppose qu'on a que du 2D en static
+        # On passe sur du 3D
+        static = torch.cat([x.values for x in batch.statics if x.ndims == 2], dim=-1)
+        static = static.flatten(1, 2).unsqueeze(2)
+        # On va traiter les entrees 2D et 3D en les 'superposant'
+        in2D = torch.cat([x.values for x in batch.inputs if x.ndims == 2], dim=-1)
+        in3D = torch.cat([x.values for x in batch.inputs if x.ndims == 3], dim=-1)
+        inputs = torch.cat([in3D, in2D], dim=-1)
+        inputs = inputs.flatten(2, 3)
+        # On fait de meme pour les sorties
+        out2D = torch.cat([x.values for x in batch.outputs if x.ndims == 2], dim=-1)
+        out3D = torch.cat([x.values for x in batch.outputs if x.ndims == 3], dim=-1)
+        outputs = torch.cat([out3D, out2D], dim=-1)
+        outputs = outputs.flatten(2, 3)
+        sh = outputs.shape
+
+        # Forcing. Expand time forcing.
+        f1 = torch.cat(
+            [
+                x.values.unsqueeze(2).expand(-1, -1, sh[2], -1)
+                for x in batch.forcing
+                if x.ndims == 1
+            ],
+            dim=-1,
+        )
+        # Ici on suppose qu'on a des forcage 2D et uniquement 2D (en plus du 1D).
+        f2 = torch.cat([x.values for x in batch.forcing if x.ndims == 2], dim=-1)
+        f2 = f2.flatten(2, 3)
+        forcing = torch.cat([f1, f2], dim=-1)
+        return inputs, outputs, static, forcing
 
     def finalize_graph_model(self):
         """
@@ -413,7 +463,7 @@ class BaseHiGraphModel(BaseGraphModel):
         # Separate mesh node embedders for each level
         self.mesh_embedders = nn.ModuleList(
             [
-                utils.make_mlp(
+                make_mlp(
                     [mesh_dim] + self.mlp_blueprint_end,
                     checkpoint=self.settings.reduce_memory_usage,
                 )
@@ -425,7 +475,7 @@ class BaseHiGraphModel(BaseGraphModel):
 
         self.mesh_same_embedders = nn.ModuleList(
             [
-                utils.make_mlp(
+                make_mlp(
                     [mesh_same_dim] + self.mlp_blueprint_end,
                     checkpoint=self.settings.reduce_memory_usage,
                 )
@@ -437,7 +487,7 @@ class BaseHiGraphModel(BaseGraphModel):
 
         self.mesh_up_embedders = nn.ModuleList(
             [
-                utils.make_mlp(
+                make_mlp(
                     [mesh_up_dim] + self.mlp_blueprint_end,
                     checkpoint=self.settings.reduce_memory_usage,
                 )
@@ -449,7 +499,7 @@ class BaseHiGraphModel(BaseGraphModel):
 
         self.mesh_down_embedders = nn.ModuleList(
             [
-                utils.make_mlp(
+                make_mlp(
                     [mesh_down_dim] + self.mlp_blueprint_end,
                     checkpoint=self.settings.reduce_memory_usage,
                 )
@@ -622,11 +672,11 @@ class GraphLAM(BaseGraphModel):
 
         # Define sub-models
         # Feature embedders for mesh
-        self.mesh_embedder = utils.make_mlp(
+        self.mesh_embedder = make_mlp(
             [mesh_dim] + self.mlp_blueprint_end,
             checkpoint=self.settings.reduce_memory_usage,
         )
-        self.m2m_embedder = utils.make_mlp(
+        self.m2m_embedder = make_mlp(
             [m2m_dim] + self.mlp_blueprint_end,
             checkpoint=self.settings.reduce_memory_usage,
         )

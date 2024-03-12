@@ -7,7 +7,7 @@ from abc import ABC, abstractmethod, abstractproperty
 from dataclasses import dataclass, field
 from functools import cached_property
 from pathlib import Path
-from typing import List, Literal, Tuple
+from typing import List, Literal, Tuple, Union
 
 import numpy as np
 import torch
@@ -16,6 +16,73 @@ from tqdm import tqdm
 
 from pnia.base import RegisterFieldsMixin
 from pnia.utils import torch_save
+
+
+@dataclass(slots=True)
+class StateVariable:
+    ndims: Literal[1, 2, 3]
+    names: List[str]  # Contient le nom des différents niveaux
+    values: torch.Tensor
+    coordinates_name: List[str]  # Nom des coordonnées
+
+    def __repr__(self):
+        return (
+            f" Kind : {self.ndims} \n names {self.names} \n"
+            f" coordinates : {self.coordinates_name} \n values(size) :{self.values.shape} \n"
+        )
+
+
+@dataclass(slots=True)
+class Item:
+    forcing: Union[
+        List[StateVariable], None
+    ] = None  # Pour les champs de forcage (SST, Rayonnement, ... )
+    inputs: Union[List[StateVariable], None] = None
+    outputs: Union[List[StateVariable], None] = None
+    # Pour le modele coupleur
+    statics: Union[List[StateVariable], None] = None
+    boundary_forcing: Union[
+        List[StateVariable], None
+    ] = None  # Transitoire avant le mettre ailleurs.
+    # J'hesite entre inputs/outputs et pronostics/diagnostics
+    # Les concepts sont totalement different (les variables ne contiendrait pas la meme chose,
+    # le get_item serait different et le unroll_prediction aussi)
+    # A discuter. J'aurais tendance a m'orienter vers pronostics/diagnostics qui me parait plus adapter
+    # (et est en phase avec la denomination du CEP)
+    # Ca ferait peut etre moins de trucs etrange dans les denominations
+
+
+def collate_fn(items: List[Item]) -> Item:
+    """
+    Collate a list of item. Add one dimension to each state variable.
+    Necessary to form batch.
+    """
+    # Here we postpone that for each batch the same dimension should be present.
+    new_item = {}
+    # ToDo : Not very clean, the list should be provided by the Item object.
+    for attr in ["statics", "forcing", "inputs", "outputs", "boundary_forcing"]:
+        new_item[attr] = []
+        if getattr(items[0], attr) is not None:
+            for i in range(len(getattr(items[0], attr))):
+                new_values = torch.stack(
+                    [getattr(item, attr)[i].values for item in items]
+                ).type(torch.float32)
+
+                new_state = StateVariable(
+                    ndims=getattr(items[0], attr)[i].ndims,
+                    names=getattr(items[0], attr)[
+                        i
+                    ].names,  # Contient le nom des différents niveaux
+                    values=new_values,
+                    coordinates_name=["batch"]
+                    + getattr(items[0], attr)[
+                        i
+                    ].coordinates_name,  # Nom des coordonnées
+                )
+                new_item[attr].append(new_state)
+        else:
+            new_item[attr] = None
+    return Item(**new_item)
 
 
 @dataclass

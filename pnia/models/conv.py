@@ -5,13 +5,15 @@ for pn-ia.
 from collections import OrderedDict
 from dataclasses import dataclass
 from functools import reduce
+from typing import Tuple
 
 import einops
 import torch
 from dataclasses_json import dataclass_json
 from torch import nn
 
-from pnia.datasets.base import Statics
+from pnia.datasets.base import Item, Statics
+from pnia.models.utils import expand_to_batch
 
 
 @dataclass_json
@@ -20,7 +22,6 @@ class ConvSettings:
 
     input_features: int
     output_features: int
-
     network_name: str = "HalfUnet"
     num_filters: int = 64
     dilation: int = 1
@@ -64,13 +65,74 @@ class ConvModel(nn.Module):
             settings, statics, *args, **kwargs
         )
 
+    def transform_statics(self, statics: Statics) -> Statics:
+        """
+        Take the statics in inputs.
+        Return the statics as expected by the model.
+        """
+        # Ici on ne devrait rien faire pour le convolutionnel.
+        # Pour l'instant ça n'est pas le cas.
+        statics.grid_static_features = einops.rearrange(
+            statics.grid_static_features,
+            "(x y) n -> x y n",
+            x=self.grid_shape[0],
+        )
+        statics.border_mask = einops.rearrange(
+            statics.border_mask,
+            "(x y) n -> x y n",
+            x=self.grid_shape[0],
+        )
+        statics.interior_mask = einops.rearrange(
+            statics.interior_mask,
+            "(x y) n -> x y n",
+            x=self.grid_shape[0],
+        )
+        return statics
+
+    def transform_batch(
+        self, batch: Item
+    ) -> Tuple[torch.tensor, torch.tensor, torch.tensor, torch.tensor]:
+        """
+        Take a batch as inputs.
+        Return inputs, outputs, batch statics and forcing with the dimension appropriated for the model.
+        """
+        # To Do : rendre cela plus générique
+        # Ici on suppose ce qu'on va trouver dans le batch.
+
+        statics = torch.cat(
+            [x.values for x in batch.statics if x.ndims == 2], dim=-1
+        ).unsqueeze(3)
+
+        in2D = torch.cat([x.values for x in batch.inputs if x.ndims == 2], dim=-1)
+        in3D = torch.cat([x.values for x in batch.inputs if x.ndims == 3], dim=-1)
+        inputs = torch.cat([in3D, in2D], dim=-1)
+
+        out2D = torch.cat([x.values for x in batch.outputs if x.ndims == 2], dim=-1)
+        out3D = torch.cat([x.values for x in batch.outputs if x.ndims == 3], dim=-1)
+        outputs = torch.cat([out3D, out2D], dim=-1)
+
+        sh = outputs.shape
+        f1 = torch.cat(
+            [
+                x.values.unsqueeze(2).unsqueeze(3).expand(-1, -1, sh[2], sh[3], -1)
+                for x in batch.forcing
+                if x.ndims == 1
+            ],
+            dim=-1,
+        )
+        # Ici on suppose qu'on a des forcage 2D et uniquement 2D (en plus du 1D).
+        f2 = torch.cat([x.values for x in batch.forcing if x.ndims == 2], dim=-1)
+        forcing = torch.cat([f1, f2], dim=-1)
+
+        return inputs, outputs, statics, forcing
+
     def predict_step(
         self,
-        prev_state,
-        prev_prev_state,
-        batch_static_features,
-        grid_static_features,
-        forcing,
+        prev_state: torch.Tensor,
+        prev_prev_state: torch.Tensor,
+        batch_static_features: torch.Tensor,
+        grid_static_features: torch.Tensor,
+        forcing: torch.Tensor,
     ) -> torch.Tensor:
         """
         Perform a prediction step.
@@ -78,27 +140,22 @@ class ConvModel(nn.Module):
         from (B, N_grid, feature_dim) to (B, feature_dim, lon, lat)
         to accomodate the graph dataloader to conv2d expected shapes
         """
+        batch_size = prev_state.shape[0]
+
         x = torch.cat(
             [
-                einops.rearrange(
-                    prev_state, "b (x y) n -> b n x y", x=self.grid_shape[0]
-                ),
-                einops.rearrange(
-                    prev_prev_state, "b (x y) n -> b n x y", x=self.grid_shape[0]
-                ),
-                einops.rearrange(
-                    batch_static_features, "b (x y) n -> b n x y", x=self.grid_shape[0]
-                ),
-                einops.rearrange(
-                    grid_static_features.unsqueeze(0),
-                    "b (x y) n -> b n x y",
-                    x=self.grid_shape[0],
-                ),
-                einops.rearrange(forcing, "b (x y) n -> b n x y", x=self.grid_shape[0]),
+                prev_state,
+                prev_prev_state,
+                batch_static_features,
+                expand_to_batch(grid_static_features, batch_size),
+                forcing,
             ],
-            dim=1,
+            dim=3,
         )
-        y = einops.rearrange(self(x), "b n x y -> b (x y) n")
+        # On met les features en seconde position
+        x = einops.rearrange(x, "b x y n -> b n x y")
+        # On met les features pour la sortie en derniere position.
+        y = einops.rearrange(self(x), "b n x y -> b x y n")
         return y * self.step_diff_std + self.step_diff_mean
 
 

@@ -75,18 +75,8 @@ class ARLightning(pl.LightningModule):
 
         # Load static features for grid/data
         statics = self.dataset.statics
-        statics.register_buffers(self)
+
         self.N_interior = statics.N_interior
-
-        # MSE loss, need to do reduction ourselves to get proper weighting
-        if hparams.loss == "mse":
-            self.loss = WeightedMSELoss(reduction="none")
-        elif hparams.loss == "mae":
-            self.loss = WeightedL1Loss(reduction="none")
-        else:
-            assert False, f"Unknown loss function: {hparams.loss}"
-
-        self.loss.prepare(statics)
 
         self.step_length = hparams.step_length  # Number of hours per pred. step
         self.val_maes = []
@@ -139,6 +129,22 @@ class ARLightning(pl.LightningModule):
         self.model = model_kls.build_from_settings(model_settings, statics)
         summary(self.model)
 
+        # We transform and register the statics after the model has been set up
+        statics = self.model.transform_statics(statics)
+        statics.register_buffers(self)
+
+        # We need to instantiate the loss after statics had been transformed.
+        # Indeed, the statics used should be in the right dimensions.
+        # MSE loss, need to do reduction ourselves to get proper weighting
+        if hparams.loss == "mse":
+            self.loss = WeightedMSELoss(reduction="none")
+        elif hparams.loss == "mae":
+            self.loss = WeightedL1Loss(reduction="none")
+        else:
+            assert False, f"Unknown loss function: {hparams.loss}"
+
+        self.loss.prepare(statics)
+
     def configure_optimizers(self):
         opt = torch.optim.AdamW(self.parameters(), lr=self.lr, betas=(0.9, 0.95))
         if self.opt_state:
@@ -173,7 +179,8 @@ class ARLightning(pl.LightningModule):
                 batch_static_features,
                 self.grid_static_features,
                 forcing,
-            )  # (B, N_grid, d_f)
+            )  # (B, N_grid, d_f) or (B, N_lat,N_lon d_f)
+
             # Overwrite border with true state
             new_state = (
                 self.border_mask * border_state + self.interior_mask * predicted_state
@@ -184,24 +191,31 @@ class ARLightning(pl.LightningModule):
             prev_prev_state = prev_state
             prev_state = new_state
 
-        return torch.stack(prediction_list, dim=1)  # (B, pred_steps, N_grid, d_f)
+        return torch.stack(
+            prediction_list, dim=1
+        )  # (B, pred_steps, N_grid, d_f) or (B, pred_steps, N_lat, N_lon, d_f)
 
     def common_step(self, batch):
         """
         Predict on single batch
         batch = time_series, batch_static_features, forcing_features
 
-        init_states: (B, 2, N_grid, d_features)
-        target_states: (B, pred_steps, N_grid, d_features)
-        batch_static_features: (B, N_grid, d_static_f), for example open water
+        init_states: (B, 2, N_grid, d_features) or (B, 2, Nlat,Nlon, d_features) depend on the grid
+        target_states: (B, pred_steps, N_grid, d_features) or (B, pred_steps, Nlat,Nlon,, dfeatures)
+        batch_static_features: (B, N_grid, d_static_f), for example open water -> Ngrid could also be (Nlat,Nlon)
         forcing_features: (B, pred_steps, N_grid, d_forcing), where index 0
-            corresponds to index 1 of init_states
+            corresponds to index 1 of init_states -> Ngrid could also be (Nlat,Nlon)
         """
-        init_states, target_states, batch_static_features, forcing_features = batch
+        (
+            init_states,
+            target_states,
+            batch_static_features,
+            forcing_features,
+        ) = self.model.transform_batch(batch)
 
         prediction = self.unroll_prediction(
             init_states, batch_static_features, forcing_features, target_states
-        )  # (B, pred_steps, N_grid, d_f)
+        )  # (B, pred_steps, N_grid, d_f) or (B, pred_steps, Nlat, Nlon, df)
 
         return prediction, target_states
 
@@ -232,15 +246,19 @@ class ARLightning(pl.LightningModule):
             loss_func = torch.nn.functional.mse_loss
         else:
             loss_func = torch.nn.functional.l1_loss
-        # print("In per_var_error :", prediction.shape)
+
         entry_loss = loss_func(
             prediction, target, reduction="none"
-        )  # (B, pred_steps, N_grid, d_f)
+        )  # (B, pred_steps, N_grid, d_f) or (B, pred_steps, Nlat, Nlon, df)
+
+        # Dimension on which to aggregate (to get rid of the grid)
+        # Aggregate_dims is negative (the last dimensions correspond at the grid in the loss)
+        dims = [len(prediction.shape) - 1 + x for x in self.loss.aggregate_dims]
 
         mean_error = (
-            torch.sum(entry_loss * self.interior_mask, dim=2) / self.N_interior
+            torch.sum(entry_loss * self.interior_mask, dim=dims) / self.N_interior
         )  # (B, pred_steps, d_f)
-        # print("In per var error", mean_error.shape)
+
         return mean_error
 
     def all_gather_cat(self, tensor_to_gather):
@@ -264,6 +282,7 @@ class ARLightning(pl.LightningModule):
         time_step_loss = torch.mean(
             self.loss(prediction, target), dim=0
         )  # (time_steps-1)
+
         mean_loss = torch.mean(time_step_loss)
 
         # Log loss per time step forward and mean
