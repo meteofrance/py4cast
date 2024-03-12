@@ -5,7 +5,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 
-from pnia.models.nlam import utils
+from pnia.models import utils
 
 ssl._create_default_https_context = ssl._create_unverified_context
 

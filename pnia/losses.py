@@ -16,8 +16,12 @@ class WeightedLossMixin:
         """
 
         self.register_buffer("state_weight", state_weight)
-        self.register_buffer("interior_mask", statics.interior_mask)
+        self.register_buffer("interior_mask", statics.interior_mask.squeeze(-1))
         self.N_interior = statics.N_interior
+        # Store the aggregate on which one should aggregate.
+        # This dimension is grid dependent (not the same for 1D and 2D problems)
+        dims = len(self.interior_mask.shape)
+        self.aggregate_dims = tuple([-(x + 1) for x in range(0, dims)])
 
     def forward(self, prediction, target, reduce_spatial_dim=True):
         """
@@ -34,7 +38,7 @@ class WeightedLossMixin:
 
         # Take (unweighted) mean over only non-border (interior) grid nodes
         time_step_loss = (
-            torch.sum(grid_node_loss * self.interior_mask[:, 0], dim=-1)
+            torch.sum(grid_node_loss * self.interior_mask, dim=self.aggregate_dims)
             / self.N_interior
         )  # (B, pred_steps)
 

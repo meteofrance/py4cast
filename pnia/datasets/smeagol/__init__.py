@@ -14,7 +14,7 @@ import torch
 import xarray as xr
 from torch.utils.data import DataLoader, Dataset
 
-from pnia.datasets.base import AbstractDataset
+from pnia.datasets.base import AbstractDataset, Item, StateVariable, collate_fn
 from pnia.settings import CACHE_DIR
 
 ssl._create_default_https_context = ssl._create_unverified_context
@@ -50,7 +50,7 @@ def get_weight(level: int, kind: str):
         raise Exception(f"unknown kind:{kind}, must be hPa or m right now")
 
 
-@dataclass
+@dataclass(slots=True)
 class Period:
     start: dt.datetime
     end: dt.datetime
@@ -168,7 +168,7 @@ class Grid:
         return cartopy.crs.LambertConformal(central_longitude=2, central_latitude=46.7)
 
 
-@dataclass
+@dataclass(slots=True)
 class Param:
     name: str
     shortname: str  # To be read in nc File ?
@@ -189,6 +189,13 @@ class Param:
         Get the number of parameters.
         """
         return len(self.levels)
+
+    @property  # Does not accept a cached property with slots=True
+    def ndims(self) -> str:
+        if len(self.levels) > 1:
+            return 3
+        else:
+            return 2
 
     @property
     def parameter_weights(self) -> list:
@@ -231,7 +238,7 @@ class Param:
         return files[0].exists()
 
 
-@dataclass
+@dataclass(slots=True)
 class Sample:
     # Describe a sample
     member: int
@@ -270,7 +277,7 @@ class Sample:
                 return True
 
 
-@dataclass
+@dataclass(slots=True)
 class HyperParam:
     term: dict  # Pas vraiment a mettre ici. Voir où le mettre
     nb_input_steps: int = 2  # Step en entrée
@@ -279,7 +286,7 @@ class HyperParam:
     num_workers: int = 10  # Worker pour charger les données
     standardize: bool = False
     subset: int = 0  # Positive integer. If subset is less than 1 it means full set.
-    # Otherwise describe the number of sample.
+    # Otherwise describe the number of sample.Param(
     # Pas vraiment a mettre ici. Voir où le mettre
     members: Tuple[int] = (0,)
     diagnose: bool = False  # Do we want extra diagnostic ? Do not use it for training
@@ -443,23 +450,37 @@ class SmeagolDataset(AbstractDataset, Dataset):
             except KeyError:
                 print(f"Problem in sample {sample}")
 
+    @cached_property
+    def stats(self):
+        return torch.load(self.cache_dir / "parameters_stats.pt", "cpu")
+
     def __getitem__(self, index):
         sample = self.sample_list[index]
+        # On fait le bourrin pour lire les stats pour la renormalisation
+        # To do : reorganiser le chargement des statistics.
+        # stats = torch.load(self.cache_dir / "parameters_stats.pt", "cpu")
+
         # Static features
-        # Peut etre la charger prealable
-        static_features = (
-            torch.from_numpy(self.grid.landsea_mask).flatten().unsqueeze(1)
-        )
-
+        # Should mouve in Statics.
+        lstatics = [
+            StateVariable(
+                ndims=2,
+                names=["LandSeaMask"],
+                values=torch.from_numpy(self.grid.landsea_mask).type(torch.float32),
+                coordinates_name=["lat", "lon"],
+            )
+        ]
         # Datetime Forcing
-        datetime_forcing = self.get_year_hour_forcing(sample)
-        datetime_forcing = datetime_forcing.unsqueeze(1).expand(
-            -1, self.grid.N_grid, -1
-        )
-
-        inputs = []
-        outputs = []
-        forcing = []
+        lforcings = [
+            StateVariable(
+                ndims=1,
+                names=["cos_hour, sin_hour, cos_doy, sin_doy"],
+                values=self.get_year_hour_forcing(sample).type(torch.float32),
+                coordinates_name=["out_step", "features"],
+            )
+        ]
+        linputs = []
+        loutputs = []
 
         # Reading parameters from files
         for param in self.params:
@@ -472,11 +493,38 @@ class SmeagolDataset(AbstractDataset, Dataset):
                 ds = ds.sel(level=param.levels)
             # Read inputs. Separate forcing field from I/O
             try:
+                means = torch.from_numpy(
+                    np.asarray(
+                        [
+                            self.stats[name]["mean"]
+                            for name in param.parameter_short_name
+                        ]
+                    )
+                )
+                std = torch.from_numpy(
+                    np.asarray(
+                        [self.stats[name]["std"] for name in param.parameter_short_name]
+                    )
+                )
+
                 if param.kind == "input_output":
                     tmp_in = ds[param.name].sel(step=sample.input_terms).values
+                    # Extend dimension to match 3D (its a 3D with one dimension in the third one)
                     if len(tmp_in.shape) != 4:
                         tmp_in = np.expand_dims(tmp_in, axis=1)
-                    inputs.append(tmp_in)
+                    tmp_in = torch.from_numpy(tmp_in).permute([0, 2, 3, 1])
+                    if self.standardize:
+                        tmp_in = (tmp_in - means) / std
+
+                    # Define the state to append.
+                    tmp_state = StateVariable(
+                        ndims=param.ndims,
+                        values=tmp_in,
+                        names=param.parameter_short_name,
+                        coordinates_name=["in_step", "lat", "lon", "levels"],
+                    )
+                    linputs.append(tmp_state)
+
                 # On lit un forcage. On le prend pour tous les pas de temps de prevision
                 # Un peu etrange de prendre le forcage a l'instant de la prevision et
                 # non pas l'instant initial ... mais bon.
@@ -484,51 +532,36 @@ class SmeagolDataset(AbstractDataset, Dataset):
                     tmp_in = ds[param.name].sel(step=sample.output_terms).values
                     if len(tmp_in.shape) != 4:
                         tmp_in = np.expand_dims(tmp_in, axis=1)
-                    forcing.append(tmp_in)
+                    tmp_in = torch.from_numpy(tmp_in).permute([0, 2, 3, 1])
+                    if self.standardize:
+                        tmp_in = (tmp_in - means) / std
+                    tmp_state = StateVariable(
+                        ndims=param.ndims,
+                        values=tmp_in,
+                        names=param.parameter_short_name,
+                        coordinates_name=["out_step", "lat", "lon", "levels"],
+                    )
+                    lforcings.append(tmp_state)
                 # Read outputs.
                 if param.kind in ["ouput", "input_output"]:
                     tmp_out = ds[param.name].sel(step=sample.output_terms).values
                     if len(tmp_out.shape) != 4:
                         tmp_out = np.expand_dims(tmp_out, axis=1)
-                    outputs.append(tmp_out)
+                    tmp_out = torch.from_numpy(tmp_out).permute([0, 2, 3, 1])
+                    if self.standardize:
+                        tmp_out = (tmp_out - means) / std
+                    tmp_state = StateVariable(
+                        ndims=param.ndims,
+                        values=tmp_out,
+                        names=param.parameter_short_name,
+                        coordinates_name=["out_step", "lat", "lon", "levels"],
+                    )
+                    loutputs.append(tmp_state)
             except KeyError as e:
                 print("Error for param {param}")
                 raise e
-        ini = np.concatenate(inputs, axis=1).transpose([0, 2, 3, 1])
-        force = torch.from_numpy(
-            np.concatenate(forcing, axis=1).transpose([0, 2, 3, 1])
-        )
-        outi = np.concatenate(outputs, axis=1).transpose([0, 2, 3, 1])
-        state_in = torch.from_numpy(ini)
-        state_out = torch.from_numpy(outi)
-
-        if self.standardize:
-            # TO DO
-            # Fait ici l'hypothese implicite que les donnes d'entree et de sortie sont les memes.
-            # Rajouter un champ diagnose pour les sorties seules que l'on stackera plus tard ?
-            # Trouver un truc plus logique pour faire la standardisation
-            # (la faire parametre par parametre a la lecture ?) ?
-            # Construire un tableau de normalisation pour la sortie different de pour
-            # les entree (permettant d'avoir plus de souplesse )?
-            state_in = (state_in - self.data_mean) / self.data_std
-            state_out = (state_out - self.data_mean) / self.data_std
-            force = (force - self.flux_mean) / self.flux_std
-
-        # Adjust the forcing. Add datetime to forcing.
-        forcing = force.flatten(1, 2)
-        forcing = torch.cat((forcing, datetime_forcing), dim=-1)
-        state_in = state_in.flatten(1, 2)
-        state_out = state_out.flatten(1, 2)
-        if self.hp.diagnose:
-            print(f"In __get_item__ : {torch.mean(state_in,dim=(0,1))}")
-        # To Do
-        # Combine forcing over each window of 3 time steps
-        # Comprendre ce que ça fait avant de voir comment l'adapter (car problematique potentiellement différente).
-        return (
-            state_in.type(torch.float32),
-            state_out.type(torch.float32),
-            static_features.type(torch.float32),
-            forcing.type(torch.float32),
+        return Item(
+            inputs=linputs, outputs=loutputs, forcing=lforcings, statics=lstatics
         )
 
     @classmethod
@@ -603,6 +636,7 @@ class SmeagolDataset(AbstractDataset, Dataset):
             num_workers=self.hp.num_workers,
             shuffle=self.shuffle,
             prefetch_factor=self.hp.prefetch,
+            collate_fn=collate_fn,
         )
 
     @property

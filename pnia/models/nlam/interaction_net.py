@@ -3,6 +3,7 @@ import torch_geometric as pyg
 from torch import nn
 
 from pnia.models.nlam import utils
+from pnia.models.utils import CheckpointWrapper
 
 
 class InteractionNet(pyg.nn.MessagePassing):
@@ -67,7 +68,7 @@ class InteractionNet(pyg.nn.MessagePassing):
                 edge_chunk_sizes,
             )
             if checkpoint:
-                self.edge_mlp = utils.CheckpointWrapper(self.edge_mlp)
+                self.edge_mlp = CheckpointWrapper(self.edge_mlp)
 
         if aggr_chunk_sizes is None:
             self.aggr_mlp = utils.make_mlp(aggr_mlp_recipe, checkpoint=checkpoint)
@@ -81,7 +82,7 @@ class InteractionNet(pyg.nn.MessagePassing):
                 aggr_chunk_sizes,
             )
             if checkpoint:
-                self.aggr_mlp = utils.CheckpointWrapper(self.aggr_mlp)
+                self.aggr_mlp = CheckpointWrapper(self.aggr_mlp)
 
         self.update_edges = update_edges
 
