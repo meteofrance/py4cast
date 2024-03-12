@@ -10,6 +10,7 @@ from torch.distributed.algorithms._checkpoint.checkpoint_wrapper import offload_
 
 from pnia.datasets.base import Statics
 from pnia.models.nlam import utils
+from pnia.models.nlam.create_mesh import build_graph_for_grid
 from pnia.models.nlam.interaction_net import InteractionNet
 from pnia.models.nlam.utils import BufferList
 
@@ -153,6 +154,8 @@ class GraphModelSettings:
     mesh_aggr: str = "sum"
     processor_layers: int = 4
 
+    hierarchical: bool = True
+
     def __str__(self) -> str:
         return f"{self.network_name}-{self.hidden_dims}x{self.hidden_layers}x{self.processor_layers}"
 
@@ -186,13 +189,25 @@ class BaseGraphModel(nn.Module):
             settings, statics, *args, **kwargs
         )
 
+    @staticmethod
+    def rank_zero_setup(settings: GraphModelSettings, statics: Statics):
+        """
+        This is a static method to allow multi-GPU
+        trainig frameworks to call this method once
+        on rank zero before instantiating the model.
+        """
+        # this doesn't take long and it prevents discrepencies
+        build_graph_for_grid(
+            statics.grid_info,
+            settings.graph_dir,
+            hierarchical=settings.hierarchical,
+        )
+
     def __init__(self, settings: GraphModelSettings, statics: Statics, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.settings = settings
-
-        # Load graph with static features
-        # NOTE: (IMPORTANT!) mesh nodes MUST have the first N_mesh indices,
         self.hierarchical, graph_ldict = load_graph(self.settings.graph_dir)
+
         for name, attr_value in graph_ldict.items():
             # Make BufferLists module members and register tensors as buffers
             if isinstance(attr_value, torch.Tensor):

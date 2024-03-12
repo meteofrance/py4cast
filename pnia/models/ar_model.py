@@ -5,6 +5,7 @@ from typing import Union
 import matplotlib.pyplot as plt
 import pytorch_lightning as pl
 import torch
+from lightning.pytorch.utilities import rank_zero_only
 from torchinfo import summary
 
 # A noter que vis depend de constant ... qui n'a donc pas les bonnes choses (car portées par le dataset).
@@ -36,16 +37,22 @@ class HyperParam:
 # as well as a defaut configuration file.
 MODELS = {
     "graph": (
-        BaseGraphModel.build_from_settings,
+        BaseGraphModel,
         GraphModelSettings,
         Path(__file__).parents[1] / "xp_conf" / "graph.json",
     ),
     "conv": (
-        ConvModel.build_from_settings,
+        ConvModel,
         ConvSettings,
         Path(__file__).parents[1] / "xp_conf" / "conv.json",
     ),
 }
+
+
+@rank_zero_only
+def rank_zero_init(model_kls, model_settings, statics):
+    if hasattr(model_kls, "rank_zero_setup"):
+        model_kls.rank_zero_setup(model_settings, statics)
 
 
 class ARLightning(pl.LightningModule):
@@ -97,7 +104,7 @@ class ARLightning(pl.LightningModule):
         self.spatial_loss_maps = []
 
         # instantiate the model with dataclass json schema validation for settings
-        model_factory, settings_class, default_settings = MODELS[hparams.model_name]
+        model_kls, settings_class, default_settings = MODELS[hparams.model_name]
 
         model_conf = hparams.model_conf if hparams.model_conf else default_settings
 
@@ -125,7 +132,11 @@ class ARLightning(pl.LightningModule):
                 model_settings.graph_dir = self.dataset.cache_dir
                 print(f"Model settings: {model_settings.graph_dir}")
 
-        self.model = model_factory(model_settings, statics)
+        print(f"Distributed ranks: {self.local_rank} {self.global_rank}")
+
+        rank_zero_init(model_kls, model_settings, statics)
+
+        self.model = model_kls.build_from_settings(model_settings, statics)
         summary(self.model)
 
     def configure_optimizers(self):

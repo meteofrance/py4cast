@@ -7,8 +7,6 @@ import torch
 import torch_geometric as pyg
 from torch_geometric.utils.convert import from_networkx
 
-from pnia.datasets.base import AbstractDataset
-from pnia.settings import CACHE_DIR
 from pnia.utils import torch_save
 
 
@@ -151,8 +149,8 @@ def hierarchical_mesh(G, mesh_levels, plot, cache_dir_path):
     )
 
     # Create inter-level mesh edges
-    up_graphs = []
-    down_graphs = []
+    mesh_up = []
+    mesh_down = []
     for from_level, to_level, G_from, G_to, start_index in zip(
         range(1, mesh_levels),
         range(0, mesh_levels - 1),
@@ -202,8 +200,8 @@ def hierarchical_mesh(G, mesh_levels, plot, cache_dir_path):
         pyg_up = pyg_down.clone()
         pyg_up.edge_index = up_edges
 
-        up_graphs.append(pyg_up)
-        down_graphs.append(pyg_down)
+        mesh_up.append(pyg_up)
+        mesh_down.append(pyg_down)
 
         if plot:
             plot_graph(pyg_down, title=f"Down graph, {from_level} -> {to_level}")
@@ -213,8 +211,8 @@ def hierarchical_mesh(G, mesh_levels, plot, cache_dir_path):
             plt.show()
 
     # Save up and down edges
-    save_edges_list(up_graphs, "mesh_up", cache_dir_path)
-    save_edges_list(down_graphs, "mesh_down", cache_dir_path)
+    save_edges_list(mesh_up, "mesh_up", cache_dir_path)
+    save_edges_list(mesh_down, "mesh_down", cache_dir_path)
 
     # Extract intra-level edges for m2m
     m2m_graphs = [
@@ -283,29 +281,21 @@ def monolevel_mesh(G, nx, plot):
 ########################################################################################
 
 
-def prepare(
-    dataset: AbstractDataset,
+def build_graph_for_grid(
+    xy: np.ndarray,
+    cache_dir_path: str,
     plot: bool = False,
     levels: int = None,
     hierarchical: bool = False,
 ):
     """
-    dataset: Dataset to load grid point coordinates from.
+    xy: (x, y) coordinates of grid points, shape (2, N_x, N_y).
     plot: If graphs should be plotted during generation (default: False).
     levels: Limit multi-scale mesh to given number of levels, from bottom up (default: None (no limit)).
     hierarchical: Generate hierarchical mesh graph (default: 0, no).
     """
-    # Load grid positions
-    # To Do Add something about the kind of graph (to make the distinction between hierachical and not ? )
-    cache_dir_path = CACHE_DIR / "neural_lam" / str(dataset)
-    print(cache_dir_path)
-    cache_dir_path.mkdir(parents=True, exist_ok=True)
-
-    xy = dataset.grid_info
-
     grid_xy = torch.tensor(xy)
     pos_max = torch.max(torch.abs(grid_xy))
-    print(f"Size of xy {xy.shape}, size of grid_xy {grid_xy.shape}")
 
     # graph geometry
     nx = 3  # number of children = nx**2
@@ -331,12 +321,12 @@ def prepare(
         G.append(g)
 
     if hierarchical:
-        m2m_graphs, mesh_pos, G_bottom_mesh, all_mesh_nodes = hierarchical_mesh(
+        m2m_graphs, mesh_features, G_bottom_mesh, all_mesh_nodes = hierarchical_mesh(
             G, mesh_levels, plot, cache_dir_path
         )
 
     else:
-        m2m_graphs, mesh_pos, G_bottom_mesh, all_mesh_nodes = monolevel_mesh(
+        m2m_graphs, mesh_features, G_bottom_mesh, all_mesh_nodes = monolevel_mesh(
             G, nx, plot
         )
 
@@ -344,11 +334,13 @@ def prepare(
     save_edges_list(m2m_graphs, "m2m", cache_dir_path)
 
     # Divide mesh node pos by max coordinate of grid cell
-    mesh_pos = [pos / pos_max for pos in mesh_pos]
+    mesh_features = [pos / pos_max for pos in mesh_features]
 
-    print("In create grid_mesh mesh_pos", mesh_pos[0].shape)
+    print("In create grid_mesh mesh_pos", mesh_features[0].shape)
     # Save mesh positions
-    torch_save(mesh_pos, cache_dir_path / "mesh_features.pt")  # mesh pos, in float32
+    torch_save(
+        mesh_features, cache_dir_path / "mesh_features.pt"
+    )  # mesh pos, in float32
 
     G_g2m, vm, vm_xy, vg_list = grid2mesh(
         G_bottom_mesh, all_mesh_nodes, xy, plot, cache_dir_path
@@ -481,4 +473,4 @@ if __name__ == "__main__":
     hparams = parser.parse_args()
     print("hparams : ", hparams)
     dataset = TitanDataset(hparams)
-    prepare(dataset, hierarchical=False)
+    build_graph_for_grid(dataset, hierarchical=False)

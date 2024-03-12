@@ -292,6 +292,9 @@ class HyperParam:
 
 
 class SmeagolDataset(AbstractDataset, Dataset):
+
+    recompute_stats: bool = False
+
     def __init__(
         self, grid: Grid, period: Period, params: List[Param], hyper_params: HyperParam
     ):
