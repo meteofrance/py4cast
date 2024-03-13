@@ -4,7 +4,7 @@ and their interfaces
 """
 
 from abc import ABC, abstractmethod, abstractproperty
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from functools import cached_property
 from pathlib import Path
 from typing import List, Literal, Tuple, Union
@@ -18,12 +18,51 @@ from pnia.base import RegisterFieldsMixin
 from pnia.utils import torch_save
 
 
+class StateVariableMetadata:
+    """
+    non dataclass storing StateVariable metadata.
+    We do this to hide metadata from lightning and to avoid
+    introspection of metadata shapes for batch size guess
+    """
+
+    def __init__(
+        self, ndims: int, names: List[str], coordinates_name: List[str], *args, **kwargs
+    ):
+        self.ndims = ndims
+        self.names = names
+        self.coordinates_name = coordinates_name
+
+
 @dataclass(slots=True)
-class StateVariable:
-    ndims: Literal[1, 2, 3]
-    names: List[str]  # Contient le nom des différents niveaux
+class StateVariableValues:
+    """
+    Dataclass storing StateVariable values.
+    """
+
     values: torch.Tensor
-    coordinates_name: List[str]  # Nom des coordonnées
+
+
+@dataclass(slots=True)
+class StateVariable(StateVariableValues, StateVariableMetadata):
+    """
+    Here we use multiple inheritance to avoid a single
+    dataclass which makes lightning confused about batch size.
+    """
+
+    values: torch.Tensor
+
+    def __init__(self, **kwargs):
+
+        StateVariableValues.__init__(
+            self,
+            **{
+                k: v
+                for k, v in kwargs.items()
+                if k in StateVariableValues.__match_args__
+            },
+        )
+
+        StateVariableMetadata.__init__(self, **kwargs)
 
     def __repr__(self):
         return (
@@ -34,16 +73,20 @@ class StateVariable:
 
 @dataclass(slots=True)
 class Item:
+    """
+    Dataclass holding one Item
+    """
+
+    inputs: List[StateVariable]
+    outputs: List[StateVariable]
+
     forcing: Union[
         List[StateVariable], None
     ] = None  # Pour les champs de forcage (SST, Rayonnement, ... )
-    inputs: Union[List[StateVariable], None] = None
-    outputs: Union[List[StateVariable], None] = None
+
     # Pour le modele coupleur
     statics: Union[List[StateVariable], None] = None
-    boundary_forcing: Union[
-        List[StateVariable], None
-    ] = None  # Transitoire avant le mettre ailleurs.
+
     # J'hesite entre inputs/outputs et pronostics/diagnostics
     # Les concepts sont totalement different (les variables ne contiendrait pas la meme chose,
     # le get_item serait different et le unroll_prediction aussi)
@@ -51,17 +94,35 @@ class Item:
     # (et est en phase avec la denomination du CEP)
     # Ca ferait peut etre moins de trucs etrange dans les denominations
 
+    def print_shapes_and_names(self):
+        """
+        Utility method to explore a batch/item shapes and names.
+        """
+        for attr in (f.name for f in fields(self)):
+            if getattr(self, attr) is not None:
+                for item in getattr(self, attr):
+                    print(
+                        f"{attr} {item.names} : {item.values.shape}, {item.values.size(0)}"
+                    )
 
-def collate_fn(items: List[Item]) -> Item:
+
+@dataclass(slots=True)
+class ItemBatch(Item):
+    """
+    Dataclass holding a batch of items.
+    """
+
+
+def collate_fn(items: List[Item]) -> ItemBatch:
     """
     Collate a list of item. Add one dimension to each state variable.
     Necessary to form batch.
     """
     # Here we postpone that for each batch the same dimension should be present.
-    new_item = {}
-    # ToDo : Not very clean, the list should be provided by the Item object.
-    for attr in ["statics", "forcing", "inputs", "outputs", "boundary_forcing"]:
-        new_item[attr] = []
+    batch_of_items = {}
+
+    for attr in (f.name for f in fields(Item)):
+        batch_of_items[attr] = []
         if getattr(items[0], attr) is not None:
             for i in range(len(getattr(items[0], attr))):
                 new_values = torch.stack(
@@ -79,10 +140,10 @@ def collate_fn(items: List[Item]) -> Item:
                         i
                     ].coordinates_name,  # Nom des coordonnées
                 )
-                new_item[attr].append(new_state)
+                batch_of_items[attr].append(new_state)
         else:
-            new_item[attr] = None
-    return Item(**new_item)
+            batch_of_items[attr] = None
+    return ItemBatch(**batch_of_items)
 
 
 @dataclass
