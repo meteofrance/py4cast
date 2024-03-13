@@ -27,7 +27,7 @@ class ConvSettings:
     dilation: int = 1
     bias: bool = False
     use_ghost: bool = False
-    last_activation: str = "Identity"
+    last_activation: str = "Sigmoid"
 
 
 class ConvModel(nn.Module):
@@ -156,7 +156,7 @@ class ConvModel(nn.Module):
         x = einops.rearrange(x, "b x y n -> b n x y")
         # On met les features pour la sortie en derniere position.
         y = einops.rearrange(self(x), "b n x y -> b x y n")
-        return y * self.step_diff_std + self.step_diff_mean
+        return prev_state + y * self.step_diff_std + self.step_diff_mean
 
 
 class GhostModule(nn.Module):
