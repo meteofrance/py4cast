@@ -15,6 +15,7 @@ from pnia.models.conv import ConvModel, ConvSettings
 from pnia.models.nlam import vis
 from pnia.models.nlam.models import BaseGraphModel, GraphModelSettings
 from pnia.models.nlam.utils import val_step_log_errors
+from pnia.models.utils import expand_to_batch
 
 
 @dataclass
@@ -66,13 +67,6 @@ class ARLightning(pl.LightningModule):
         self.lr = hparams.lr
         self.dataset = hparams.dataset
 
-        # Some constants useful for sub-classes
-        self.batch_static_feature_dim = (
-            self.dataset.static_feature_dim
-        )  # Only open water?
-        # TODO Understand the 3 timestep Before. Linked to __get_item__ (concatenation).
-        # 3 replace by 1. How to have something more modular ?
-
         # Load static features for grid/data
         statics = self.dataset.statics
 
@@ -103,16 +97,12 @@ class ARLightning(pl.LightningModule):
 
         if hparams.shape_from_dataset:
             # Set model input/output grid features based on dataset tensor shapes
-            (
-                _,
-                grid_static_dim,
-            ) = statics.grid_static_features.shape
+            grid_static_dim = statics.grid_static_features.values.shape[-1]
 
             input_features = (
                 2 * self.dataset.weather_dim
                 + grid_static_dim
                 + self.dataset.forcing_dim
-                + self.batch_static_feature_dim
             )
             model_settings.input_features = input_features
             model_settings.output_features = self.dataset.weather_dim
@@ -130,9 +120,19 @@ class ARLightning(pl.LightningModule):
         summary(self.model)
 
         # We transform and register the statics after the model has been set up
+
         statics = self.model.transform_statics(statics)
         statics.register_buffers(self)
-
+        # On enregistre manuellement les valueurs pour grid_static_features.
+        # On l'etend a la taille attendu du batch.
+        # De cette manière on évite les expands dans chaque module et l'operation est faite une unique fois.
+        self.register_buffer(
+            "grid_static_features",
+            expand_to_batch(
+                statics.grid_static_features.values, self.dataset.hp.batch_size
+            ),
+            persistent=False,
+        )
         # We need to instantiate the loss after statics had been transformed.
         # Indeed, the statics used should be in the right dimensions.
         # MSE loss, need to do reduction ourselves to get proper weighting
@@ -152,13 +152,10 @@ class ARLightning(pl.LightningModule):
 
         return opt
 
-    def unroll_prediction(
-        self, init_states, batch_static_features, forcing_features, true_states
-    ):
+    def unroll_prediction(self, init_states, forcing_features, true_states):
         """
         Roll out prediction taking multiple autoregressive steps with model
         init_states: (B, 2, N_grid, d_f)
-        batch_static_features: (B, N_grid, d_static_f)
         forcing_features: (B, pred_steps, N_grid, d_static_f)
         true_states: (B, pred_steps, N_grid, d_f)
         """
@@ -176,7 +173,6 @@ class ARLightning(pl.LightningModule):
             predicted_state = self.model.predict_step(
                 prev_state,
                 prev_prev_state,
-                batch_static_features,
                 self.grid_static_features,
                 forcing,
             )  # (B, N_grid, d_f) or (B, N_lat,N_lon d_f)
@@ -198,23 +194,20 @@ class ARLightning(pl.LightningModule):
     def common_step(self, batch):
         """
         Predict on single batch
-        batch = time_series, batch_static_features, forcing_features
 
         init_states: (B, 2, N_grid, d_features) or (B, 2, Nlat,Nlon, d_features) depend on the grid
         target_states: (B, pred_steps, N_grid, d_features) or (B, pred_steps, Nlat,Nlon,, dfeatures)
-        batch_static_features: (B, N_grid, d_static_f), for example open water -> Ngrid could also be (Nlat,Nlon)
         forcing_features: (B, pred_steps, N_grid, d_forcing), where index 0
             corresponds to index 1 of init_states -> Ngrid could also be (Nlat,Nlon)
         """
         (
             init_states,
             target_states,
-            batch_static_features,
             forcing_features,
         ) = self.model.transform_batch(batch)
 
         prediction = self.unroll_prediction(
-            init_states, batch_static_features, forcing_features, target_states
+            init_states, forcing_features, target_states
         )  # (B, pred_steps, N_grid, d_f) or (B, pred_steps, Nlat, Nlon, df)
 
         return prediction, target_states

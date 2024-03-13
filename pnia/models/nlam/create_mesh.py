@@ -282,7 +282,7 @@ def monolevel_mesh(G, nx, plot):
 
 
 def build_graph_for_grid(
-    xy: np.ndarray,
+    grid_xy: torch.Tensor,
     cache_dir_path: str,
     plot: bool = False,
     levels: int = None,
@@ -294,6 +294,8 @@ def build_graph_for_grid(
     levels: Limit multi-scale mesh to given number of levels, from bottom up (default: None (no limit)).
     hierarchical: Generate hierarchical mesh graph (default: 0, no).
     """
+
+    xy = grid_xy.numpy()
     grid_xy = torch.tensor(xy)
     pos_max = torch.max(torch.abs(grid_xy))
 

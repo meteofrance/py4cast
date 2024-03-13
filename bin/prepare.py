@@ -58,7 +58,7 @@ def testsmeagol(dataconf=path.parent.parent / "pnia/xp_conf/smeagol.json"):
     This function could change...
     """
     train_ds, _, _ = SmeagolDataset.from_json(
-        dataconf, {"train": {"standardize": True, "nb_pred_steps": 1}}
+        dataconf, {"train": {"standardize": True, "nb_pred_steps": 20}}
     )
     train_ds.standardize = True
     print("Forcing", train_ds.shortnames("forcing"))
@@ -68,7 +68,12 @@ def testsmeagol(dataconf=path.parent.parent / "pnia/xp_conf/smeagol.json"):
     print("Weather", train_ds.shortnames("all"))
 
     for index in tqdm(range(len(train_ds.sample_list))):
-        train_ds.test_sample(index)
+        try:
+            train_ds.test_sample(index)
+        except KeyError:
+            print(f"Problem in sample {train_ds.sample_list[index]}")
+        except OSError:
+            print(f"Problem in sample {train_ds.sample_list[index]}")
 
 
 @titan_app.command("all")
