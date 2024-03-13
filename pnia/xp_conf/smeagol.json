@@ -2,7 +2,7 @@
     "periods": {
         "train": {
             "start": 2022080600,
-            "end": 2022102100,
+            "end": 2022101800,
             "step": 3
         },
         "test": {
@@ -21,7 +21,7 @@
         "border_size":10, 
         "domain":"france",
         "model":"arome",
-        "subgrid":[50,550,50,550]
+        "subgrid":[50,306,50,306]
     }, 
     "dataset": {
         "arome": {

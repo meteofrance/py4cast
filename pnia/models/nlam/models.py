@@ -282,13 +282,16 @@ class BaseGraphModel(nn.Module):
         Take the statics in inputs.
         Return the statics as expected by the model.
         """
-        # Ici on fait rien.
-        # C'est ici qu'on devra faire les flatten.
+        statics.grid_static_features.values = (
+            statics.grid_static_features.values.flatten(0, 1)
+        )
+        statics.border_mask = statics.border_mask.flatten(0, 1)
+        statics.interior_mask = statics.interior_mask.flatten(0, 1)
         return statics
 
     def transform_batch(
         self, batch: Item
-    ) -> Tuple[torch.tensor, torch.tensor, torch.tensor, torch.tensor]:
+    ) -> Tuple[torch.tensor, torch.tensor, torch.tensor]:
         """
         Transform the batch to the need
         We postpone here that files are order as in smeagol.
@@ -296,10 +299,6 @@ class BaseGraphModel(nn.Module):
         Going from dictionnary to torch tensor
         """
         # TODO Rendre plus generique cette fonction.
-        # On suppose qu'on a que du 2D en static
-        # On passe sur du 3D
-        static = torch.cat([x.values for x in batch.statics if x.ndims == 2], dim=-1)
-        static = static.flatten(1, 2).unsqueeze(2)
         # On va traiter les entrees 2D et 3D en les 'superposant'
         in2D = torch.cat([x.values for x in batch.inputs if x.ndims == 2], dim=-1)
         in3D = torch.cat([x.values for x in batch.inputs if x.ndims == 3], dim=-1)
@@ -325,7 +324,7 @@ class BaseGraphModel(nn.Module):
         f2 = torch.cat([x.values for x in batch.forcing if x.ndims == 2], dim=-1)
         f2 = f2.flatten(2, 3)
         forcing = torch.cat([f1, f2], dim=-1)
-        return inputs, outputs, static, forcing
+        return inputs, outputs, forcing
 
     def finalize_graph_model(self):
         """
@@ -361,7 +360,6 @@ class BaseGraphModel(nn.Module):
         self,
         prev_state,
         prev_prev_state,
-        batch_static_features,
         grid_static_features,
         forcing,
     ):
@@ -369,20 +367,17 @@ class BaseGraphModel(nn.Module):
         Step state one step ahead using prediction model, X_{t-1}, X_t -> X_t+1
         prev_state: (B, N_grid, feature_dim), X_t
         prev_prev_state: (B, N_grid, feature_dim), X_{t-1}
-        batch_static_features: (B, N_grid, batch_static_feature_dim)
         forcing: (B, N_grid, forcing_dim)
         """
         batch_size = prev_state.shape[0]
 
-        # print(prev_state.dtype, self.grid_static_features.dtype,batch_static_features.dtype )
         # Create full grid node features of shape (B, N_grid, grid_dim)
         grid_features = torch.cat(
             (
                 prev_state,
                 prev_prev_state,
-                batch_static_features,
                 forcing,
-                expand_to_batch(grid_static_features, batch_size),
+                grid_static_features,
             ),
             dim=-1,
         )
@@ -662,7 +657,6 @@ class GraphLAM(BaseGraphModel):
         if self.hierarchical:
             raise ValueError("GraphLAM does not use a hierarchical mesh graph")
 
-        # grid_dim from data + static + batch_static
         mesh_dim = self.mesh_static_features.shape[1]
         m2m_edges, m2m_dim = self.m2m_features.shape
         print(

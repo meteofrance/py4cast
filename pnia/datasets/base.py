@@ -9,6 +9,7 @@ from functools import cached_property
 from pathlib import Path
 from typing import List, Literal, Tuple, Union
 
+import einops
 import numpy as np
 import torch
 from torch.utils.data import DataLoader
@@ -42,14 +43,11 @@ class StateVariableValues:
     values: torch.Tensor
 
 
-@dataclass(slots=True)
 class StateVariable(StateVariableValues, StateVariableMetadata):
     """
     Here we use multiple inheritance to avoid a single
-    dataclass which makes lightning confused about batch size.
+    dataclass which makes ightning confused about batch size.
     """
-
-    values: torch.Tensor
 
     def __init__(self, **kwargs):
 
@@ -61,14 +59,37 @@ class StateVariable(StateVariableValues, StateVariableMetadata):
                 if k in StateVariableValues.__match_args__
             },
         )
-
         StateVariableMetadata.__init__(self, **kwargs)
 
     def __repr__(self):
         return (
-            f" Kind : {self.ndims} \n names {self.names} \n"
+            f" ndims : {self.ndims} \n names {self.names} \n"
             f" coordinates : {self.coordinates_name} \n values(size) :{self.values.shape} \n"
         )
+
+    def __getattr__(self, name: str) -> torch.Tensor:
+        """
+        Return one element of a step variable picked by name.
+        We assume that different features are in the las dimension.
+        """
+        if "names" in self.__dict__:
+            if name in self.names:
+                pos = [
+                    self.names.index(name),
+                ]
+                pos = torch.tensor(pos, dtype=torch.int)
+
+            else:
+                raise AttributeError(f"StateVariable does not contains {name} feature.")
+            return torch.index_select(self.values, -1, pos)
+        else:
+            raise AttributeError("names not defined.")
+
+    def change_type(self, new_type):
+        """
+        Modify the type of the value
+        """
+        self.values = self.values.type(new_type)
 
 
 @dataclass(slots=True)
@@ -83,9 +104,6 @@ class Item:
     forcing: Union[
         List[StateVariable], None
     ] = None  # Pour les champs de forcage (SST, Rayonnement, ... )
-
-    # Pour le modele coupleur
-    statics: Union[List[StateVariable], None] = None
 
     # J'hesite entre inputs/outputs et pronostics/diagnostics
     # Les concepts sont totalement different (les variables ne contiendrait pas la meme chose,
@@ -154,20 +172,35 @@ class Statics(RegisterFieldsMixin):
     using the register_buffers method.
     """
 
-    border_mask: torch.Tensor
-    grid_static_features: torch.Tensor
+    # border_mask: torch.Tensor
+    grid_static_features: StateVariable
     step_diff_mean: torch.Tensor
     step_diff_std: torch.Tensor
     data_mean: torch.Tensor
     data_std: torch.Tensor
     param_weights: torch.Tensor
     grid_shape: Tuple[int, int]
-    grid_info: np.ndarray
-
+    # grid_info: np.ndarray
+    border_mask: torch.Tensor = field(init=False)
     interior_mask: torch.Tensor = field(init=False)
 
     def __post_init__(self):
+        self.border_mask = self.grid_static_features.border_mask
         self.interior_mask = 1.0 - self.border_mask
+
+    @cached_property
+    def grid_info(self):
+        # On fait l'inverse de la creation
+        return einops.rearrange(
+            torch.cat(
+                [
+                    self.grid_static_features.x,
+                    self.grid_static_features.y,
+                ],
+                dim=-1,
+            ),
+            ("x y n -> n x y"),
+        )
 
     @cached_property
     def N_interior(self):
@@ -359,6 +392,13 @@ class AbstractDataset(ABC):
         If True, the stats will be recomputed
         """
 
+    def dataset_extra_statics(self) -> List[StateVariable]:
+        """
+        Datasets can override this method to add
+        more static data.
+        """
+        return []
+
     @cached_property
     def grid_static_features(self):
         """
@@ -367,32 +407,41 @@ class AbstractDataset(ABC):
         # -- Static grid node features --
         xy = self.grid_info  # (2, N_x, N_y)
         grid_xy = torch.tensor(xy)
-        grid_xy = grid_xy.flatten(1, 2).T  # (N_grid, 2)
+        # Need to rearange
         pos_max = torch.max(torch.abs(grid_xy))
-        grid_xy = grid_xy / pos_max  # Divide by maximum coordinate
+        grid_xy = (
+            einops.rearrange(grid_xy, ("n x y -> x y n")) / pos_max
+        )  # Rearange and divide  by maximum coordinate
 
-        geopotential = torch.tensor(self.geopotential_info)  # (N_x, N_y)
-        geopotential = geopotential.flatten(0, 1).unsqueeze(1)  # (N_grid,1)
+        # (Nx, Ny, 1)
+        geopotential = torch.tensor(self.geopotential_info).unsqueeze(
+            2
+        )  # (N_x, N_y, 1)
         gp_min = torch.min(geopotential)
         gp_max = torch.max(geopotential)
         # Rescale geopotential to [0,1]
-        geopotential = (geopotential - gp_min) / (gp_max - gp_min)  # (N_grid, 1)
+        geopotential = (geopotential - gp_min) / (gp_max - gp_min)  # (N_x,N_y, 1)
+        grid_border_mask = torch.tensor(self.border_mask).unsqueeze(2)  # (N_x, N_y,1)
 
-        grid_border_mask = torch.tensor(self.border_mask)  # (N_x, N_y)
-        grid_border_mask = (
-            grid_border_mask.flatten(0, 1).to(torch.float).unsqueeze(1)
-        )  # (N_grid, 1)
-
-        # Concatenate grid features
-        return torch.cat(
-            (grid_xy, geopotential, grid_border_mask), dim=1
-        )  # (N_grid, 4)
+        batch_names = []
+        for x in self.dataset_extra_statics:
+            batch_names += x.names
+        state_var = StateVariable(
+            ndims=2,  # Champ 2D
+            values=torch.cat(
+                [grid_xy, geopotential, grid_border_mask]
+                + [x.values for x in self.dataset_extra_statics],
+                dim=-1,
+            ),
+            names=["x", "y", "geopotential", "border_mask"]
+            + batch_names,  # Noms des champs 2D
+            coordinates_name=["lat", "lon", "features"],
+        )
+        state_var.change_type(torch.float32)
+        return state_var
 
     @cached_property
     def statics(self) -> Statics:
-        # (N_grid, d_grid_static)
-        grid_static_features = self.grid_static_features
-        border_mask = grid_static_features[:, 3].unsqueeze(1)
 
         # Load step diff stats
         diff_stats = self.timestep_stats  # (d_f,)
@@ -422,14 +471,14 @@ class AbstractDataset(ABC):
         )  # (d_f,)
         return Statics(
             **{
-                "border_mask": border_mask.type(torch.float32),
-                "grid_static_features": grid_static_features.type(torch.float32),
+                # "border_mask": border_mask.type(torch.float32),
+                "grid_static_features": self.grid_static_features,
                 "step_diff_mean": torch.stack(step_diff_mean).type(torch.float32),
                 "step_diff_std": torch.stack(step_diff_std).type(torch.float32),
                 "data_mean": torch.stack(data_mean).type(torch.float32),
                 "data_std": torch.stack(data_std).type(torch.float32),
-                "grid_shape": (self.grid.x, self.grid.y),
-                "grid_info": self.grid_info,
+                "grid_shape": self.grid_shape,
+                # "grid_info": self.grid_info,
                 "param_weights": param_weights.type(torch.float32),
             }
         )
@@ -471,13 +520,6 @@ class AbstractDataset(ABC):
             "flux_min": torch.stack(flux_min).type(torch.float32),
             "flux_max": torch.stack(flux_max).type(torch.float32),
         }
-
-    @abstractproperty
-    def static_feature_dim(self) -> int:
-        """
-        Return the number of static feature of the dataset
-        """
-        pass
 
     @abstractproperty
     def forcing_dim(self) -> int:

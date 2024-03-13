@@ -251,6 +251,9 @@ class Sample:
     def __post_init__(self):
         self.terms = self.input_terms + self.output_terms
 
+    def __repr__(self):
+        return f"member : {self.member}, date {self.date}, terms {self.terms}"
+
     @property
     def hours_of_day(self) -> np.array:
         hours = []
@@ -362,6 +365,22 @@ class SmeagolDataset(AbstractDataset, Dataset):
                         number += 1
         return samples
 
+    @cached_property
+    def dataset_extra_statics(self):
+        """
+        We add the LandSea Mask to the produced statics.
+        """
+        return [
+            StateVariable(
+                ndims=2,
+                names=["LandSeaMask"],
+                values=torch.from_numpy(self.grid.landsea_mask)
+                .type(torch.float32)
+                .unsqueeze(2),
+                coordinates_name=["lat", "lon", "features"],
+            )
+        ]
+
     def __len__(self):
         return len(self.sample_list)
 
@@ -393,13 +412,6 @@ class SmeagolDataset(AbstractDataset, Dataset):
         Retourne les indices de la sous grille
         """
         return self.grid.subgrid
-
-    @cached_property
-    def static_feature_dim(self):
-        """
-        Only landSeaMask currently
-        """
-        return 1
 
     @cached_property
     def forcing_dim(self):
@@ -445,10 +457,8 @@ class SmeagolDataset(AbstractDataset, Dataset):
             if "level" in ds.coords:
                 ds = ds.sel(level=param.levels)
             # Read inputs. Separate forcing field from I/O
-            try:
-                _ = ds[param.name].sel(step=sample.input_terms)
-            except KeyError:
-                print(f"Problem in sample {sample}")
+
+            _ = ds[param.name].sel(step=sample.input_terms)
 
     @cached_property
     def stats(self):
@@ -460,16 +470,6 @@ class SmeagolDataset(AbstractDataset, Dataset):
         # To do : reorganiser le chargement des statistics.
         # stats = torch.load(self.cache_dir / "parameters_stats.pt", "cpu")
 
-        # Static features
-        # Should mouve in Statics.
-        lstatics = [
-            StateVariable(
-                ndims=2,
-                names=["LandSeaMask"],
-                values=torch.from_numpy(self.grid.landsea_mask).type(torch.float32),
-                coordinates_name=["lat", "lon"],
-            )
-        ]
         # Datetime Forcing
         lforcings = [
             StateVariable(
@@ -560,9 +560,7 @@ class SmeagolDataset(AbstractDataset, Dataset):
             except KeyError as e:
                 print("Error for param {param}")
                 raise e
-        return Item(
-            inputs=linputs, outputs=loutputs, forcing=lforcings, statics=lstatics
-        )
+        return Item(inputs=linputs, outputs=loutputs, forcing=lforcings)
 
     @classmethod
     def from_json(cls, file, args={}):

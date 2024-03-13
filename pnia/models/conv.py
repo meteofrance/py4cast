@@ -13,7 +13,6 @@ from dataclasses_json import dataclass_json
 from torch import nn
 
 from pnia.datasets.base import Item, Statics
-from pnia.models.utils import expand_to_batch
 
 
 @dataclass_json
@@ -70,23 +69,6 @@ class ConvModel(nn.Module):
         Take the statics in inputs.
         Return the statics as expected by the model.
         """
-        # Ici on ne devrait rien faire pour le convolutionnel.
-        # Pour l'instant ça n'est pas le cas.
-        statics.grid_static_features = einops.rearrange(
-            statics.grid_static_features,
-            "(x y) n -> x y n",
-            x=self.grid_shape[0],
-        )
-        statics.border_mask = einops.rearrange(
-            statics.border_mask,
-            "(x y) n -> x y n",
-            x=self.grid_shape[0],
-        )
-        statics.interior_mask = einops.rearrange(
-            statics.interior_mask,
-            "(x y) n -> x y n",
-            x=self.grid_shape[0],
-        )
         return statics
 
     def transform_batch(
@@ -98,10 +80,6 @@ class ConvModel(nn.Module):
         """
         # To Do : rendre cela plus générique
         # Ici on suppose ce qu'on va trouver dans le batch.
-
-        statics = torch.cat(
-            [x.values for x in batch.statics if x.ndims == 2], dim=-1
-        ).unsqueeze(3)
 
         in2D = torch.cat([x.values for x in batch.inputs if x.ndims == 2], dim=-1)
         in3D = torch.cat([x.values for x in batch.inputs if x.ndims == 3], dim=-1)
@@ -124,30 +102,24 @@ class ConvModel(nn.Module):
         f2 = torch.cat([x.values for x in batch.forcing if x.ndims == 2], dim=-1)
         forcing = torch.cat([f1, f2], dim=-1)
 
-        return inputs, outputs, statics, forcing
+        return inputs, outputs, forcing
 
     def predict_step(
         self,
         prev_state: torch.Tensor,
         prev_prev_state: torch.Tensor,
-        batch_static_features: torch.Tensor,
         grid_static_features: torch.Tensor,
         forcing: torch.Tensor,
     ) -> torch.Tensor:
         """
         Perform a prediction step.
-        First input needs to be reshaped
-        from (B, N_grid, feature_dim) to (B, feature_dim, lon, lat)
-        to accomodate the graph dataloader to conv2d expected shapes
         """
-        batch_size = prev_state.shape[0]
 
         x = torch.cat(
             [
                 prev_state,
                 prev_prev_state,
-                batch_static_features,
-                expand_to_batch(grid_static_features, batch_size),
+                grid_static_features,
                 forcing,
             ],
             dim=3,
