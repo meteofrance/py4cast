@@ -1,4 +1,4 @@
-FROM pytorch/pytorch:2.1.0-cuda12.1-cudnn8-runtime
+FROM pytorch/pytorch:2.1.2-cuda12.1-cudnn8-runtime
 
 ARG USERNAME
 ARG GROUPNAME
@@ -37,7 +37,7 @@ RUN set -eux && groupadd --gid $USER_GUID $GROUPNAME \
     && mkdir /run/sshd
 
 RUN set -eux && pip install pyg-lib==0.4.0 torch-scatter==2.1.2 torch-sparse==0.6.18 torch-cluster==1.6.2\
-    torch-geometric==2.3.1 -f https://data.pyg.org/whl/torch-2.1.0+cpu.html
+    torch-geometric==2.3.1 -f https://data.pyg.org/whl/torch-2.1.2+cpu.html
 
 WORKDIR $HOME_DIR
 RUN curl -fsSL https://code-server.dev/install.sh | sh

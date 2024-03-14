@@ -293,7 +293,7 @@ class HyperParam:
     # Pas vraiment a mettre ici. Voir où le mettre
     members: Tuple[int] = (0,)
     diagnose: bool = False  # Do we want extra diagnostic ? Do not use it for training
-    prefetch: int = 2
+    prefetch: int = None
 
     @property
     def nb_steps(self):

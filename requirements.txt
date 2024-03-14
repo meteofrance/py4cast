@@ -2,8 +2,8 @@ numpy>=1.24.2
 wandb>=0.13.10
 matplotlib>=3.7.0
 scipy>=1.10.0
-pytorch-lightning>=2.0.3
-lightning==2.0.1.post
+pytorch-lightning>=2.1.2
+lightning
 shapely>=2.0.1
 networkx>=3.0
 Cartopy>=0.22.0
