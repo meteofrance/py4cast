@@ -493,18 +493,12 @@ class SmeagolDataset(AbstractDataset, Dataset):
                 ds = ds.sel(level=param.levels)
             # Read inputs. Separate forcing field from I/O
             try:
-                means = torch.from_numpy(
-                    np.asarray(
-                        [
-                            self.stats[name]["mean"]
-                            for name in param.parameter_short_name
-                        ]
-                    )
+                means = np.asarray(
+                    [self.stats[name]["mean"] for name in param.parameter_short_name]
                 )
-                std = torch.from_numpy(
-                    np.asarray(
-                        [self.stats[name]["std"] for name in param.parameter_short_name]
-                    )
+
+                std = np.asarray(
+                    [self.stats[name]["std"] for name in param.parameter_short_name]
                 )
 
                 if param.kind == "input_output":
@@ -512,14 +506,14 @@ class SmeagolDataset(AbstractDataset, Dataset):
                     # Extend dimension to match 3D (its a 3D with one dimension in the third one)
                     if len(tmp_in.shape) != 4:
                         tmp_in = np.expand_dims(tmp_in, axis=1)
-                    tmp_in = torch.from_numpy(tmp_in).permute([0, 2, 3, 1])
+                    tmp_in = np.transpose(tmp_in, axes=[0, 2, 3, 1])
                     if self.standardize:
                         tmp_in = (tmp_in - means) / std
 
                     # Define the state to append.
                     tmp_state = StateVariable(
                         ndims=param.ndims,
-                        values=tmp_in,
+                        values=torch.from_numpy(tmp_in),
                         names=param.parameter_short_name,
                         coordinates_name=["in_step", "lat", "lon", "levels"],
                     )
@@ -532,12 +526,12 @@ class SmeagolDataset(AbstractDataset, Dataset):
                     tmp_in = ds[param.name].sel(step=sample.output_terms).values
                     if len(tmp_in.shape) != 4:
                         tmp_in = np.expand_dims(tmp_in, axis=1)
-                    tmp_in = torch.from_numpy(tmp_in).permute([0, 2, 3, 1])
+                    tmp_in = np.transpose(tmp_in, axes=[0, 2, 3, 1])
                     if self.standardize:
                         tmp_in = (tmp_in - means) / std
                     tmp_state = StateVariable(
                         ndims=param.ndims,
-                        values=tmp_in,
+                        values=torch.from_numpy(tmp_in),
                         names=param.parameter_short_name,
                         coordinates_name=["out_step", "lat", "lon", "levels"],
                     )
@@ -547,12 +541,12 @@ class SmeagolDataset(AbstractDataset, Dataset):
                     tmp_out = ds[param.name].sel(step=sample.output_terms).values
                     if len(tmp_out.shape) != 4:
                         tmp_out = np.expand_dims(tmp_out, axis=1)
-                    tmp_out = torch.from_numpy(tmp_out).permute([0, 2, 3, 1])
+                    tmp_out = np.transpose(tmp_out, axes=[0, 2, 3, 1])
                     if self.standardize:
                         tmp_out = (tmp_out - means) / std
                     tmp_state = StateVariable(
                         ndims=param.ndims,
-                        values=tmp_out,
+                        values=torch.from_numpy(tmp_out),
                         names=param.parameter_short_name,
                         coordinates_name=["out_step", "lat", "lon", "levels"],
                     )
