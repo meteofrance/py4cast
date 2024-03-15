@@ -13,6 +13,7 @@ import einops
 import numpy as np
 import torch
 from torch.utils.data import DataLoader
+from torch.utils.data._utils.collate import collate_tensor_fn
 from tqdm import tqdm
 
 from pnia.base import RegisterFieldsMixin
@@ -141,22 +142,21 @@ def collate_fn(items: List[Item]) -> ItemBatch:
 
     for attr in (f.name for f in fields(Item)):
         batch_of_items[attr] = []
-        if getattr(items[0], attr) is not None:
-            for i in range(len(getattr(items[0], attr))):
-                new_values = torch.stack(
+        item_zero_field_value = getattr(items[0], attr)
+        if item_zero_field_value is not None:
+            for i in range(len(item_zero_field_value)):
+                new_values = collate_tensor_fn(
                     [getattr(item, attr)[i].values for item in items]
                 ).type(torch.float32)
 
                 new_state = StateVariable(
-                    ndims=getattr(items[0], attr)[i].ndims,
-                    names=getattr(items[0], attr)[
+                    ndims=item_zero_field_value[i].ndims,
+                    names=item_zero_field_value[
                         i
                     ].names,  # Contient le nom des différents niveaux
                     values=new_values,
                     coordinates_name=["batch"]
-                    + getattr(items[0], attr)[
-                        i
-                    ].coordinates_name,  # Nom des coordonnées
+                    + item_zero_field_value[i].coordinates_name,  # Nom des coordonnées
                 )
                 batch_of_items[attr].append(new_state)
         else:
