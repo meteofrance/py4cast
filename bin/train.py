@@ -3,7 +3,7 @@ import time
 from argparse import ArgumentParser, BooleanOptionalAction
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Union
+from typing import Optional, Union
 
 import pytorch_lightning as pl
 
@@ -15,10 +15,11 @@ from lightning_fabric.utilities import seed
 from torch.utils.data import Dataset
 
 from pnia.datasets import SmeagolDataset, TitanDataset
+from pnia.datasets.base import TorchDataloaderSettings
 from pnia.datasets.titan import TitanHyperParams
 
 # From the package
-from pnia.models.ar_model import ARLightning, HyperParam
+from pnia.lightning import ArLightningHyperParam, AutoRegressiveLightning
 
 DATASETS = {
     "titan": {"dataset": TitanDataset},
@@ -36,6 +37,7 @@ class TrainingParams:
     profiler: str = "None"
     run_id: int = 1
     no_log: bool = False
+    limit_train_batches: Optional[Union[int, float]] = None
 
 
 def main(
@@ -43,12 +45,13 @@ def main(
     val_dataset: Dataset,
     test_dataset: Dataset,
     tp: TrainingParams,
-    hp: HyperParam,
+    hp: ArLightningHyperParam,
+    dl_settings: TorchDataloaderSettings,
 ):
 
-    train_loader = training_dataset.loader
-    val_loader = val_dataset.loader
-    test_loader = test_dataset.loader
+    train_loader = training_dataset.torch_dataloader(dl_settings)
+    val_loader = val_dataset.torch_dataloader(dl_settings)
+    test_loader = test_dataset.torch_dataloader(dl_settings)
 
     # Instatiate model + trainer
     if torch.cuda.is_available():
@@ -115,9 +118,10 @@ def main(
         callbacks=callback_list,
         check_val_every_n_epoch=tp.val_interval,
         precision=tp.precision,
+        limit_train_batches=tp.limit_train_batches,
     )
 
-    lightning_module = ARLightning(hp)
+    lightning_module = AutoRegressiveLightning(hp)
 
     if tp.evaluation:
         if tp.evaluation == "val":
@@ -150,7 +154,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--data_conf",
         type=str,
-        default=path.parent.parent / "pnia/xp_conf/smeagol.json",
+        default=path.parent.parent / "config" / "smeagol.json",
         help="Configuration file for this dataset. Used only for smeagol dataset right now.",
     )
 
@@ -250,10 +254,10 @@ if __name__ == "__main__":
         help="Do we need to save memory ?",
     )
     parser.add_argument(
-        "--subset",
+        "--limit_train_batches",
         type=int,
-        default=0,
-        help="Do we select a subset ? 0 means Full dataset set is used. Otherwise, number of sample to use.",
+        default=None,
+        help="Number of batches to use for training",
     )
     parser.add_argument(
         "--steps",
@@ -286,17 +290,14 @@ if __name__ == "__main__":
                     "nb_pred_steps": args.steps,
                     "diagnose": args.diagnose,
                     "standardize": args.standardize,
-                    "subset": args.subset,
                 },
                 "valid": {
                     "nb_pred_steps": 5,
                     "standardize": args.standardize,
-                    "subset": args.subset,
                 },
                 "test": {
                     "nb_pred_steps": 5,
                     "standardize": args.standardize,
-                    "subset": args.subset,
                 },
             },
         )
@@ -313,9 +314,9 @@ if __name__ == "__main__":
         )
         test_dataset = DATASETS["titan"]["dataset"](hparams_test_dataset)
 
-    # On rajoute le modele dedans
-    hp = HyperParam(
+    hp = ArLightningHyperParam(
         dataset=training_dataset,
+        batch_size=args.batch_size,
         model_name=args.model,
         model_conf=args.model_conf,
         lr=args.lr,
@@ -333,5 +334,7 @@ if __name__ == "__main__":
         profiler=args.profiler,
         no_log=args.no_log,
         run_id=random_run_id,
+        limit_train_batches=args.limit_train_batches,
     )
-    main(training_dataset, validation_dataset, test_dataset, tp, hp)
+    dl_settings = TorchDataloaderSettings(batch_size=args.batch_size)
+    main(training_dataset, validation_dataset, test_dataset, tp, hp, dl_settings)

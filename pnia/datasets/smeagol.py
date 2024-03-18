@@ -14,7 +14,13 @@ import torch
 import xarray as xr
 from torch.utils.data import DataLoader, Dataset
 
-from pnia.datasets.base import AbstractDataset, Item, StateVariable, collate_fn
+from pnia.datasets.base import (
+    AbstractDataset,
+    Item,
+    StateVariable,
+    TorchDataloaderSettings,
+    collate_fn,
+)
 from pnia.settings import CACHE_DIR
 
 ssl._create_default_https_context = ssl._create_unverified_context
@@ -285,15 +291,12 @@ class HyperParam:
     term: dict  # Pas vraiment a mettre ici. Voir où le mettre
     nb_input_steps: int = 2  # Step en entrée
     nb_pred_steps: int = 1  # Step en sortie
-    batch_size: int = 1  # Nombre d'élément par batch
-    num_workers: int = 10  # Worker pour charger les données
     standardize: bool = False
     subset: int = 0  # Positive integer. If subset is less than 1 it means full set.
     # Otherwise describe the number of sample.Param(
     # Pas vraiment a mettre ici. Voir où le mettre
     members: Tuple[int] = (0,)
     diagnose: bool = False  # Do we want extra diagnostic ? Do not use it for training
-    prefetch: int = None
 
     @property
     def nb_steps(self):
@@ -620,14 +623,15 @@ class SmeagolDataset(AbstractDataset, Dataset):
     def __str__(self) -> str:
         return f"smeagol_{self.grid.geometry}"
 
-    @property
-    def loader(self) -> DataLoader:
+    def torch_dataloader(
+        self, tl_settings: TorchDataloaderSettings = TorchDataloaderSettings()
+    ) -> DataLoader:
         return DataLoader(
             self,
-            self.hp.batch_size,
-            num_workers=self.hp.num_workers,
+            tl_settings.batch_size,
+            num_workers=tl_settings.num_workers,
             shuffle=self.shuffle,
-            prefetch_factor=self.hp.prefetch,
+            prefetch_factor=tl_settings.prefetch_factor,
             collate_fn=collate_fn,
         )
 

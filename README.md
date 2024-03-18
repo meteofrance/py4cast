@@ -1,8 +1,19 @@
 # PNIA : Prévision numérique par IA
 
+Ce projet fourni un cadre **PyTorch** et **PyTorch-lightning** pour entrainer des architectures variées (Graph NN, Réseaux convolutifs, Transformers, ...) sur des jeux de données.
+
 Projet administré par DSM/Lab IA et CNRM/GMAP/PREV
 
-MaJ : 11/12/2023
+## Structure du projet
+
+```
+bin => scripts principaux
+config => Fichiers de configuration
+pnia => package python du projet
+Dockerfile => recette docker de construction du contexte d'éxecution
+requirements.txt => dépendances python
+.gitlab-ci.yml => intégration continue gitlab
+```
 
 ## Utilisation
 
@@ -34,6 +45,9 @@ runai exec_gpu python bin/train.py --dataset smeagol --model graph --standardize
 
 # Avec un réseau convolutif (par défaut HalfUnet)
 runai exec_gpu python bin/train.py --dataset smeagol --model conv --standardize --gpus 4
+
+# Avec un fichier de configuration spécifique
+runai exec_gpu python bin/train.py --dataset smeagol --model conv --standardize --gpus 4 --data_conf config/smeagol.json
 ```
 [More information here](./bin/Readme.md)
 
@@ -42,15 +56,3 @@ runai exec_gpu python bin/train.py --dataset smeagol --model conv --standardize 
 - Le dossier `submodules` contient des submodules (au sens git) de plusieurs répo open source de codes de PN par IA (Pangu, ClimaX, Neural-LAM,...). On peut ainsi facilement importer des fonctions issues de ces projets dans nos codes.
 
 - Le dossier `pnia` contient pour le moment les codes servant à faire fonctionner neural-LAM avec le jeu de données Titan.
-
-## Prochaines étapes
-
-- [ ]  merger train_vincent et train
-- [ ]  pourquoi les nan sur Titan ?
-- [ ]  tous les TODO du Titan dataset (flux, stadardisation)
-- [ ]  meilleure séparation model / trainer
-- [ ]  get item fonctionnel pour tout type de modèle (pb grille graph)
-- [ ]  faire marcher avec un U-Net
-- [ ]  faire marcher AIFS
-- [ ]  meilleur logger
-- [ ]  comment gérer la CLI

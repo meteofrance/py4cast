@@ -18,7 +18,7 @@ if __name__ == "__main__":
     model.n_example_pred = 1
     model.eval()
     training_dataset, validation_dataset, test_dataset = SmeagolDataset.from_json(
-        path.parent.parent / "pnia/xp_conf/smeagol.json",
+        path.parent.parent / "config" / "smeagol.json",
         args={
             "train": {
                 "nb_pred_steps": 1,
@@ -34,5 +34,5 @@ if __name__ == "__main__":
         default_hp_metric=False,
     )
     trainer = pl.Trainer(logger=logger)
-    trainer.test(model=model, dataloaders=validation_dataset.loader)
+    trainer.test(model=model, dataloaders=validation_dataset.torch_dataloader())
     # model(validation_dataset.__getitem__(0))
