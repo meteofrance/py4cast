@@ -207,10 +207,25 @@ class Statics(RegisterFieldsMixin):
         return torch.sum(self.interior_mask).item()
 
 
+@dataclass(slots=True)
+class TorchDataloaderSettings:
+    """
+    Settings for the torch dataloader
+    """
+
+    batch_size: int = 1
+    num_workers: int = 10
+    pin_memory: bool = False
+    prefetch_factor: Union[int, None] = None
+    persistent_workers: bool = False
+
+
 class AbstractDataset(ABC):
-    @abstractproperty
-    def loader(self) -> DataLoader:
-        pass
+    @abstractmethod
+    def torch_dataloader(self, tl_settings: TorchDataloaderSettings) -> DataLoader:
+        """
+        Builds a torch dataloader from self.
+        """
 
     @abstractproperty
     def grid_info(self) -> np.array:
@@ -289,7 +304,7 @@ class AbstractDataset(ABC):
             )
 
         forced_len = len(self.shortnames("forcing"))  # Nombre de forcage
-        for init_batch, target_batch, _, forcing_batch in tqdm(self.loader):
+        for init_batch, target_batch, _, forcing_batch in tqdm(self.torch_dataloader()):
             batch = torch.cat((init_batch, target_batch), dim=1)
             means.append(torch.mean(batch, dim=(1, 2)))  # (N_batch, d_features,)
             squares.append(torch.mean(batch**2, dim=(1, 2)))  # (N_batch, d_features,)
@@ -353,7 +368,7 @@ class AbstractDataset(ABC):
         print(f"Computing one-step difference mean and std.-dev for {self}...")
         diff_means = []
         diff_squares = []
-        for init_batch, target_batch, _, _ in tqdm(self.loader):
+        for init_batch, target_batch, _, _ in tqdm(self.torch_dataloader()):
             batch = torch.cat(
                 (init_batch, target_batch), dim=1
             )  # (Nbatch, Nt, Ngrid, d_features)

@@ -30,7 +30,7 @@ def compute_parameters_stats(dataset: AbstractDataset, static_dir_path: Path = N
     squares = []
     flux_means = []
     flux_squares = []
-    for init_batch, target_batch, _, forcing_batch in tqdm(dataset.loader):
+    for init_batch, target_batch, _, forcing_batch in tqdm(dataset.torch_dataloader()):
         batch = torch.cat(
             (init_batch, target_batch), dim=1
         )  # (N_batch, N_t, N_grid, d_features)
@@ -67,7 +67,7 @@ def compute_timestep_stats(dataset: AbstractDataset, static_dir_path: Path = Non
 
     diff_means = []
     diff_squares = []
-    for init_batch, target_batch, _, _ in tqdm(dataset.loader):
+    for init_batch, target_batch, _, _ in tqdm(dataset.torch_dataloader()):
         batch = torch.cat(
             (init_batch, target_batch), dim=1
         )  # (Nbatch, Nt, Ngrid, d_features)

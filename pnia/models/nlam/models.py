@@ -212,9 +212,6 @@ class BaseGraphModel(nn.Module):
         self.N_mesh, _ = self.get_num_mesh()
         print(f"N_mesh : {self.N_mesh}")
 
-        self.register_buffer("step_diff_std", statics.step_diff_std)
-        self.register_buffer("step_diff_mean", statics.step_diff_mean)
-
         self.g2m_edges, g2m_dim = self.g2m_features.shape
         self.m2g_edges, m2g_dim = self.m2g_features.shape
 
@@ -356,35 +353,21 @@ class BaseGraphModel(nn.Module):
         """
         raise NotImplementedError("process_step not implemented")
 
-    def predict_step(
+    def forward(
         self,
-        prev_state,
-        prev_prev_state,
-        grid_static_features,
-        forcing,
-    ):
+        x: torch.tensor,
+    ) -> torch.tensor:
         """
         Step state one step ahead using prediction model, X_{t-1}, X_t -> X_t+1
         prev_state: (B, N_grid, feature_dim), X_t
         prev_prev_state: (B, N_grid, feature_dim), X_{t-1}
         forcing: (B, N_grid, forcing_dim)
         """
-        batch_size = prev_state.shape[0]
-
-        # Create full grid node features of shape (B, N_grid, grid_dim)
-        grid_features = torch.cat(
-            (
-                prev_state,
-                prev_prev_state,
-                forcing,
-                grid_static_features,
-            ),
-            dim=-1,
-        )
+        batch_size = x.shape[0]
 
         # print("Features",grid_features.dtype, grid_features.shape)
         # Embedd all features
-        grid_emb = self.grid_embedder(grid_features)  # (B, N_grid, d_h)
+        grid_emb = self.grid_embedder(x)  # (B, N_grid, d_h)
         g2m_emb = self.g2m_embedder(self.g2m_features)  # (M_g2m, d_h)
         m2g_emb = self.m2g_embedder(self.m2g_features)  # (M_m2g, d_h)
         mesh_emb = self.embedd_mesh_nodes()
@@ -411,12 +394,7 @@ class BaseGraphModel(nn.Module):
 
         # Map to output dimension, only for grid
         net_output = self.output_map(grid_rep)  # (B, N_grid, d_f)
-
-        # Rescale with one-step difference statistics
-        rescaled_net_output = net_output * self.step_diff_std + self.step_diff_mean
-
-        # Residual connection for full state
-        return prev_state + rescaled_net_output
+        return net_output
 
 
 class BaseHiGraphModel(BaseGraphModel):

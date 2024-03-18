@@ -40,8 +40,6 @@ class ConvModel(nn.Module):
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
-        self.register_buffer("step_diff_std", statics.step_diff_std)
-        self.register_buffer("step_diff_mean", statics.step_diff_mean)
 
     def __init_subclass__(cls) -> None:
         """
@@ -104,31 +102,17 @@ class ConvModel(nn.Module):
 
         return inputs, outputs, forcing
 
-    def predict_step(
-        self,
-        prev_state: torch.Tensor,
-        prev_prev_state: torch.Tensor,
-        grid_static_features: torch.Tensor,
-        forcing: torch.Tensor,
-    ) -> torch.Tensor:
+    def reshape_x(self, x: torch.Tensor) -> torch.Tensor:
         """
-        Perform a prediction step.
+        On met les features en seconde position
         """
+        return einops.rearrange(x, "b x y n -> b n x y").contiguous()
 
-        x = torch.cat(
-            [
-                prev_state,
-                prev_prev_state,
-                grid_static_features,
-                forcing,
-            ],
-            dim=3,
-        )
-        # On met les features en seconde position
-        x = einops.rearrange(x, "b x y n -> b n x y").contiguous()
-        # On met les features pour la sortie en derniere position.
-        y = einops.rearrange(self(x), "b n x y -> b x y n").contiguous()
-        return prev_state + y * self.step_diff_std + self.step_diff_mean
+    def reshape_y(self, y: torch.Tensor) -> torch.Tensor:
+        """
+        On met les features pour la sortie en derniere position.
+        """
+        return einops.rearrange(y, "b n x y -> b x y n").contiguous()
 
 
 class GhostModule(nn.Module):
@@ -254,6 +238,7 @@ class HalfUnet(ConvModel):
         self.activation = getattr(nn, settings.last_activation)()
 
     def forward(self, x):
+        x = self.reshape_x(x)
         enc1 = self.encoder1(x)
         enc2 = self.encoder2(self.pool1(enc1))
         enc3 = self.encoder3(self.pool2(enc2))
@@ -267,7 +252,7 @@ class HalfUnet(ConvModel):
         )
         dec = self.decoder(summed)
 
-        return self.activation(self.outconv(dec))
+        return self.reshape_y(self.activation(self.outconv(dec)))
 
     @staticmethod
     def _block(
