@@ -78,3 +78,18 @@ Test conducted on MR !14
 |--|--|--|
 |1 GPU |                   | 0.59 it/s -> 5:39|
 |4 GPU | 0.80 it/s -> 1:02 | 0.43 it/s -> 1:55| 
+
+
+## 4. Other informations
+### 4.1 Memory Leak
+The script `bin/minimal_leak.py` illustrate some memory leaks using pytorch/xarray on a docker container. 
+This investigation had been carried out after a OOM error due to smeagol dataLoader. 
+
+Figure ![Alt text](../doc/figs/memory_leak.png) shows the memory consumption on several cases. 
+One can see that when doing the normalisation in pytorch, opening a netcdf file using xarray leads to a big leak. 
+This is no longer the case when we do not open a file (but in real world, no data will come in) and the leak is limited if normalisation 
+is done in numpy. 
+
+
+**Results are not reproducible** : The behaviour (e.g for with open_xarray()) does not provides the same curve each time it is launched (even if we use the same node).
+
