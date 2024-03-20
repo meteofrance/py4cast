@@ -38,7 +38,6 @@ def smeagol_stats(dataconf=path.parent.parent / "pnia/xp_conf/smeagol.json"):
 @smeagol_app.command("diffstats")
 def smeagol_diffstats(dataconf=path.parent.parent / "pnia/xp_conf/smeagol.json"):
     train_ds, _, _ = SmeagolDataset.from_json(dataconf)
-    train_ds.standardize = True
     train_ds.compute_timestep_stats()
 
 
@@ -47,7 +46,6 @@ def smeagol_all(dataconf=path.parent.parent / "pnia/xp_conf/smeagol.json"):
     train_ds, _, _ = SmeagolDataset.from_json(dataconf)
     create_grid_features.prepare(dataset=train_ds)
     train_ds.compute_parameters_stats()
-    train_ds.standardize = True
     train_ds.compute_timestep_stats()
 
 
@@ -60,7 +58,6 @@ def testsmeagol(dataconf=path.parent.parent / "pnia/xp_conf/smeagol.json"):
     train_ds, _, _ = SmeagolDataset.from_json(
         dataconf, {"train": {"standardize": True, "nb_pred_steps": 20}}
     )
-    train_ds.standardize = True
     print("Forcing", train_ds.shortnames("forcing"))
     print("Weather", train_ds.shortnames("input_output"))
     print("Weather", train_ds.shortnames("diagnostic"))

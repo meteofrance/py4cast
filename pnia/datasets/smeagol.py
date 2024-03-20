@@ -217,7 +217,11 @@ class Param:
 
     @property
     def units(self) -> list:
-        return [self.unit for level in self.levels]
+        """
+        For a given variable, the unit is the
+        same accross all levels.
+        """
+        return [self.unit for _ in self.levels]
 
     def filename(self, member: int, date: dt.datetime, term: float) -> str:
         """
@@ -287,16 +291,15 @@ class Sample:
 
 
 @dataclass(slots=True)
-class HyperParam:
+class SmeagolSettings:
     term: dict  # Pas vraiment a mettre ici. Voir où le mettre
     nb_input_steps: int = 2  # Step en entrée
     nb_pred_steps: int = 1  # Step en sortie
-    standardize: bool = False
+    standardize: bool = True
     subset: int = 0  # Positive integer. If subset is less than 1 it means full set.
     # Otherwise describe the number of sample.Param(
     # Pas vraiment a mettre ici. Voir où le mettre
     members: Tuple[int] = (0,)
-    diagnose: bool = False  # Do we want extra diagnostic ? Do not use it for training
 
     @property
     def nb_steps(self):
@@ -309,25 +312,16 @@ class SmeagolDataset(AbstractDataset, Dataset):
     recompute_stats: bool = False
 
     def __init__(
-        self, grid: Grid, period: Period, params: List[Param], hyper_params: HyperParam
+        self, grid: Grid, period: Period, params: List[Param], settings: SmeagolSettings
     ):
         self.grid = grid
         self.period = period
         self.params = params
-        self.hp = hyper_params
+        self.settings = settings
 
         self._cache_dir = CACHE_DIR / "neural_lam" / str(self)
         self.shuffle = self.split == "train"
         self.cache_dir.mkdir(parents=True, exist_ok=True)
-
-        if self.standardize:
-            ds_stats = self.statistics
-            self.data_mean, self.data_std, self.flux_mean, self.flux_std = (
-                ds_stats["data_mean"],
-                ds_stats["data_std"],
-                ds_stats["flux_mean"],
-                ds_stats["flux_std"],
-            )
 
     @cached_property
     def sample_list(self):
@@ -336,24 +330,28 @@ class SmeagolDataset(AbstractDataset, Dataset):
         """
         terms = list(
             np.arange(
-                self.hp.term["start"], self.hp.term["end"], self.hp.term["timestep"]
+                self.settings.term["start"],
+                self.settings.term["end"],
+                self.settings.term["timestep"],
             )
         )
-        sample_by_date = len(terms) // self.hp.nb_steps
+        sample_by_date = len(terms) // self.settings.nb_steps
         samples = []
         number = 0
         for date in self.period.date_list:
-            for member in self.hp.members:
+            for member in self.settings.members:
                 for sample in range(0, sample_by_date):
                     input_terms = terms[
-                        sample * self.hp.nb_steps : sample * self.hp.nb_steps
-                        + self.hp.nb_input_steps
+                        sample
+                        * self.settings.nb_steps : sample
+                        * self.settings.nb_steps
+                        + self.settings.nb_input_steps
                     ]
                     output_terms = terms[
-                        sample * self.hp.nb_steps
-                        + self.hp.nb_input_steps : sample * self.hp.nb_steps
-                        + self.hp.nb_input_steps
-                        + self.hp.nb_pred_steps
+                        sample * self.settings.nb_steps
+                        + self.settings.nb_input_steps : sample * self.settings.nb_steps
+                        + self.settings.nb_input_steps
+                        + self.settings.nb_pred_steps
                     ]
                     samp = Sample(
                         member=member,
@@ -362,7 +360,7 @@ class SmeagolDataset(AbstractDataset, Dataset):
                         output_terms=output_terms,
                     )
                     if samp.is_valid(self.params) and (
-                        number < self.hp.subset or self.hp.subset < 1
+                        number < self.settings.subset or self.settings.subset < 1
                     ):
                         samples.append(samp)
                         number += 1
@@ -510,7 +508,7 @@ class SmeagolDataset(AbstractDataset, Dataset):
                     if len(tmp_in.shape) != 4:
                         tmp_in = np.expand_dims(tmp_in, axis=1)
                     tmp_in = np.transpose(tmp_in, axes=[0, 2, 3, 1])
-                    if self.standardize:
+                    if self.settings.standardize:
                         tmp_in = (tmp_in - means) / std
 
                     # Define the state to append.
@@ -530,7 +528,7 @@ class SmeagolDataset(AbstractDataset, Dataset):
                     if len(tmp_in.shape) != 4:
                         tmp_in = np.expand_dims(tmp_in, axis=1)
                     tmp_in = np.transpose(tmp_in, axes=[0, 2, 3, 1])
-                    if self.standardize:
+                    if self.settings.standardize:
                         tmp_in = (tmp_in - means) / std
                     tmp_state = StateVariable(
                         ndims=param.ndims,
@@ -545,7 +543,7 @@ class SmeagolDataset(AbstractDataset, Dataset):
                     if len(tmp_out.shape) != 4:
                         tmp_out = np.expand_dims(tmp_out, axis=1)
                     tmp_out = np.transpose(tmp_out, axes=[0, 2, 3, 1])
-                    if self.standardize:
+                    if self.settings.standardize:
                         tmp_out = (tmp_out - means) / std
                     tmp_state = StateVariable(
                         ndims=param.ndims,
@@ -604,19 +602,19 @@ class SmeagolDataset(AbstractDataset, Dataset):
             grid,
             train_period,
             param_list,
-            HyperParam(members=members, term=term, **args.get("train", {})),
+            SmeagolSettings(members=members, term=term, **args.get("train", {})),
         )
         valid_ds = SmeagolDataset(
             grid,
             valid_period,
             param_list,
-            HyperParam(members=members, term=term, **args.get("valid", {})),
+            SmeagolSettings(members=members, term=term, **args.get("valid", {})),
         )
         test_ds = SmeagolDataset(
             grid,
             test_period,
             param_list,
-            HyperParam(members=members, term=term, **args.get("test", {})),
+            SmeagolSettings(members=members, term=term, **args.get("test", {})),
         )
         return train_ds, valid_ds, test_ds
 
@@ -752,30 +750,6 @@ class SmeagolDataset(AbstractDataset, Dataset):
             if param.kind in ["output", "input_output"]:
                 w_list += [params[p] for p in param.parameter_short_name]
         return np.asarray(w_list)
-
-    @property
-    def standardize(self) -> bool:
-        return self.hp.standardize
-
-    @standardize.setter
-    def standardize(self, value: bool):
-        self.hp.standardize = value
-        if self.standardize:
-            ds_stats = self.statistics
-            self.data_mean, self.data_std, self.flux_mean, self.flux_std = (
-                ds_stats["data_mean"],
-                ds_stats["data_std"],
-                ds_stats["flux_mean"],
-                ds_stats["flux_std"],
-            )
-
-    @property
-    def nb_pred_steps(self) -> int:
-        return self.hp.nb_pred_steps
-
-    @property
-    def members(self):
-        return self.hp.members
 
     @property
     def cache_dir(self) -> Path:
