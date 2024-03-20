@@ -83,7 +83,6 @@ class AutoRegressiveLightning(pl.LightningModule):
         self.opt_state = None
 
         # For example plotting
-        self.n_example_pred = hparams.n_example_pred
         self.plotted_examples = 0
 
         # For storing spatial loss maps during evaluation
@@ -369,13 +368,17 @@ class AutoRegressiveLightning(pl.LightningModule):
         self.spatial_loss_maps.append(log_spatial_losses)  # (B, N_log, N_grid)
 
         # Plot example predictions (on rank 0 only)
-        if self.trainer.is_global_zero and self.plotted_examples < self.n_example_pred:
+        if (
+            self.trainer.is_global_zero
+            and self.plotted_examples < self.hparams.n_example_pred
+        ):
             self.plot_pred(prediction, target)
 
     def plot_pred(self, prediction, target):
         # Need to plot more example predictions
         n_additional_examples = min(
-            prediction.shape[0], self.n_example_pred - self.plotted_examples
+            prediction.shape[0],
+            self.hparams.n_example_pred - self.plotted_examples,
         )
         # Rescale to original data scale
         prediction_rescaled = prediction * self.data_std + self.data_mean

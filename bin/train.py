@@ -22,14 +22,13 @@ from pnia.datasets.titan import TitanHyperParams
 from pnia.lightning import ArLightningHyperParam, AutoRegressiveLightning
 
 DATASETS = {
-    "titan": {"dataset": TitanDataset},
-    "smeagol": {"dataset": SmeagolDataset},
+    "titan": (TitanDataset,),
+    "smeagol": (SmeagolDataset,),
 }
 
 
 @dataclass
 class TrainingParams:
-    evaluation: str = None  # None (train model)
     precision: str = "32"
     val_interval: int = 1
     epochs: int = 200
@@ -63,8 +62,6 @@ def main(
         device_name = "cpu"
 
     prefix = ""
-    if tp.evaluation:
-        prefix += f"eval-{tp.evaluation}-"
 
     run_name = (
         f"{prefix}{str(hp.dataset)}{hp.model_name}-"
@@ -123,19 +120,14 @@ def main(
 
     lightning_module = AutoRegressiveLightning(hp)
 
-    if tp.evaluation:
-        if tp.evaluation == "val":
-            eval_loader = val_loader
-        else:
-            eval_loader = test_loader
-        trainer.test(model=lightning_module, dataloaders=eval_loader)
-    else:
-        # Train model
-        trainer.fit(
-            model=lightning_module,
-            train_dataloaders=train_loader,
-            val_dataloaders=val_loader,
-        )
+    # Train model
+    trainer.fit(
+        model=lightning_module,
+        train_dataloaders=train_loader,
+        val_dataloaders=val_loader,
+    )
+
+    trainer.test(ckpt_path="best", dataloaders=test_loader)
 
 
 if __name__ == "__main__":
@@ -190,12 +182,6 @@ if __name__ == "__main__":
         default=1,
         help="Number of epochs training between each validation run (default: 1)",
     )
-    parser.add_argument(
-        "--n_example_pred",
-        type=int,
-        default=1,
-        help="Number of example predictions to plot during evaluation (default: 1)",
-    )
 
     # General options
     parser.add_argument(
@@ -227,26 +213,6 @@ if __name__ == "__main__":
         help="Numerical precision to use for model (32/16/bf16) (default: 32)",
     )
 
-    # Evaluation options
-    parser.add_argument(
-        "--eval",
-        type=str,
-        help="Eval model on given data split (val/test) (default: None (train model))",
-    )
-
-    # New arguments
-    parser.add_argument(
-        "--standardize",
-        action=BooleanOptionalAction,
-        default=False,
-        help="Do we need to standardize",
-    )
-    parser.add_argument(
-        "--diagnose",
-        action=BooleanOptionalAction,
-        default=False,
-        help="Do we need to show extra print ?",
-    )
     parser.add_argument(
         "--memory",
         action=BooleanOptionalAction,
@@ -273,11 +239,6 @@ if __name__ == "__main__":
     )
     args, other = parser.parse_known_args()
 
-    # Asserts for arguments
-    assert args.eval in (None, "val", "test"), f"Unknown eval setting: {args.eval}"
-
-    args, others = parser.parse_known_args()
-
     random_run_id = random.randint(0, 9999)
     seed.seed_everything(args.seed)
 
@@ -288,31 +249,27 @@ if __name__ == "__main__":
             args={
                 "train": {
                     "nb_pred_steps": args.steps,
-                    "diagnose": args.diagnose,
-                    "standardize": args.standardize,
                 },
                 "valid": {
                     "nb_pred_steps": 5,
-                    "standardize": args.standardize,
                 },
                 "test": {
                     "nb_pred_steps": 5,
-                    "standardize": args.standardize,
                 },
             },
         )
 
     elif args.dataset == "titan":
         hparams_train_dataset = TitanHyperParams(**{"nb_pred_steps": 1})
-        training_dataset = DATASETS["titan"]["dataset"](hparams_train_dataset)
+        training_dataset = DATASETS["titan"][0](hparams_train_dataset)
         hparams_val_dataset = TitanHyperParams(
             **{"nb_pred_steps": 19, "split": "valid"}
         )
-        validation_dataset = DATASETS["titan"]["dataset"](hparams_val_dataset)
+        validation_dataset = DATASETS["titan"][0](hparams_val_dataset)
         hparams_test_dataset = TitanHyperParams(
             **{"nb_pred_steps": 19, "split": "test"}
         )
-        test_dataset = DATASETS["titan"]["dataset"](hparams_test_dataset)
+        test_dataset = DATASETS["titan"][0](hparams_test_dataset)
 
     hp = ArLightningHyperParam(
         dataset=training_dataset,
@@ -321,12 +278,10 @@ if __name__ == "__main__":
         model_conf=args.model_conf,
         lr=args.lr,
         loss=args.loss,
-        n_example_pred=args.n_example_pred,
     )
 
     # Parametre pour le training uniquement
     tp = TrainingParams(
-        evaluation=args.eval,
         precision=args.precision,
         val_interval=args.val_interval,
         epochs=args.epochs,

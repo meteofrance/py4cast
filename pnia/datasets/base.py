@@ -262,14 +262,6 @@ class AbstractDataset(ABC):
         pass
 
     @abstractproperty
-    def standardize(self) -> bool:
-        pass
-
-    @abstractproperty
-    def nb_pred_steps(self) -> int:
-        pass
-
-    @abstractproperty
     def weather_params(self) -> List[str]:
         pass
 
@@ -535,6 +527,22 @@ class AbstractDataset(ABC):
             "flux_min": torch.stack(flux_min).type(torch.float32),
             "flux_max": torch.stack(flux_max).type(torch.float32),
         }
+
+    @cached_property
+    def data_mean(self):
+        return self.statistics["data_mean"]
+
+    @cached_property
+    def data_std(self):
+        return self.statistics["data_std"]
+
+    @cached_property
+    def flux_mean(self):
+        return self.statistics["flux_mean"]
+
+    @cached_property
+    def flux_std(self):
+        return self.statistics["flux_std"]
 
     @abstractproperty
     def forcing_dim(self) -> int:
