@@ -15,6 +15,7 @@ from pnia.models.conv import ConvModel, ConvSettings
 from pnia.models.nlam import vis
 from pnia.models.nlam.models import BaseGraphModel, GraphModelSettings
 from pnia.models.nlam.utils import val_step_log_errors
+from pnia.models.transformers import TransformerModel, TransformerSettings
 from pnia.models.utils import expand_to_batch
 
 
@@ -51,6 +52,11 @@ MODELS = {
         ConvModel,
         ConvSettings,
         Path(__file__).parents[1] / "config" / "conv.json",
+    ),
+    "transformer": (
+        TransformerModel,
+        TransformerSettings,
+        Path(__file__).parents[1] / "config" / "segformer.json",
     ),
 }
 
