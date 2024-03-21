@@ -40,14 +40,17 @@ runai exec_gpu python bin/prepare.py smeagol grid # Préparation des statics sme
 
 runai exec_gpu python bin/prepare.py nlam --dataset smeagol # Construction des pré-requis pour les graphes
 
-# Avec un réseau de type Graphe
-runai exec_gpu python bin/train.py --dataset smeagol --model graph --standardize --gpus 4
+# Avec un réseau de type Graphe (Défaut HiLam)
+runai exec_gpu python bin/train.py --dataset smeagol --model graph --gpus 4
 
 # Avec un réseau convolutif (par défaut HalfUnet)
-runai exec_gpu python bin/train.py --dataset smeagol --model conv --standardize --gpus 4
+runai exec_gpu python bin/train.py --dataset smeagol --model conv --gpus 4
+
+# Avec un réseau segformer (Vision Transformer)
+runai exec_gpu python bin/train.py --dataset smeagol --model transformer --gpus 4
 
 # Avec un fichier de configuration spécifique
-runai exec_gpu python bin/train.py --dataset smeagol --model conv --standardize --gpus 4 --data_conf config/smeagol.json
+runai exec_gpu python bin/train.py --dataset smeagol --model conv --gpus 4 --data_conf config/smeagol.json
 ```
 [More information here](./bin/Readme.md)
 
