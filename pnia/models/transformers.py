@@ -16,6 +16,7 @@ from einops import rearrange
 from torch import einsum, nn
 
 from pnia.datasets.base import Item, Statics
+from pnia.models.base import ModelBase
 from pnia.models.vision_utils import (
     features_last_to_second,
     features_second_to_last,
@@ -33,12 +34,7 @@ def cast_tuple(val, depth):
 
 @dataclass_json
 @dataclass(slots=True)
-class TransformerSettings:
-
-    input_features: int
-    output_features: int
-
-    network_name: str = "SegFormer"
+class SegformerSettings:
 
     dims: Tuple[int, ...] = (32, 64, 160, 256)
     heads: Tuple[int, ...] = (1, 2, 5, 8)
@@ -50,56 +46,6 @@ class TransformerSettings:
     # Number of channels after downsampling
     # injected in the mit
     no_downsampling_chans: int = 32
-
-
-class TransformerModel(nn.Module):
-    """
-    Base class and registry for vision transformers.
-    """
-
-    registry = {}
-
-    def __init__(
-        self,
-        settings: TransformerSettings,
-        statics: Statics,
-        *args,
-        **kwargs,
-    ):
-        super().__init__(*args, **kwargs)
-
-    def __init_subclass__(cls) -> None:
-        """
-        Register subclasses in registry
-        if not a base class
-        """
-        name = cls.__name__.lower()
-
-        if "base" not in name:
-            cls.registry[name] = cls
-
-    @classmethod
-    def build_from_settings(
-        cls, settings: TransformerSettings, statics: Statics, *args, **kwargs
-    ):
-        """
-        Create model from settings and dataset statics
-        """
-        return cls.registry[settings.network_name.lower()](
-            settings, statics, *args, **kwargs
-        )
-
-    def transform_statics(self, statics: Statics) -> Statics:
-        """
-        Take the statics in inputs.
-        Return the statics as expected by the model.
-        """
-        return statics
-
-    def transform_batch(
-        self, batch: Item
-    ) -> Tuple[torch.tensor, torch.tensor, torch.tensor, torch.tensor]:
-        return transform_batch_vision(batch)
 
 
 class DsConv2d(nn.Module):
@@ -271,21 +217,24 @@ class MiT(nn.Module):
         return ret
 
 
-class Segformer(TransformerModel):
+class Segformer(ModelBase, nn.Module):
     """
     Segformer architecture with extra
     upsampling in the decoder to match
     the input image size.
     """
 
+    settings_kls = SegformerSettings
+
     def __init__(
         self,
-        settings: TransformerSettings,
-        statics: Statics,
+        no_input_features: int,
+        no_output_features: int,
+        settings: SegformerSettings,
         *args,
         **kwargs,
     ):
-        super().__init__(settings, statics, *args, **kwargs)
+        super().__init__(*args, **kwargs)
 
         dims, heads, ff_expansion, reduction_ratio, num_layers = map(
             partial(cast_tuple, depth=4),
@@ -309,7 +258,7 @@ class Segformer(TransformerModel):
         no_chans = settings.no_downsampling_chans
         self.downsampler = nn.Sequential(
             nn.MaxPool2d(kernel_size=2, stride=2),
-            nn.Conv2d(settings.input_features, no_chans, kernel_size=3, padding=1),
+            nn.Conv2d(no_input_features, no_chans, kernel_size=3, padding=1),
             nn.BatchNorm2d(no_chans),
             nn.ReLU(inplace=True),
             nn.Conv2d(no_chans, no_chans, kernel_size=3, padding=1),
@@ -352,8 +301,16 @@ class Segformer(TransformerModel):
             nn.BatchNorm2d(num_features=dim_out // 4),
             nn.ReLU(inplace=True),
             nn.UpsamplingBilinear2d(scale_factor=2),
-            nn.Conv2d(dim_out // 4, settings.output_features, kernel_size=3, padding=1),
+            nn.Conv2d(dim_out // 4, no_output_features, kernel_size=3, padding=1),
         )
+
+    def transform_statics(self, statics: Statics) -> Statics:
+        return statics
+
+    def transform_batch(
+        self, batch: Item
+    ) -> Tuple[torch.tensor, torch.tensor, torch.tensor]:
+        return transform_batch_vision(batch)
 
     def forward(self, x):
 

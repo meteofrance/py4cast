@@ -10,7 +10,7 @@ from torch import nn
 from torch.distributed.algorithms._checkpoint.checkpoint_wrapper import offload_wrapper
 
 from pnia.datasets.base import Item, Statics
-from pnia.models.base import ModelInfo
+from pnia.models.base import ModelBase, ModelInfo
 from pnia.models.nlam.create_mesh import build_graph_for_grid
 from pnia.models.nlam.interaction_net import InteractionNet
 from pnia.models.nlam.utils import make_mlp
@@ -129,17 +129,12 @@ def load_graph(graph_dir: Path, device="cpu") -> Tuple[bool, dict]:
 
 @dataclass_json
 @dataclass(slots=True)
-class GraphModelSettings:
+class GraphLamSettings:
     """
     Settings for graph-based models
     """
 
-    graph_dir: Path
-
-    input_features: int
-    output_features: int
-
-    network_name: str = "hilam"
+    tmp_dir: Path = Path("/tmp")  # nosec B108
 
     hidden_dims: int = 64
     hidden_layers: int = 1
@@ -155,37 +150,16 @@ class GraphModelSettings:
         return f"{self.network_name}-{self.hidden_dims}x{self.hidden_layers}x{self.processor_layers}"
 
 
-class BaseGraphModel(nn.Module):
+class BaseGraphModel(ModelBase, nn.Module):
     """
     Base (abstract) class for graph-based models building on
     the encode-process-decode idea.
     """
 
-    registry = {}
-
-    def __init_subclass__(cls) -> None:
-        """
-        Register subclasses in registry
-        if not a base class
-        """
-        name = cls.__name__.lower()
-
-        if "base" not in name:
-            cls.registry[name] = cls
-
-    @classmethod
-    def build_from_settings(
-        cls, settings: GraphModelSettings, statics: Statics, *args, **kwargs
-    ):
-        """
-        Create model from settings and dataset statics
-        """
-        return cls.registry[settings.network_name.lower()](
-            settings, statics, *args, **kwargs
-        )
+    settings_kls = GraphLamSettings
 
     @staticmethod
-    def rank_zero_setup(settings: GraphModelSettings, statics: Statics):
+    def rank_zero_setup(settings: GraphLamSettings, statics: Statics):
         """
         This is a static method to allow multi-GPU
         trainig frameworks to call this method once
@@ -194,14 +168,21 @@ class BaseGraphModel(nn.Module):
         # this doesn't take long and it prevents discrepencies
         build_graph_for_grid(
             statics.grid_info,
-            settings.graph_dir,
+            settings.tmp_dir,
             hierarchical=settings.hierarchical,
         )
 
-    def __init__(self, settings: GraphModelSettings, statics: Statics, *args, **kwargs):
+    def __init__(
+        self,
+        no_input_features: int,
+        no_output_features: int,
+        settings: GraphLamSettings,
+        *args,
+        **kwargs,
+    ):
         super().__init__(*args, **kwargs)
         self.settings = settings
-        self.hierarchical, graph_ldict = load_graph(self.settings.graph_dir)
+        self.hierarchical, graph_ldict = load_graph(self.settings.tmp_dir)
         for name, attr_value in graph_ldict.items():
             # Make BufferLists module members and register tensors as buffers
             if isinstance(attr_value, torch.Tensor):
@@ -223,7 +204,7 @@ class BaseGraphModel(nn.Module):
             self.settings.hidden_layers + 1
         )
         self.grid_embedder = make_mlp(
-            [self.settings.input_features] + self.mlp_blueprint_end,
+            [no_input_features] + self.mlp_blueprint_end,
             checkpoint=self.settings.reduce_memory_usage,
         )
         self.g2m_embedder = make_mlp(
@@ -268,7 +249,7 @@ class BaseGraphModel(nn.Module):
         # Output mapping (hidden_dim -> output_dim)
         self.output_map = make_mlp(
             [self.settings.hidden_dims] * (self.settings.hidden_layers + 1)
-            + [self.settings.output_features],
+            + [no_output_features],
             layer_norm=False,
             checkpoint=self.settings.reduce_memory_usage,
         )  # No layer norm on this one
