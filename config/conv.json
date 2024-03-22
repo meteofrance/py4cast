@@ -1,5 +1,0 @@
-{
-    "network_name": "HalfUnet",
-    "input_features": 1,
-    "output_features": 1
-}

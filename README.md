@@ -39,19 +39,32 @@ runai gpu_play 4
 runai exec_gpu python bin/prepare.py smeagol grid # Préparation des statics smeagol
 
 runai exec_gpu python bin/prepare.py nlam --dataset smeagol # Construction des pré-requis pour les graphes
-
-# Avec un réseau de type Graphe (Défaut HiLam)
-runai exec_gpu python bin/train.py --dataset smeagol --model graph --gpus 4
-
-# Avec un réseau convolutif (par défaut HalfUnet)
-runai exec_gpu python bin/train.py --dataset smeagol --model conv --gpus 4
-
-# Avec un réseau segformer (Vision Transformer)
-runai exec_gpu python bin/train.py --dataset smeagol --model transformer --gpus 4
-
-# Avec un fichier de configuration spécifique
-runai exec_gpu python bin/train.py --dataset smeagol --model conv --gpus 4 --data_conf config/smeagol.json
 ```
+
+Currently we support the following neural network architectures: hilam, halfunet and segformer. 
+To train on a dataset using a network with its default settings just pass the name of the architecture
+(all lowercase) as shown below:
+
+```bash
+runai exec_gpu python bin/train.py --dataset smeagol --model hilam --gpus 4
+
+runai exec_gpu python bin/train.py --dataset smeagol --model halfunet --gpus 4
+
+runai exec_gpu python bin/train.py --dataset smeagol --model segformer --gpus 4
+```
+
+You can override some settings of the model using a json config file (here we increase the number of filter to 128 and use ghost modules):
+
+```bash
+runai exec_gpu python bin/train.py --dataset smeagol --model halfunet --gpus 1 --model_conf config/halfunet128_ghost.json
+```
+
+You can also override the dataset default configuration file:
+
+```bash
+runai exec_gpu python bin/train.py --dataset smeagol --model halfunet --gpus 4 --data_conf config/smeagol.json
+```
+
 [More information here](./bin/Readme.md)
 
 ## Architecture

@@ -12,7 +12,7 @@ from dataclasses_json import dataclass_json
 from torch import nn
 
 from pnia.datasets.base import Item, Statics
-from pnia.models.base import ModelInfo
+from pnia.models.base import ModelBase, ModelInfo
 from pnia.models.vision_utils import (
     features_last_to_second,
     features_second_to_last,
@@ -22,62 +22,13 @@ from pnia.models.vision_utils import (
 
 @dataclass_json
 @dataclass(slots=True)
-class ConvSettings:
+class HalfUnetSettings:
 
-    input_features: int
-    output_features: int
-    network_name: str = "HalfUnet"
     num_filters: int = 64
     dilation: int = 1
     bias: bool = False
     use_ghost: bool = False
     last_activation: str = "Identity"
-
-
-class ConvModel(nn.Module):
-    registry = {}
-
-    def __init__(
-        self,
-        settings: ConvSettings,
-        statics: Statics,
-        *args,
-        **kwargs,
-    ):
-        super().__init__(*args, **kwargs)
-
-    def __init_subclass__(cls) -> None:
-        """
-        Register subclasses in registry
-        if not a base class
-        """
-        name = cls.__name__.lower()
-
-        if "base" not in name:
-            cls.registry[name] = cls
-
-    @classmethod
-    def build_from_settings(
-        cls, settings: ConvSettings, statics: Statics, *args, **kwargs
-    ):
-        """
-        Create model from settings and dataset statics
-        """
-        return cls.registry[settings.network_name.lower()](
-            settings, statics, *args, **kwargs
-        )
-
-    def transform_statics(self, statics: Statics) -> Statics:
-        """
-        Take the statics in inputs.
-        Return the statics as expected by the model.
-        """
-        return statics
-
-    def transform_batch(
-        self, batch: Item
-    ) -> Tuple[torch.tensor, torch.tensor, torch.tensor, torch.tensor]:
-        return transform_batch_vision(batch)
 
 
 class GhostModule(nn.Module):
@@ -118,18 +69,21 @@ class GhostModule(nn.Module):
         return self.relu(x)
 
 
-class HalfUnet(ConvModel):
+class HalfUnet(ModelBase, nn.Module):
+    settings_kls = HalfUnetSettings
+
     def __init__(
         self,
-        settings: ConvSettings,
-        statics: Statics,
+        no_input_features: int,
+        no_output_features: int,
+        settings: HalfUnetSettings,
         *args,
         **kwargs,
     ):
-        super().__init__(settings, statics, *args, **kwargs)
+        super().__init__(*args, **kwargs)
 
         self.encoder1 = self._block(
-            settings.input_features,
+            no_input_features,
             settings.num_filters,
             name="enc1",
             bias=settings.bias,
@@ -194,12 +148,20 @@ class HalfUnet(ConvModel):
 
         self.outconv = nn.Conv2d(
             in_channels=settings.num_filters,
-            out_channels=settings.output_features,
+            out_channels=no_output_features,
             kernel_size=1,
             bias=settings.bias,
         )
 
         self.activation = getattr(nn, settings.last_activation)()
+
+    def transform_statics(self, statics: Statics) -> Statics:
+        return statics
+
+    def transform_batch(
+        self, batch: Item
+    ) -> Tuple[torch.tensor, torch.tensor, torch.tensor]:
+        return transform_batch_vision(batch)
 
     def forward(self, x):
         x = features_last_to_second(x)

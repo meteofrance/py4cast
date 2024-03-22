@@ -13,10 +13,8 @@ from torchinfo import summary
 
 from pnia.datasets.base import AbstractDataset
 from pnia.losses import ScaledL1Loss, ScaledRMSELoss, WeightedL1Loss, WeightedMSELoss
-from pnia.models.conv import ConvModel, ConvSettings
-from pnia.models.nlam.models import BaseGraphModel, GraphModelSettings
+from pnia.models import build_model_from_settings, get_model_kls_and_settings
 from pnia.models.nlam.utils import val_step_log_errors
-from pnia.models.transformers import TransformerModel, TransformerSettings
 from pnia.models.utils import expand_to_batch
 from pnia.observer import PredictionPlot, SpatialErrorPlot, StateErrorPlot
 
@@ -38,27 +36,6 @@ class ArLightningHyperParam:
 
     # guess some of the model parameters using the dataset
     shape_from_dataset: bool = True
-
-
-# each model type must provide a factory function to build the model and a settings class
-# as well as a defaut configuration file.
-MODELS = {
-    "graph": (
-        BaseGraphModel,
-        GraphModelSettings,
-        Path(__file__).parents[1] / "config" / "graph.json",
-    ),
-    "conv": (
-        ConvModel,
-        ConvSettings,
-        Path(__file__).parents[1] / "config" / "conv.json",
-    ),
-    "transformer": (
-        TransformerModel,
-        TransformerSettings,
-        Path(__file__).parents[1] / "config" / "segformer.json",
-    ),
-}
 
 
 @rank_zero_only
@@ -94,37 +71,29 @@ class AutoRegressiveLightning(pl.LightningModule):
         # For storing spatial loss maps during evaluation
         self.spatial_loss_maps = []
 
-        # instantiate the model with dataclass json schema validation for settings
-        model_kls, settings_class, default_settings = MODELS[hparams.model_name]
+        # Set model input/output grid features based on dataset tensor shapes
+        grid_static_dim = statics.grid_static_features.values.shape[-1]
 
-        model_conf = hparams.model_conf if hparams.model_conf else default_settings
+        input_features = (
+            # we inject the previous and the penultimate states hence the 2
+            2 * self.hparams.dataset.weather_dim
+            + grid_static_dim
+            + self.hparams.dataset.forcing_dim
+        )
+        no_input_features = input_features
+        no_output_features = self.hparams.dataset.weather_dim
 
-        with open(model_conf, "r") as f:
-            model_settings = settings_class.schema().loads(f.read())
-
-        if hparams.shape_from_dataset:
-            # Set model input/output grid features based on dataset tensor shapes
-            grid_static_dim = statics.grid_static_features.values.shape[-1]
-
-            input_features = (
-                # we inject the previous and the penultimate states hence the 2
-                2 * self.hparams.dataset.weather_dim
-                + grid_static_dim
-                + self.hparams.dataset.forcing_dim
-            )
-            model_settings.input_features = input_features
-            model_settings.output_features = self.hparams.dataset.weather_dim
-
-            # todo fix this it should decoupled
-            if hasattr(model_settings, "graph_dir"):
-                model_settings.graph_dir = self.hparams.dataset.cache_dir
-                print(f"Model settings: {model_settings.graph_dir}")
-
-        print(f"Distributed ranks: {self.local_rank} {self.global_rank}")
+        model_kls, model_settings = get_model_kls_and_settings(self.hparams.model_name)
 
         rank_zero_init(model_kls, model_settings, statics)
 
-        self.model = model_kls.build_from_settings(model_settings, statics)
+        self.model, model_settings = build_model_from_settings(
+            self.hparams.model_name,
+            no_input_features,
+            no_output_features,
+            self.hparams.model_conf,
+        )
+
         summary(self.model)
 
         # We transform and register the statics after the model has been set up

@@ -160,8 +160,8 @@ if __name__ == "__main__":
 
     parser.add_argument(
         "--model_conf",
-        type=Union[Path, None],
         default=None,
+        type=Path,
         help="Configuration file for the model.",
     )
 
