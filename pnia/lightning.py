@@ -116,7 +116,7 @@ class AutoRegressiveLightning(pl.LightningModule):
         elif hparams.loss == "mae":
             self.loss = WeightedL1Loss(reduction="none")
         else:
-            assert False, f"Unknown loss function: {hparams.loss}"
+            raise TypeError(f"Unknown loss function: {hparams.loss}")
         self.loss.prepare(statics)
 
     def configure_optimizers(self):
