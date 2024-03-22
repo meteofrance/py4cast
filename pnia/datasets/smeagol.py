@@ -16,6 +16,7 @@ from torch.utils.data import DataLoader, Dataset
 
 from pnia.datasets.base import (
     AbstractDataset,
+    DatasetInfo,
     Item,
     StateVariable,
     TorchDataloaderSettings,
@@ -324,6 +325,19 @@ class SmeagolDataset(AbstractDataset, Dataset):
         self._cache_dir = CACHE_DIR / "neural_lam" / str(self)
         self.shuffle = self.split == "train"
         self.cache_dir.mkdir(parents=True, exist_ok=True)
+
+    @cached_property
+    def dataset_info(self) -> DatasetInfo:
+        return DatasetInfo(
+            name=str(self),
+            domain_info=self.domain_info,
+            shortnames=self.shortnames,
+            units=self.units,
+            weather_dim=self.weather_dim,
+            forcing_dim=self.forcing_dim,
+            step_duration=0.25,  # Should be in settings
+            statics=self.statics,
+        )
 
     @cached_property
     def sample_list(self):

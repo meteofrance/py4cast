@@ -7,7 +7,7 @@ from abc import ABC, abstractmethod, abstractproperty
 from dataclasses import dataclass, field, fields
 from functools import cached_property
 from pathlib import Path
-from typing import List, Literal, Tuple, Union
+from typing import Callable, List, Literal, Tuple, Union
 
 import einops
 import numpy as np
@@ -207,6 +207,24 @@ class Statics(RegisterFieldsMixin):
     @cached_property
     def N_interior(self):
         return torch.sum(self.interior_mask).item()
+
+
+@dataclass(slots=True)
+class DatasetInfo:
+    """
+    This dataclass holds all the informations
+    about the dataset that other classes
+    and functions need to interact with it.
+    """
+
+    name: str  # Name of the dataset
+    domain_info: DomainInfo
+    shortnames: Callable  # Already present in items/batch. Should it be used from there
+    units: Callable  # Should be moved in Batch and consume from this place ?
+    weather_dim: int
+    forcing_dim: int
+    step_duration: float  # Duration (in hour) of one step in the dataset. 0.25 means 15 minutes.
+    statics: Statics  # A lot of static variable
 
 
 @dataclass(slots=True)

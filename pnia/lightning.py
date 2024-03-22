@@ -1,7 +1,6 @@
 from copy import deepcopy
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from functools import cached_property
-from io import BytesIO
 from pathlib import Path
 from typing import Union
 
@@ -11,7 +10,7 @@ import torch
 from lightning.pytorch.utilities import rank_zero_only
 from torchinfo import summary
 
-from pnia.datasets.base import AbstractDataset
+from pnia.datasets.base import DatasetInfo
 from pnia.losses import ScaledL1Loss, ScaledRMSELoss, WeightedL1Loss, WeightedMSELoss
 from pnia.models import build_model_from_settings, get_model_kls_and_settings
 from pnia.models.nlam.utils import val_step_log_errors
@@ -25,17 +24,13 @@ class ArLightningHyperParam:
     Settings and hyperparameters for the lightning AR model.
     """
 
-    dataset: AbstractDataset
+    dataset_info: DatasetInfo
     batch_size: int
     model_conf: Union[Path, None] = None
     model_name: str = "graph"
     lr: float = 0.1
     loss: str = "mse"
     n_example_pred: int = 2
-    step_length: float = 0.25
-
-    # guess some of the model parameters using the dataset
-    shape_from_dataset: bool = True
 
 
 @rank_zero_only
@@ -51,12 +46,14 @@ class AutoRegressiveLightning(pl.LightningModule):
 
     def __init__(self, hparams: ArLightningHyperParam, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.save_hyperparameters(asdict(hparams))
+
+        self.save_hyperparameters()
+
         # Load static features for grid/data
         # We do not want to change dataset statics inplace
         # Otherwise their is some problem with transform_statics and parameters_saving
         # when relaoding from checkpoint
-        statics = deepcopy(self.hparams.dataset.statics)
+        statics = deepcopy(self.hparams["hparams"].dataset_info.statics)
 
         # Keeping track of grid shape and N_interior
         self.grid_shape = statics.grid_shape
@@ -76,22 +73,24 @@ class AutoRegressiveLightning(pl.LightningModule):
 
         input_features = (
             # we inject the previous and the penultimate states hence the 2
-            2 * self.hparams.dataset.weather_dim
+            2 * self.hparams["hparams"].dataset_info.weather_dim
             + grid_static_dim
-            + self.hparams.dataset.forcing_dim
+            + self.hparams["hparams"].dataset_info.forcing_dim
         )
         no_input_features = input_features
-        no_output_features = self.hparams.dataset.weather_dim
+        no_output_features = self.hparams["hparams"].dataset_info.weather_dim
 
-        model_kls, model_settings = get_model_kls_and_settings(self.hparams.model_name)
+        model_kls, model_settings = get_model_kls_and_settings(
+            self.hparams["hparams"].model_name
+        )
 
         rank_zero_init(model_kls, model_settings, statics)
 
         self.model, model_settings = build_model_from_settings(
-            self.hparams.model_name,
+            self.hparams["hparams"].model_name,
             no_input_features,
             no_output_features,
-            self.hparams.model_conf,
+            self.hparams["hparams"].model_conf,
         )
 
         summary(self.model)
@@ -104,7 +103,7 @@ class AutoRegressiveLightning(pl.LightningModule):
         self.register_buffer(
             "grid_static_features",
             expand_to_batch(
-                statics.grid_static_features.values, self.hparams.batch_size
+                statics.grid_static_features.values, self.hparams["hparams"].batch_size
             ),
             persistent=False,
         )
@@ -121,7 +120,7 @@ class AutoRegressiveLightning(pl.LightningModule):
 
     def configure_optimizers(self):
         opt = torch.optim.AdamW(
-            self.parameters(), lr=self.hparams.lr, betas=(0.9, 0.95)
+            self.parameters(), lr=self.hparams["hparams"].lr, betas=(0.9, 0.95)
         )
         if self.opt_state:
             opt.load_state_dict(self.opt_state)
@@ -146,10 +145,10 @@ class AutoRegressiveLightning(pl.LightningModule):
 
             # TODO c'est ici qu'il faudra charger le forceur sur les côtés.
             # ToDo : fix batch size problem. This is weird to have to do that.
-            if self.hparams.batch_size != prev_state.shape[0]:
+            if self.hparams["hparams"].batch_size != prev_state.shape[0]:
                 bs = prev_state.shape[0]
             else:
-                bs = self.hparams.batch_size
+                bs = self.hparams["hparams"].batch_size
             x = torch.cat(
                 [
                     prev_state,
@@ -227,7 +226,7 @@ class AutoRegressiveLightning(pl.LightningModule):
         """
         Add some observers when starting validation
         """
-        statics = deepcopy(self.hparams.dataset.statics)
+        statics = deepcopy(self.hparams["hparams"].dataset_info.statics)
         statics = self.model.transform_statics(statics)
         l1_loss = ScaledL1Loss(reduction="none")
         l1_loss.prepare(statics)
@@ -272,7 +271,7 @@ class AutoRegressiveLightning(pl.LightningModule):
         """
         # this is very strange that we need to do that
         # Think at this statics problem (may be we just need to have a self.statics).
-        statics = deepcopy(self.hparams.dataset.statics)
+        statics = deepcopy(self.hparams["hparams"].dataset_info.statics)
         statics = self.model.transform_statics(statics)
         l1_loss = ScaledL1Loss(reduction="none")
         rmse_loss = ScaledRMSELoss(reduction="none")
@@ -283,7 +282,7 @@ class AutoRegressiveLightning(pl.LightningModule):
         self.test_plotters = [
             StateErrorPlot(metrics),
             SpatialErrorPlot(),
-            PredictionPlot(self.hparams.n_example_pred),
+            PredictionPlot(self.hparams["hparams"].n_example_pred),
         ]
 
     def test_step(self, batch, batch_idx):
@@ -329,19 +328,3 @@ class AutoRegressiveLightning(pl.LightningModule):
         # Notify plotters that the test epoch end
         for plotter in self.test_plotters:
             plotter.on_step_end(self)
-
-    @classmethod
-    def load_from_checkpoint(cls, checkpoint_path, **kwargs):
-        """
-        Overwrite the load_from_checkpoint method in order to be able to read our parameters.
-        """
-
-        checkpoint = torch.load(
-            checkpoint_path, map_location=lambda storage, loc: storage
-        )
-        hp = ArLightningHyperParam(**checkpoint["hyper_parameters"])
-        checkpoint["hyper_parameters"] = {}
-        buffer = BytesIO()
-        torch.save(checkpoint, buffer)
-        buffer.seek(0)
-        return super().load_from_checkpoint(buffer, hparams=hp)
