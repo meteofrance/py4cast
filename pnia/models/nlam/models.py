@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from functools import cached_property
 from pathlib import Path
 from typing import Tuple
 
@@ -9,6 +10,7 @@ from torch import nn
 from torch.distributed.algorithms._checkpoint.checkpoint_wrapper import offload_wrapper
 
 from pnia.datasets.base import Item, Statics
+from pnia.models.base import ModelInfo
 from pnia.models.nlam.create_mesh import build_graph_for_grid
 from pnia.models.nlam.interaction_net import InteractionNet
 from pnia.models.nlam.utils import make_mlp
@@ -273,6 +275,13 @@ class BaseGraphModel(nn.Module):
 
         # subclasses should override this method
         self.finalize_graph_model()
+
+    @cached_property
+    def info(self) -> ModelInfo:
+        """
+        Return information on this model
+        """
+        return ModelInfo(output_dim=1)
 
     def transform_statics(self, statics: Statics) -> Statics:
         """

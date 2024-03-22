@@ -4,19 +4,21 @@ import pytorch_lightning as pl
 from lightning.pytorch.loggers import TensorBoardLogger
 
 from pnia.datasets import SmeagolDataset
-from pnia.models import HiLAM
+from pnia.datasets.base import TorchDataloaderSettings
+from pnia.lightning import AutoRegressiveLightning
 
 path = Path(__file__)
 
 if __name__ == "__main__":
-    #    "/home/mrpa/chabotv/pnia/saved_models/hi_lam_full_ds_12h/min_val_loss-v1.ckpt"
-    # "/home/mrpa/chabotv/pnia/saved_models/smeagol_franmgsp32hi_lam-4x64-021308:46-1307/last.ckpt"
-    model = HiLAM.load_from_checkpoint(
-        "/home/mrpa/chabotv/pnia/saved_models/smeagol_franmgsp32hi_lam-4x64-021415:52-2529/last.ckpt"
-    )
+
+    # ckpt = "/home/mrpa/chabotv/pnia/saved_models/smeagol_franmgsp32graph-031914:46-8984/last.ckpt"
+    # )
+    ckpt = "/home/mrpa/chabotv/pnia/saved_models/smeagol_franmgsp32conv-032115:50-5700/last.ckpt"
+
+    model = AutoRegressiveLightning.load_from_checkpoint(ckpt)
     # For debbugging skip plotting
-    model.n_example_pred = 1
-    model.eval()
+    model.hparams.n_example_pred = 1
+    # model.eval()
     training_dataset, validation_dataset, test_dataset = SmeagolDataset.from_json(
         path.parent.parent / "config" / "smeagol.json",
         args={
@@ -24,15 +26,20 @@ if __name__ == "__main__":
                 "nb_pred_steps": 1,
                 "standardize": True,
             },
-            "valid": {"nb_pred_steps": 10, "standardize": True, "subset": 10},
-            "test": {"nb_pred_steps": 4, "standardize": True, "subset": 10},
+            "valid": {"nb_pred_steps": 3, "standardize": True, "subset": 10},
+            "test": {"nb_pred_steps": 3, "standardize": True, "subset": 10},
         },
     )
+    print("Starting Logger")
     logger = TensorBoardLogger(
         save_dir="/scratch/shared/pnia/logs/infer/",
         name="test",
         default_hp_metric=False,
     )
-    trainer = pl.Trainer(logger=logger)
-    trainer.test(model=model, dataloaders=validation_dataset.torch_dataloader())
-    # model(validation_dataset.__getitem__(0))
+    dl_settings = TorchDataloaderSettings(batch_size=1)
+    print("Initialising trainer")
+    trainer = pl.Trainer(logger=logger, devices=1)  # ,strategy="ddp")
+    print("Testing")
+    trainer.test(
+        model=model, dataloaders=validation_dataset.torch_dataloader(dl_settings)
+    )

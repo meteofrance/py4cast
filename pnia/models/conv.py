@@ -4,7 +4,7 @@ for pn-ia.
 """
 from collections import OrderedDict
 from dataclasses import dataclass
-from functools import reduce
+from functools import cached_property, reduce
 from typing import Tuple
 
 import torch
@@ -12,6 +12,7 @@ from dataclasses_json import dataclass_json
 from torch import nn
 
 from pnia.datasets.base import Item, Statics
+from pnia.models.base import ModelInfo
 from pnia.models.vision_utils import (
     features_last_to_second,
     features_second_to_last,
@@ -201,7 +202,7 @@ class HalfUnet(ConvModel):
         self.activation = getattr(nn, settings.last_activation)()
 
     def forward(self, x):
-        x = features_second_to_last(x)
+        x = features_last_to_second(x)
         enc1 = self.encoder1(x)
         enc2 = self.encoder2(self.pool1(enc1))
         enc3 = self.encoder3(self.pool2(enc2))
@@ -215,7 +216,14 @@ class HalfUnet(ConvModel):
         )
         dec = self.decoder(summed)
 
-        return features_last_to_second(self.activation(self.outconv(dec)))
+        return features_second_to_last(self.activation(self.outconv(dec)))
+
+    @cached_property
+    def info(self) -> ModelInfo:
+        """
+        Return information on this model
+        """
+        return ModelInfo(output_dim=2)
 
     @staticmethod
     def _block(
