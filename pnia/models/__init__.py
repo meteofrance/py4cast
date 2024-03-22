@@ -1,9 +1,9 @@
 from pathlib import Path
 from typing import Union
 
-from .conv import HalfUnet  # noqa: F401
-from .nlam.models import GraphLAM, HiLAM, HiLAMParallel  # noqa: F401
-from .transformers import Segformer  # noqa: F401
+from .conv import HalfUnet
+from .nlam.models import GraphLAM, HiLAM, HiLAMParallel
+from .transformers import Segformer
 
 # Models MUST be added to the registry
 # in order to be used by the training script.
@@ -21,7 +21,12 @@ def get_model_kls_and_settings(
     """
     Returns the classes for a model and its settings instance.
     """
-    model_kls = registry[model_name]
+    try:
+        model_kls = registry[model_name]
+    except KeyError as e:
+        raise KeyError(
+            f"Model {model_name} not found in registry of {__file__}. Did you add it ?"
+        ) from e
     settings_kls = model_kls.settings_kls
 
     if settings_path is None:
@@ -39,7 +44,7 @@ def build_model_from_settings(
     no_output_features: int,
     settings_path: Union[Path, None],
     *args,
-    **kwargs
+    **kwargs,
 ):
     """
     Instanciates a model based on its name and an optional settings file.
