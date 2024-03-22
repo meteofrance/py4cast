@@ -142,14 +142,18 @@ class PredictionPlot(ErrorObserver):
                             target_t[:, :, var_i],
                             obj.interior_2d[:, :, 0],
                             title=f"{var_name} ({var_unit}), "
-                            f"t={t_i} ({obj.hparams.step_length*t_i} h)",
+                            f"t={t_i} ({obj.hparams['hparams'].dataset_info.step_duration*t_i} h)",
                             vrange=var_vrange,
-                            domain_info=obj.hparams.dataset.domain_info,
+                            domain_info=obj.hparams["hparams"].dataset_info.domain_info,
                         )
                         for var_i, (var_name, var_unit, var_vrange) in enumerate(
                             zip(
-                                obj.hparams.dataset.shortnames(kind="output"),
-                                obj.hparams.dataset.units(kind="output"),
+                                obj.hparams["hparams"].dataset_info.shortnames(
+                                    kind="output"
+                                ),
+                                obj.hparams["hparams"].dataset_info.units(
+                                    kind="output"
+                                ),
                                 var_vranges,
                             )
                         )
@@ -160,7 +164,10 @@ class PredictionPlot(ErrorObserver):
                             f"{var_name}_example_{self.plotted_examples}", fig, t_i
                         )
                         for var_name, fig in zip(
-                            obj.hparams.dataset.shortnames(kind="output"), var_figs
+                            obj.hparams["hparams"].dataset_info.shortnames(
+                                kind="output"
+                            ),
+                            var_figs,
                         )
                     ]
 
@@ -209,8 +216,8 @@ class StateErrorPlot(ErrorObserver):
                 if not obj.trainer.sanity_checking:
                     fig = plot_error_map(
                         loss,
-                        obj.hparams.dataset,
-                        step_length=obj.hparams.step_length,
+                        obj.hparams["hparams"].dataset_info,
+                        step_duration=obj.hparams["hparams"].dataset_info.step_duration,
                     )
 
                     tensorboard = obj.logger.experiment
@@ -260,8 +267,8 @@ class SpatialErrorPlot(ErrorObserver):
                 plot_spatial_error(
                     loss_map,
                     obj.interior_2d[:, :, 0],
-                    title=f"{self.kind} loss, t={t_i} ({obj.hparams.step_length*t_i} h)",
-                    domain_info=obj.hparams.dataset.domain_info,
+                    title=f"{self.kind} loss, t={t_i} ({obj.hparams['hparams'].dataset_info.step_duration*t_i} h)",
+                    domain_info=obj.hparams["hparams"].dataset_info.domain_info,
                 )
                 for t_i, loss_map in zip(val_step_log_errors, mean_spatial_loss)
             ]

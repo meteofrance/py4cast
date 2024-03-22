@@ -64,7 +64,7 @@ def main(
     prefix = ""
 
     run_name = (
-        f"{prefix}{str(hp.dataset)}{hp.model_name}-"
+        f"{prefix}{str(hp.dataset_info.name)}{hp.model_name}-"
         f"{time.strftime('%m%d%H:%M')}-{tp.run_id}"
     )
 
@@ -277,7 +277,7 @@ if __name__ == "__main__":
         test_dataset = DATASETS["titan"][0](hparams_test_dataset)
 
     hp = ArLightningHyperParam(
-        dataset=training_dataset,
+        dataset_info=training_dataset.dataset_info,
         batch_size=args.batch_size,
         model_name=args.model,
         model_conf=args.model_conf,

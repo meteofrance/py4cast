@@ -13,14 +13,14 @@ if __name__ == "__main__":
 
     # ckpt = "/home/mrpa/chabotv/pnia/saved_models/smeagol_franmgsp32graph-031914:46-8984/last.ckpt"
     # )
-    ckpt = "/home/mrpa/chabotv/pnia/saved_models/smeagol_franmgsp32conv-032115:50-5700/last.ckpt"
+    ckpt = "/home/mrpa/chabotv/pnia/saved_models/smeagol_franmgsp32halfunet-032215:16-6950/last.ckpt"
 
     model = AutoRegressiveLightning.load_from_checkpoint(ckpt)
     # For debbugging skip plotting
     model.hparams.n_example_pred = 1
     # model.eval()
     training_dataset, validation_dataset, test_dataset = SmeagolDataset.from_json(
-        path.parent.parent / "config" / "smeagol.json",
+        path.parent.parent / "config" / "smeagoldev.json",
         args={
             "train": {
                 "nb_pred_steps": 1,
