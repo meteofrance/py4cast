@@ -16,9 +16,8 @@ from torch.utils.data import DataLoader
 from torch.utils.data._utils.collate import collate_tensor_fn
 from tqdm import tqdm
 
-from pnia.base import RegisterFieldsMixin
 from pnia.plots import DomainInfo
-from pnia.utils import torch_save
+from pnia.utils import RegisterFieldsMixin, torch_save
 
 
 class StateVariableMetadata:
