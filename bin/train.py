@@ -240,6 +240,10 @@ if __name__ == "__main__":
     )
     args, other = parser.parse_known_args()
 
+    # Raise an exception if there are unknown arguments
+    if other:
+        raise ValueError(f"Unknown command line argument(s): {other}")
+
     random_run_id = random.randint(0, 9999)
     seed.seed_everything(args.seed)
 
