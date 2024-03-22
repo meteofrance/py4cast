@@ -21,6 +21,7 @@ from pnia.datasets.base import (
     TorchDataloaderSettings,
     collate_fn,
 )
+from pnia.plots import DomainInfo
 from pnia.settings import CACHE_DIR
 
 ssl._create_default_https_context = ssl._create_unverified_context
@@ -314,6 +315,7 @@ class SmeagolDataset(AbstractDataset, Dataset):
     def __init__(
         self, grid: Grid, period: Period, params: List[Param], settings: SmeagolSettings
     ):
+        print("Initializing Smeagol")
         self.grid = grid
         self.period = period
         self.params = params
@@ -328,6 +330,7 @@ class SmeagolDataset(AbstractDataset, Dataset):
         """
         Create a list of sample from information
         """
+        print("Start forming samples")
         terms = list(
             np.arange(
                 self.settings.term["start"],
@@ -364,6 +367,7 @@ class SmeagolDataset(AbstractDataset, Dataset):
                     ):
                         samples.append(samp)
                         number += 1
+        print("All samples are now defined")
         return samples
 
     @cached_property
@@ -755,11 +759,8 @@ class SmeagolDataset(AbstractDataset, Dataset):
     def cache_dir(self) -> Path:
         return self._cache_dir
 
-    # On va encoder les proprietes pour la visu
-    @property
-    def grid_limits(self) -> list:
-        return self.grid.grid_limits
-
-    @property
-    def projection(self):
-        return self.grid.projection
+    @cached_property
+    def domain_info(self) -> DomainInfo:
+        return DomainInfo(
+            grid_limits=self.grid.grid_limits, projection=self.grid.projection
+        )

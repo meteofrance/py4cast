@@ -17,6 +17,7 @@ from torch.utils.data._utils.collate import collate_tensor_fn
 from tqdm import tqdm
 
 from pnia.base import RegisterFieldsMixin
+from pnia.plots import DomainInfo
 from pnia.utils import torch_save
 
 
@@ -189,8 +190,10 @@ class Statics(RegisterFieldsMixin):
         self.interior_mask = 1.0 - self.border_mask
 
     @cached_property
-    def grid_info(self):
-        # On fait l'inverse de la creation
+    def grid_info(self) -> torch.Tensor:
+        """
+        Return a tensor concatening X,Y
+        """
         return einops.rearrange(
             torch.cat(
                 [
@@ -574,12 +577,8 @@ class AbstractDataset(ABC):
         pass
 
     @abstractproperty
-    def grid_limits(self) -> list:
-        pass
-
-    @abstractproperty
-    def projection(self):
+    def domain_info(self) -> DomainInfo:
         """
-        Return the cartopy projection of the dataset
+        Return a DomainInfo object for plotting purposes
         """
         pass

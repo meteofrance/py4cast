@@ -1,7 +1,6 @@
 import torch
 import torch.nn as nn
 from torch.utils.checkpoint import checkpoint
-from tueplots import bundles, figsizes
 
 
 class CheckpointWrapper(nn.Module):
@@ -38,17 +37,6 @@ class BufferList(nn.Module):
 
     def __iter__(self):
         return (self[i] for i in range(len(self)))
-
-
-def fractional_plot_bundle(fraction):
-    """
-    Get the tueplots bundle, but with figure width as a fraction of the page width.
-    """
-    bundle = bundles.neurips2023(usetex=True, family="serif")
-    bundle.update(figsizes.neurips2023())
-    original_figsize = bundle["figure.figsize"]
-    bundle["figure.figsize"] = (original_figsize[0] / fraction, original_figsize[1])
-    return bundle
 
 
 def expand_to_batch(x: torch.Tensor, batch_size: int):

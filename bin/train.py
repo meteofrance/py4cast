@@ -116,6 +116,7 @@ def main(
         check_val_every_n_epoch=tp.val_interval,
         precision=tp.precision,
         limit_train_batches=tp.limit_train_batches,
+        limit_val_batches=tp.limit_train_batches,  # No reason to spend hours on validation if we limit the training.
     )
 
     lightning_module = AutoRegressiveLightning(hp)

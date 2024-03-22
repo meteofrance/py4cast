@@ -2,17 +2,17 @@
     "periods": {
         "train": {
             "start": 2022080600,
-            "end": 2022101800,
+            "end": 2022081000,
             "step": 3
         },
         "test": {
             "start": 2022102800,
-            "end": 2022110200,
+            "end": 2022102900,
             "step": 3
         },
         "valid": {
             "start": 2022102800,
-            "end": 2022110200,
+            "end": 2022102900,
             "step": 3
         }
     },
@@ -21,7 +21,7 @@
         "border_size":10, 
         "domain":"france",
         "model":"arome",
-        "subgrid":[50,562,50,562]
+        "subgrid":[50,306,50,306]
     }, 
     "dataset": {
         "arome": {
@@ -31,10 +31,7 @@
             "geometry": "franmgsp32",
             "members": [
                 0,
-                1, 
-                2,
-                3,
-                4
+                1
             ],
             "term": {
                 "start": 3,

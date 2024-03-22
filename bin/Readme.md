@@ -50,19 +50,18 @@ Note that the seed is fixed by default so exactly the same random number had bee
 
 ```sh 
 runai gpu_play 4
-runai exec_gpu python bin/train.py --model hi_lam --dataset smeagol --no_log --standardize --gpu 4 --subset 200 --step 1
-runai exec_gpu python bin/train.py --model hi_lam --dataset smeagol --no_log --standardize --gpu 4 --subset 200 --step 3
-runai exec_gpu python bin/train.py --model hi_lam --dataset smeagol --no_log --standardize --gpu 1 --subset 200 --step 1
-runai exec_gpu python bin/train.py --model hi_lam --dataset smeagol --no_log --standardize --gpu 1 --subset 200 --step 3
+runai exec_gpu python bin/train.py --model graph --dataset smeagol --no_log --standardize --gpu 4 --limit_train_batches 200  --batch_size 1 --step 1
+runai exec_gpu python bin/train.py --model graph --dataset smeagol --no_log --standardize --gpu 4 --limit_train_batches 200  --batch_size 1 --step 3
+runai exec_gpu python bin/train.py --model graph --dataset smeagol --no_log --standardize --gpu 1 --limit_train_batches 200  --batch_size 1 --step 1
+runai exec_gpu python bin/train.py --model graph --dataset smeagol --no_log --standardize --gpu 1 --limit_train_batches 200  --batch_size 1 --step 3
 ```
 
 NB : The it per second is increasing batch after batch. There seem to be an initial cost which vanish. 
 
 
 ** Other important factors  which may impact a lot : **
-  - batch_size : 1
   - num_workers : 10
-  - prefetch : 2 
+  - prefetch : 2
   - Grid: 500 x 500
 
 
@@ -79,6 +78,18 @@ Test conducted on MR !14
 |1 GPU |                   | 0.59 it/s -> 5:39|
 |4 GPU | 0.80 it/s -> 1:02 | 0.43 it/s -> 1:55| 
 
+
+Test conducted on MR !26 
+
+- Grid 512 x 512
+- prefetch : None
+
+The way to select the number of batch has changed. Previously we globally limit the number of batch. Now it's a limit per gpu. 
+
+|  | 1 Step | 3 Steps |
+|--|--|--|
+|1 GPU | 1.51 it/s -> 2:12 | 0.58 it/s -> 5:42  |
+|4 GPU | 0.88 it/s -> 3:48 |  | 
 
 ## 4. Other informations
 ### 4.1 Memory Leak
