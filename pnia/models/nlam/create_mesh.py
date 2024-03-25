@@ -462,17 +462,3 @@ def mesh2grid(G_g2m, vm, vm_xy, vg_list, plot, cache_dir_path):
 
     # m2g
     save_edges(pyg_m2g, "m2g", cache_dir_path)
-
-
-########################################################################################
-
-if __name__ == "__main__":
-    from argparse_dataclass import ArgumentParser
-
-    from pnia.datasets.titan import TitanDataset, TitanHyperParams
-
-    parser = ArgumentParser(TitanHyperParams)
-    hparams = parser.parse_args()
-    print("hparams : ", hparams)
-    dataset = TitanDataset(hparams)
-    build_graph_for_grid(dataset, hierarchical=False)

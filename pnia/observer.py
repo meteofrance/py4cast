@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING, Dict
 
 import einops
 import matplotlib.pyplot as plt
+import numpy as np
 import torch
 from pytorch_lightning.strategies import (  # Use for homogeneity in gathering operation for plot.
     ParallelStrategy,
@@ -14,8 +15,9 @@ if TYPE_CHECKING:
     from pnia.lightning import AutoRegressiveLightning
 
 from pnia.losses import PniaLoss
-from pnia.models.nlam.utils import val_step_log_errors  # A deplacer quelque part autre
 from pnia.plots import plot_error_map, plot_prediction, plot_spatial_error
+
+val_step_log_errors = np.array([1, 2, 3])
 
 
 def gather(

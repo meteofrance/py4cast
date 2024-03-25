@@ -1,6 +1,5 @@
 """
 Abstract Base Class for all models
-+ model registry
 """
 from abc import ABC, abstractmethod
 from dataclasses import dataclass

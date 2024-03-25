@@ -2,8 +2,7 @@ import torch
 import torch_geometric as pyg
 from torch import nn
 
-from pnia.models.nlam import utils
-from pnia.models.utils import CheckpointWrapper
+from pnia.models.utils.common import CheckpointWrapper
 
 
 class InteractionNet(pyg.nn.MessagePassing):
@@ -57,12 +56,12 @@ class InteractionNet(pyg.nn.MessagePassing):
 
         if edge_chunk_sizes is None:
 
-            self.edge_mlp = utils.make_mlp(edge_mlp_recipe, checkpoint=checkpoint)
+            self.edge_mlp = make_mlp(edge_mlp_recipe, checkpoint=checkpoint)
         else:
             # Not test : split was never used during dev phase
             self.edge_mlp = SplitMLPs(
                 [
-                    utils.make_mlp(edge_mlp_recipe, checkpoint=checkpoint)
+                    make_mlp(edge_mlp_recipe, checkpoint=checkpoint)
                     for _ in edge_chunk_sizes
                 ],
                 edge_chunk_sizes,
@@ -71,12 +70,12 @@ class InteractionNet(pyg.nn.MessagePassing):
                 self.edge_mlp = CheckpointWrapper(self.edge_mlp)
 
         if aggr_chunk_sizes is None:
-            self.aggr_mlp = utils.make_mlp(aggr_mlp_recipe, checkpoint=checkpoint)
+            self.aggr_mlp = make_mlp(aggr_mlp_recipe, checkpoint=checkpoint)
         else:
             # Not test : split was never used during dev phase
             self.aggr_mlp = SplitMLPs(
                 [
-                    utils.make_mlp(aggr_mlp_recipe, checkpoint=checkpoint)
+                    make_mlp(aggr_mlp_recipe, checkpoint=checkpoint)
                     for _ in aggr_chunk_sizes
                 ],
                 aggr_chunk_sizes,
@@ -164,3 +163,32 @@ class SplitMLPs(nn.Module):
             mlp(chunk_input) for mlp, chunk_input in zip(self.mlps, chunks)
         ]
         return torch.cat(chunk_outputs, dim=-2)
+
+
+def make_mlp(blueprint, layer_norm=True, checkpoint=False):
+    """
+    Create MLP from list blueprint, with
+    input dimensionality: blueprint[0]
+    output dimensionality: blueprint[-1] and
+    hidden layers of dimensions: blueprint[1], ..., blueprint[-2]
+
+    if layer_norm is True, includes a LayerNorm layer at
+    the output (as used in GraphCast)
+    """
+    hidden_layers = len(blueprint) - 2
+    assert hidden_layers >= 0, "Invalid MLP blueprint"
+
+    layers = []
+    for layer_i, (dim1, dim2) in enumerate(zip(blueprint[:-1], blueprint[1:])):
+        layers.append(nn.Linear(dim1, dim2))
+        if layer_i != hidden_layers:
+            layers.append(nn.SiLU())  # Swish activation
+
+    # Optionally add layer norm to output
+    if layer_norm:
+        layers.append(nn.LayerNorm(blueprint[-1]))
+
+    mlp = nn.Sequential(*layers)
+    if checkpoint:
+        mlp = CheckpointWrapper(mlp)
+    return mlp

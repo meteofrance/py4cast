@@ -7,18 +7,12 @@ import torch
 import torch_geometric as pyg
 from dataclasses_json import dataclass_json
 from torch import nn
-from torch.distributed.algorithms._checkpoint.checkpoint_wrapper import offload_wrapper
 
 from pnia.datasets.base import Item, Statics
 from pnia.models.base import ModelBase, ModelInfo
 from pnia.models.nlam.create_mesh import build_graph_for_grid
-from pnia.models.nlam.interaction_net import InteractionNet
-from pnia.models.nlam.utils import make_mlp
-from pnia.models.utils import BufferList, expand_to_batch
-
-
-def offload_to_cpu(model: nn.ModuleList):
-    return nn.ModuleList([offload_wrapper(x) for x in model])
+from pnia.models.nlam.interaction_net import InteractionNet, make_mlp
+from pnia.models.utils.common import BufferList, expand_to_batch, offload_to_cpu
 
 
 def load_graph(graph_dir: Path, device="cpu") -> Tuple[bool, dict]:
