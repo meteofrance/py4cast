@@ -13,7 +13,7 @@ from torchinfo import summary
 from pnia.datasets.base import DatasetInfo
 from pnia.losses import ScaledL1Loss, ScaledRMSELoss, WeightedL1Loss, WeightedMSELoss
 from pnia.models import build_model_from_settings, get_model_kls_and_settings
-from pnia.models.utils.common import expand_to_batch
+from pnia.models.utils import expand_to_batch
 from pnia.observer import (
     PredictionPlot,
     SpatialErrorPlot,

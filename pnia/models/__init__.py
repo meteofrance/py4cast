@@ -1,9 +1,9 @@
 from pathlib import Path
 from typing import Union
 
-from .conv import HalfUnet
 from .nlam.models import GraphLAM, HiLAM, HiLAMParallel
-from .transformers import Segformer
+from .vision.conv import HalfUnet
+from .vision.transformers import Segformer
 
 # Models MUST be added to the registry
 # in order to be used by the training script.

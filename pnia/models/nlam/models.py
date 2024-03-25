@@ -12,7 +12,7 @@ from pnia.datasets.base import Item, Statics
 from pnia.models.base import ModelBase, ModelInfo
 from pnia.models.nlam.create_mesh import build_graph_for_grid
 from pnia.models.nlam.interaction_net import InteractionNet, make_mlp
-from pnia.models.utils.common import BufferList, expand_to_batch, offload_to_cpu
+from pnia.models.utils import BufferList, expand_to_batch, offload_to_cpu
 
 
 def load_graph(graph_dir: Path, device="cpu") -> Tuple[bool, dict]:
