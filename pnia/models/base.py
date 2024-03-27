@@ -13,6 +13,7 @@ from torch.utils.checkpoint import checkpoint
 
 from pnia.datasets.base import Item, Statics
 
+
 class ModelBase(ABC):
     """
     All models should inherit from this class.
@@ -45,7 +46,6 @@ class ModelInfo:
     """
 
     output_dim: int  # Spatial dimension of the output
-
 
 
 def offload_to_cpu(model: nn.ModuleList):

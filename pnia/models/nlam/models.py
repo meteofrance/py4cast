@@ -9,10 +9,15 @@ from dataclasses_json import dataclass_json
 from torch import nn
 
 from pnia.datasets.base import Item, Statics
-from pnia.models.base import ModelBase, ModelInfo, BufferList, expand_to_batch, offload_to_cpu
+from pnia.models.base import (
+    BufferList,
+    ModelBase,
+    ModelInfo,
+    expand_to_batch,
+    offload_to_cpu,
+)
 from pnia.models.nlam.create_mesh import build_graph_for_grid
 from pnia.models.nlam.interaction_net import InteractionNet, make_mlp
-
 
 
 def load_graph(graph_dir: Path, device="cpu") -> Tuple[bool, dict]:
