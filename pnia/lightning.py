@@ -85,7 +85,7 @@ class AutoRegressiveLightning(pl.LightningModule):
         no_output_features = self.hparams["hparams"].dataset_info.weather_dim
 
         model_kls, model_settings = get_model_kls_and_settings(
-            self.hparams["hparams"].model_name,self.hparams["hparams"].model_conf
+            self.hparams["hparams"].model_name, self.hparams["hparams"].model_conf
         )
 
         rank_zero_init(model_kls, model_settings, statics)
