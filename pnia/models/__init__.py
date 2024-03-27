@@ -25,7 +25,7 @@ def get_model_kls_and_settings(
         model_kls = registry[model_name]
     except KeyError as e:
         raise KeyError(
-            f"Model {model_name} not found in registry of {__file__}. Did you add it ? Possibiliies are {registry.keys()}"
+            f"Model {model_name} not found in registry of {__file__}. Did you add it ? Names are {registry.keys()}"
         ) from e
     settings_kls = model_kls.settings_kls
 

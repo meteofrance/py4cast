@@ -1,6 +1,6 @@
 """
 Abstract Base Class for all models
-Contains also a few functionnality used in various model. 
+Contains also a few functionnality used in various model.
 """
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
