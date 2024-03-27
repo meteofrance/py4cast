@@ -146,7 +146,7 @@ class GraphLamSettings:
     hierarchical: bool = True
 
     def __str__(self) -> str:
-        return f"{self.network_name}-{self.hidden_dims}x{self.hidden_layers}x{self.processor_layers}"
+        return f"{self.hierarchical}-{self.hidden_dims}x{self.hidden_layers}x{self.processor_layers}"
 
 
 class BaseGraphModel(ModelBase, nn.Module):

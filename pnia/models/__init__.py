@@ -34,7 +34,6 @@ def get_model_kls_and_settings(
     else:
         with open(settings_path, "r") as f:
             model_settings = settings_kls.schema().loads(f.read())
-
     return model_kls, model_settings
 
 
@@ -50,7 +49,6 @@ def build_model_from_settings(
     Instanciates a model based on its name and an optional settings file.
     """
     model_kls, model_settings = get_model_kls_and_settings(network_name, settings_path)
-
     return (
         model_kls(
             no_input_features, no_output_features, model_settings, *args, **kwargs
