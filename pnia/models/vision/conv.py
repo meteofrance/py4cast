@@ -13,7 +13,7 @@ from torch import nn
 
 from pnia.datasets.base import Item, Statics
 from pnia.models.base import ModelBase, ModelInfo
-from pnia.models.vision_utils import (
+from pnia.models.vision.utils import (
     features_last_to_second,
     features_second_to_last,
     transform_batch_vision,

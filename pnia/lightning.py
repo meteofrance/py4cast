@@ -13,9 +13,13 @@ from torchinfo import summary
 from pnia.datasets.base import DatasetInfo
 from pnia.losses import ScaledL1Loss, ScaledRMSELoss, WeightedL1Loss, WeightedMSELoss
 from pnia.models import build_model_from_settings, get_model_kls_and_settings
-from pnia.models.nlam.utils import val_step_log_errors
-from pnia.models.utils import expand_to_batch
-from pnia.observer import PredictionPlot, SpatialErrorPlot, StateErrorPlot
+from pnia.models.base import expand_to_batch
+from pnia.observer import (
+    PredictionPlot,
+    SpatialErrorPlot,
+    StateErrorPlot,
+    val_step_log_errors,
+)
 
 
 @dataclass
@@ -81,7 +85,7 @@ class AutoRegressiveLightning(pl.LightningModule):
         no_output_features = self.hparams["hparams"].dataset_info.weather_dim
 
         model_kls, model_settings = get_model_kls_and_settings(
-            self.hparams["hparams"].model_name
+            self.hparams["hparams"].model_name, self.hparams["hparams"].model_conf
         )
 
         rank_zero_init(model_kls, model_settings, statics)
