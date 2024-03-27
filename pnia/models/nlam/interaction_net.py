@@ -2,7 +2,7 @@ import torch
 import torch_geometric as pyg
 from torch import nn
 
-from pnia.models.utils import CheckpointWrapper
+from pnia.models.base import CheckpointWrapper
 
 
 class InteractionNet(pyg.nn.MessagePassing):
