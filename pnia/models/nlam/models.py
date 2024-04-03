@@ -143,10 +143,8 @@ class GraphLamSettings:
     mesh_aggr: str = "sum"
     processor_layers: int = 4
 
-    hierarchical: bool = True
-
     def __str__(self) -> str:
-        return f"{self.hierarchical}-{self.hidden_dims}x{self.hidden_layers}x{self.processor_layers}"
+        return f"ModelCOnfig : {self.hidden_dims}x{self.hidden_layers}x{self.processor_layers}"
 
 
 class BaseGraphModel(ModelBase, nn.Module):
@@ -156,9 +154,10 @@ class BaseGraphModel(ModelBase, nn.Module):
     """
 
     settings_kls = GraphLamSettings
+    hierarchical = False
 
-    @staticmethod
-    def rank_zero_setup(settings: GraphLamSettings, statics: Statics):
+    @classmethod
+    def rank_zero_setup(cls, settings: GraphLamSettings, statics: Statics):
         """
         This is a static method to allow multi-GPU
         trainig frameworks to call this method once
@@ -166,9 +165,9 @@ class BaseGraphModel(ModelBase, nn.Module):
         """
         # this doesn't take long and it prevents discrepencies
         build_graph_for_grid(
-            statics.grid_info,
+            statics.meshgrid,
             settings.tmp_dir,
-            hierarchical=settings.hierarchical,
+            hierarchical=cls.hierarchical,
         )
 
     def __init__(
@@ -181,7 +180,11 @@ class BaseGraphModel(ModelBase, nn.Module):
     ):
         super().__init__(*args, **kwargs)
         self.settings = settings
-        self.hierarchical, graph_ldict = load_graph(self.settings.tmp_dir)
+        hierarchical, graph_ldict = load_graph(self.settings.tmp_dir)
+        if hierarchical != self.hierarchical:
+            raise ValueError(
+                f"Loaded graph is {hierarchical} while expecting {self.hierarchical}"
+            )
         for name, attr_value in graph_ldict.items():
             # Make BufferLists module members and register tensors as buffers
             if isinstance(attr_value, torch.Tensor):
@@ -390,6 +393,8 @@ class BaseHiGraphModel(BaseGraphModel):
     """
     Base class for hierarchical graph models.
     """
+
+    hierarchical = True
 
     def finalize_graph_model(self):
         # Track number of nodes, edges on each level

@@ -52,7 +52,7 @@ class AutoRegressiveLightning(pl.LightningModule):
         super().__init__(*args, **kwargs)
 
         self.save_hyperparameters()
-
+        self.hparams["hparams"].dataset_info.summary()
         # Load static features for grid/data
         # We do not want to change dataset statics inplace
         # Otherwise their is some problem with transform_statics and parameters_saving

@@ -27,7 +27,7 @@ from pnia.settings import CACHE_DIR
 
 ssl._create_default_https_context = ssl._create_unverified_context
 # torch.set_num_threads(8)
-priam_path = Path("/scratch/shared/smeagol")
+scratch_path = Path("/scratch/shared/smeagol")
 # Assuming no leap years in dataset (2024 is next)
 SECONDS_IN_YEAR = 365 * 24 * 60 * 60
 
@@ -92,10 +92,7 @@ class Grid:
     y: int = field(init=False)  # Y dimension
 
     def __post_init__(self):
-        grid_name = (
-            priam_path / "nc" / constant_fname(self.domain, self.model, self.geometry)
-        )
-        ds = xr.open_dataset(grid_name)
+        ds = xr.open_dataset(self.grid_name)
         # lat = ds.lat.values
         x, y = ds.lat.shape
         # Setting correct subgrid if no subgrid is selected.
@@ -105,42 +102,36 @@ class Grid:
         self.x = self.subgrid[1] - self.subgrid[0]
         self.y = self.subgrid[3] - self.subgrid[2]
 
+    @property
+    def grid_name(self):
+        return (
+            scratch_path / "nc" / constant_fname(self.domain, self.model, self.geometry)
+        )
+
     @cached_property
     def lat(self) -> np.array:
-        grid_name = (
-            priam_path / "nc" / constant_fname(self.domain, self.model, self.geometry)
-        )
-        ds = xr.open_dataset(grid_name)
+        ds = xr.open_dataset(self.grid_name)
         return ds.lat.values[
             self.subgrid[0] : self.subgrid[1], self.subgrid[2] : self.subgrid[3]
         ]
 
     @cached_property
     def lon(self) -> np.array:
-        grid_name = (
-            priam_path / "nc" / constant_fname(self.domain, self.model, self.geometry)
-        )
-        ds = xr.open_dataset(grid_name)
+        ds = xr.open_dataset(self.grid_name)
         return ds.lon.values[
             self.subgrid[0] : self.subgrid[1], self.subgrid[2] : self.subgrid[3]
         ]
 
     @property
     def geopotential(self) -> np.array:
-        grid_name = (
-            priam_path / "nc" / constant_fname(self.domain, self.model, self.geometry)
-        )
-        ds = xr.open_dataset(grid_name)
+        ds = xr.open_dataset(self.grid_name)
         return ds["SURFGEOPOTENTIEL"].values[
             self.subgrid[0] : self.subgrid[1], self.subgrid[2] : self.subgrid[3]
         ]
 
     @property
     def landsea_mask(self) -> np.array:
-        grid_name = (
-            priam_path / "nc" / constant_fname(self.domain, self.model, self.geometry)
-        )
-        ds = xr.open_dataset(grid_name)
+        ds = xr.open_dataset(self.grid_name)
         return ds["LandSeaMask"].values[
             self.subgrid[0] : self.subgrid[1], self.subgrid[2] : self.subgrid[3]
         ]
@@ -158,10 +149,8 @@ class Grid:
 
     @cached_property
     def grid_limits(self):
-        grid_name = (
-            priam_path / "nc" / constant_fname(self.domain, self.model, self.geometry)
-        )
-        ds = xr.open_dataset(grid_name)
+
+        ds = xr.open_dataset(self.grid_name)
         grid_limits = [  # In projection
             ds.x[self.subgrid[0]].values,  # min x
             ds.x[self.subgrid[1]].values,  # max x
@@ -169,6 +158,17 @@ class Grid:
             ds.y[self.subgrid[3]].values,  # max y
         ]
         return grid_limits
+
+    @cached_property
+    def meshgrid(self) -> np.array:
+        """
+        Build a meshgrid from coordinates position.
+        """
+        ds = xr.open_dataset(self.grid_name)
+        x = ds.x[self.subgrid[0] : self.subgrid[1]]
+        y = ds.y[self.subgrid[2] : self.subgrid[3]]
+        xx, yy = np.meshgrid(x, y)
+        return np.asarray([xx, yy])
 
     @cached_property
     def projection(self):
@@ -206,7 +206,7 @@ class Param:
             return 2
 
     @property
-    def parameter_weights(self) -> list:
+    def state_weights(self) -> list:
         return [get_weight(level, self.level_type) for level in self.levels]
 
     @property
@@ -229,7 +229,7 @@ class Param:
         """
         Return the filename. Even if term is not used for this example it could be (e.g. for radars).
         """
-        return priam_path / "nc" / self.fnamer(date=date, member=member, term=term)
+        return scratch_path / "nc" / self.fnamer(date=date, member=member, term=term)
 
     def load_data(self, member: int, date: dt.datetime, terms: List):
         flist = []
@@ -268,6 +268,10 @@ class Sample:
 
     @property
     def hours_of_day(self) -> np.array:
+        """
+        Hour of the day.
+        For output terms only. This is a float.
+        """
         hours = []
         for term in self.output_terms:
             date_tmp = self.date + dt.timedelta(hours=term)
@@ -275,7 +279,11 @@ class Sample:
         return np.asarray(hours)
 
     @property
-    def seconds_into_year(self) -> np.array:
+    def seconds_from_start_of_year(self) -> np.array:
+        """
+        Second from the start of the year.
+        For output terms only
+        """
         start_of_year = dt.datetime(self.date.year, 1, 1)
         return np.asarray(
             [
@@ -284,7 +292,15 @@ class Sample:
             ]
         )
 
-    def is_valid(self, param_list):
+    def is_valid(self, param_list: List) -> bool:
+        """
+        Check that all the files necessary for this samples exists.
+
+        Args:
+            param_list (List): List of parameters
+        Returns:
+            Boolean:  Whether the sample exist or not
+        """
         for param in param_list:
             if not param.exist(self.member, self.date, self.terms):
                 return False
@@ -298,8 +314,6 @@ class SmeagolSettings:
     nb_input_steps: int = 2  # Step en entrée
     nb_pred_steps: int = 1  # Step en sortie
     standardize: bool = True
-    subset: int = 0  # Positive integer. If subset is less than 1 it means full set.
-    # Otherwise describe the number of sample.Param(
     # Pas vraiment a mettre ici. Voir où le mettre
     members: Tuple[int] = (0,)
 
@@ -310,24 +324,26 @@ class SmeagolSettings:
 
 
 class SmeagolDataset(AbstractDataset, Dataset):
-
-    recompute_stats: bool = False
-
     def __init__(
         self, grid: Grid, period: Period, params: List[Param], settings: SmeagolSettings
     ):
-        print("Initializing Smeagol")
         self.grid = grid
         self.period = period
         self.params = params
         self.settings = settings
-
         self._cache_dir = CACHE_DIR / "neural_lam" / str(self)
         self.shuffle = self.split == "train"
         self.cache_dir.mkdir(parents=True, exist_ok=True)
 
     @cached_property
     def dataset_info(self) -> DatasetInfo:
+        """
+        Return a DatasetInfo object.
+        This object describes the dataset.
+
+        Returns:
+            DatasetInfo: _description_
+        """
         return DatasetInfo(
             name=str(self),
             domain_info=self.domain_info,
@@ -337,6 +353,9 @@ class SmeagolDataset(AbstractDataset, Dataset):
             forcing_dim=self.forcing_dim,
             step_duration=0.25,  # Should be in settings
             statics=self.statics,
+            stats=self.stats,
+            diff_stats=self.diff_stats,
+            state_weights=self.state_weights,
         )
 
     @cached_property
@@ -376,9 +395,7 @@ class SmeagolDataset(AbstractDataset, Dataset):
                         input_terms=input_terms,
                         output_terms=output_terms,
                     )
-                    if samp.is_valid(self.params) and (
-                        number < self.settings.subset or self.settings.subset < 1
-                    ):
+                    if samp.is_valid(self.params):
                         samples.append(samp)
                         number += 1
         print("All samples are now defined")
@@ -387,7 +404,7 @@ class SmeagolDataset(AbstractDataset, Dataset):
     @cached_property
     def dataset_extra_statics(self):
         """
-        We add the LandSea Mask to the produced statics.
+        We add the LandSea Mask to the statics.
         """
         return [
             StateVariable(
@@ -411,7 +428,9 @@ class SmeagolDataset(AbstractDataset, Dataset):
             torch.Tensor(sample.hours_of_day) / 12
         ) * torch.pi  # (sample_len,)
         year_angle = (
-            (torch.Tensor(sample.seconds_into_year) / SECONDS_IN_YEAR) * 2 * torch.pi
+            (torch.Tensor(sample.seconds_from_start_of_year) / SECONDS_IN_YEAR)
+            * 2
+            * torch.pi
         )  # (sample_len,)
         datetime_forcing = torch.stack(
             (
@@ -426,24 +445,20 @@ class SmeagolDataset(AbstractDataset, Dataset):
         return datetime_forcing
 
     @cached_property
-    def subgrid(self):
+    def forcing_dim(self) -> int:
         """
-        Retourne les indices de la sous grille
+        Return the number of forcings.
         """
-        return self.grid.subgrid
-
-    @cached_property
-    def forcing_dim(self):
-        res = 4  # Pour la date
+        res = 4  # For date
         for param in self.params:
             if param.kind == "input":
                 res += param.number
         return res
 
     @cached_property
-    def weather_dim(self):
+    def weather_dim(self) -> int:
         """
-        Retourne la dimensions des variables présentes en entrée et en sortie.
+        Return the dimension of pronostic variable.
         """
         res = 0
         for param in self.params:
@@ -464,6 +479,11 @@ class SmeagolDataset(AbstractDataset, Dataset):
         return res
 
     def test_sample(self, index):
+        """
+        Test if the sample is present.
+        To do so, check that inputs term are present for the variable.
+        Raise an error if something went wrong (for example required term does not exists).
+        """
         sample = self.sample_list[index]
 
         # Reading parameters from files
@@ -479,21 +499,14 @@ class SmeagolDataset(AbstractDataset, Dataset):
 
             _ = ds[param.name].sel(step=sample.input_terms)
 
-    @cached_property
-    def stats(self):
-        return torch.load(self.cache_dir / "parameters_stats.pt", "cpu")
-
     def __getitem__(self, index):
         sample = self.sample_list[index]
-        # On fait le bourrin pour lire les stats pour la renormalisation
-        # To do : reorganiser le chargement des statistics.
-        # stats = torch.load(self.cache_dir / "parameters_stats.pt", "cpu")
 
         # Datetime Forcing
         lforcings = [
             StateVariable(
                 ndims=1,
-                names=["cos_hour, sin_hour, cos_doy, sin_doy"],
+                names=["cos_hour, sin_hour, cos_doy, sin_doy"],  # doy : day_of_year
                 values=self.get_year_hour_forcing(sample).type(torch.float32),
                 coordinates_name=["out_step", "features"],
             )
@@ -584,9 +597,6 @@ class SmeagolDataset(AbstractDataset, Dataset):
         # Reflechir a comment le faire fonctionner avec plusieurs sources.
         for data_source in conf["dataset"]:
             data = conf["dataset"][data_source]
-            # Voir comment les rajouter
-            # Pour l'instant ils sont passer en HyperParametre
-            # (pas top du tout car on s'amusera certainement pas à la volée avec).
             members = conf["dataset"][data_source].get("members", [0])
             term = conf["dataset"][data_source]["term"]
             for var in data["var"]:
@@ -652,12 +662,12 @@ class SmeagolDataset(AbstractDataset, Dataset):
         )
 
     @property
-    def grid_info(self) -> np.array:
+    def meshgrid(self) -> np.array:
         """
         array of shape (2, num_lat, num_lon)
-        of (lat, lon) values
+        of (X, Y) values
         """
-        return np.asarray([self.grid.lon, self.grid.lat])
+        return self.grid.meshgrid
 
     @property
     def geopotential_info(self) -> np.array:
@@ -738,35 +748,24 @@ class SmeagolDataset(AbstractDataset, Dataset):
         """
         return self.__get_params_attr("units", kind)
 
-    def create_parameter_weights(self):
+    @cached_property
+    def state_weights(self):
         """
-        Create parameter weights (for the loss function).
-        Each variable has is own weight.
-
-        May evolve to have a weight dependent of the situation ?
+        Weights used in the loss function.
         """
-        w_list = []
         w_dict = {}
         for param in self.params:
             if param.kind in ["output", "input_output"]:
-                for x, y in zip(param.parameter_short_name, param.parameter_weights):
-                    w_dict[x] = float(y)
-                w_list += param.parameter_weights
-        path = self.cache_dir / "parameter_weights.npz"
-        if path.exists():
-            path.unlink()
-        np.savez(path, **w_dict)
-        path.chmod(0o666)
+                for name, weight in zip(
+                    param.parameter_short_name, param.state_weights
+                ):
+                    w_dict[name] = weight
 
-    @property
-    def parameter_weights(self) -> np.array:
-        if not (self.cache_dir / "parameter_weights.npz").exists():
-            self.create_parameter_weights()
-        params = np.load(self.cache_dir / "parameter_weights.npz")
-        w_list = []
-        for param in self.params:
-            if param.kind in ["output", "input_output"]:
-                w_list += [params[p] for p in param.parameter_short_name]
+        return w_dict
+
+    @cached_property
+    def tensor_state_weights(self) -> np.array:
+        w_list = [self.state_weights[name] for name in self.shortnames("output")]
         return np.asarray(w_list)
 
     @property
@@ -775,6 +774,9 @@ class SmeagolDataset(AbstractDataset, Dataset):
 
     @cached_property
     def domain_info(self) -> DomainInfo:
+        """Information on the domain considered.
+        Usefull information for plotting.
+        """
         return DomainInfo(
             grid_limits=self.grid.grid_limits, projection=self.grid.projection
         )

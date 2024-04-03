@@ -13,7 +13,7 @@ if __name__ == "__main__":
 
     # ckpt = "/home/mrpa/chabotv/pnia/saved_models/smeagol_franmgsp32graph-031914:46-8984/last.ckpt"
     # )
-    ckpt = "/home/mrpa/chabotv/pnia/saved_models/smeagol_franmgsp32halfunet-032215:16-6950/last.ckpt"
+    ckpt = "/home/mrpa/chabotv/pnia/saved_models/smeagol_franmgsp32halfunet-032715:57-9520/last.ckpt"
 
     model = AutoRegressiveLightning.load_from_checkpoint(ckpt)
     # For debbugging skip plotting
@@ -26,8 +26,8 @@ if __name__ == "__main__":
                 "nb_pred_steps": 1,
                 "standardize": True,
             },
-            "valid": {"nb_pred_steps": 3, "standardize": True, "subset": 10},
-            "test": {"nb_pred_steps": 3, "standardize": True, "subset": 10},
+            "valid": {"nb_pred_steps": 3, "standardize": True},
+            "test": {"nb_pred_steps": 3, "standardize": True},
         },
     )
     print("Starting Logger")
