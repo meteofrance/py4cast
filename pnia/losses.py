@@ -121,7 +121,7 @@ class WeightedMSELoss(WeightedLossMixin, MSELoss, PniaLoss):
         inv_var = (
             statics.step_diff_std**-2.0
         )  # Comes from buffer registration of statistics
-        loss_state_weights = statics.param_weights * inv_var  # (d_f,)
+        loss_state_weights = statics.state_weights * inv_var  # (d_f,)
         super().register_loss_state_buffers(statics, loss_state_weights)
 
 
@@ -129,5 +129,5 @@ class WeightedL1Loss(WeightedLossMixin, L1Loss, PniaLoss):
     def prepare(self, statics: Statics) -> None:
 
         # Weight states with inverse std instead in this case
-        state_weights = statics.param_weights / statics.step_diff_std  # (d_f,)
+        state_weights = statics.state_weights / statics.step_diff_std  # (d_f,)
         super().register_loss_state_buffers(statics, state_weights)
