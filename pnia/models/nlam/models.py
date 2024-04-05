@@ -11,7 +11,7 @@ from torch import nn
 from pnia.datasets.base import Item, Statics
 from pnia.models.base import (
     BufferList,
-    ModelBase,
+    ModelABC,
     ModelInfo,
     expand_to_batch,
     offload_to_cpu,
@@ -139,7 +139,9 @@ class GraphLamSettings:
     hidden_layers: int = 1
     processor_layers: int = 4
 
-    reduce_memory_usage: bool = False
+    use_checkpointing: bool = False
+    offload_to_cpu: bool = False
+
     mesh_aggr: str = "sum"
     processor_layers: int = 4
 
@@ -147,7 +149,7 @@ class GraphLamSettings:
         return f"ModelCOnfig : {self.hidden_dims}x{self.hidden_layers}x{self.processor_layers}"
 
 
-class BaseGraphModel(ModelBase, nn.Module):
+class BaseGraphModel(ModelABC, nn.Module):
     """
     Base (abstract) class for graph-based models building on
     the encode-process-decode idea.
@@ -172,8 +174,8 @@ class BaseGraphModel(ModelBase, nn.Module):
 
     def __init__(
         self,
-        no_input_features: int,
-        no_output_features: int,
+        num_input_features: int,
+        num_output_features: int,
         settings: GraphLamSettings,
         *args,
         **kwargs,
@@ -206,16 +208,16 @@ class BaseGraphModel(ModelBase, nn.Module):
             self.settings.hidden_layers + 1
         )
         self.grid_embedder = make_mlp(
-            [no_input_features] + self.mlp_blueprint_end,
-            checkpoint=self.settings.reduce_memory_usage,
+            [num_input_features] + self.mlp_blueprint_end,
+            checkpoint=self.settings.use_checkpointing,
         )
         self.g2m_embedder = make_mlp(
             [g2m_dim] + self.mlp_blueprint_end,
-            checkpoint=self.settings.reduce_memory_usage,
+            checkpoint=self.settings.use_checkpointing,
         )
         self.m2g_embedder = make_mlp(
             [m2g_dim] + self.mlp_blueprint_end,
-            checkpoint=self.settings.reduce_memory_usage,
+            checkpoint=self.settings.use_checkpointing,
         )
 
         # GNNs
@@ -232,11 +234,11 @@ class BaseGraphModel(ModelBase, nn.Module):
             self.settings.hidden_dims,
             hidden_layers=self.settings.hidden_layers,
             update_edges=False,
-            checkpoint=self.settings.reduce_memory_usage,
+            checkpoint=self.settings.use_checkpointing,
         )
         self.encoding_grid_mlp = make_mlp(
             [self.settings.hidden_dims] + self.mlp_blueprint_end,
-            checkpoint=self.settings.reduce_memory_usage,
+            checkpoint=self.settings.use_checkpointing,
         )
 
         # decoder
@@ -245,15 +247,15 @@ class BaseGraphModel(ModelBase, nn.Module):
             self.settings.hidden_dims,
             hidden_layers=self.settings.hidden_layers,
             update_edges=False,
-            checkpoint=self.settings.reduce_memory_usage,
+            checkpoint=self.settings.use_checkpointing,
         )
 
         # Output mapping (hidden_dim -> output_dim)
         self.output_map = make_mlp(
             [self.settings.hidden_dims] * (self.settings.hidden_layers + 1)
-            + [no_output_features],
+            + [num_output_features],
             layer_norm=False,
-            checkpoint=self.settings.reduce_memory_usage,
+            checkpoint=self.settings.use_checkpointing,
         )  # No layer norm on this one
 
         # subclasses should override this method
@@ -432,48 +434,48 @@ class BaseHiGraphModel(BaseGraphModel):
             [
                 make_mlp(
                     [mesh_dim] + self.mlp_blueprint_end,
-                    checkpoint=self.settings.reduce_memory_usage,
+                    checkpoint=self.settings.use_checkpointing,
                 )
                 for _ in range(self.N_levels)
             ]
         )
-        if self.settings.reduce_memory_usage:
+        if self.settings.offload_to_cpu:
             self.mesh_embedders = offload_to_cpu(self.mesh_embedders)
 
         self.mesh_same_embedders = nn.ModuleList(
             [
                 make_mlp(
                     [mesh_same_dim] + self.mlp_blueprint_end,
-                    checkpoint=self.settings.reduce_memory_usage,
+                    checkpoint=self.settings.use_checkpointing,
                 )
                 for _ in range(self.N_levels)
             ]
         )
-        if self.settings.reduce_memory_usage:
+        if self.settings.offload_to_cpu:
             self.mesh_same_embedders = offload_to_cpu(self.mesh_same_embedders)
 
         self.mesh_up_embedders = nn.ModuleList(
             [
                 make_mlp(
                     [mesh_up_dim] + self.mlp_blueprint_end,
-                    checkpoint=self.settings.reduce_memory_usage,
+                    checkpoint=self.settings.use_checkpointing,
                 )
                 for _ in range(self.N_levels - 1)
             ]
         )
-        if self.settings.reduce_memory_usage:
+        if self.settings.use_checkpointing:
             self.mesh_up_embedders = offload_to_cpu(self.mesh_up_embedders)
 
         self.mesh_down_embedders = nn.ModuleList(
             [
                 make_mlp(
                     [mesh_down_dim] + self.mlp_blueprint_end,
-                    checkpoint=self.settings.reduce_memory_usage,
+                    checkpoint=self.settings.use_checkpointing,
                 )
                 for _ in range(self.N_levels - 1)
             ]
         )
-        if self.settings.reduce_memory_usage:
+        if self.settings.offload_to_cpu:
             self.mesh_down_embedders = offload_to_cpu(self.mesh_down_embedders)
 
         # Instantiate GNNs
@@ -484,12 +486,12 @@ class BaseHiGraphModel(BaseGraphModel):
                     edge_index,
                     self.settings.hidden_dims,
                     hidden_layers=self.settings.hidden_layers,
-                    checkpoint=self.settings.reduce_memory_usage,
+                    checkpoint=self.settings.use_checkpointing,
                 )
                 for edge_index in self.mesh_up_edge_index
             ]
         )
-        if self.settings.reduce_memory_usage:
+        if self.settings.use_checkpointing:
             self.mesh_init_gnns = offload_to_cpu(self.mesh_init_gnns)
 
         # Read out GNNs
@@ -500,12 +502,12 @@ class BaseHiGraphModel(BaseGraphModel):
                     self.settings.hidden_dims,
                     hidden_layers=self.settings.hidden_layers,
                     update_edges=False,
-                    checkpoint=self.settings.reduce_memory_usage,
+                    checkpoint=self.settings.use_checkpointing,
                 )
                 for edge_index in self.mesh_down_edge_index
             ]
         )
-        if self.settings.reduce_memory_usage:
+        if self.settings.offload_to_cpu:
             self.mesh_read_gnns = offload_to_cpu(self.mesh_read_gnns)
 
     def get_num_mesh(self):
@@ -640,11 +642,11 @@ class GraphLAM(BaseGraphModel):
         # Feature embedders for mesh
         self.mesh_embedder = make_mlp(
             [mesh_dim] + self.mlp_blueprint_end,
-            checkpoint=self.settings.reduce_memory_usage,
+            checkpoint=self.settings.use_checkpointing,
         )
         self.m2m_embedder = make_mlp(
             [m2m_dim] + self.mlp_blueprint_end,
-            checkpoint=self.settings.reduce_memory_usage,
+            checkpoint=self.settings.use_checkpointing,
         )
 
         # GNNs
@@ -655,7 +657,7 @@ class GraphLAM(BaseGraphModel):
                 self.settings.hidden_dims,
                 hidden_layers=self.settings.hidden_layers,
                 aggr=self.settings.mesh_aggr,
-                checkpoint=self.settings.reduce_memory_usage,
+                checkpoint=self.settings.use_checkpointing,
             )
             for _ in range(self.settings.processor_layers)
         ]
@@ -822,12 +824,12 @@ class HiLAM(BaseHiGraphModel):
                     edge_index,
                     self.settings.hidden_dims,
                     hidden_layers=self.settings.hidden_layers,
-                    checkpoint=self.settings.reduce_memory_usage,
+                    checkpoint=self.settings.use_checkpointing,
                 )
                 for edge_index in self.m2m_edge_index
             ]
         )
-        if self.settings.reduce_memory_usage:
+        if self.settings.offload_to_cpu:
             model = offload_to_cpu(model)
         return model
 
@@ -841,12 +843,12 @@ class HiLAM(BaseHiGraphModel):
                     edge_index,
                     self.settings.hidden_dims,
                     hidden_layers=self.settings.hidden_layers,
-                    checkpoint=self.settings.reduce_memory_usage,
+                    checkpoint=self.settings.use_checkpointing,
                 )
                 for edge_index in self.mesh_up_edge_index
             ]
         )
-        if self.settings.reduce_memory_usage:
+        if self.settings.offload_to_cpu:
             model = offload_to_cpu(model)
         return model
 
@@ -860,12 +862,12 @@ class HiLAM(BaseHiGraphModel):
                     edge_index,
                     self.settings.hidden_dims,
                     hidden_layers=self.settings.hidden_layers,
-                    checkpoint=self.settings.reduce_memory_usage,
+                    checkpoint=self.settings.use_checkpointing,
                 )
                 for edge_index in self.mesh_down_edge_index
             ]
         )
-        if self.settings.reduce_memory_usage:
+        if self.settings.offload_to_cpu:
             model = offload_to_cpu(model)
         return model
 

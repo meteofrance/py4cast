@@ -3,7 +3,7 @@ import time
 from argparse import ArgumentParser, BooleanOptionalAction
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, Union
+from typing import Optional, Tuple, Union
 
 import pytorch_lightning as pl
 
@@ -12,27 +12,19 @@ import torch
 from lightning.pytorch.loggers import TensorBoardLogger
 from lightning.pytorch.profilers import PyTorchProfiler
 from lightning_fabric.utilities import seed
-from torch.utils.data import Dataset
 
-from pnia.datasets import SmeagolDataset, TitanDataset
-from pnia.datasets.base import TorchDataloaderSettings
-from pnia.datasets.titan import TitanHyperParams
+from pnia.datasets import get_datasets
+from pnia.datasets.base import DatasetABC, TorchDataloaderSettings
 
 # From the package
 from pnia.lightning import ArLightningHyperParam, AutoRegressiveLightning
 
-DATASETS = {
-    "titan": (TitanDataset,),
-    "smeagol": (SmeagolDataset,),
-}
-
 
 @dataclass
-class TrainingParams:
+class TrainerParams:
     precision: str = "32"
     val_interval: int = 1
     epochs: int = 200
-    devices: int = 1
     profiler: str = "None"
     run_id: int = 1
     no_log: bool = False
@@ -40,17 +32,21 @@ class TrainingParams:
 
 
 def main(
-    training_dataset: Dataset,
-    val_dataset: Dataset,
-    test_dataset: Dataset,
-    tp: TrainingParams,
+    tp: TrainerParams,
     hp: ArLightningHyperParam,
     dl_settings: TorchDataloaderSettings,
+    datasets: Tuple[DatasetABC, DatasetABC, DatasetABC],
 ):
+    """
+    Main function to first train the model
+    using the (train, val) datasets and lightning .fit
+    and then evaluate the model on the test dataset calling .test
+    """
+    train_ds, val_ds, test_ds = datasets
 
-    train_loader = training_dataset.torch_dataloader(dl_settings)
-    val_loader = val_dataset.torch_dataloader(dl_settings)
-    test_loader = test_dataset.torch_dataloader(dl_settings)
+    train_loader = train_ds.torch_dataloader(dl_settings)
+    val_loader = val_ds.torch_dataloader(dl_settings)
+    test_loader = test_ds.torch_dataloader(dl_settings)
 
     # Instatiate model + trainer
     if torch.cuda.is_available():
@@ -103,7 +99,6 @@ def main(
         print(f"No profiler set {tp.profiler}")
 
     trainer = pl.Trainer(
-        devices=tp.devices,
         num_nodes=1,
         max_epochs=tp.epochs,
         deterministic=True,
@@ -135,8 +130,10 @@ if __name__ == "__main__":
 
     path = Path(__file__)
 
-    parser = ArgumentParser(description="Train or evaluate models for LAM")
-    # For our implementation
+    parser = ArgumentParser(
+        description="Train Neural networks for weather forecasting."
+    )
+
     parser.add_argument(
         "--dataset",
         type=str,
@@ -145,24 +142,24 @@ if __name__ == "__main__":
         choices=["titan", "smeagol"],
     )
     parser.add_argument(
-        "--data_conf",
-        type=str,
-        default=path.parent.parent / "config" / "smeagol.json",
-        help="Configuration file for this dataset. Used only for smeagol dataset right now.",
+        "--dataset_conf",
+        type=Union[str, None],
+        default=None,
+        help="Configuration file for the dataset. If None, default configuration is used.",
     )
 
     parser.add_argument(
         "--model",
         type=str,
-        default="graph",
-        help="Model architecture to train/evaluate (default: graph)",
+        default="halfunet",
+        help="Neural Network architecture to train",
     )
 
     parser.add_argument(
         "--model_conf",
         default=None,
         type=Path,
-        help="Configuration file for the model.",
+        help="Configuration file for the model. If None default model settings are used.",
     )
 
     # Old arguments from nlam
@@ -188,37 +185,18 @@ if __name__ == "__main__":
     parser.add_argument(
         "--epochs", type=int, default=200, help="upper epoch limit (default: 200)"
     )
-    parser.add_argument("--gpus", type=int, default=1, help="Gpus asked.")
     parser.add_argument(
         "--profiler",
         type=str,
         default="None",
         help="Profiler required. Possibilities are ['simple', 'pytorch', 'None']",
     )
-    parser.add_argument(
-        "--batch_size", type=int, default=4, help="batch size (default: 4)"
-    )
-    parser.add_argument(
-        "--load", type=str, help="Path to load model parameters from (default: None)"
-    )
-    parser.add_argument(
-        "--restore_opt",
-        type=int,
-        default=0,
-        help="If optimizer state shoudl be restored with model (default: 0 (false))",
-    )
+    parser.add_argument("--batch_size", type=int, default=1, help="batch size")
     parser.add_argument(
         "--precision",
         type=str,
         default="32",
         help="Numerical precision to use for model (32/16/bf16) (default: 32)",
-    )
-
-    parser.add_argument(
-        "--memory",
-        action=BooleanOptionalAction,
-        default=False,
-        help="Do we need to save memory ?",
     )
     parser.add_argument(
         "--limit_train_batches",
@@ -227,10 +205,22 @@ if __name__ == "__main__":
         help="Number of batches to use for training",
     )
     parser.add_argument(
-        "--steps",
+        "--num_pred_steps_train",
         type=int,
         default=1,
-        help="How many ARSteps do we use ? ",
+        help="Number of auto-regressive steps/prediction steps during training forward pass",
+    )
+    parser.add_argument(
+        "--num_pred_steps_val_test",
+        type=int,
+        default=5,
+        help="Number of auto-regressive steps/prediction steps during validation and tests",
+    )
+    parser.add_argument(
+        "--num_input_steps",
+        type=int,
+        default=2,
+        help="Number of previous timesteps supplied as inputs to the model",
     )
     parser.add_argument(
         "--no_log",
@@ -247,54 +237,36 @@ if __name__ == "__main__":
     random_run_id = random.randint(0, 9999)
     seed.seed_everything(args.seed)
 
-    # Initialisation du dataset
-    if args.dataset == "smeagol":
-        training_dataset, validation_dataset, test_dataset = SmeagolDataset.from_json(
-            args.data_conf,
-            args={
-                "train": {
-                    "nb_pred_steps": args.steps,
-                },
-                "valid": {
-                    "nb_pred_steps": 5,
-                },
-                "test": {
-                    "nb_pred_steps": 5,
-                },
-            },
-        )
-
-    elif args.dataset == "titan":
-        hparams_train_dataset = TitanHyperParams(**{"nb_pred_steps": 1})
-        training_dataset = DATASETS["titan"][0](hparams_train_dataset)
-        hparams_val_dataset = TitanHyperParams(
-            **{"nb_pred_steps": 19, "split": "valid"}
-        )
-        validation_dataset = DATASETS["titan"][0](hparams_val_dataset)
-        hparams_test_dataset = TitanHyperParams(
-            **{"nb_pred_steps": 19, "split": "test"}
-        )
-        test_dataset = DATASETS["titan"][0](hparams_test_dataset)
+    datasets = get_datasets(
+        args.dataset,
+        args.num_input_steps,
+        args.num_pred_steps_train,
+        args.num_pred_steps_val_test,
+        args.dataset_conf,
+    )
 
     hp = ArLightningHyperParam(
-        dataset_info=training_dataset.dataset_info,
+        dataset_info=datasets[0].dataset_info,
         batch_size=args.batch_size,
         model_name=args.model,
         model_conf=args.model_conf,
+        num_input_steps=args.num_input_steps,
+        num_pred_steps_train=args.num_pred_steps_train,
+        num_pred_steps_val_test=args.num_pred_steps_val_test,
         lr=args.lr,
         loss=args.loss,
     )
 
     # Parametre pour le training uniquement
-    tp = TrainingParams(
+    tp = TrainerParams(
         precision=args.precision,
         val_interval=args.val_interval,
         epochs=args.epochs,
-        devices=args.gpus,
         profiler=args.profiler,
         no_log=args.no_log,
         run_id=random_run_id,
         limit_train_batches=args.limit_train_batches,
     )
     dl_settings = TorchDataloaderSettings(batch_size=args.batch_size)
-    main(training_dataset, validation_dataset, test_dataset, tp, hp, dl_settings)
+
+    main(tp, hp, dl_settings, datasets)

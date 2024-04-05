@@ -15,7 +15,7 @@ import xarray as xr
 from torch.utils.data import DataLoader, Dataset
 
 from pnia.datasets.base import (
-    AbstractDataset,
+    DatasetABC,
     DatasetInfo,
     Item,
     StateVariable,
@@ -311,19 +311,23 @@ class Sample:
 @dataclass(slots=True)
 class SmeagolSettings:
     term: dict  # Pas vraiment a mettre ici. Voir où le mettre
-    nb_input_steps: int = 2  # Step en entrée
-    nb_pred_steps: int = 1  # Step en sortie
+    num_input_steps: int = 2  # Number of input timesteps
+    num_pred_steps: int = 1  # Number of output timesteps
     standardize: bool = True
     # Pas vraiment a mettre ici. Voir où le mettre
     members: Tuple[int] = (0,)
 
     @property
-    def nb_steps(self):
+    def num_total_steps(self):
+        """
+        Total number of timesteps
+        for one sample.
+        """
         # Nb of step in on sample
-        return self.nb_input_steps + self.nb_pred_steps
+        return self.num_input_steps + self.num_pred_steps
 
 
-class SmeagolDataset(AbstractDataset, Dataset):
+class SmeagolDataset(DatasetABC, Dataset):
     def __init__(
         self, grid: Grid, period: Period, params: List[Param], settings: SmeagolSettings
     ):
@@ -371,7 +375,7 @@ class SmeagolDataset(AbstractDataset, Dataset):
                 self.settings.term["timestep"],
             )
         )
-        sample_by_date = len(terms) // self.settings.nb_steps
+        sample_by_date = len(terms) // self.settings.num_total_steps
         samples = []
         number = 0
         for date in self.period.date_list:
@@ -379,15 +383,16 @@ class SmeagolDataset(AbstractDataset, Dataset):
                 for sample in range(0, sample_by_date):
                     input_terms = terms[
                         sample
-                        * self.settings.nb_steps : sample
-                        * self.settings.nb_steps
-                        + self.settings.nb_input_steps
+                        * self.settings.num_total_steps : sample
+                        * self.settings.num_total_steps
+                        + self.settings.num_input_steps
                     ]
                     output_terms = terms[
-                        sample * self.settings.nb_steps
-                        + self.settings.nb_input_steps : sample * self.settings.nb_steps
-                        + self.settings.nb_input_steps
-                        + self.settings.nb_pred_steps
+                        sample * self.settings.num_total_steps
+                        + self.settings.num_input_steps : sample
+                        * self.settings.num_total_steps
+                        + self.settings.num_input_steps
+                        + self.settings.num_pred_steps
                     ]
                     samp = Sample(
                         member=member,
@@ -589,9 +594,16 @@ class SmeagolDataset(AbstractDataset, Dataset):
         return Item(inputs=linputs, outputs=loutputs, forcing=lforcings)
 
     @classmethod
-    def from_json(cls, file, args={}):
-        with open(file, "r") as fp:
+    def from_json(
+        cls,
+        fname: Path,
+        num_input_steps: int,
+        num_pred_steps_train: int,
+        num_pred_steps_val_test: int,
+    ) -> Tuple["SmeagolDataset", "SmeagolDataset", "SmeagolDataset"]:
+        with open(fname, "r") as fp:
             conf = json.load(fp)
+
         grid = Grid(**conf["grid"])
         param_list = []
         # Reflechir a comment le faire fonctionner avec plusieurs sources.
@@ -630,19 +642,34 @@ class SmeagolDataset(AbstractDataset, Dataset):
             grid,
             train_period,
             param_list,
-            SmeagolSettings(members=members, term=term, **args.get("train", {})),
+            SmeagolSettings(
+                members=members,
+                term=term,
+                num_pred_steps=num_pred_steps_train,
+                num_input_steps=num_input_steps,
+            ),
         )
         valid_ds = SmeagolDataset(
             grid,
             valid_period,
             param_list,
-            SmeagolSettings(members=members, term=term, **args.get("valid", {})),
+            SmeagolSettings(
+                members=members,
+                term=term,
+                num_pred_steps=num_pred_steps_val_test,
+                num_input_steps=num_input_steps,
+            ),
         )
         test_ds = SmeagolDataset(
             grid,
             test_period,
             param_list,
-            SmeagolSettings(members=members, term=term, **args.get("test", {})),
+            SmeagolSettings(
+                members=members,
+                term=term,
+                num_pred_steps=num_pred_steps_val_test,
+                num_input_steps=num_input_steps,
+            ),
         )
         return train_ds, valid_ds, test_ds
 

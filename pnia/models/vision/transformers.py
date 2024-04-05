@@ -16,7 +16,7 @@ from einops import rearrange
 from torch import einsum, nn
 
 from pnia.datasets.base import Item, Statics
-from pnia.models.base import ModelBase
+from pnia.models.base import ModelABC
 from pnia.models.vision.utils import (
     features_last_to_second,
     features_second_to_last,
@@ -45,7 +45,7 @@ class SegformerSettings:
 
     # Number of channels after downsampling
     # injected in the mit
-    no_downsampling_chans: int = 32
+    num_downsampling_chans: int = 32
 
 
 class DsConv2d(nn.Module):
@@ -217,7 +217,7 @@ class MiT(nn.Module):
         return ret
 
 
-class Segformer(ModelBase, nn.Module):
+class Segformer(ModelABC, nn.Module):
     """
     Segformer architecture with extra
     upsampling in the decoder to match
@@ -228,8 +228,8 @@ class Segformer(ModelBase, nn.Module):
 
     def __init__(
         self,
-        no_input_features: int,
-        no_output_features: int,
+        num_input_features: int,
+        num_output_features: int,
         settings: SegformerSettings,
         *args,
         **kwargs,
@@ -254,20 +254,20 @@ class Segformer(ModelBase, nn.Module):
         ), "only four stages are allowed, all keyword arguments must be either a single value or a tuple of 4 values"
 
         # reduce image size by a factor 2
-        # and spread over no_downsampling_chans channels
-        no_chans = settings.no_downsampling_chans
+        # and spread over num_downsampling_chans channels
+        num_chans = settings.num_downsampling_chans
         self.downsampler = nn.Sequential(
             nn.MaxPool2d(kernel_size=2, stride=2),
-            nn.Conv2d(no_input_features, no_chans, kernel_size=3, padding=1),
-            nn.BatchNorm2d(no_chans),
+            nn.Conv2d(num_input_features, num_chans, kernel_size=3, padding=1),
+            nn.BatchNorm2d(num_chans),
             nn.ReLU(inplace=True),
-            nn.Conv2d(no_chans, no_chans, kernel_size=3, padding=1),
-            nn.BatchNorm2d(no_chans),
+            nn.Conv2d(num_chans, num_chans, kernel_size=3, padding=1),
+            nn.BatchNorm2d(num_chans),
             nn.ReLU(inplace=True),
         )
 
         self.mit = MiT(
-            channels=no_chans,
+            channels=num_chans,
             dims=dims,
             heads=heads,
             ff_expansion=ff_expansion,
@@ -301,7 +301,7 @@ class Segformer(ModelBase, nn.Module):
             nn.BatchNorm2d(num_features=dim_out // 4),
             nn.ReLU(inplace=True),
             nn.UpsamplingBilinear2d(scale_factor=2),
-            nn.Conv2d(dim_out // 4, no_output_features, kernel_size=3, padding=1),
+            nn.Conv2d(dim_out // 4, num_output_features, kernel_size=3, padding=1),
         )
 
     def transform_statics(self, statics: Statics) -> Statics:

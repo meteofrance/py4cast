@@ -12,7 +12,7 @@ from cyeccodes import nested_dd_iterator
 from cyeccodes.eccodes import get_multi_messages_from_file
 from torch.utils.data import DataLoader, Dataset
 
-from pnia.datasets.base import AbstractDataset
+from pnia.datasets.base import DatasetABC
 from pnia.settings import CACHE_DIR
 
 FORMATSTR = "%Y-%m-%d_%Hh%M"
@@ -117,7 +117,7 @@ def read_grib(params, path_grib: Path, names=None, levels=None):
     return params, grib_dict
 
 
-class TitanDataset(AbstractDataset, Dataset):
+class TitanDataset(DatasetABC, Dataset):
     def __init__(self, hparams: TitanHyperParams) -> None:
         self.root_dir = TITAN_DIR
         self.init_metadata()

@@ -12,7 +12,7 @@ from dataclasses_json import dataclass_json
 from torch import nn
 
 from pnia.datasets.base import Item, Statics
-from pnia.models.base import ModelBase, ModelInfo
+from pnia.models.base import ModelABC, ModelInfo
 from pnia.models.vision.utils import (
     features_last_to_second,
     features_second_to_last,
@@ -69,13 +69,13 @@ class GhostModule(nn.Module):
         return self.relu(x)
 
 
-class HalfUnet(ModelBase, nn.Module):
+class HalfUnet(ModelABC, nn.Module):
     settings_kls = HalfUnetSettings
 
     def __init__(
         self,
-        no_input_features: int,
-        no_output_features: int,
+        num_input_features: int,
+        num_output_features: int,
         settings: HalfUnetSettings,
         *args,
         **kwargs,
@@ -83,7 +83,7 @@ class HalfUnet(ModelBase, nn.Module):
         super().__init__(*args, **kwargs)
 
         self.encoder1 = self._block(
-            no_input_features,
+            num_input_features,
             settings.num_filters,
             name="enc1",
             bias=settings.bias,
@@ -148,7 +148,7 @@ class HalfUnet(ModelBase, nn.Module):
 
         self.outconv = nn.Conv2d(
             in_channels=settings.num_filters,
-            out_channels=no_output_features,
+            out_channels=num_output_features,
             kernel_size=1,
             bias=settings.bias,
         )

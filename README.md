@@ -46,23 +46,23 @@ To train on a dataset using a network with its default settings just pass the na
 (all lowercase) as shown below:
 
 ```bash
-runai exec_gpu python bin/train.py --dataset smeagol --model hilam --gpus 4
+runai exec_gpu python bin/train.py --dataset smeagol --model hilam
 
-runai exec_gpu python bin/train.py --dataset smeagol --model halfunet --gpus 4
+runai exec_gpu python bin/train.py --dataset smeagol --model halfunet
 
-runai exec_gpu python bin/train.py --dataset smeagol --model segformer --gpus 4
+runai exec_gpu python bin/train.py --dataset smeagol --model segformer
 ```
 
 You can override some settings of the model using a json config file (here we increase the number of filter to 128 and use ghost modules):
 
 ```bash
-runai exec_gpu python bin/train.py --dataset smeagol --model halfunet --gpus 1 --model_conf config/halfunet128_ghost.json
+runai exec_gpu python bin/train.py --dataset smeagol --model halfunet --model_conf config/halfunet128_ghost.json
 ```
 
 You can also override the dataset default configuration file:
 
 ```bash
-runai exec_gpu python bin/train.py --dataset smeagol --model halfunet --gpus 4 --data_conf config/smeagol.json
+runai exec_gpu python bin/train.py --dataset smeagol --model halfunet --dataset_conf config/smeagol.json
 ```
 
 [More information here](./bin/Readme.md)
