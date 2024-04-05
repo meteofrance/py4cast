@@ -17,7 +17,7 @@ if __name__ == "__main__":
 
     model = AutoRegressiveLightning.load_from_checkpoint(ckpt)
     # For debbugging skip plotting
-    model.hparams.n_example_pred = 1
+    model.hparams.num_samples_to_plot = 1
     # model.eval()
     training_dataset, validation_dataset, test_dataset = SmeagolDataset.from_json(
         path.parent.parent / "config" / "smeagoldev.json",

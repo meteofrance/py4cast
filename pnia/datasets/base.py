@@ -3,7 +3,7 @@ Base classes defining our software components
 and their interfaces
 """
 
-from abc import ABC, abstractmethod, abstractproperty
+from abc import ABC, abstractclassmethod, abstractmethod, abstractproperty
 from dataclasses import dataclass, field, fields
 from functools import cached_property
 from pathlib import Path
@@ -126,11 +126,23 @@ class Item:
                     )
 
 
-@dataclass(slots=True)
+@dataclass
 class ItemBatch(Item):
     """
     Dataclass holding a batch of items.
     """
+
+    @cached_property
+    def batch_size(self):
+        return self.inputs[0].values.size(0)
+
+    @cached_property
+    def num_input_steps(self):
+        return self.inputs[0].values.size(1)
+
+    @cached_property
+    def num_pred_steps(self):
+        return self.outputs[0].values.size(1)
 
 
 def collate_fn(items: List[Item]) -> ItemBatch:
@@ -331,7 +343,13 @@ class TorchDataloaderSettings:
     persistent_workers: bool = False
 
 
-class AbstractDataset(ABC):
+class DatasetABC(ABC):
+    """
+    Abstract Base class defining the mandatory
+    properties and methods a dataset MUST
+    implement.
+    """
+
     @abstractmethod
     def torch_dataloader(self, tl_settings: TorchDataloaderSettings) -> DataLoader:
         """
@@ -588,5 +606,20 @@ class AbstractDataset(ABC):
     def diagnostic_dim(self) -> int:
         """
         Return the number of diagnostic variables (output only)
+        """
+        pass
+
+    @abstractclassmethod
+    def from_json(
+        cls,
+        fname: Path,
+        num_input_steps: int,
+        num_pred_steps_train: int,
+        num_pred_steps_val_tests: int,
+    ) -> Tuple["DatasetABC", "DatasetABC", "DatasetABC"]:
+        """
+        Load a dataset from a json file + the number of expected timesteps
+        taken as inputs (num_input_steps) and to predict (num_pred_steps)
+        Return the train, valid and test datasets, in that order
         """
         pass

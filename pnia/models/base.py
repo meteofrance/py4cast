@@ -14,13 +14,12 @@ from torch.utils.checkpoint import checkpoint
 from pnia.datasets.base import Item, Statics
 
 
-class ModelBase(ABC):
+class ModelABC(ABC):
     """
     All models should inherit from this class.
+    It provides the two methods to plug
+    a nn.Module subclass with our Statics and Item classes.
     """
-
-    def __init_subclass__(cls) -> None:
-        return super().__init_subclass__()
 
     @abstractmethod
     def transform_statics(self, statics: Statics) -> Statics:
@@ -35,7 +34,7 @@ class ModelBase(ABC):
     ) -> Tuple[torch.tensor, torch.tensor, torch.tensor]:
         """
         Transform the batch into a set of tensors as expected
-        by the model.
+        by this model forward call.
         """
 
 

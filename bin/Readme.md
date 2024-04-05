@@ -18,8 +18,8 @@ Main options are :
 
     - --model  ["hi_lam","graph_lam"] : The model choosed
     - --dataset ["titan","smeagol"] : The dataset choosed
-    - --data_conf  : The configuration file for the dataset (used only for smeagol right now).
-    - --steps : Number of autoregressive steps 
+    - --dataset_conf  : The configuration file for the dataset (used only for smeagol right now).
+    - --num_ar_steps : Number of autoregressive steps 
     - --standardize : Do we want to standardize our inputs ? 
 
 In dev mode : 
@@ -31,13 +31,13 @@ In dev mode :
 ### Examples
 
 ```sh
-    runai gpu_play_mono
-    runai exec_gpu python bin/train.py --model hi_lam --dataset smeagol
+    runai gpu_play 1
+    runai exec_gpu python bin/train.py --model hilam --dataset smeagol
 ```
 
 ```sh
-    runai gpu_play_mono
-    runai exec_gpu python bin/train.py --model hi_lam --dataset titan
+    runai gpu_play 1
+    runai exec_gpu python bin/train.py --model hilam --dataset titan
 ```
 
 
@@ -50,10 +50,10 @@ Note that the seed is fixed by default so exactly the same random number had bee
 
 ```sh 
 runai gpu_play 4
-runai exec_gpu python bin/train.py --model graph --dataset smeagol --no_log --standardize --gpu 4 --limit_train_batches 200  --batch_size 1 --step 1
-runai exec_gpu python bin/train.py --model graph --dataset smeagol --no_log --standardize --gpu 4 --limit_train_batches 200  --batch_size 1 --step 3
-runai exec_gpu python bin/train.py --model graph --dataset smeagol --no_log --standardize --gpu 1 --limit_train_batches 200  --batch_size 1 --step 1
-runai exec_gpu python bin/train.py --model graph --dataset smeagol --no_log --standardize --gpu 1 --limit_train_batches 200  --batch_size 1 --step 3
+runai exec_gpu python bin/train.py --model hilam --dataset smeagol --no_log --standardize --gpu 4 --limit_train_batches 200  --batch_size 1 --step 1
+runai exec_gpu python bin/train.py --model hilam --dataset smeagol --no_log --standardize --gpu 4 --limit_train_batches 200  --batch_size 1 --step 3
+runai exec_gpu python bin/train.py --model hilam --dataset smeagol --no_log --standardize --gpu 1 --limit_train_batches 200  --batch_size 1 --step 1
+runai exec_gpu python bin/train.py --model hilam --dataset smeagol --no_log --standardize --gpu 1 --limit_train_batches 200  --batch_size 1 --step 3
 ```
 
 NB : The it per second is increasing batch after batch. There seem to be an initial cost which vanish. 

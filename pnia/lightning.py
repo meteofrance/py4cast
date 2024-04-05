@@ -2,7 +2,7 @@ from copy import deepcopy
 from dataclasses import dataclass
 from functools import cached_property
 from pathlib import Path
-from typing import Union
+from typing import Tuple, Union
 
 import einops
 import pytorch_lightning as pl
@@ -10,7 +10,7 @@ import torch
 from lightning.pytorch.utilities import rank_zero_only
 from torchinfo import summary
 
-from pnia.datasets.base import DatasetInfo
+from pnia.datasets.base import DatasetInfo, ItemBatch
 from pnia.losses import ScaledL1Loss, ScaledRMSELoss, WeightedL1Loss, WeightedMSELoss
 from pnia.models import build_model_from_settings, get_model_kls_and_settings
 from pnia.models.base import expand_to_batch
@@ -30,11 +30,19 @@ class ArLightningHyperParam:
 
     dataset_info: DatasetInfo
     batch_size: int
+
     model_conf: Union[Path, None] = None
-    model_name: str = "graph"
+    model_name: str = "halfunet"
+
     lr: float = 0.1
     loss: str = "mse"
-    n_example_pred: int = 2
+
+    num_input_steps: int = 2
+
+    num_pred_steps_train: int = 2
+    num_pred_steps_val_test: int = 2
+
+    num_samples_to_plot: int = 2
 
 
 @rank_zero_only
@@ -52,12 +60,12 @@ class AutoRegressiveLightning(pl.LightningModule):
         super().__init__(*args, **kwargs)
 
         self.save_hyperparameters()
-        self.hparams["hparams"].dataset_info.summary()
+        hparams.dataset_info.summary()
         # Load static features for grid/data
         # We do not want to change dataset statics inplace
         # Otherwise their is some problem with transform_statics and parameters_saving
         # when relaoding from checkpoint
-        statics = deepcopy(self.hparams["hparams"].dataset_info.statics)
+        statics = deepcopy(hparams.dataset_info.statics)
 
         # Keeping track of grid shape and N_interior
         self.grid_shape = statics.grid_shape
@@ -73,28 +81,30 @@ class AutoRegressiveLightning(pl.LightningModule):
         self.spatial_loss_maps = []
 
         # Set model input/output grid features based on dataset tensor shapes
-        grid_static_dim = statics.grid_static_features.values.shape[-1]
+        num_grid_static_features = statics.grid_static_features.values.shape[-1]
 
-        input_features = (
-            # we inject the previous and the penultimate states hence the 2
-            2 * self.hparams["hparams"].dataset_info.weather_dim
-            + grid_static_dim
-            + self.hparams["hparams"].dataset_info.forcing_dim
+        # Compute the number of input features for the neural network
+        # Should be directly supplied by datasetinfo ?
+
+        num_input_features = (
+            hparams.num_input_steps * hparams.dataset_info.weather_dim
+            + num_grid_static_features
+            + hparams.dataset_info.forcing_dim
         )
-        no_input_features = input_features
-        no_output_features = self.hparams["hparams"].dataset_info.weather_dim
+
+        num_output_features = hparams.dataset_info.weather_dim
 
         model_kls, model_settings = get_model_kls_and_settings(
-            self.hparams["hparams"].model_name, self.hparams["hparams"].model_conf
+            hparams.model_name, hparams.model_conf
         )
 
         rank_zero_init(model_kls, model_settings, statics)
 
         self.model, model_settings = build_model_from_settings(
-            self.hparams["hparams"].model_name,
-            no_input_features,
-            no_output_features,
-            self.hparams["hparams"].model_conf,
+            hparams.model_name,
+            num_input_features,
+            num_output_features,
+            hparams.model_conf,
         )
 
         summary(self.model)
@@ -106,9 +116,7 @@ class AutoRegressiveLightning(pl.LightningModule):
 
         self.register_buffer(
             "grid_static_features",
-            expand_to_batch(
-                statics.grid_static_features.values, self.hparams["hparams"].batch_size
-            ),
+            expand_to_batch(statics.grid_static_features.values, hparams.batch_size),
             persistent=False,
         )
         # We need to instantiate the loss after statics had been transformed.
@@ -122,7 +130,7 @@ class AutoRegressiveLightning(pl.LightningModule):
             raise TypeError(f"Unknown loss function: {hparams.loss}")
         self.loss.prepare(statics)
 
-    def configure_optimizers(self):
+    def configure_optimizers(self) -> torch.optim.Optimizer:
         opt = torch.optim.AdamW(
             self.parameters(), lr=self.hparams["hparams"].lr, betas=(0.9, 0.95)
         )
@@ -131,63 +139,13 @@ class AutoRegressiveLightning(pl.LightningModule):
 
         return opt
 
-    def unroll_prediction(self, init_states, forcing_features, true_states):
-        """
-        Roll out prediction taking multiple autoregressive steps with model
-        init_states: (B, 2, N_grid, d_f)
-        forcing_features: (B, pred_steps, N_grid, d_static_f)
-        true_states: (B, pred_steps, N_grid, d_f)
-        """
-        prev_prev_state = init_states[:, 0]
-        prev_state = init_states[:, 1]
-        prediction_list = []
-        pred_steps = forcing_features.shape[1]
-
-        for i in range(pred_steps):
-            forcing = forcing_features[:, i]
-            border_state = true_states[:, i]
-
-            # TODO c'est ici qu'il faudra charger le forceur sur les côtés.
-            # ToDo : fix batch size problem. This is weird to have to do that.
-            if self.hparams["hparams"].batch_size != prev_state.shape[0]:
-                bs = prev_state.shape[0]
-            else:
-                bs = self.hparams["hparams"].batch_size
-            x = torch.cat(
-                [
-                    prev_state,
-                    prev_prev_state,
-                    self.grid_static_features[:bs],  # temporary fix.
-                    forcing,
-                ],
-                dim=-1,
-            )
-
-            # Graph (B, N_grid, d_f) or Conv (B, N_lat,N_lon d_f)
-            y = self.model(x)
-
-            predicted_state = prev_state + y * self.step_diff_std + self.step_diff_mean
-
-            # Overwrite border with true state
-            new_state = (
-                self.border_mask * border_state + self.interior_mask * predicted_state
-            )
-            prediction_list.append(new_state)
-            # Upate conditioning states
-            prev_prev_state = prev_state
-            prev_state = new_state
-
-        return torch.stack(
-            prediction_list, dim=1
-        )  # Stacking is done on time step. (B, pred_steps, N_grid, d_f) or (B, pred_steps, N_lat, N_lon, d_f)
-
-    def common_step(self, batch):
+    def common_step(self, batch: ItemBatch) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Predict on single batch
-
-        init_states: (B, 2, N_grid, d_features) or (B, 2, Nlat,Nlon, d_features) depend on the grid
-        target_states: (B, pred_steps, N_grid, d_features) or (B, pred_steps, Nlat,Nlon,, dfeatures)
-        forcing_features: (B, pred_steps, N_grid, d_forcing), where index 0
+        init_states: (B,num_input_steps, N_grid, d_features)
+        or (B, num_input_steps, Nlat,Nlon, d_features) depend on the grid
+        target_states: (B, num_pred_steps, N_grid, d_features) or (B, num_pred_steps, Nlat,Nlon,, dfeatures)
+        forcing_features: (B, num_pred_steps, N_grid, d_forcing), where index 0
             corresponds to index 1 of init_states -> Ngrid could also be (Nlat,Nlon)
         """
         (
@@ -196,16 +154,57 @@ class AutoRegressiveLightning(pl.LightningModule):
             forcing_features,
         ) = self.model.transform_batch(batch)
 
-        prediction = self.unroll_prediction(
-            init_states, forcing_features, target_states
-        )  # (B, pred_steps, N_grid, d_f) or (B, pred_steps, Nlat, Nlon, df)
+        prev_states = init_states
+
+        prediction_list = []
+
+        # Here we do the autoregressive prediction looping
+        # for the desired number of ar steps.
+        for i in range(batch.num_pred_steps):
+
+            forcing = forcing_features[:, i]
+            border_state = target_states[:, i]
+
+            x = torch.cat(
+                [prev_states[:, idx] for idx in range(batch.num_input_steps)]
+                + [
+                    self.grid_static_features[: batch.batch_size],
+                    forcing,
+                ],
+                dim=-1,
+            )
+
+            # Graph (B, N_grid, d_f) or Conv (B, N_lat,N_lon d_f)
+            y = self.model(x)
+
+            # We update the latest of our prev_states with the network output
+            predicted_state = (
+                prev_states[:, -1] + y * self.step_diff_std + self.step_diff_mean
+            )
+
+            # Overwrite border with true state
+            new_state = (
+                self.border_mask * border_state + self.interior_mask * predicted_state
+            )
+            prediction_list.append(new_state)
+
+            # Only update the prev_states if we are not at the last step
+            if i < batch.num_pred_steps - 1:
+                # Update input states for next iteration: drop oldest, append new_state
+                prev_states = torch.cat(
+                    [prev_states[:, 1:], new_state.unsqueeze(1)], dim=1
+                )
+
+        prediction = torch.stack(
+            prediction_list, dim=1
+        )  # Stacking is done on time step. (B, pred_steps, N_grid, d_f) or (B, pred_steps, N_lat, N_lon, d_f)
 
         return prediction, target_states
 
     def on_train_start(self):
         self.train_plotters = []
 
-    def training_step(self, batch):
+    def training_step(self, batch: ItemBatch) -> torch.Tensor:
         """
         Train on single batch
         """
@@ -286,10 +285,10 @@ class AutoRegressiveLightning(pl.LightningModule):
         self.test_plotters = [
             StateErrorPlot(metrics),
             SpatialErrorPlot(),
-            PredictionPlot(self.hparams["hparams"].n_example_pred),
+            PredictionPlot(self.hparams["hparams"].num_samples_to_plot),
         ]
 
-    def test_step(self, batch, batch_idx):
+    def test_step(self, batch: ItemBatch, batch_idx):
         """
         Run test on single batch
         """
@@ -314,7 +313,7 @@ class AutoRegressiveLightning(pl.LightningModule):
             plotter.update(self, prediction=prediction, target=target)
 
     @cached_property
-    def interior_2d(self):
+    def interior_2d(self) -> torch.Tensor:
         """
         Get the interior mask as a 2d mask.
         Usefull when stored as 1D in statics.

@@ -70,9 +70,9 @@ class PredictionPlot(ErrorObserver):
     Observer used to plot prediction and target
     """
 
-    def __init__(self, n_example_pred: int, kind: str = "Test"):
-        self.n_example_pred = n_example_pred  # A prendre en parametre
-        print(f"Nombre de pred {n_example_pred}")
+    def __init__(self, num_samples_to_plot: int, kind: str = "Test"):
+        self.num_samples_to_plot = num_samples_to_plot  # A prendre en parametre
+        print(f"Nombre de pred {num_samples_to_plot}")
         self.plotted_examples = 0
         self.kind = kind
 
@@ -96,10 +96,13 @@ class PredictionPlot(ErrorObserver):
             )
 
         # Starting by plotting images
-        if obj.trainer.is_global_zero and self.plotted_examples < self.n_example_pred:
+        if (
+            obj.trainer.is_global_zero
+            and self.plotted_examples < self.num_samples_to_plot
+        ):
             # Need to plot more example predictions
             n_additional_examples = min(
-                prediction.shape[0], self.n_example_pred - self.plotted_examples
+                prediction.shape[0], self.num_samples_to_plot - self.plotted_examples
             )
             # Rescale to original data scale
             prediction_rescaled = pred * obj.data_std + obj.data_mean

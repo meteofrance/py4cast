@@ -39,8 +39,8 @@ def get_model_kls_and_settings(
 
 def build_model_from_settings(
     network_name: str,
-    no_input_features: int,
-    no_output_features: int,
+    num_input_features: int,
+    num_output_features: int,
     settings_path: Union[Path, None],
     *args,
     **kwargs,
@@ -51,7 +51,7 @@ def build_model_from_settings(
     model_kls, model_settings = get_model_kls_and_settings(network_name, settings_path)
     return (
         model_kls(
-            no_input_features, no_output_features, model_settings, *args, **kwargs
+            num_input_features, num_output_features, model_settings, *args, **kwargs
         ),
         model_settings,
     )
