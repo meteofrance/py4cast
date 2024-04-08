@@ -21,6 +21,7 @@ def smeagol_stats(dataconf=path.parent.parent / "config/smeagolstats.json"):
     train_ds, _, _ = SmeagolDataset.from_json(
         dataconf, {"train": {"standardize": False}}
     )
+    train_ds.settings.standardize = False
     train_ds.compute_parameters_stats()
     train_ds.settings.standardize = True
     train_ds.compute_time_step_stats()
