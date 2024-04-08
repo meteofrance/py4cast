@@ -114,7 +114,9 @@ def main(
         limit_val_batches=tp.limit_train_batches,  # No reason to spend hours on validation if we limit the training.
     )
     if args.load:
-        lightning_module = AutoRegressiveLightning.load_from_checkpoint(args.load,hparams=hp)
+        lightning_module = AutoRegressiveLightning.load_from_checkpoint(
+            args.load, hparams=hp
+        )
     else:
         lightning_module = AutoRegressiveLightning(hp)
 
@@ -231,9 +233,8 @@ if __name__ == "__main__":
         help="When activated, log are not stored and models are not saved. Use in dev mode.",
     )
     parser.add_argument(
-        "--load", 
-        type=str, 
-        help="Path to load model parameters from (default: None)")
+        "--load", type=str, help="Path to load model parameters from (default: None)"
+    )
     args, other = parser.parse_known_args()
 
     # Raise an exception if there are unknown arguments
