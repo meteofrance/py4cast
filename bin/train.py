@@ -147,7 +147,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--dataset_conf",
-        type=Union[str, None],
+        type=str,  # Union[str, None],
         default=None,
         help="Configuration file for the dataset. If None, default configuration is used.",
     )

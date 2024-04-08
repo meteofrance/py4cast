@@ -226,7 +226,9 @@ class StateErrorPlot(ErrorObserver):
                     )
 
                     tensorboard = obj.logger.experiment
-                    tensorboard.add_figure(f"{self.kind}_{name}", fig)
+                    tensorboard.add_figure(
+                        f"{self.kind}_{name}", fig, obj.current_epoch
+                    )
         # Free memory
         [self.losses[name].clear() for name in self.metrics]
 
