@@ -17,7 +17,7 @@ if __name__ == "__main__":
     # )
 
     train_ds, val_ds, test_ds = get_datasets(
-        "smeagol", 2, 1, 17, path.parent.parent / "config" / "smeagol.json"
+        "smeagol", 2, 1, 17
     )
 
     ckpt = "/home/mrpa/chabotv/pnia/saved_models/smeagol_franmgsp32hilam-040520:02-4832/last.ckpt"
