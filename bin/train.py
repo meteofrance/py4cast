@@ -113,7 +113,7 @@ def main(
         limit_train_batches=tp.limit_train_batches,
         limit_val_batches=tp.limit_train_batches,  # No reason to spend hours on validation if we limit the training.
     )
-    if args.load:
+    if args.load_model_ckpt:
         lightning_module = AutoRegressiveLightning.load_from_checkpoint(
             args.load, hparams=hp
         )
