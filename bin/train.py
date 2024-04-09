@@ -233,7 +233,7 @@ if __name__ == "__main__":
         help="When activated, log are not stored and models are not saved. Use in dev mode.",
     )
     parser.add_argument(
-        "--load",
+        "--load_model_ckpt",
         type=str,
         default=None,
         help="Path to load model parameters from (default: None)",
