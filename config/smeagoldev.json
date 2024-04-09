@@ -21,7 +21,7 @@
         "border_size":10, 
         "domain":"france",
         "model":"arome",
-        "subgrid":[50,306,50,306]
+        "subgrid":[50,178,50,178]
     }, 
     "dataset": {
         "arome": {
@@ -46,17 +46,7 @@
                         85,
                         80,
                         75,
-                        70,
-                        65,
-                        60,
-                        55,
-                        50,
-                        45,
-                        40,
-                        30,
-                        20,
-                        10,
-                        1
+                        70
                     ]
                 },
                 "WIND.V.PHYS": {
@@ -67,16 +57,7 @@
                         80,
                         75,
                         70,
-                        65,
-                        60,
-                        55,
-                        50,
-                        45,
-                        40,
-                        30,
-                        20,
-                        10,
-                        1
+                        65
                     ]
                 },
                 "WIND.U.PHYS":{
@@ -87,16 +68,7 @@
                         80,
                         75,
                         70,
-                        65,
-                        60,
-                        55,
-                        50,
-                        45,
-                        40,
-                        30,
-                        20,
-                        10,
-                        1
+                        65
                     ]
                 },
                 "HUMI.SPECIFI":{
@@ -110,25 +82,15 @@
                         65,
                         60,
                         55,
-                        50,
-                        45,
-                        40,
-                        30,
-                        20,
-                        10,
-                        1
+                        50
                     ]
                 },
-                "SURFTEMPERATURE":{"shortname":"surf_t"},
                 "CLSTEMPERATURE":{"shortname":"2t"},
                 "CLSHUMI.RELATIVE":{"shortname":"2hu"},
-                "CLSVENT.ZONAL":{"shortname":"10u"},
-                "CLSVENT.MERIDIEN":{"shortname":"10v"},
                 "CLSU.RAF60M.XFU":{"shortname":"u_raf"},
                 "CLSV.RAF60M.XFU":{"shortname":"v_raf"},
                 "SURFPRESSION":{"shortname":"psurf"},
                 "SURFACCPLUIE":{"shortname":"rain"},
-                "SOMMFLU.RAY.SOLA":{"shortname":"Rad_Flux", "kind":"input"},
                 "SOMMRAYT.SOLAIRE":{"shortname":"Rad","kind":"input"}
                 }
             }

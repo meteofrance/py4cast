@@ -530,13 +530,17 @@ class SmeagolDataset(DatasetABC, Dataset):
                 ds = ds.sel(level=param.levels)
             # Read inputs. Separate forcing field from I/O
             try:
-                means = np.asarray(
-                    [self.stats[name]["mean"] for name in param.parameter_short_name]
-                )
+                if self.settings.standardize:
+                    means = np.asarray(
+                        [
+                            self.stats[name]["mean"]
+                            for name in param.parameter_short_name
+                        ]
+                    )
 
-                std = np.asarray(
-                    [self.stats[name]["std"] for name in param.parameter_short_name]
-                )
+                    std = np.asarray(
+                        [self.stats[name]["std"] for name in param.parameter_short_name]
+                    )
 
                 if param.kind == "input_output":
                     tmp_in = ds[param.name].sel(step=sample.input_terms).values

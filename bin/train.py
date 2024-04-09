@@ -113,8 +113,12 @@ def main(
         limit_train_batches=tp.limit_train_batches,
         limit_val_batches=tp.limit_train_batches,  # No reason to spend hours on validation if we limit the training.
     )
-
-    lightning_module = AutoRegressiveLightning(hp)
+    if args.load_model_ckpt:
+        lightning_module = AutoRegressiveLightning.load_from_checkpoint(
+            args.load_model_ckpt, hparams=hp
+        )
+    else:
+        lightning_module = AutoRegressiveLightning(hp)
 
     # Train model
     trainer.fit(
@@ -143,7 +147,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--dataset_conf",
-        type=Union[str, None],
+        type=str,  # Union[str, None] # Union does not work from CLI.
         default=None,
         help="Configuration file for the dataset. If None, default configuration is used.",
     )
@@ -227,6 +231,12 @@ if __name__ == "__main__":
         action=BooleanOptionalAction,
         default=False,
         help="When activated, log are not stored and models are not saved. Use in dev mode.",
+    )
+    parser.add_argument(
+        "--load_model_ckpt",
+        type=str,
+        default=None,
+        help="Path to load model parameters from (default: None)",
     )
     args, other = parser.parse_known_args()
 
