@@ -115,7 +115,7 @@ def main(
     )
     if args.load_model_ckpt:
         lightning_module = AutoRegressiveLightning.load_from_checkpoint(
-            args.load, hparams=hp
+            args.load_model_ckpt, hparams=hp
         )
     else:
         lightning_module = AutoRegressiveLightning(hp)
