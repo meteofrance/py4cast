@@ -1,14 +1,6 @@
 FROM pytorch/pytorch:2.1.2-cuda12.1-cudnn8-runtime
 
-ARG USERNAME
-ARG GROUPNAME
-ARG USER_UID
-ARG USER_GUID
-ARG HOME_DIR
 ARG INJECT_MF_CERT
-ARG REQUESTS_CA_BUNDLE
-ARG CURL_CA_BUNDLE
-ARG NODE_EXTRA_CA_CERTS
 
 COPY mf.crt /usr/local/share/ca-certificates/mf.crt
 
@@ -22,10 +14,19 @@ RUN $MY_APT update && $MY_APT install -y curl gdal-bin libgdal-dev libgeos-dev g
 ENV CPLUS_INCLUDE_PATH=/usr/include/gdal
 ENV C_INCLUDE_PATH=/usr/include/gdal
 
-RUN pip install --upgrade pip
+ARG REQUESTS_CA_BUNDLE
+ARG CURL_CA_BUNDLE
 
+RUN pip install --upgrade pip
 COPY requirements.txt /root/requirements.txt
 RUN set -eux && pip install --default-timeout=100 -r /root/requirements.txt
+
+ARG USERNAME
+ARG GROUPNAME
+ARG USER_UID
+ARG USER_GUID
+ARG HOME_DIR
+ARG NODE_EXTRA_CA_CERTS
 
 RUN set -eux && groupadd --gid $USER_GUID $GROUPNAME \
     # https://stackoverflow.com/questions/73208471/docker-build-issue-stuck-at-exporting-layers
