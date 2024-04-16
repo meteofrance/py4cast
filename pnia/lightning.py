@@ -15,12 +15,7 @@ from pnia.datasets.base import DatasetInfo, ItemBatch, StateVariables
 from pnia.losses import ScaledL1Loss, ScaledRMSELoss, WeightedL1Loss, WeightedMSELoss
 from pnia.models import build_model_from_settings, get_model_kls_and_settings
 from pnia.models.base import expand_to_batch
-from pnia.observer import (
-    PredictionPlot,
-    SpatialErrorPlot,
-    StateErrorPlot,
-    val_step_log_errors,
-)
+from pnia.observer import PredictionPlot, SpatialErrorPlot, StateErrorPlot
 
 
 @dataclass
@@ -310,7 +305,7 @@ class AutoRegressiveLightning(pl.LightningModule):
         # Log loss per time step forward and mean
         val_log_dict = {
             f"val_loss_unroll{step}": time_step_loss[step - 1]
-            for step in val_step_log_errors
+            for step in range(time_step_loss.shape[0])
         }
         val_log_dict["val_mean_loss"] = mean_loss
         self.log_dict(val_log_dict, on_step=False, on_epoch=True, sync_dist=True)
@@ -362,7 +357,7 @@ class AutoRegressiveLightning(pl.LightningModule):
         # Log loss per time step forward and mean
         test_log_dict = {
             f"test_loss_unroll{step}": time_step_loss[step - 1]
-            for step in val_step_log_errors
+            for step in range(time_step_loss.shape[0])
         }
         test_log_dict["test_mean_loss"] = mean_loss
         self.log_dict(test_log_dict, on_step=False, on_epoch=True, sync_dist=True)

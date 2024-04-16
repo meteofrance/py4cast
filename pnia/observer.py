@@ -4,7 +4,6 @@ from typing import TYPE_CHECKING, Dict
 
 import einops
 import matplotlib.pyplot as plt
-import numpy as np
 import torch
 from pytorch_lightning.strategies import (  # Use for homogeneity in gathering operation for plot.
     ParallelStrategy,
@@ -16,8 +15,6 @@ if TYPE_CHECKING:
 
 from pnia.losses import PniaLoss
 from pnia.plots import plot_error_map, plot_prediction, plot_spatial_error
-
-val_step_log_errors = np.array([1, 2, 3])
 
 
 def gather(
@@ -264,12 +261,11 @@ class SpatialErrorPlot(ErrorObserver):
     ) -> None:
         spatial_loss = obj.loss(prediction, target, reduce_spatial_dim=False)
         # Getting only spatial loss for the required val_step_errors
-        log_spatial_losses = spatial_loss[:, val_step_log_errors - 1]
         if obj.model.info.output_dim == 1:
-            log_spatial_losses = einops.rearrange(
-                log_spatial_losses, "b t (x y) -> b t x y ", x=obj.grid_shape[0]
+            spatial_loss = einops.rearrange(
+                spatial_loss, "b t (x y) -> b t x y ", x=obj.grid_shape[0]
             )
-        self.spatial_loss_maps.append(log_spatial_losses)  # (B, N_log, N_lat, N_lon)
+        self.spatial_loss_maps.append(spatial_loss)  # (B, N_log, N_lat, N_lon)
 
     def on_step_end(self, obj: "AutoRegressiveLightning") -> None:
         """
@@ -283,7 +279,7 @@ class SpatialErrorPlot(ErrorObserver):
             mean_spatial_loss = torch.mean(
                 spatial_loss_tensor, dim=0
             )  # (N_log, N_lat, N_lon)
-
+            print(mean_spatial_loss.shape)
             loss_map_figs = [
                 plot_spatial_error(
                     loss_map,
@@ -291,12 +287,12 @@ class SpatialErrorPlot(ErrorObserver):
                     title=f"{self.kind} loss, t={t_i} ({obj.hparams['hparams'].dataset_info.step_duration*t_i} h)",
                     domain_info=obj.hparams["hparams"].dataset_info.domain_info,
                 )
-                for t_i, loss_map in zip(val_step_log_errors, mean_spatial_loss)
+                for t_i, loss_map in enumerate(mean_spatial_loss)
             ]
             tensorboard = obj.logger.experiment
             [
                 tensorboard.add_figure(f"{self.kind}_spatial_error", fig, t_i)
-                for t_i, fig in zip(val_step_log_errors, loss_map_figs)
+                for t_i, fig in enumerate(loss_map_figs)
             ]
             plt.close()
 

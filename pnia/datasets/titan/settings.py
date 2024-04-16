@@ -5,22 +5,26 @@ SCRATCH_PATH = Path("/scratch/shared/Titan")
 GRIDS = {
     "ANTJP7CLIM_1S100": {
         "size": [1051, 1651],
-        "extend": [51.5, 41.0, -6.0, 10.5],
+        "resolution": 0.01,
+        "extent": [51.5, 41.0, -6.0, 10.5],
         "prefix": "ant",
     },
     "PAAROME_1S100": {
         "size": [1791, 2801],
-        "extend": [55.4, 37.5, -12.0, 16.0],
+        "resolution": 0.01,
+        "extent": [55.4, 37.5, -12.0, 16.0],
         "prefix": "aro",
     },
     "PAAROME_1S40": {
         "size": [717, 1121],
-        "extend": [55.4, 37.5, -12.0, 16.0],
+        "resolution": 0.25,
+        "extent": [55.4, 37.5, -12.0, 16.0],
         "prefix": "aro",
     },
     "PA_01D": {
         "size": [521, 741],
-        "extend": [72.0, 20.0, -32.0, 42.0],
+        "resolution": 0.1,
+        "extent": [72.0, 20.0, -32.0, 42.0],
         "prefix": "arp",
     },
 }

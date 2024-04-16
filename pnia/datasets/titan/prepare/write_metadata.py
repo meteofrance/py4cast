@@ -4,7 +4,9 @@ from pathlib import Path
 
 import xarray as xr
 import yaml
-from settings import GRIDS, ISOBARIC_LEVELS_HPA
+from tqdm import tqdm
+
+from pnia.datasets.titan.settings import GRIDS, ISOBARIC_LEVELS_HPA
 
 
 def get_prefixes(grib_name):
@@ -25,7 +27,7 @@ grib_files = sorted(list(path.glob("*.grib")))
 param_dict = {}
 grib_dict = {}
 
-for grib in grib_files:
+for grib in tqdm(grib_files):
     print("--------------")
     print(grib.name)
     ds = xr.open_dataset(grib, engine="cfgrib")
@@ -56,7 +58,7 @@ for grib in grib_files:
             "grib": grib.name,
             "grid": grid_name,
             "shape": GRIDS[grid_name]["size"],
-            "extend": GRIDS[grid_name]["extend"],
+            "extent": GRIDS[grid_name]["extent"],
         }
         print(param_dict[key])
         grib_dict[grib.name].append(key)
