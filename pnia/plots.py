@@ -33,7 +33,7 @@ def fractional_plot_bundle(fraction):
 
 
 @matplotlib.rc_context(fractional_plot_bundle(1))
-def plot_error_map(errors, dataset_info, title=None, step_duration=3):
+def plot_error_map(errors, shortnames, units, title=None, step_duration=3):
     """
     Plot a heatmap of errors of different variables at different predictions horizons
     errors: (pred_steps, d_f)
@@ -72,12 +72,7 @@ def plot_error_map(errors, dataset_info, title=None, step_duration=3):
     ax.set_xlabel("Lead time (h)", size=label_size)
 
     ax.set_yticks(np.arange(d_f))
-    y_ticklabels = [
-        f"{name} ({unit})"
-        for name, unit in zip(
-            dataset_info.shortnames("output"), dataset_info.units("output")
-        )
-    ]
+    y_ticklabels = [f"{name} ({unit})" for name, unit in zip(shortnames, units)]
     ax.set_yticklabels(y_ticklabels, rotation=30, size=label_size)
 
     if title:

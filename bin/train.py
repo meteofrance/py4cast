@@ -103,6 +103,7 @@ def main(
         max_epochs=tp.epochs,
         deterministic=True,
         strategy="ddp",
+        accumulate_grad_batches=30,
         accelerator=device_name,
         logger=logger,
         profiler=profiler,
@@ -227,6 +228,12 @@ if __name__ == "__main__":
         help="Number of previous timesteps supplied as inputs to the model",
     )
     parser.add_argument(
+        "--num_inter_steps",
+        type=int,
+        default=1,
+        help="Number of model steps between two samples",
+    )
+    parser.add_argument(
         "--no_log",
         action=BooleanOptionalAction,
         default=False,
@@ -263,6 +270,7 @@ if __name__ == "__main__":
         num_input_steps=args.num_input_steps,
         num_pred_steps_train=args.num_pred_steps_train,
         num_pred_steps_val_test=args.num_pred_steps_val_test,
+        num_inter_steps=args.num_inter_steps,
         lr=args.lr,
         loss=args.loss,
     )

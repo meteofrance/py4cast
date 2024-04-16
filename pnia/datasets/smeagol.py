@@ -5,7 +5,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from functools import cached_property, partial
 from pathlib import Path
-from typing import List, Literal, Tuple
+from typing import Dict, List, Literal, Tuple
 
 import cartopy
 import numpy as np
@@ -181,7 +181,8 @@ class Param:
     name: str
     shortname: str  # To be read in nc File ?
     levels: Tuple[int]
-    grid: Grid
+    grid: Grid  # Parameter grid.
+    # It is not necessarly the same as the model grid.
     # Function which can return the filenames.
     # It should accept member and date as argument (as well as term).
     fnamer: Callable[[], [str]]
@@ -190,6 +191,7 @@ class Param:
     # Les variables diagnostiques seulement en output.
     kind: Literal["input", "output", "input_output"] = "input_output"
     unit: str = "FakeUnit"  # To be read in nc FIle  ?
+    ndims: int = 2
 
     @property
     def number(self) -> int:
@@ -197,13 +199,6 @@ class Param:
         Get the number of parameters.
         """
         return len(self.levels)
-
-    @property  # Does not accept a cached property with slots=True
-    def ndims(self) -> str:
-        if len(self.levels) > 1:
-            return 3
-        else:
-            return 2
 
     @property
     def state_weights(self) -> list:
@@ -274,7 +269,7 @@ class Sample:
         """
         hours = []
         for term in self.output_terms:
-            date_tmp = self.date + dt.timedelta(hours=term)
+            date_tmp = self.date + dt.timedelta(hours=float(term))
             hours.append(date_tmp.hour + date_tmp.minute / 60)
         return np.asarray(hours)
 
@@ -287,7 +282,9 @@ class Sample:
         start_of_year = dt.datetime(self.date.year, 1, 1)
         return np.asarray(
             [
-                (self.date + dt.timedelta(hours=term) - start_of_year).total_seconds()
+                (
+                    self.date + dt.timedelta(hours=float(term)) - start_of_year
+                ).total_seconds()
                 for term in self.output_terms
             ]
         )
@@ -338,6 +335,7 @@ class SmeagolDataset(DatasetABC, Dataset):
         self._cache_dir = CACHE_DIR / "neural_lam" / str(self)
         self.shuffle = self.split == "train"
         self.cache_dir.mkdir(parents=True, exist_ok=True)
+        self.step_duration = self.settings.term["timestep"]
 
     @cached_property
     def dataset_info(self) -> DatasetInfo:
@@ -351,11 +349,11 @@ class SmeagolDataset(DatasetABC, Dataset):
         return DatasetInfo(
             name=str(self),
             domain_info=self.domain_info,
-            shortnames=self.shortnames,
             units=self.units,
+            shortnames=self.shortnames,
             weather_dim=self.weather_dim,
             forcing_dim=self.forcing_dim,
-            step_duration=0.25,  # Should be in settings
+            step_duration=self.step_duration,
             statics=self.statics,
             stats=self.stats,
             diff_stats=self.diff_stats,
@@ -508,13 +506,26 @@ class SmeagolDataset(DatasetABC, Dataset):
         sample = self.sample_list[index]
 
         # Datetime Forcing
+        datetime_forcing = self.get_year_hour_forcing(sample).type(torch.float32)
         lforcings = [
             StateVariable(
                 ndims=1,
-                names=["cos_hour, sin_hour, cos_doy, sin_doy"],  # doy : day_of_year
-                values=self.get_year_hour_forcing(sample).type(torch.float32),
+                names=[
+                    "cos_hour",
+                    "sin_hour",
+                ],  # doy : day_of_year
+                values=datetime_forcing[:, :2],
                 coordinates_name=["out_step", "features"],
-            )
+            ),
+            StateVariable(
+                ndims=1,
+                names=[
+                    "cos_doy",
+                    "sin_doy",
+                ],  # doy : day_of_year
+                values=datetime_forcing[:, 2:],
+                coordinates_name=["out_step", "features"],
+            ),
         ]
         linputs = []
         loutputs = []
@@ -615,6 +626,7 @@ class SmeagolDataset(DatasetABC, Dataset):
             data = conf["dataset"][data_source]
             members = conf["dataset"][data_source].get("members", [0])
             term = conf["dataset"][data_source]["term"]
+            param_grid = Grid(**data["grid"])
             for var in data["var"]:
                 vard = data["var"][var]
                 # Change grid definition
@@ -627,13 +639,13 @@ class SmeagolDataset(DatasetABC, Dataset):
                 param = Param(
                     name=var,
                     levels=vard.pop("level", [0]),
-                    grid=grid,
+                    grid=param_grid,
                     level_type=level_type,
                     fnamer=partial(
                         smeagol_forecast_namer,
-                        model=data["model"],
-                        domain=data["domain"],
-                        geometry=data["geometry"],
+                        model=data["grid"]["model"],
+                        domain=data["grid"]["domain"],
+                        geometry=data["grid"]["geometry"],
                         var=var_file,
                     ),
                     **vard,
@@ -724,15 +736,6 @@ class SmeagolDataset(DatasetABC, Dataset):
     def split(self) -> Literal["train", "valid", "test"]:
         return self.period.name
 
-    @property
-    def weather_params(self) -> List[str]:
-        """
-        Return the name of the parameters in the dataset.
-        Does not make the difference between inputs, outputs and forcing.
-        Does not include grid information (such as geopotentiel and LandSeaMask).
-        """
-        return self.__get_params_attr("parameter_name", "all")
-
     def __get_params_attr(
         self,
         attribute: str,
@@ -758,26 +761,26 @@ class SmeagolDataset(DatasetABC, Dataset):
                 out_list += getattr(param, attribute)
         return out_list
 
-    def shortnames(
-        self,
-        kind: Literal[
-            "all", "input", "output", "forcing", "diagnostic", "input_output"
-        ] = "all",
-    ) -> List[str]:
+    @cached_property
+    def units(self) -> Dict[str, int]:
+        """
+        Return a dictionnary with name and units
+        """
+        dout = {}
+        for param in self.params:
+            names = getattr(param, "parameter_short_name")
+            units = getattr(param, "units")
+            for name, unit in zip(names, units):
+                dout[name] = unit
+        return dout
+
+    def shortnames(self, kind: Literal["all", "input", "output"] = "all") -> List[str]:
         """
         Return the name of the parameters in the dataset.
         Does not include grid information (such as geopotentiel and LandSeaMask).
         Make the difference between inputs, outputs.
         """
         return self.__get_params_attr("parameter_short_name", kind)
-
-    def units(self, kind: Literal["all", "input", "output"] = "all") -> List[str]:
-        """
-        Return the name of the parameters in the dataset.
-        Does not include grid information (such as geopotentiel and LandSeaMask).
-        Make the difference between inputs, outputs.
-        """
-        return self.__get_params_attr("units", kind)
 
     @cached_property
     def state_weights(self):
@@ -793,11 +796,6 @@ class SmeagolDataset(DatasetABC, Dataset):
                     w_dict[name] = weight
 
         return w_dict
-
-    @cached_property
-    def tensor_state_weights(self) -> np.array:
-        w_list = [self.state_weights[name] for name in self.shortnames("output")]
-        return np.asarray(w_list)
 
     @property
     def cache_dir(self) -> Path:

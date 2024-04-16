@@ -3,6 +3,7 @@ Base classes defining our software components
 and their interfaces
 """
 
+import warnings
 from abc import ABC, abstractclassmethod, abstractmethod, abstractproperty
 from dataclasses import dataclass, field, fields
 from functools import cached_property
@@ -32,8 +33,8 @@ class StateVariableMetadata:
         self, ndims: int, names: List[str], coordinates_name: List[str], *args, **kwargs
     ):
         self.ndims = ndims
-        self.names = names
-        self.coordinates_name = coordinates_name
+        self.names = names  # Names of each variable on its level
+        self.coordinates_name = coordinates_name  # Names of the coordinates
 
 
 @dataclass(slots=True)
@@ -48,7 +49,7 @@ class StateVariableValues:
 class StateVariable(StateVariableValues, StateVariableMetadata):
     """
     Here we use multiple inheritance to avoid a single
-    dataclass which makes ightning confused about batch size.
+    dataclass which makes lightning confused about batch size.
     """
 
     def __init__(self, **kwargs):
@@ -68,6 +69,9 @@ class StateVariable(StateVariableValues, StateVariableMetadata):
             f" ndims : {self.ndims} \n names {self.names} \n"
             f" coordinates : {self.coordinates_name} \n values(size) :{self.values.shape} \n"
         )
+
+    def __getitem__(self, name: str) -> torch.Tensor:
+        return self.__getattr__(name)
 
     def __getattr__(self, name: str) -> torch.Tensor:
         """
@@ -94,6 +98,39 @@ class StateVariable(StateVariableValues, StateVariableMetadata):
         self.values = self.values.type(new_type)
 
 
+class StateVariables(StateVariable):
+    """
+    Store multiple variables.
+    ToDo : Have a representation of all this variables.
+    """
+
+
+def merge_statevariables(
+    var1: Union[StateVariables, None], var2: Union[StateVariables, None]
+) -> Union[StateVariables, None]:
+    """Merge two states variables (on the last dimension). If both are None, a None is return."""
+    if var1 is None and var2 is None:
+        return None
+    if var1 is None:
+        return var2
+    if var2 is None:
+        return var1
+    if var1.ndims != var2.ndims:
+        warnings.warn(
+            f"Both variable have not the same dimension {var1.ndims} {var2.ndims}"
+        )
+    if var1.coordinates_name != var2.coordinates_name:
+        warnings.warn(
+            f"Both variable have not the same coordinates {var1.coordinates_name} {var2.coordinates_name}"
+        )
+    return StateVariables(
+        ndims=var1.ndims,
+        names=var1.names + var1.names,
+        values=torch.cat([var1.values, var2.values], dim=-1),
+        coordinates_name=var1.coordinates_name,
+    )
+
+
 @dataclass(slots=True)
 class Item:
     """
@@ -114,16 +151,17 @@ class Item:
     # (et est en phase avec la denomination du CEP)
     # Ca ferait peut etre moins de trucs etrange dans les denominations
 
-    def __str__(self):
+    def __str__(self) -> str:
         """
         Utility method to explore a batch/item shapes and names.
         """
+        out = ""
         for attr in (f.name for f in fields(self)):
             if getattr(self, attr) is not None:
                 for item in getattr(self, attr):
-                    print(
-                        f"{attr} {item.names} : {item.values.shape}, {item.values.size(0)}"
-                    )
+                    out += f"{attr} {item.names} {item.coordinates_name} : {item.values.shape}"
+                    out += f"ndims {item.ndims} firstShape {item.values.size(0)} \n"
+        return out
 
 
 @dataclass
@@ -143,6 +181,70 @@ class ItemBatch(Item):
     @cached_property
     def num_pred_steps(self):
         return self.outputs[0].values.size(1)
+
+    def cat(
+        self, attr: Literal["inputs", "outputs", "forcing"], dim: int
+    ) -> Union[StateVariables, None]:
+        """
+        Cat all the state variable of the same attr for a specific dimension.
+
+        It postpones that all the variable are on the same grid
+        and only the last dimension is different
+
+        Args:
+            attr (str): inputs/outputs/forcing
+            dim (int): Dimension of the state variable to consider
+
+        """
+        names = []
+        [names.extend(x.names) for x in getattr(self, attr) if x.ndims == dim]
+        if len(names) > 0:
+            values = torch.cat(
+                [x.values for x in getattr(self, attr) if x.ndims == dim], dim=-1
+            )
+            coords_name = [
+                x.coordinates_name for x in getattr(self, attr) if x.ndims == dim
+            ][0]
+            return StateVariables(
+                ndims=dim, names=names, values=values, coordinates_name=coords_name
+            )
+        return None
+
+    def cat_2D(self) -> "ItemBatch":
+        """
+        Concat (Torch cat) all inputs/outputs/forcing in 2D fields along features dimension.
+        1d (ndims=1) state variables for input and outputs are ignored (only taken into account for forcing).
+        2d and 3d are concatenated.
+        """
+        batch = {}
+        batch["inputs"] = [self.cat("inputs", 2)]
+        batch["outputs"] = [self.cat("outputs", 2)]
+
+        # Check if 1D input/output exist and are not taken into accout.
+        extra_names_in = [x.names for x in self.inputs if x.ndims == 1]
+        extra_names_out = [x.names for x in self.outputs if x.ndims == 1]
+        if len(extra_names_in) > 0:
+            warnings.warn(f"1D inputs are ignored {extra_names_in}")
+        if len(extra_names_out) > 0:
+            warnings.warn(f"1D outputs are ignored {extra_names_out}")
+
+        f1 = self.cat("forcing", 1)
+        if f1 is not None:
+            # Extend it to be on the grid
+            outputs = batch["outputs"][0]
+            sh = outputs.values.shape
+            f1.values = (
+                f1.values.unsqueeze(2).unsqueeze(3).expand(-1, -1, sh[2], sh[3], -1)
+            )
+            f1.coordinates_name = outputs.coordinates_name
+            f1.ndims = 2
+        f2 = self.cat("forcing", 2)
+        forcing = merge_statevariables(f1, f2)
+        if forcing is not None:
+            batch["forcing"] = [forcing]
+        else:
+            batch["forcing"] = None
+        return ItemBatch(**batch)
 
 
 def collate_fn(items: List[Item]) -> ItemBatch:
@@ -186,15 +288,7 @@ class Statics(RegisterFieldsMixin):
     """
 
     # border_mask: torch.Tensor
-    grid_static_features: StateVariable
-    # Remove this once we have a batch in the loss
-    # Indeed, we will be able to use datasetInfo
-    # information (stored with variable name)
-    step_diff_mean: torch.Tensor
-    step_diff_std: torch.Tensor
-    data_mean: torch.Tensor
-    data_std: torch.Tensor
-    state_weights: torch.Tensor
+    grid_static_features: StateVariables
     grid_shape: Tuple[int, int]
     border_mask: torch.Tensor = field(init=False)
     interior_mask: torch.Tensor = field(init=False)
@@ -228,25 +322,14 @@ class Statics(RegisterFieldsMixin):
 class Stats:
     fname: Path
 
+    def __post_init__(self):
+        self.stats = torch.load(self.fname, "cpu")
+
+    def items(self):
+        return self.stats.items()
+
     def __getitem__(self, shortname: str):
         return self.stats[shortname]
-
-    @cached_property
-    def stats(self) -> Dict:
-        """
-        The file should contain a dictionnary like structure with the shortname as the first key and
-        statistic stored as a second key.
-        d[{shortname}][{stat}] = value
-
-        Ex. :
-           d["u10"]["mean"] = 5
-           d["u10"]["std"] = 0.1
-
-        This files could have been generated by
-          - compute_parameters_stats
-          - compute_time_step_stats
-        """
-        return torch.load(self.fname, "cpu")
 
     def to_list(
         self, aggregate: Literal["mean", "std", "min", "max"], shortnames: List[str]
@@ -262,7 +345,12 @@ class Stats:
         Returns:
             _type_: _description_
         """
-        return [self[name][aggregate] for name in shortnames]
+        if len(shortnames) > 0:
+            return torch.stack(
+                [self[name][aggregate] for name in shortnames], dim=0
+            ).type(torch.float32)
+        else:
+            return []
 
 
 @dataclass(slots=True)
@@ -275,39 +363,46 @@ class DatasetInfo:
 
     name: str  # Name of the dataset
     domain_info: DomainInfo  # Information used for plotting
-    shortnames: Callable
-    units: Callable
+    units: Dict[str, str]  # d[shortname] = unit (str)
     weather_dim: int
     forcing_dim: int
     step_duration: float  # Duration (in hour) of one step in the dataset. 0.25 means 15 minutes.
     statics: Statics  # A lot of static variable
-    # Wait for batch in loss to use them instead of statics.
-    stats: Stats  # Not used yet except in summary
-    diff_stats: Stats  # Not used yet except in summary
-    state_weights: Dict[str, float]  # Not used yet except in summary
+    stats: Stats
+    diff_stats: Stats
+    state_weights: Dict[str, float]
+    shortnames: Callable = None
 
     def summary(self):
         """
         Print a table summarizing variables present in the dataset (and their role)
         """
         print(f"\n Summarizing {self.name} \n")
+        print(f"Step_duration {self.step_duration}")
+        print(f"Static fields {self.statics.grid_static_features.names}]")
+
         for p in ["forcing", "input_output", "diagnostic"]:
             names = self.shortnames(p)
             mean = self.stats.to_list("mean", names)
             std = self.stats.to_list("std", names)
             mini = self.stats.to_list("min", names)
             maxi = self.stats.to_list("max", names)
+            units = [self.units[name] for name in names]
             if p != "forcing":
                 diff_mean = self.diff_stats.to_list("mean", names)
                 diff_std = self.diff_stats.to_list("std", names)
                 weight = [self.state_weights[name] for name in names]
+
                 data = list(
-                    zip(names, mean, std, mini, maxi, diff_mean, diff_std, weight)
+                    zip(
+                        names, units, mean, std, mini, maxi, diff_mean, diff_std, weight
+                    )
                 )
                 table = tabulate(
                     data,
                     headers=[
                         "Name",
+                        "Unit",
                         "Mean",
                         "Std",
                         "Minimum",
@@ -319,10 +414,10 @@ class DatasetInfo:
                     tablefmt="simple_outline",
                 )
             else:
-                data = list(zip(names, mean, std, mini, maxi))
+                data = list(zip(names, units, mean, std, mini, maxi))
                 table = tabulate(
                     data,
-                    headers=["Name", "Mean", "Std", "Minimun", "Maximum"],
+                    headers=["Name", "Unit", "Mean", "Std", "Minimun", "Maximum"],
                     tablefmt="simple_outline",
                 )
             if data:
@@ -391,12 +486,6 @@ class DatasetABC(ABC):
     @abstractproperty
     def split(self) -> Literal["train", "valid", "test"]:
         pass
-
-    @abstractproperty
-    def weather_params(self) -> List[str]:
-        """
-        Return the name of all the variable present in the dataset
-        """
 
     @abstractproperty
     def cache_dir(self) -> Path:
@@ -543,7 +632,7 @@ class DatasetABC(ABC):
         batch_names = []
         for x in self.dataset_extra_statics:
             batch_names += x.names
-        state_var = StateVariable(
+        state_var = StateVariables(
             ndims=2,  # Champ 2D
             values=torch.cat(
                 [grid_xy, geopotential, grid_border_mask]
@@ -559,38 +648,12 @@ class DatasetABC(ABC):
 
     @cached_property
     def statics(self) -> Statics:
-        # When manipulating tensor, we postpone that field will be stored in the same order
-        # This may not be the case
-        step_diff_mean = self.diff_stats.to_list(
-            "mean", self.shortnames("input_output")
-        )
-        step_diff_std = self.diff_stats.to_list("std", self.shortnames("input_output"))
-        data_mean = self.stats.to_list("mean", self.shortnames("input_output"))
-        data_std = self.stats.to_list("std", self.shortnames("input_output"))
-
-        # Load loss weighting vectors
-        state_weights = torch.tensor(
-            self.tensor_state_weights, dtype=torch.float32
-        )  # (d_f,)
         return Statics(
             **{
                 "grid_static_features": self.grid_static_features,
                 "grid_shape": self.grid_shape,
-                # Should be removed when using batch
-                "step_diff_mean": torch.stack(step_diff_mean).type(torch.float32),
-                "step_diff_std": torch.stack(step_diff_std).type(torch.float32),
-                "data_mean": torch.stack(data_mean).type(torch.float32),
-                "data_std": torch.stack(data_std).type(torch.float32),
-                "state_weights": state_weights.type(torch.float32),
             }
         )
-
-    @abstractproperty
-    def tensor_state_weights(self):
-        """
-        Load the weights as a tensor.
-        """
-        pass
 
     @cached_property
     def stats(self) -> Stats:
@@ -598,9 +661,7 @@ class DatasetABC(ABC):
 
     @cached_property
     def diff_stats(self) -> Stats:
-        return Stats(
-            fname=self.cache_dir / "diff_stats.pt"
-        )  # "diff_parameters_stats2.pt")
+        return Stats(fname=self.cache_dir / "diff_stats.pt")
 
     @abstractproperty
     def diagnostic_dim(self) -> int:

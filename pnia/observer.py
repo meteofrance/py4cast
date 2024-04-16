@@ -85,8 +85,8 @@ class PredictionPlot(ErrorObserver):
         """
         Update. Should be call by "on_{training/validation/test}_step
         """
-        pred = deepcopy(prediction)  # In order to not modify the input
-        targ = deepcopy(target)  # In order to not modify the input
+        pred = deepcopy(prediction).values  # In order to not modify the input
+        targ = deepcopy(target).values  # In order to not modify the input
         if obj.model.info.output_dim == 1:
             pred = einops.rearrange(
                 pred, "b t (x y) n -> b t x y n", x=obj.grid_shape[0]
@@ -102,11 +102,15 @@ class PredictionPlot(ErrorObserver):
         ):
             # Need to plot more example predictions
             n_additional_examples = min(
-                prediction.shape[0], self.num_samples_to_plot - self.plotted_examples
+                pred.shape[0], self.num_samples_to_plot - self.plotted_examples
             )
             # Rescale to original data scale
-            prediction_rescaled = pred * obj.data_std + obj.data_mean
-            target_rescaled = targ * obj.data_std + obj.data_mean
+            std = obj.stats.to_list("std", prediction.names).to(pred, non_blocking=True)
+            mean = obj.stats.to_list("mean", prediction.names).to(
+                pred, non_blocking=True
+            )
+            prediction_rescaled = pred * std + mean
+            target_rescaled = targ * std + mean
 
             # Iterate over the examples
             # We postpone example are already on grid
@@ -153,12 +157,11 @@ class PredictionPlot(ErrorObserver):
                         )
                         for var_i, (var_name, var_unit, var_vrange) in enumerate(
                             zip(
-                                obj.hparams["hparams"].dataset_info.shortnames(
-                                    kind="output"
-                                ),
-                                obj.hparams["hparams"].dataset_info.units(
-                                    kind="output"
-                                ),
+                                prediction.names,
+                                [
+                                    obj.hparams["hparams"].dataset_info.units[name]
+                                    for name in prediction.names
+                                ],
                                 var_vranges,
                             )
                         )
@@ -195,6 +198,9 @@ class StateErrorPlot(ErrorObserver):
         self.metrics = metrics
         self.kind = kind
         self.losses = {}
+        self.shortnames = []
+        self.units = []
+        self.initialized = False
         for metric in self.metrics:
             self.losses[metric] = []
 
@@ -209,6 +215,13 @@ class StateErrorPlot(ErrorObserver):
         """
         for name in self.metrics:
             self.losses[name].append(self.metrics[name](prediction, target))
+        if not self.initialized:
+            self.shortnames = prediction.names
+            self.units = [
+                obj.hparams["hparams"].dataset_info.units[name]
+                for name in prediction.names
+            ]
+            self.initialized = True
 
     def on_step_end(self, obj: "AutoRegressiveLightning") -> None:
         """
@@ -221,7 +234,8 @@ class StateErrorPlot(ErrorObserver):
                 if not obj.trainer.sanity_checking:
                     fig = plot_error_map(
                         loss,
-                        obj.hparams["hparams"].dataset_info,
+                        self.shortnames,
+                        self.units,
                         step_duration=obj.hparams["hparams"].dataset_info.step_duration,
                     )
 
