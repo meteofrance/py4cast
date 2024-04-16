@@ -138,9 +138,14 @@ class Grid:
 
     @property
     def border_mask(self) -> np.array:
-        border_mask = np.ones((self.x, self.y)).astype(bool)
-        size = self.border_size
-        border_mask[size:-size, size:-size] *= False
+        if self.border_size > 0:
+            border_mask = np.ones((self.x, self.y)).astype(bool)
+            size = self.border_size
+            border_mask[size:-size, size:-size] *= False
+        elif self.border_size == 0:
+            border_mask = np.ones((self.x, self.y)).astype(bool) * False
+        else:
+            raise ValueError(f"Bordersize should be positive. Get {self.border_size}")
         return border_mask
 
     @property

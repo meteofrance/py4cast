@@ -155,13 +155,23 @@ class Item:
         """
         Utility method to explore a batch/item shapes and names.
         """
-        out = ""
+        table = []
         for attr in (f.name for f in fields(self)):
             if getattr(self, attr) is not None:
                 for item in getattr(self, attr):
-                    out += f"{attr} {item.names} {item.coordinates_name} : {item.values.shape}"
-                    out += f"ndims {item.ndims} firstShape {item.values.size(0)} \n"
-        return out
+                    names = item.names[0] if len(item.names) == 1 else item.names
+                    table.append(
+                        [
+                            attr,
+                            names,
+                            list(item.values.shape),
+                            item.coordinates_name,
+                            item.values.min(),
+                            item.values.max(),
+                        ]
+                    )
+        headers = ["Type", "Short Names", "Torch Shape", "coordinates", "Min", "Max"]
+        return str(tabulate(table, headers=headers, tablefmt="simple_outline"))
 
 
 @dataclass

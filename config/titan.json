@@ -1,0 +1,50 @@
+{
+    "periods": {
+        "train": {
+            "start": 2023030106,
+            "end": 2023030918,
+            "step": 3
+        },
+        "valid": {
+            "start": 2023031006,
+            "end": 2023031918,
+            "step": 3
+        },
+        "test": {
+            "start": 2023032006,
+            "end": 2023033118,
+            "step": 3
+        }
+    },
+    "grid":{
+        "name": "PAAROME_1S100", 
+        "border_size": 0, 
+        "subgrid": [1000,1256,1200,1456]
+    },
+    "settings":{
+        "step_duration": 1,
+        "standardize": true
+    },
+    "params": {
+        "aro_t2m": {
+            "levels": [2],
+            "kind": "input_output"
+        },
+        "aro_tp": {
+            "levels": [0],
+            "kind": "input_output"
+        },
+        "aro_u10": {
+            "levels": [10],
+            "kind": "input_output"
+        },
+        "aro_v10": {
+            "levels": [10],
+            "kind": "input_output"
+        },
+        "aro_r2": {
+            "levels": [2],
+            "kind": "input_output"
+        }        
+    }
+}

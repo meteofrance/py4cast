@@ -28,7 +28,13 @@ class TrainerParams:
     profiler: str = "None"
     run_id: int = 1
     no_log: bool = False
+    dev_mode: bool = False
     limit_train_batches: Optional[Union[int, float]] = None
+
+    def __post_init__(self):
+        if self.dev_mode:
+            self.epochs = 3
+            self.limit_train_batches = 3
 
 
 def main(
@@ -113,6 +119,7 @@ def main(
         precision=tp.precision,
         limit_train_batches=tp.limit_train_batches,
         limit_val_batches=tp.limit_train_batches,  # No reason to spend hours on validation if we limit the training.
+        limit_test_batches=tp.limit_train_batches,
     )
     if args.load_model_ckpt:
         lightning_module = AutoRegressiveLightning.load_from_checkpoint(
@@ -122,6 +129,7 @@ def main(
         lightning_module = AutoRegressiveLightning(hp)
 
     # Train model
+    print("Starting training !")
     trainer.fit(
         model=lightning_module,
         train_dataloaders=train_loader,
@@ -240,6 +248,12 @@ if __name__ == "__main__":
         help="When activated, log are not stored and models are not saved. Use in dev mode.",
     )
     parser.add_argument(
+        "--dev_mode",
+        action=BooleanOptionalAction,
+        default=False,
+        help="When activated, reduce number of epoch and steps.",
+    )
+    parser.add_argument(
         "--load_model_ckpt",
         type=str,
         default=None,
@@ -282,6 +296,7 @@ if __name__ == "__main__":
         epochs=args.epochs,
         profiler=args.profiler,
         no_log=args.no_log,
+        dev_mode=args.dev_mode,
         run_id=random_run_id,
         limit_train_batches=args.limit_train_batches,
     )
