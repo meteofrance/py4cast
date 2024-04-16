@@ -8,9 +8,10 @@ import einops
 import pytorch_lightning as pl
 import torch
 from lightning.pytorch.utilities import rank_zero_only
+from torch import nn
 from torchinfo import summary
 
-from pnia.datasets.base import DatasetInfo, ItemBatch
+from pnia.datasets.base import DatasetInfo, ItemBatch, StateVariables
 from pnia.losses import ScaledL1Loss, ScaledRMSELoss, WeightedL1Loss, WeightedMSELoss
 from pnia.models import build_model_from_settings, get_model_kls_and_settings
 from pnia.models.base import expand_to_batch
@@ -38,17 +39,51 @@ class ArLightningHyperParam:
     loss: str = "mse"
 
     num_input_steps: int = 2
-
     num_pred_steps_train: int = 2
-    num_pred_steps_val_test: int = 2
+    num_inter_steps: int = 1  # Number of intermediary steps (without any data)
 
-    num_samples_to_plot: int = 2
+    num_pred_steps_val_test: int = 2
+    num_samples_to_plot: int = 1
+
+    def __post_init__(self):
+        """
+        Check the configuration
+
+        Raises:
+            AttributeError: raise an exception if the set of attribute is not well designed.
+        """
+        if self.num_inter_steps > 1 and self.num_input_steps > 1:
+            raise AttributeError(
+                "It is not possible to have multiple input steps when num_inter_steps > 1."
+                f"Get num_input_steps :{self.num_input_steps} and num_inter_steps: {self.num_inter_steps}"
+            )
+
+    def summary(self):
+        self.dataset_info.summary()
+        print(f"Number of input_steps : {self.num_input_steps}")
+        print(f"Number of pred_steps : {self.num_pred_steps_train}")
+        print(f"Number of intermediary steps :{self.num_inter_steps}")
+        print(
+            f"Model step duration : {self.dataset_info.step_duration /self.num_inter_steps}"
+        )
+        print(f"Model conf {self.model_conf}")
+        print("---------------------")
+        print(f"Loss {self.loss}")
+        print(f"Batch size {self.batch_size}")
+        print(f"Learning rate {self.lr}")
+        print("---------------------------")
 
 
 @rank_zero_only
 def rank_zero_init(model_kls, model_settings, statics):
     if hasattr(model_kls, "rank_zero_setup"):
         model_kls.rank_zero_setup(model_settings, statics)
+
+
+@rank_zero_only
+def exp_summary(hparams: ArLightningHyperParam, model: nn.Module):
+    hparams.summary()
+    summary(model)
 
 
 class AutoRegressiveLightning(pl.LightningModule):
@@ -60,12 +95,15 @@ class AutoRegressiveLightning(pl.LightningModule):
         super().__init__(*args, **kwargs)
 
         self.save_hyperparameters()
-        hparams.dataset_info.summary()
+
         # Load static features for grid/data
         # We do not want to change dataset statics inplace
         # Otherwise their is some problem with transform_statics and parameters_saving
         # when relaoding from checkpoint
         statics = deepcopy(hparams.dataset_info.statics)
+        # Init object of register_dict
+        self.diff_stats = hparams.dataset_info.diff_stats
+        self.stats = hparams.dataset_info.stats
 
         # Keeping track of grid shape and N_interior
         self.grid_shape = statics.grid_shape
@@ -107,11 +145,12 @@ class AutoRegressiveLightning(pl.LightningModule):
             hparams.model_conf,
         )
 
-        summary(self.model)
+        exp_summary(hparams, self.model)
 
         # We transform and register the statics after the model has been set up
         # This change the dimension of all statics
         statics = self.model.transform_statics(statics)
+        # Register interior and border mask.
         statics.register_buffers(self)
 
         self.register_buffer(
@@ -128,7 +167,9 @@ class AutoRegressiveLightning(pl.LightningModule):
             self.loss = WeightedL1Loss(reduction="none")
         else:
             raise TypeError(f"Unknown loss function: {hparams.loss}")
-        self.loss.prepare(statics)
+
+        # self.loss.prepare(statics)
+        self.loss.prepare(statics.interior_mask, hparams.dataset_info)
 
     def configure_optimizers(self) -> torch.optim.Optimizer:
         opt = torch.optim.AdamW(
@@ -148,13 +189,10 @@ class AutoRegressiveLightning(pl.LightningModule):
         forcing_features: (B, num_pred_steps, N_grid, d_forcing), where index 0
             corresponds to index 1 of init_states -> Ngrid could also be (Nlat,Nlon)
         """
-        (
-            init_states,
-            target_states,
-            forcing_features,
-        ) = self.model.transform_batch(batch)
+        # Right now we postpone that we have a single input/output/forcing
+        batch = self.model.transform_batch(batch)
 
-        prev_states = init_states
+        prev_states = batch.inputs[0].values
 
         prediction_list = []
 
@@ -162,44 +200,67 @@ class AutoRegressiveLightning(pl.LightningModule):
         # for the desired number of ar steps.
         for i in range(batch.num_pred_steps):
 
-            forcing = forcing_features[:, i]
-            border_state = target_states[:, i]
-
-            x = torch.cat(
-                [prev_states[:, idx] for idx in range(batch.num_input_steps)]
-                + [
-                    self.grid_static_features[: batch.batch_size],
-                    forcing,
-                ],
-                dim=-1,
+            forcing = batch.forcing[0].values[:, i]
+            border_state = batch.outputs[0].values[:, i]
+            # Get stats from buffer.
+            # Set them to the good device.
+            step_diff_std = self.diff_stats.to_list("std", batch.outputs[0].names).to(
+                prev_states, non_blocking=True
             )
-
-            # Graph (B, N_grid, d_f) or Conv (B, N_lat,N_lon d_f)
-            y = self.model(x)
-
-            # We update the latest of our prev_states with the network output
-            predicted_state = (
-                prev_states[:, -1] + y * self.step_diff_std + self.step_diff_mean
+            step_diff_mean = self.diff_stats.to_list("mean", batch.outputs[0].names).to(
+                prev_states, non_blocking=True
             )
-
-            # Overwrite border with true state
-            new_state = (
-                self.border_mask * border_state + self.interior_mask * predicted_state
-            )
-            prediction_list.append(new_state)
-
-            # Only update the prev_states if we are not at the last step
-            if i < batch.num_pred_steps - 1:
-                # Update input states for next iteration: drop oldest, append new_state
-                prev_states = torch.cat(
-                    [prev_states[:, 1:], new_state.unsqueeze(1)], dim=1
+            # Intermediary steps for which we have no y_true data
+            # Should be greater or equal to 1 (otherwise nothing is done).
+            for k in range(self.hparams["hparams"].num_inter_steps):
+                x = torch.cat(
+                    [prev_states[:, idx] for idx in range(batch.num_input_steps)]
+                    + [
+                        self.grid_static_features[: batch.batch_size],
+                        forcing,
+                    ],
+                    dim=-1,
                 )
 
-        prediction = torch.stack(
-            prediction_list, dim=1
-        )  # Stacking is done on time step. (B, pred_steps, N_grid, d_f) or (B, pred_steps, N_lat, N_lon, d_f)
+                # Graph (B, N_grid, d_f) or Conv (B, N_lat,N_lon d_f)
+                y = self.model(x)
 
-        return prediction, target_states
+                # We update the latest of our prev_states with the network output
+                predicted_state = (
+                    prev_states[:, -1] + y * step_diff_std + step_diff_mean
+                )
+
+                # Overwrite border with true state
+                # Force it to true state for all intermediary step
+                new_state = (
+                    self.border_mask * border_state
+                    + self.interior_mask * predicted_state
+                )
+
+                # Only update the prev_states if we are not at the last step
+                if (
+                    i < batch.num_pred_steps - 1
+                    or k < self.hparams["hparams"].num_inter_steps - 1
+                ):
+                    # Update input states for next iteration: drop oldest, append new_state
+                    prev_states = torch.cat(
+                        [prev_states[:, 1:], new_state.unsqueeze(1)], dim=1
+                    )
+            # Append prediction to prediction list only "normal steps"
+            prediction_list.append(new_state)
+
+            prediction = torch.stack(
+                prediction_list, dim=1
+            )  # Stacking is done on time step. (B, pred_steps, N_grid, d_f) or (B, pred_steps, N_lat, N_lon, d_f)
+            # print(prediction.shape)
+            pred_out = StateVariables(
+                values=prediction,
+                names=batch.outputs[0].names,
+                coordinates_name=batch.outputs[0].coordinates_name,
+                ndims=batch.outputs[0].ndims,
+            )
+
+        return pred_out, batch.outputs[0]
 
     def on_train_start(self):
         self.train_plotters = []
@@ -229,10 +290,8 @@ class AutoRegressiveLightning(pl.LightningModule):
         """
         Add some observers when starting validation
         """
-        statics = deepcopy(self.hparams["hparams"].dataset_info.statics)
-        statics = self.model.transform_statics(statics)
         l1_loss = ScaledL1Loss(reduction="none")
-        l1_loss.prepare(statics)
+        l1_loss.prepare(self.interior_mask, self.hparams["hparams"].dataset_info)
         metrics = {"mae": l1_loss}
         self.valid_plotters = [StateErrorPlot(metrics, kind="Validation")]
 
@@ -274,12 +333,12 @@ class AutoRegressiveLightning(pl.LightningModule):
         """
         # this is very strange that we need to do that
         # Think at this statics problem (may be we just need to have a self.statics).
-        statics = deepcopy(self.hparams["hparams"].dataset_info.statics)
-        statics = self.model.transform_statics(statics)
+
         l1_loss = ScaledL1Loss(reduction="none")
         rmse_loss = ScaledRMSELoss(reduction="none")
-        l1_loss.prepare(statics)
-        rmse_loss.prepare(statics)
+        l1_loss.prepare(self.interior_mask, self.hparams["hparams"].dataset_info)
+        rmse_loss.prepare(self.interior_mask, self.hparams["hparams"].dataset_info)
+
         metrics = {"mae": l1_loss, "rmse": rmse_loss}
         # I do not like settings things outside the __init__
         self.test_plotters = [
@@ -331,3 +390,27 @@ class AutoRegressiveLightning(pl.LightningModule):
         # Notify plotters that the test epoch end
         for plotter in self.test_plotters:
             plotter.on_step_end(self)
+
+    @classmethod
+    def load_from_checkpoint(cls, checkpoint_path, hparams):
+        """
+        Overwrite the load_from_checkpoint method in order to be able to read our parameters.
+        """
+        from io import BytesIO
+
+        checkpoint = torch.load(
+            checkpoint_path, map_location=lambda storage, loc: storage
+        )
+        # remove hyperparameters
+        checkpoint["hyper_parameters"] = {}
+        # Do no iniate loss state (as it has been changed from previous version)
+        keys = list(checkpoint["state_dict"].keys())
+        # Relmoving information for loss and statistics
+        for key in keys:
+            if "loss_" in key or "stats" in key:
+                checkpoint["state_dict"].pop(key)
+        buffer = BytesIO()
+        torch.save(checkpoint, buffer)
+        buffer.seek(0)
+        # Don't do strict mode. Indeed a lot of variable had changed (but are initiate in the __init__).
+        return super().load_from_checkpoint(buffer, hparams=hparams, strict=False)

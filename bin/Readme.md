@@ -18,13 +18,13 @@ Main options are :
 
     - --model  ["hi_lam","graph_lam"] : The model choosed
     - --dataset ["titan","smeagol"] : The dataset choosed
-    - --dataset_conf  : The configuration file for the dataset (used only for smeagol right now).
-    - --num_ar_steps : Number of autoregressive steps 
-    - --standardize : Do we want to standardize our inputs ? 
+    - --dataset_conf  : The configuration file for the dataset 
+    - --model_conf : Configuration file for the model  
+
 
 In dev mode : 
 
-    - --subset 10 : Number of batch to use 
+    - --limit_train_batches 10 : Number of batch to use (per_gpu) 
     - --no_log : If activated, no log are kept in tensorboard. Models are not saved. 
 
 
@@ -40,8 +40,86 @@ In dev mode :
     runai exec_gpu python bin/train.py --model hilam --dataset titan
 ```
 
+## 3. Playing with 'num' 'steps' options 
+Currently they are many 'num' 'steps options tunable from CLI. 
+ - --num_pred_steps_train : The number of prediction step for which we have some data. Used during training. 
+ - --num_pred_steps_val_test : The number of prediction step for which we have some data. Used during validation and test step (from train.py). 
+- --num_input_steps : Number of previous timesteps fed as inputs to the neural network
+ - --num_inter_steps : Number of intermediary time steps (for which we do not have or do not use the y_true training data).
+ We run num_inter_steps between each pred_step.
 
-## 3. Some information on training speed. 
+ This different options interfer with other options of the dataset. 
+
+ The step_duration of the model is defined by : 
+
+     step_duration of the dataset / num_inter_steps  
+
+ 
+### Example 
+ Let's take an example. 
+ 
+ Aim : Get a model with 15 min timestep.  
+ Data :  A dataset which can be used with different timestep (e.g 15 min, 1h, 3h). 
+
+#### First step of parameters :  
+ A possible set of parameter : 
+    - num_input_steps : 1 
+    - num_inter_steps : 1 
+    - num_pred_steps_train : 1 
+    - dataset : 15 min timestep.
+
+The input will be H-15. The model will be run one time to get the prediction at time H. 
+
+#### Second set of paramters : 
+  A possible set of parameter : 
+    - num_input_steps : 1 
+    - num_inter_steps : 4 
+    - num_pred_steps_train : 1 
+    - dataset : 1h timestep.
+
+The input will be H -1. The model will be run 4 times to get the prediction at time H. 
+
+#### Third set of parameters : 
+    - num_input_steps : 2 
+    - num_inter_steps : 4 
+    - num_pred_steps_train : 1 
+    - dataset : 1h timestep.
+
+The input will be H-2 and H-1. The model will be run 4 times. 
+**The behavour is not the one expected. One should not used input_steps > 1 with inter_steps ? Do we reject by defaut such configuration ?**
+
+#### Another set of parameters : 
+   - num_input_steps : 1
+   - num_inter_steps : 4 
+   - num_pred_steps_train : 3 
+   - dataset : 1h timestep 
+
+Input will be H-1, the model will be run 4 times to obtain H, then 4 times to obtain H+1 and another 4 times to obtain H+2. 
+As a consequence, there is a better computation cost with respect to dataloading. 
+Is it detrimental for the minimisation ? 
+
+#### Other information 
+Note that in all those example, the metrics will be difficult to compared. 
+Indeed, the dataset step_duration is not constant, which means that the cost will not be taken at the same time. 
+Note that, even if we have a 15 min timestep dataset, it is not possible to have a 1h timestep for training and 15 min timestep for validation. 
+However, this could be done in inference. 
+
+Training parameters
+```
+    - num_input_steps : 1 
+    - num_inter_steps : 4 
+    - num_pred_steps_train : 1 
+    - dataset : 1h timestep.
+```
+Inference parameters 
+```
+    - num_input_steps : 1 
+    - num_inter_steps : 1 
+    - num_pred_steps_train : 4 
+    - dataset : 15 min timestep.
+```
+
+## 4. Some information on training speed. 
 
 A few test had been conducted in order to see if there is regression in training speed due to an increase complexity. 
 Here are the command launch. 

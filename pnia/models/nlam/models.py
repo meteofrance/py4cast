@@ -1,8 +1,9 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from functools import cached_property
 from pathlib import Path
 from typing import Tuple
 
+import numpy as np
 import torch
 import torch_geometric as pyg
 from dataclasses_json import dataclass_json
@@ -289,33 +290,18 @@ class BaseGraphModel(ModelABC, nn.Module):
 
         Going from dictionnary to torch tensor
         """
-        # TODO Rendre plus generique cette fonction.
-        # On va traiter les entrees 2D et 3D en les 'superposant'
-        in2D = torch.cat([x.values for x in batch.inputs if x.ndims == 2], dim=-1)
-        in3D = torch.cat([x.values for x in batch.inputs if x.ndims == 3], dim=-1)
-        inputs = torch.cat([in3D, in2D], dim=-1)
-        inputs = inputs.flatten(2, 3)
-        # On fait de meme pour les sorties
-        out2D = torch.cat([x.values for x in batch.outputs if x.ndims == 2], dim=-1)
-        out3D = torch.cat([x.values for x in batch.outputs if x.ndims == 3], dim=-1)
-        outputs = torch.cat([out3D, out2D], dim=-1)
-        outputs = outputs.flatten(2, 3)
-        sh = outputs.shape
-
-        # Forcing. Expand time forcing.
-        f1 = torch.cat(
-            [
-                x.values.unsqueeze(2).expand(-1, -1, sh[2], -1)
-                for x in batch.forcing
-                if x.ndims == 1
-            ],
-            dim=-1,
-        )
-        # Ici on suppose qu'on a des forcage 2D et uniquement 2D (en plus du 1D).
-        f2 = torch.cat([x.values for x in batch.forcing if x.ndims == 2], dim=-1)
-        f2 = f2.flatten(2, 3)
-        forcing = torch.cat([f1, f2], dim=-1)
-        return inputs, outputs, forcing
+        new_batch = batch.cat_2D()
+        # Postpone we have inputs
+        coords = np.delete(batch.inputs[0].coordinates_name, [2, 3]).tolist()
+        coords[2:2] = ["ngrid"]
+        for attr in (f.name for f in fields(Item)):
+            attribute = getattr(new_batch, attr)
+            if attribute is not None:
+                # our grided datasets produce tensor of shape (B, T, W, H, F)
+                # so we flatten (W,H) => (num_graph_nodes) for GNNs
+                attribute[0].values = attribute[0].values.flatten(2, 3)
+                attribute[0].coordinates_name = coords
+        return new_batch
 
     def finalize_graph_model(self):
         """
