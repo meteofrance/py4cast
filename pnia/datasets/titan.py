@@ -38,6 +38,8 @@ SECONDS_IN_YEAR = (
 with open(SCRATCH_PATH / "metadata.yaml", "r") as file:
     METADATA = yaml.safe_load(file)
 
+DEFAULT_CONFIG = Path(__file__).parents[2] / "config" / "titan.json"
+
 
 def get_weight_per_lvl(level: int, kind: Literal["hPa", "m"]):
     if kind == "hPa":
@@ -310,6 +312,7 @@ class TitanSettings:
     num_pred_steps: int  # Number of output timesteps
     step_duration: float  # duration in hour
     standardize: bool = True
+    file_format: Literal["npy", "grib"] = "grib"
 
 
 #############################################################
@@ -358,7 +361,7 @@ class Sample:
         """
         for date in self.dates:
             for param in param_list:
-                if not param.exist(date):
+                if not param.exist(date, self.settings.file_format):
                     return False
         return True
 
@@ -487,7 +490,7 @@ class TitanDataset(DatasetABC, Dataset):
             names = param.parameter_short_names
             means = np.asarray([self.stats[name]["mean"] for name in names])
             std = np.asarray([self.stats[name]["std"] for name in names])
-        arrays = [param.load_data(date) for date in dates]
+        arrays = [param.load_data(date, self.settings.file_format) for date in dates]
         array = np.stack(arrays)
         # Extend dimension to match 3D (level dimension)
         if len(array.shape) != 4:
@@ -520,7 +523,7 @@ class TitanDataset(DatasetABC, Dataset):
         for param in self.params:
             state_kwargs = {
                 "feature_names": param.parameter_short_names,
-                "names": ["out_step", "lat", "lon", "levels"],
+                "names": ["out_step", "lat", "lon", "features"],
             }
 
             if param.kind == "input":
@@ -691,43 +694,54 @@ class TitanDataset(DatasetABC, Dataset):
             grid_limits=self.grid.grid_limits, projection=self.grid.projection
         )
 
+    @classmethod
+    def prepare(cls, path_config: Path):
+        print("--> Preparing Titan Dataset...")
+
+        print("Load train dataset configuration...")
+        with open(path_config, "r") as fp:
+            conf = json.load(fp)
+
+        print("Computing stats on each parameter...")
+        conf["settings"]["standardize"] = False
+        train_ds, _, _ = TitanDataset.from_dict(conf, 2, 3, 3)
+        train_ds.compute_parameters_stats()
+
+        print("Computing time stats on each parameters, between 2 timesteps...")
+        conf["settings"]["standardize"] = True
+        train_ds, _, _ = TitanDataset.from_dict(conf, 2, 3, 3)
+        train_ds.compute_time_step_stats()
+
 
 # TODO :
-# - mettre à jour les métadonnées, stocker les niveaux en liste
-# - sauvegarde des npy en float32
-# - stocker en npz non compressé pour indexer les niveaux
-# - faire une fonction prepare dataset qui reprend ce qui est en dessous
+# - pouvoir gérer plusieurs niveaux
 
 
 if __name__ == "__main__":
     import time
+    from argparse import ArgumentParser
 
-    print("--> Preparing Titan Dataset...")
+    parser = ArgumentParser(description="Prepare Titan dataset.")
+    parser.add_argument(
+        "--path_config",
+        default=DEFAULT_CONFIG,
+        type=Path,
+        help="Configuration file for the dataset.",
+    )
+    args = parser.parse_args()
 
-    print("Load train dataset configuration...")
-    path_json = Path(__file__).parents[2] / "config" / "titan.json"
-    with open(path_json, "r") as fp:
-        conf = json.load(fp)
-
-    print("Computing stats on each parameter...")
-    conf["settings"]["standardize"] = False
-    train_ds, _, _ = TitanDataset.from_dict(conf, 2, 3, 3)
-    # train_ds.compute_parameters_stats()
-
-    print("Computing time stats on each parameters, between 2 timesteps...")
-    conf["settings"]["standardize"] = True
-    train_ds, _, _ = TitanDataset.from_dict(conf, 2, 3, 3)
-    # train_ds.compute_time_step_stats()
+    TitanDataset.prepare(args.path_config)
 
     print("Dataset info : ")
-    # print(train_ds.dataset_info)
+    train_ds, _, _ = TitanDataset.from_json(args.path_config, 2, 3, 3)
+    train_ds.dataset_info.summary()
 
     print("Test __get_item__")
     print("Len dataset : ", len(train_ds))
 
     beg = time.time()
-    for i in tqdm.tqdm(range(10)):
+    for i in tqdm.tqdm(range(5)):
         item = train_ds[i]
-    print("Time to load 10 sample : ", time.time() - beg)
-    print("Item description :")
+    print("Time to load 5 sample : ", time.time() - beg)
+    print("Last Item description :")
     print(item)
