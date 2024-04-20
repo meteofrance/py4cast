@@ -18,7 +18,7 @@ from pnia.datasets.base import (
     DatasetABC,
     DatasetInfo,
     Item,
-    StateVariable,
+    NamedTensor,
     TorchDataloaderSettings,
     collate_fn,
 )
@@ -415,13 +415,12 @@ class SmeagolDataset(DatasetABC, Dataset):
         We add the LandSea Mask to the statics.
         """
         return [
-            StateVariable(
-                ndims=2,
-                names=["LandSeaMask"],
-                values=torch.from_numpy(self.grid.landsea_mask)
+            NamedTensor(
+                feature_names=["LandSeaMask"],
+                tensor=torch.from_numpy(self.grid.landsea_mask)
                 .type(torch.float32)
                 .unsqueeze(2),
-                coordinates_name=["lat", "lon", "features"],
+                names=["lat", "lon", "features"],
             )
         ]
 
@@ -513,23 +512,21 @@ class SmeagolDataset(DatasetABC, Dataset):
         # Datetime Forcing
         datetime_forcing = self.get_year_hour_forcing(sample).type(torch.float32)
         lforcings = [
-            StateVariable(
-                ndims=1,
-                names=[
+            NamedTensor(
+                feature_names=[
                     "cos_hour",
                     "sin_hour",
                 ],  # doy : day_of_year
-                values=datetime_forcing[:, :2],
-                coordinates_name=["out_step", "features"],
+                tensor=datetime_forcing[:, :2],
+                names=["out_step", "features"],
             ),
-            StateVariable(
-                ndims=1,
-                names=[
+            NamedTensor(
+                feature_names=[
                     "cos_doy",
                     "sin_doy",
                 ],  # doy : day_of_year
-                values=datetime_forcing[:, 2:],
-                coordinates_name=["out_step", "features"],
+                tensor=datetime_forcing[:, 2:],
+                names=["out_step", "features"],
             ),
         ]
         linputs = []
@@ -568,11 +565,10 @@ class SmeagolDataset(DatasetABC, Dataset):
                         tmp_in = (tmp_in - means) / std
 
                     # Define the state to append.
-                    tmp_state = StateVariable(
-                        ndims=param.ndims,
-                        values=torch.from_numpy(tmp_in),
-                        names=param.parameter_short_name,
-                        coordinates_name=["in_step", "lat", "lon", "levels"],
+                    tmp_state = NamedTensor(
+                        tensor=torch.from_numpy(tmp_in),
+                        feature_names=param.parameter_short_name,
+                        names=["in_step", "lat", "lon", "features"],
                     )
                     linputs.append(tmp_state)
 
@@ -586,11 +582,10 @@ class SmeagolDataset(DatasetABC, Dataset):
                     tmp_in = np.transpose(tmp_in, axes=[0, 2, 3, 1])
                     if self.settings.standardize:
                         tmp_in = (tmp_in - means) / std
-                    tmp_state = StateVariable(
-                        ndims=param.ndims,
-                        values=torch.from_numpy(tmp_in),
-                        names=param.parameter_short_name,
-                        coordinates_name=["out_step", "lat", "lon", "levels"],
+                    tmp_state = NamedTensor(
+                        tensor=torch.from_numpy(tmp_in),
+                        feature_names=param.parameter_short_name,
+                        names=["out_step", "lat", "lon", "features"],
                     )
                     lforcings.append(tmp_state)
                 # Read outputs.
@@ -601,11 +596,10 @@ class SmeagolDataset(DatasetABC, Dataset):
                     tmp_out = np.transpose(tmp_out, axes=[0, 2, 3, 1])
                     if self.settings.standardize:
                         tmp_out = (tmp_out - means) / std
-                    tmp_state = StateVariable(
-                        ndims=param.ndims,
-                        values=torch.from_numpy(tmp_out),
-                        names=param.parameter_short_name,
-                        coordinates_name=["out_step", "lat", "lon", "levels"],
+                    tmp_state = NamedTensor(
+                        tensor=torch.from_numpy(tmp_out),
+                        feature_names=param.parameter_short_name,
+                        names=["out_step", "lat", "lon", "features"],
                     )
                     loutputs.append(tmp_state)
             except KeyError as e:

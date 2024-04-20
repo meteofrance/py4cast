@@ -2,7 +2,7 @@ import datetime as dt
 import json
 from copy import deepcopy
 from dataclasses import dataclass, field
-from functools import cached_property
+from functools import cached_property, lru_cache
 from pathlib import Path
 from typing import Dict, List, Literal, Tuple
 
@@ -10,15 +10,18 @@ import cartopy
 import numpy as np
 import pandas as pd
 import torch
+import tqdm
 import xarray as xr
 import yaml
+from cyeccodes import nested_dd_iterator
+from cyeccodes.eccodes import get_multi_messages_from_file
 from torch.utils.data import DataLoader, Dataset
 
 from pnia.datasets.base import (
     DatasetABC,
     DatasetInfo,
     Item,
-    StateVariable,
+    NamedTensor,
     TorchDataloaderSettings,
     collate_fn,
 )
@@ -41,6 +44,36 @@ def get_weight_per_lvl(level: int, kind: Literal["hPa", "m"]):
         return 1 + (level) / (90)
     else:
         return 2
+
+
+@lru_cache(256)
+def read_grib(path_grib: Path, names=None, levels=None):
+    if names or levels:
+        include_filters = {
+            k: v for k, v in [("cfVarName", names), ("level", levels)] if v is not None
+        }
+    else:
+        include_filters = None
+    _, results = get_multi_messages_from_file(
+        path_grib,
+        storage_keys=("cfVarName", "level"),
+        include_filters=include_filters,
+        metadata_keys=("missingValue", "Ni", "Nj"),
+        include_latlon=False,
+    )
+
+    grib_dict = {}
+    for metakey, result in nested_dd_iterator(results):
+        array = result["values"]
+        grid = (result["metadata"]["Nj"], result["metadata"]["Ni"])
+        mv = result["metadata"]["missingValue"]
+        array = np.reshape(array, grid)
+        array = np.where(array == mv, np.nan, array)
+        name, level = metakey.split("-")
+        level = int(level)
+        grib_dict[name] = {}
+        grib_dict[name][level] = array
+    return grib_dict
 
 
 #############################################################
@@ -81,7 +114,6 @@ class Grid:
     subgrid: Tuple[int] = (0, 0, 0, 0)
     x: int = field(init=False)  # X dimension
     y: int = field(init=False)  # Y dimension
-    extent: Tuple[int] = field(init=False)  # lat lon coordinates of corners
 
     def __post_init__(self):
         grid_info = METADATA["GRIDS"][self.name]
@@ -176,9 +208,13 @@ class Param:
     long_name: str = field(init=False)
     unit: str = field(init=False)
     native_grid: str = field(init=False)
+    grib_name: str = field(init=False)
+    grib_param: str = field(init=False)
 
     def __post_init__(self):
         param_info = METADATA["WEATHER_PARAMS"][self.name]
+        self.grib_name = param_info["grib"]
+        self.grib_param = param_info["param"]
         self.unit = param_info["unit"]
         if param_info["type_level"] in ["heightAboveGround", "meanSea", "surface"]:
             self.level_type = "m"
@@ -219,12 +255,18 @@ class Param:
         """For a given variable, the unit is the same accross all levels."""
         return [self.unit for _ in self.levels]
 
-    def get_filepath(self, date: dt.datetime) -> Path:
+    def get_filepath(
+        self, date: dt.datetime, file_format: Literal["npy", "grib"]
+    ) -> Path:
         """Return the file path."""
-        return SCRATCH_PATH / "npy" / date.strftime(FORMATSTR) / f"{self.name}.npy"
+        folder = SCRATCH_PATH / file_format / date.strftime(FORMATSTR)
+        if file_format == "npy":
+            return folder / f"{self.name}.npy"
+        else:
+            return folder / self.grib_name
 
-    def load_data(self, date: dt.datetime):
-        array = np.load(self.get_filepath(date))
+    def load_data_npy(self, date: dt.datetime) -> np.ndarray:
+        array = np.load(self.get_filepath(date, "npy"))
         subgrid = self.grid.subgrid
         array = array[subgrid[0] : subgrid[1], subgrid[2] : subgrid[3]]
         if self.native_grid != self.grid.name:
@@ -235,8 +277,25 @@ class Param:
         # TODO : select only desired levels -> save dataset as npz with dico level
         return array
 
-    def exist(self, date: dt.datetime):
-        filepath = self.get_filepath(date)
+    def load_data_grib(self, date: dt.datetime) -> np.ndarray:
+        path_grib = self.get_filepath(date, "grib")
+        param_dict = read_grib(path_grib)[self.grib_param]
+        array = param_dict[
+            self.levels[0]
+        ]  # warning : doesn't work with multiple levels for now
+        subgrid = self.grid.subgrid
+        return array[subgrid[0] : subgrid[1], subgrid[2] : subgrid[3]]
+
+    def load_data(
+        self, date: dt.datetime, file_format: Literal["npy", "grib"] = "grib"
+    ):
+        if file_format == "npy":
+            return self.load_data_npy(date)
+        else:
+            return self.load_data_grib(date)
+
+    def exist(self, date: dt.datetime, file_format: Literal["npy", "grib"] = "grib"):
+        filepath = self.get_filepath(date, file_format)
         return filepath.exists()
 
 
@@ -359,13 +418,12 @@ class TitanDataset(DatasetABC, Dataset):
     def dataset_extra_statics(self):
         """Add the LandSea Mask to the statics."""
         return [
-            StateVariable(
-                ndims=2,
-                names=["LandSeaMask"],
-                values=torch.from_numpy(self.grid.landsea_mask)
+            NamedTensor(
+                feature_names=["LandSeaMask"],
+                tensor=torch.from_numpy(self.grid.landsea_mask)
                 .type(torch.float32)
                 .unsqueeze(2),
-                coordinates_name=["lat", "lon", "features"],
+                names=["lat", "lon", "features"],
             )
         ]
 
@@ -444,16 +502,15 @@ class TitanDataset(DatasetABC, Dataset):
 
         # Datetime Forcing
         lforcings = [
-            StateVariable(
-                ndims=1,
-                names=[
+            NamedTensor(
+                feature_names=[
                     "cos_hour",
                     "sin_hour",
                     "cos_doy",
                     "sin_doy",
                 ],  # doy : day_of_year
-                values=self.get_year_hour_forcing(sample).type(torch.float32),
-                coordinates_name=["out_step", "features"],
+                tensor=self.get_year_hour_forcing(sample).type(torch.float32),
+                names=["out_step", "features"],
             )
         ]
         linputs = []
@@ -461,38 +518,36 @@ class TitanDataset(DatasetABC, Dataset):
 
         # Reading parameters from files
         for param in self.params:
-
             state_kwargs = {
-                "ndims": param.ndims,
-                "names": param.parameter_short_names,
-                "coordinates_name": ["out_step", "lat", "lon", "levels"],
+                "feature_names": param.parameter_short_names,
+                "names": ["out_step", "lat", "lon", "levels"],
             }
 
             if param.kind == "input":
                 # forcing is taken for every predicted step
                 dates = sample.dates[-self.settings.num_pred_steps :]
                 tensor = self.get_param_tensor(param, dates)
-                tmp_state = StateVariable(values=tensor, **deepcopy(state_kwargs))
+                tmp_state = NamedTensor(tensor=tensor, **deepcopy(state_kwargs))
                 lforcings.append(tmp_state)
 
             elif param.kind == "output":
                 dates = sample.dates[-self.settings.num_pred_steps :]
                 tensor = self.get_param_tensor(param, dates)
-                tmp_state = StateVariable(values=tensor, **deepcopy(state_kwargs))
+                tmp_state = NamedTensor(tensor=tensor, **deepcopy(state_kwargs))
                 loutputs.append(tmp_state)
 
             else:  # input_output
                 tensor = self.get_param_tensor(param, sample.dates)
-                state_kwargs["coordinates_name"][0] = "out_step"
-                tmp_state = StateVariable(
-                    values=tensor[-self.settings.num_pred_steps :],
+                state_kwargs["names"][0] = "out_step"
+                tmp_state = NamedTensor(
+                    tensor=tensor[-self.settings.num_pred_steps :],
                     **deepcopy(state_kwargs),
                 )
 
                 loutputs.append(tmp_state)
-                state_kwargs["coordinates_name"][0] = "in_step"
-                tmp_state = StateVariable(
-                    values=tensor[: self.settings.num_input_steps],
+                state_kwargs["names"][0] = "in_step"
+                tmp_state = NamedTensor(
+                    tensor=tensor[: self.settings.num_input_steps],
                     **deepcopy(state_kwargs),
                 )
                 linputs.append(tmp_state)
@@ -641,6 +696,7 @@ class TitanDataset(DatasetABC, Dataset):
 # - mettre à jour les métadonnées, stocker les niveaux en liste
 # - sauvegarde des npy en float32
 # - stocker en npz non compressé pour indexer les niveaux
+# - faire une fonction prepare dataset qui reprend ce qui est en dessous
 
 
 if __name__ == "__main__":
@@ -656,20 +712,22 @@ if __name__ == "__main__":
     print("Computing stats on each parameter...")
     conf["settings"]["standardize"] = False
     train_ds, _, _ = TitanDataset.from_dict(conf, 2, 3, 3)
-    train_ds.compute_parameters_stats()
+    # train_ds.compute_parameters_stats()
 
     print("Computing time stats on each parameters, between 2 timesteps...")
     conf["settings"]["standardize"] = True
     train_ds, _, _ = TitanDataset.from_dict(conf, 2, 3, 3)
-    train_ds.compute_time_step_stats()
+    # train_ds.compute_time_step_stats()
 
     print("Dataset info : ")
-    print(train_ds.dataset_info)
+    # print(train_ds.dataset_info)
 
     print("Test __get_item__")
     print("Len dataset : ", len(train_ds))
+
     beg = time.time()
-    item = train_ds.__getitem__(0)
-    print("Time to load 1 sample : ", time.time() - beg)
+    for i in tqdm.tqdm(range(10)):
+        item = train_ds[i]
+    print("Time to load 10 sample : ", time.time() - beg)
     print("Item description :")
     print(item)

@@ -1,5 +1,6 @@
 stages:
   - lint
+  - test
 
 linting:
   stage: lint
@@ -14,3 +15,11 @@ complexity:
   script:
     - pip install --trusted-host pypi.org --trusted-host files.pythonhosted.org sourcery-analytics
     - sourcery-analytics assess .
+
+unit_test:
+  stage: test
+  image: pytorch/pytorch:2.1.2-cuda12.1-cudnn8-runtime
+  script:
+    - pip install --trusted-host pypi.org --trusted-host files.pythonhosted.org -r requirements.txt
+    - python -m pytest
+  

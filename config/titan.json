@@ -18,8 +18,8 @@
     },
     "grid":{
         "name": "PAAROME_1S100", 
-        "border_size": 0, 
-        "subgrid": [1000,1256,1200,1456]
+        "border_size": 0,
+        "subgrid": [383,1407,888,1912]
     },
     "settings":{
         "step_duration": 1,
