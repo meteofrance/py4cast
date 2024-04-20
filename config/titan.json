@@ -23,7 +23,8 @@
     },
     "settings":{
         "step_duration": 1,
-        "standardize": true
+        "standardize": true,
+        "file_format": "grib"
     },
     "params": {
         "aro_t2m": {

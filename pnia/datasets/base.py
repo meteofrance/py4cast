@@ -91,23 +91,15 @@ class NamedTensor(TensorWrapper):
         return len([x for x in self.names if x in self.SPATIAL_DIM_NAMES])
 
     def __str__(self):
-        table = []
-        head = f"NamedTensor(names={self.names}, features={self.feature_names}, tensor shape={self.tensor.shape})"
-        for feature in self.feature_names:
-            table.append(
-                [
-                    feature,
-                    self[feature].min(),
-                    self[feature].max(),
-                ]
-            )
-
+        head = "--- NamedTensor ---\n"
+        head += f"Names: {self.names}\nTensor Shape: {self.tensor.shape})\nFeatures:\n"
+        table = [
+            [feature, self[feature].min(), self[feature].max()]
+            for feature in self.feature_names
+        ]
         headers = ["Feature name", "Min", "Max"]
-        return (
-            head
-            + "\n"
-            + str(tabulate(table, headers=headers, tablefmt="simple_outline"))
-        )
+        table_string = str(tabulate(table, headers=headers, tablefmt="simple_outline"))
+        return head + table_string
 
     def __or__(self, other: Union["NamedTensor", None]) -> "NamedTensor":
         """
@@ -692,7 +684,7 @@ class DatasetABC(ABC):
         store_d = {}
         # Get variables names
         names = []
-        [names.extend(x.names) for x in batch.inputs]
+        [names.extend(x.feature_names) for x in batch.inputs]
         # Storing variable statistics
         for i, name in enumerate(names):
             store_d[name] = {
@@ -715,9 +707,10 @@ class DatasetABC(ABC):
             # Here we postpone that data are in 2 or 3 D
             inputs = torch.cat([x.tensor for x in batch.inputs], dim=-1)
             outputs = torch.cat([x.tensor for x in batch.outputs], dim=-1)
+
             # Check that no variable is a forcing variable
-            f_names = [x.names for x in batch.forcing if x.ndims == 2]
-            if len(f_names) > 0:
+            f_names = [x.feature_names for x in batch.forcing if x.ndims == 2]
+            if any(f_names):
                 raise ValueError(
                     "During statistics computation no forcing are accepted. All variables should be in in/out mode."
                 )
@@ -739,7 +732,7 @@ class DatasetABC(ABC):
         store_d = {}
         # Get variables names
         names = []
-        [names.extend(x.names) for x in batch.inputs]
+        [names.extend(x.feature_names) for x in batch.inputs]
         # Storing variable statistics
         for i, name in enumerate(names):
             store_d[name] = {
