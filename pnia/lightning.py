@@ -11,7 +11,7 @@ from lightning.pytorch.utilities import rank_zero_only
 from torch import nn
 from torchinfo import summary
 
-from pnia.datasets.base import DatasetInfo, ItemBatch, StateVariables
+from pnia.datasets.base import DatasetInfo, ItemBatch, NamedTensor
 from pnia.losses import ScaledL1Loss, ScaledRMSELoss, WeightedL1Loss, WeightedMSELoss
 from pnia.models import build_model_from_settings, get_model_kls_and_settings
 from pnia.models.base import expand_to_batch
@@ -100,9 +100,8 @@ class AutoRegressiveLightning(pl.LightningModule):
         self.diff_stats = hparams.dataset_info.diff_stats
         self.stats = hparams.dataset_info.stats
 
-        # Keeping track of grid shape and N_interior
+        # Keeping track of grid shape
         self.grid_shape = statics.grid_shape
-        self.N_interior = statics.N_interior
 
         # For making restoring of optimizer state optional (slight hack)
         self.opt_state = None
@@ -114,7 +113,7 @@ class AutoRegressiveLightning(pl.LightningModule):
         self.spatial_loss_maps = []
 
         # Set model input/output grid features based on dataset tensor shapes
-        num_grid_static_features = statics.grid_static_features.values.shape[-1]
+        num_grid_static_features = statics.grid_static_features.dim_size("features")
 
         # Compute the number of input features for the neural network
         # Should be directly supplied by datasetinfo ?
@@ -150,7 +149,7 @@ class AutoRegressiveLightning(pl.LightningModule):
 
         self.register_buffer(
             "grid_static_features",
-            expand_to_batch(statics.grid_static_features.values, hparams.batch_size),
+            expand_to_batch(statics.grid_static_features.tensor, hparams.batch_size),
             persistent=False,
         )
         # We need to instantiate the loss after statics had been transformed.
@@ -175,7 +174,7 @@ class AutoRegressiveLightning(pl.LightningModule):
 
         return opt
 
-    def common_step(self, batch: ItemBatch) -> Tuple[torch.Tensor, torch.Tensor]:
+    def common_step(self, batch: ItemBatch) -> Tuple[NamedTensor, NamedTensor]:
         """
         Predict on single batch
         init_states: (B,num_input_steps, N_grid, d_features)
@@ -186,8 +185,7 @@ class AutoRegressiveLightning(pl.LightningModule):
         """
         # Right now we postpone that we have a single input/output/forcing
         batch = self.model.transform_batch(batch)
-
-        prev_states = batch.inputs[0].values
+        prev_states = batch.inputs[0].tensor
 
         prediction_list = []
 
@@ -195,16 +193,16 @@ class AutoRegressiveLightning(pl.LightningModule):
         # for the desired number of ar steps.
         for i in range(batch.num_pred_steps):
 
-            forcing = batch.forcing[0].values[:, i]
-            border_state = batch.outputs[0].values[:, i]
+            forcing = batch.forcing[0].tensor[:, i]
+            border_state = batch.outputs[0].tensor[:, i]
             # Get stats from buffer.
             # Set them to the good device.
-            step_diff_std = self.diff_stats.to_list("std", batch.outputs[0].names).to(
-                prev_states, non_blocking=True
-            )
-            step_diff_mean = self.diff_stats.to_list("mean", batch.outputs[0].names).to(
-                prev_states, non_blocking=True
-            )
+            step_diff_std = self.diff_stats.to_list(
+                "std", batch.outputs[0].feature_names
+            ).to(prev_states, non_blocking=True)
+            step_diff_mean = self.diff_stats.to_list(
+                "mean", batch.outputs[0].feature_names
+            ).to(prev_states, non_blocking=True)
             # Intermediary steps for which we have no y_true data
             # Should be greater or equal to 1 (otherwise nothing is done).
             for k in range(self.hparams["hparams"].num_inter_steps):
@@ -227,6 +225,7 @@ class AutoRegressiveLightning(pl.LightningModule):
 
                 # Overwrite border with true state
                 # Force it to true state for all intermediary step
+
                 new_state = (
                     self.border_mask * border_state
                     + self.interior_mask * predicted_state
@@ -244,16 +243,10 @@ class AutoRegressiveLightning(pl.LightningModule):
             # Append prediction to prediction list only "normal steps"
             prediction_list.append(new_state)
 
-            prediction = torch.stack(
-                prediction_list, dim=1
-            )  # Stacking is done on time step. (B, pred_steps, N_grid, d_f) or (B, pred_steps, N_lat, N_lon, d_f)
-            # print(prediction.shape)
-            pred_out = StateVariables(
-                values=prediction,
-                names=batch.outputs[0].names,
-                coordinates_name=batch.outputs[0].coordinates_name,
-                ndims=batch.outputs[0].ndims,
-            )
+        prediction = torch.stack(
+            prediction_list, dim=1
+        )  # Stacking is done on time step. (B, pred_steps, N_grid, d_f) or (B, pred_steps, N_lat, N_lon, d_f)
+        pred_out = NamedTensor.new_like(prediction, batch.outputs[0])
 
         return pred_out, batch.outputs[0]
 
@@ -290,7 +283,7 @@ class AutoRegressiveLightning(pl.LightningModule):
         metrics = {"mae": l1_loss}
         self.valid_plotters = [StateErrorPlot(metrics, kind="Validation")]
 
-    def validation_step(self, batch, batch_idx):
+    def validation_step(self, batch: ItemBatch, batch_idx):
         """
         Run validation on single batch
         """

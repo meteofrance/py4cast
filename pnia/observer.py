@@ -82,8 +82,8 @@ class PredictionPlot(ErrorObserver):
         """
         Update. Should be call by "on_{training/validation/test}_step
         """
-        pred = deepcopy(prediction).values  # In order to not modify the input
-        targ = deepcopy(target).values  # In order to not modify the input
+        pred = deepcopy(prediction).tensor  # In order to not modify the input
+        targ = deepcopy(target).tensor  # In order to not modify the input
         if obj.model.info.output_dim == 1:
             pred = einops.rearrange(
                 pred, "b t (x y) n -> b t x y n", x=obj.grid_shape[0]
@@ -102,8 +102,10 @@ class PredictionPlot(ErrorObserver):
                 pred.shape[0], self.num_samples_to_plot - self.plotted_examples
             )
             # Rescale to original data scale
-            std = obj.stats.to_list("std", prediction.names).to(pred, non_blocking=True)
-            mean = obj.stats.to_list("mean", prediction.names).to(
+            std = obj.stats.to_list("std", prediction.feature_names).to(
+                pred, non_blocking=True
+            )
+            mean = obj.stats.to_list("mean", prediction.feature_names).to(
                 pred, non_blocking=True
             )
             prediction_rescaled = pred * std + mean
@@ -154,10 +156,10 @@ class PredictionPlot(ErrorObserver):
                         )
                         for var_i, (var_name, var_unit, var_vrange) in enumerate(
                             zip(
-                                prediction.names,
+                                prediction.feature_names,
                                 [
                                     obj.hparams["hparams"].dataset_info.units[name]
-                                    for name in prediction.names
+                                    for name in prediction.feature_names
                                 ],
                                 var_vranges,
                             )
@@ -213,10 +215,10 @@ class StateErrorPlot(ErrorObserver):
         for name in self.metrics:
             self.losses[name].append(self.metrics[name](prediction, target))
         if not self.initialized:
-            self.shortnames = prediction.names
+            self.shortnames = prediction.feature_names
             self.units = [
                 obj.hparams["hparams"].dataset_info.units[name]
-                for name in prediction.names
+                for name in prediction.feature_names
             ]
             self.initialized = True
 

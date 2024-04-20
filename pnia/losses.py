@@ -3,7 +3,7 @@ from abc import ABC, abstractmethod
 import torch
 from torch.nn import L1Loss, MSELoss
 
-from pnia.datasets.base import DatasetInfo, StateVariables
+from pnia.datasets.base import DatasetInfo, NamedTensor
 
 
 class WeightedLossMixin:
@@ -17,7 +17,7 @@ class WeightedLossMixin:
         """
         self.loss_state_weight = loss_state_weight
         self.register_buffer("interior_mask", interior_mask.squeeze(-1))
-        self.N_interior = torch.sum(interior_mask).item()
+        self.num_interior = torch.sum(interior_mask).item()
         # Store the aggregate onrmse which one should aggregate.
         # This dimension is grid dependent (not the same for 1D and 2D problems)
         dims = len(self.interior_mask.shape)
@@ -25,20 +25,20 @@ class WeightedLossMixin:
 
     def forward(
         self,
-        prediction: StateVariables,
-        target: StateVariables,
+        prediction: NamedTensor,
+        target: NamedTensor,
         reduce_spatial_dim=True,
-    ):
+    ) -> torch.Tensor:
         """
         Computed weighted loss function.
         prediction/target: (B, pred_steps, N_grid, d_f)
         returns (B, pred_steps)
         """
         entry_loss = super().forward(
-            prediction.values, target.values
+            prediction.tensor, target.tensor
         )  # (B, pred_steps, N_grid, d_f)
         weight = torch.stack(
-            [self.loss_state_weight[name] for name in prediction.names]
+            [self.loss_state_weight[name] for name in prediction.feature_names]
         ).to(entry_loss, non_blocking=True)
         grid_node_loss = torch.sum(
             entry_loss * weight, dim=-1
@@ -48,7 +48,7 @@ class WeightedLossMixin:
         # Take (unweighted) mean over only non-border (interior) grid nodes
         time_step_loss = (
             torch.sum(grid_node_loss * self.interior_mask, dim=self.aggregate_dims)
-            / self.N_interior
+            / self.num_interior
         )  # (B, pred_steps)
         return time_step_loss  # (B, pred_steps)
 
@@ -64,7 +64,7 @@ class RegisterSpatialMixin:
 
         self.loss_state_weight = loss_state_weight
         self.register_buffer("interior_mask", interior_mask)
-        self.N_interior = torch.sum(interior_mask).item()
+        self.num_interior = torch.sum(interior_mask).item()
         # Store the aggregate onrmse which one should aggregate.
         # This dimension is grid dependent (not the same for 1D and 2D problems)
         # As we do not squeeze (in order to be able to multiply) the dimension is changed
@@ -75,18 +75,18 @@ class RegisterSpatialMixin:
 
 
 class SpatialLossMixin:
-    def forward(self, prediction: StateVariables, target: StateVariables):
+    def forward(self, prediction: NamedTensor, target: NamedTensor) -> torch.Tensor:
         """
         Computed weighted loss function.
         prediction/target: (B, pred_steps, N_grid, d_f)
         returns (B, pred_steps)
         """
         entry_loss = super().forward(
-            prediction.values, target.values
+            prediction.tensor, target.tensor
         )  # (B, pred_steps, N_grid, d_f)
         # Je ne comprend pas pourquoi j'ai besoin ici de le faire.
         weight = torch.stack(
-            [self.loss_state_weight[name] for name in prediction.names]
+            [self.loss_state_weight[name] for name in prediction.feature_names]
         ).to(entry_loss, non_blocking=True)
         entry_loss = entry_loss * weight
         mean_error = (
@@ -94,7 +94,7 @@ class SpatialLossMixin:
                 entry_loss * self.interior_mask.to(entry_loss, non_blocking=True),
                 dim=self.aggregate_dims,
             )
-            / self.N_interior
+            / self.num_interior
         )
         return mean_error
 
@@ -117,20 +117,20 @@ class ScaledRMSELoss(
             loss_state_weight[name] = dataset_info.stats[name]["std"]
         super().register_loss_state_buffers(interior_mask, loss_state_weight)
 
-    def forward(self, prediction: StateVariables, target: StateVariables):
+    def forward(self, prediction: NamedTensor, target: NamedTensor):
         """
         Computed weighted loss function.
         prediction/target: (B, pred_steps, N_grid, d_f)
         returns (B, pred_steps)
         """
         entry_loss = super().forward(
-            prediction.values, target.values
+            prediction.tensor, target.tensor
         )  # (B, pred_steps, N_grid, d_f)
         entry_loss = entry_loss * self.interior_mask.to(entry_loss, non_blocking=True)
 
-        mean_error = torch.sum(entry_loss, dim=self.aggregate_dims) / self.N_interior
+        mean_error = torch.sum(entry_loss, dim=self.aggregate_dims) / self.num_interior
         weight = torch.stack(
-            [self.loss_state_weight[name] for name in prediction.names]
+            [self.loss_state_weight[name] for name in prediction.feature_names]
         ).to(entry_loss, non_blocking=True)
         return torch.sqrt(mean_error) * weight
 

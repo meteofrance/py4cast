@@ -1,15 +1,14 @@
-from dataclasses import dataclass, fields
+from dataclasses import dataclass
 from functools import cached_property
 from pathlib import Path
 from typing import Tuple
 
-import numpy as np
 import torch
 import torch_geometric as pyg
 from dataclasses_json import dataclass_json
 from torch import nn
 
-from pnia.datasets.base import Item, Statics
+from pnia.datasets.base import ItemBatch, Statics
 from pnia.models.base import (
     BufferList,
     ModelABC,
@@ -274,33 +273,26 @@ class BaseGraphModel(ModelABC, nn.Module):
         Take the statics in inputs.
         Return the statics as expected by the model.
         """
-        statics.grid_static_features.values = (
-            statics.grid_static_features.values.flatten(0, 1)
-        )
+        statics.grid_static_features.flatten_("ngrid", 0, 1)
         statics.border_mask = statics.border_mask.flatten(0, 1)
         statics.interior_mask = statics.interior_mask.flatten(0, 1)
         return statics
 
-    def transform_batch(
-        self, batch: Item
-    ) -> Tuple[torch.tensor, torch.tensor, torch.tensor]:
+    def transform_batch(self, batch: ItemBatch) -> ItemBatch:
         """
-        Transform the batch to the need
-        We postpone here that files are order as in smeagol.
-
-        Going from dictionnary to torch tensor
+        Transform the batch for our GNNS
+        Our grided datasets produce tensor of shape (B, T, W, H, F)
+        so we flatten (W,H) => (num_graph_nodes) for GNNs
         """
         new_batch = batch.cat_2D()
-        # Postpone we have inputs
-        coords = np.delete(batch.inputs[0].coordinates_name, [2, 3]).tolist()
-        coords[2:2] = ["ngrid"]
-        for attr in (f.name for f in fields(Item)):
-            attribute = getattr(new_batch, attr)
-            if attribute is not None:
-                # our grided datasets produce tensor of shape (B, T, W, H, F)
-                # so we flatten (W,H) => (num_graph_nodes) for GNNs
-                attribute[0].values = attribute[0].values.flatten(2, 3)
-                attribute[0].coordinates_name = coords
+
+        new_batch.inputs[0].flatten_("ngrid", 2, 3)
+
+        new_batch.outputs[0].flatten_("ngrid", 2, 3)
+
+        if new_batch.forcing is not None:
+            new_batch.forcing[0].flatten_("ngrid", 2, 3)
+
         return new_batch
 
     def finalize_graph_model(self):

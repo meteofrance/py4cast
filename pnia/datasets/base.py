@@ -2,11 +2,12 @@
 Base classes defining our software components
 and their interfaces
 """
-
 import warnings
 from abc import ABC, abstractclassmethod, abstractmethod, abstractproperty
+from copy import deepcopy
 from dataclasses import dataclass, field, fields
 from functools import cached_property
+from itertools import chain
 from pathlib import Path
 from typing import Callable, Dict, List, Literal, Tuple, Union
 
@@ -22,113 +23,258 @@ from pnia.plots import DomainInfo
 from pnia.utils import RegisterFieldsMixin, torch_save
 
 
-class StateVariableMetadata:
+@dataclass(slots=True)
+class TensorWrapper:
     """
-    non dataclass storing StateVariable metadata.
-    We do this to hide metadata from lightning and to avoid
-    introspection of metadata shapes for batch size guess
+    Wrapper around a torch tensor.
+    We do this to allow lightning's introspection to see our batch size
+    and move our tensors to the right device.
     """
+
+    tensor: torch.Tensor
+
+
+class NamedTensor(TensorWrapper):
+    """
+    NamedTensor is a wrapper around a torch tensor
+    adding several attributes :
+
+    * a 'names' attribute with the names of the
+    tensor's dimensions (like https://pytorch.org/docs/stable/named_tensor.html).
+
+    Torch's named tensors are still experimental and subject to change.
+
+    * a 'feature_names' attribute containing the names of the features
+    along the last dimension of the tensor.
+
+    NamedTensor can be concatenated along the last dimension
+    using the | operator.
+    nt3 = nt1 | nt2
+    """
+
+    SPATIAL_DIM_NAMES = ("lat", "lon", "ngrid")
 
     def __init__(
-        self, ndims: int, names: List[str], coordinates_name: List[str], *args, **kwargs
+        self, tensor: torch.Tensor, names: List[str], feature_names: List[str]
     ):
-        self.ndims = ndims
-        self.names = names  # Names of each variable on its level
-        self.coordinates_name = coordinates_name  # Names of the coordinates
+        if len(tensor.shape) != len(names):
+            raise ValueError(
+                f"Number of names ({len(names)}) must match number of dimensions ({len(tensor.shape)})"
+            )
+        if tensor.shape[-1] != len(feature_names):
+            raise ValueError(
+                f"Number of feature names ({len(feature_names)}:{feature_names}) must match"
+                f"number of features ({tensor.shape[-1]})"
+            )
 
+        super().__init__(tensor)
 
-@dataclass(slots=True)
-class StateVariableValues:
-    """
-    Dataclass storing StateVariable values.
-    """
+        self.names = names
+        # build lookup table for fast indexing
+        self.feature_names_to_idx = {
+            feature_name: idx for idx, feature_name in enumerate(feature_names)
+        }
+        self.feature_names = feature_names
 
-    values: torch.Tensor
+    @property
+    def ndims(self):
+        """
+        Number of dimensions of the tensor.
+        """
+        return len(self.names)
 
-
-class StateVariable(StateVariableValues, StateVariableMetadata):
-    """
-    Here we use multiple inheritance to avoid a single
-    dataclass which makes lightning confused about batch size.
-    """
-
-    def __init__(self, **kwargs):
-
-        StateVariableValues.__init__(
-            self,
-            **{
-                k: v
-                for k, v in kwargs.items()
-                if k in StateVariableValues.__match_args__
-            },
-        )
-        StateVariableMetadata.__init__(self, **kwargs)
+    @property
+    def num_spatial_dims(self):
+        """
+        Number of spatial dimensions of the tensor.
+        """
+        return len([x for x in self.names if x in self.SPATIAL_DIM_NAMES])
 
     def __str__(self):
-        return (
-            f" ndims : {self.ndims} \n names {self.names} \n"
-            f" coordinates : {self.coordinates_name} \n values(size) :{self.values.shape} \n"
-        )
-
-    def __getitem__(self, name: str) -> torch.Tensor:
-        return self.__getattr__(name)
-
-    def __getattr__(self, name: str) -> torch.Tensor:
-        """
-        Return one element of a step variable picked by name.
-        We assume that different features are in the last dimension.
-        """
-        if "names" in self.__dict__:
-            if name in self.names:
-                pos = [
-                    self.names.index(name),
+        table = []
+        head = f"NamedTensor(names={self.names}, features={self.feature_names}, tensor shape={self.tensor.shape})"
+        for feature in self.feature_names:
+            table.append(
+                [
+                    feature,
+                    self[feature].min(),
+                    self[feature].max(),
                 ]
-                pos = torch.tensor(pos, dtype=torch.int)
+            )
 
-            else:
-                raise AttributeError(f"StateVariable does not contains {name} feature.")
-            return torch.index_select(self.values, -1, pos)
+        headers = ["Feature name", "Min", "Max"]
+        return (
+            head
+            + "\n"
+            + str(tabulate(table, headers=headers, tablefmt="simple_outline"))
+        )
+
+    def __or__(self, other: Union["NamedTensor", None]) -> "NamedTensor":
+        """
+        Concatenate two NamedTensors along the last dimension.
+        """
+        if other is None:
+            return self
+
+        if not isinstance(other, NamedTensor):
+            raise ValueError("Can only concatenate NamedTensor with NamedTensor")
+
+        # check features names are distinct between the two tensors
+        if set(self.feature_names) & set(other.feature_names):
+            raise ValueError(
+                f"Feature names must be distinct between the two tensors for"
+                f"unambiguous concat, self:{self.feature_names} other:{other.feature_names}"
+            )
+
+        if self.names != other.names:
+            raise ValueError(
+                f"NamedTensors must have the same dimension names to concatenate, self:{self.names} other:{other.names}"
+            )
+        try:
+            return NamedTensor(
+                torch.cat([self.tensor, other.tensor], dim=-1),
+                self.names.copy(),
+                self.feature_names + other.feature_names,
+            )
+        except Exception as e:
+            raise ValueError(f"Error while concatenating {self} and {other}") from e
+
+    def __ror__(self, other: Union["NamedTensor", None]) -> "NamedTensor":
+        return self.__or__(other)
+
+    @staticmethod
+    def concat(nts: List["NamedTensor"]) -> "NamedTensor":
+        """
+        Safely concat a list of NamedTensors along the last dimension
+        in one shot.
+        """
+        if len(nts) == 0:
+            raise ValueError("Cannot concatenate an empty list of NamedTensors")
+        if len(nts) == 1:
+            return nts[0].clone()
         else:
-            raise AttributeError("names not defined.")
+            # Check features names are distinct between the n named tensors
+            feature_names = set()
+            for nt in nts:
+                if feature_names & set(nt.feature_names):
+                    raise ValueError(
+                        f"Feature names must be distinct between the named tensors to concat"
+                        f"Found duplicates: {feature_names & set(nt.feature_names)}"
+                    )
+                feature_names |= set(nt.feature_names)
 
-    def change_type(self, new_type):
-        """
-        Modify the type of the value
-        """
-        self.values = self.values.type(new_type)
+            # Check that all named tensors have the same names
+            if not all(nt.names == nts[0].names for nt in nts):
+                raise ValueError(
+                    "NamedTensors must have the same dimension names to concatenate"
+                )
 
+            # Concat in one shot
+            return NamedTensor(
+                torch.cat([nt.tensor for nt in nts], dim=-1),
+                nts[0].names.copy(),
+                list(chain.from_iterable(nt.feature_names for nt in nts)),
+            )
 
-class StateVariables(StateVariable):
-    """
-    Store multiple variables.
-    ToDo : Have a representation of all this variables.
-    """
-
-
-def merge_statevariables(
-    var1: Union[StateVariables, None], var2: Union[StateVariables, None]
-) -> Union[StateVariables, None]:
-    """Merge two states variables (on the last dimension). If both are None, a None is return."""
-    if var1 is None and var2 is None:
-        return None
-    if var1 is None:
-        return var2
-    if var2 is None:
-        return var1
-    if var1.ndims != var2.ndims:
-        warnings.warn(
-            f"Both variable have not the same dimension {var1.ndims} {var2.ndims}"
+    def clone(self):
+        return NamedTensor(
+            tensor=deepcopy(self.tensor).to(self.tensor.device),
+            names=self.names.copy(),
+            feature_names=self.feature_names.copy(),
         )
-    if var1.coordinates_name != var2.coordinates_name:
-        warnings.warn(
-            f"Both variable have not the same coordinates {var1.coordinates_name} {var2.coordinates_name}"
+
+    def __getitem__(self, feature_name: str) -> torch.Tensor:
+        """
+        Get one feature of the tensor by name.
+        """
+        try:
+            return self.tensor[..., self.feature_names_to_idx[feature_name]].unsqueeze(
+                -1
+            )
+        except KeyError:
+            raise ValueError(
+                f"Feature {feature_name} not found in {self.feature_names}"
+            )
+
+    def type_(self, new_type):
+        """
+        Modify the type of the underlying torch tensor
+        by calling torch's .type method
+
+        in_place operation for this class, the internal
+        tensor is replaced by the new one.
+        """
+        self.tensor = self.tensor.type(new_type)
+
+    def flatten_(self, flatten_dim_name: str, start_dim: int, end_dim: int):
+        """
+        Flatten the underlying tensor from start_dim to end_dim.
+        Deletes flattened dimension names and insert
+        the new one.
+        """
+        self.tensor = torch.flatten(self.tensor, start_dim, end_dim)
+
+        # Remove the flattened dimensions from the names
+        # and insert the replacing one
+        self.names = (
+            self.names[:start_dim] + [flatten_dim_name] + self.names[end_dim + 1 :]
         )
-    return StateVariables(
-        ndims=var1.ndims,
-        names=var1.names + var1.names,
-        values=torch.cat([var1.values, var2.values], dim=-1),
-        coordinates_name=var1.coordinates_name,
-    )
+
+    def dim_size(self, dim_name: str) -> int:
+        """
+        Return the size of a dimension given its name.
+        """
+        try:
+            return self.tensor.size(self.names.index(dim_name))
+        except ValueError as ve:
+            raise ValueError(f"Dimension {dim_name} not found in {self.names}") from ve
+
+    def unsqueeze_and_expand_from_(self, other: "NamedTensor"):
+        """
+        Unsqueeze and expand the tensor to have the same number of spatial dimensions
+        as another NamedTensor.
+        Injects new dimensions where the missing names are.
+        """
+        missing_names = set(other.names) - set(self.names)
+        missing_names &= set(self.SPATIAL_DIM_NAMES)
+
+        if missing_names:
+            index_to_unsqueeze = [
+                (name, other.names.index(name)) for name in missing_names
+            ]
+            for name, idx in sorted(index_to_unsqueeze, key=lambda x: x[1]):
+                self.tensor = torch.unsqueeze(self.tensor, idx)
+                self.names.insert(idx, name)
+
+            expander = []
+            for _, name in enumerate(self.names):
+                expander.append(other.dim_size(name) if name in missing_names else -1)
+
+            self.tensor = self.tensor.expand(*expander)
+
+    @staticmethod
+    def new_like(tensor: torch.Tensor, other: "NamedTensor") -> "NamedTensor":
+        """
+        Create a new NamedTensor with the same names and feature names as another NamedTensor
+        and a tensor of the same shape as the input tensor.
+        """
+        return NamedTensor(tensor, other.names.copy(), other.feature_names.copy())
+
+    @staticmethod
+    def expand_to_batch_like(
+        tensor: torch.Tensor, other: "NamedTensor"
+    ) -> "NamedTensor":
+        """
+        Create a new NamedTensor with the same names and feature names as another NamedTensor
+        with an extra first dimension called 'batch' using the supplied tensor.
+        Supplied new 'batched' tensor must have one more dimension than other.
+        """
+        names = ["batch"] + other.names
+        if tensor.dim() != len(names):
+            raise ValueError(
+                f"Tensor dim {tensor.dim()} must match number of names {len(names)} with extra batch dim"
+            )
+        return NamedTensor(tensor, ["batch"] + other.names, other.feature_names.copy())
 
 
 @dataclass(slots=True)
@@ -137,11 +283,11 @@ class Item:
     Dataclass holding one Item
     """
 
-    inputs: List[StateVariable]
-    outputs: List[StateVariable]
+    inputs: List[NamedTensor]
+    outputs: List[NamedTensor]
 
     forcing: Union[
-        List[StateVariable], None
+        List[NamedTensor], None
     ] = None  # Pour les champs de forcage (SST, Rayonnement, ... )
 
     # J'hesite entre inputs/outputs et pronostics/diagnostics
@@ -164,13 +310,20 @@ class Item:
                         [
                             attr,
                             names,
-                            list(item.values.shape),
-                            item.coordinates_name,
-                            item.values.min(),
-                            item.values.max(),
+                            list(item.tensor.shape),
+                            item.feature_names,
+                            item.tensor.min(),
+                            item.tensor.max(),
                         ]
                     )
-        headers = ["Type", "Short Names", "Torch Shape", "coordinates", "Min", "Max"]
+        headers = [
+            "Type",
+            "Dimension Names",
+            "Torch Shape",
+            "feature names",
+            "Min",
+            "Max",
+        ]
         return str(tabulate(table, headers=headers, tablefmt="simple_outline"))
 
 
@@ -182,23 +335,23 @@ class ItemBatch(Item):
 
     @cached_property
     def batch_size(self):
-        return self.inputs[0].values.size(0)
+        return self.inputs[0].dim_size("batch")
 
     @cached_property
     def num_input_steps(self):
-        return self.inputs[0].values.size(1)
+        return self.inputs[0].dim_size("in_step")
 
     @cached_property
     def num_pred_steps(self):
-        return self.outputs[0].values.size(1)
+        return self.outputs[0].dim_size("out_step")
 
     def cat(
-        self, attr: Literal["inputs", "outputs", "forcing"], dim: int
-    ) -> Union[StateVariables, None]:
+        self, attr: Literal["inputs", "outputs", "forcing"], ndims: int
+    ) -> Union[NamedTensor, None]:
         """
-        Cat all the state variable of the same attr for a specific dimension.
+        Cat all the NamedTensor of the same attr having a specific number of dims.
 
-        It postpones that all the variable are on the same grid
+        It assumes that all the variable are on the same grid
         and only the last dimension is different
 
         Args:
@@ -206,19 +359,37 @@ class ItemBatch(Item):
             dim (int): Dimension of the state variable to consider
 
         """
-        names = []
-        [names.extend(x.names) for x in getattr(self, attr) if x.ndims == dim]
-        if len(names) > 0:
-            values = torch.cat(
-                [x.values for x in getattr(self, attr) if x.ndims == dim], dim=-1
-            )
-            coords_name = [
-                x.coordinates_name for x in getattr(self, attr) if x.ndims == dim
-            ][0]
-            return StateVariables(
-                ndims=dim, names=names, values=values, coordinates_name=coords_name
-            )
-        return None
+        tensors = [x for x in getattr(self, attr) if x.num_spatial_dims == ndims]
+
+        if len(tensors) == 0:
+            return None
+        else:
+            return NamedTensor.concat(tensors)
+
+    def warn_if_1d(self) -> None:
+        """
+        Issue a warning if 1D state variables are present in the batch.
+        """
+        extra_names_in = [x.names for x in self.inputs if x.num_spatial_dims == 0]
+        extra_names_out = [x.names for x in self.outputs if x.num_spatial_dims == 0]
+
+        if len(extra_names_in) > 0:
+            warnings.warn(f"1D inputs are ignored {extra_names_in}")
+        if len(extra_names_out) > 0:
+            warnings.warn(f"1D outputs are ignored {extra_names_out}")
+
+    def cat_forcing(self) -> Union[NamedTensor, None]:
+        """
+        Concat (Torch cat) all forcing in 2D fields along features dimension.
+        1D forcing values are replicated at all grid points.
+        """
+        f1 = self.cat("forcing", 0)
+
+        if f1 is not None:
+            f1.unsqueeze_and_expand_from_(self.inputs[0])
+
+        f2 = self.cat("forcing", 2)
+        return [f1 | f2] if any((f1, f2)) else None
 
     def cat_2D(self) -> "ItemBatch":
         """
@@ -226,35 +397,14 @@ class ItemBatch(Item):
         1d (ndims=1) state variables for input and outputs are ignored (only taken into account for forcing).
         2d and 3d are concatenated.
         """
-        batch = {}
-        batch["inputs"] = [self.cat("inputs", 2)]
-        batch["outputs"] = [self.cat("outputs", 2)]
+        cat_inputs = [self.cat("inputs", 2)]
+        cat_outputs = [self.cat("outputs", 2)]
 
-        # Check if 1D input/output exist and are not taken into accout.
-        extra_names_in = [x.names for x in self.inputs if x.ndims == 1]
-        extra_names_out = [x.names for x in self.outputs if x.ndims == 1]
-        if len(extra_names_in) > 0:
-            warnings.warn(f"1D inputs are ignored {extra_names_in}")
-        if len(extra_names_out) > 0:
-            warnings.warn(f"1D outputs are ignored {extra_names_out}")
+        self.warn_if_1d()
 
-        f1 = self.cat("forcing", 1)
-        if f1 is not None:
-            # Extend it to be on the grid
-            outputs = batch["outputs"][0]
-            sh = outputs.values.shape
-            f1.values = (
-                f1.values.unsqueeze(2).unsqueeze(3).expand(-1, -1, sh[2], sh[3], -1)
-            )
-            f1.coordinates_name = outputs.coordinates_name
-            f1.ndims = 2
-        f2 = self.cat("forcing", 2)
-        forcing = merge_statevariables(f1, f2)
-        if forcing is not None:
-            batch["forcing"] = [forcing]
-        else:
-            batch["forcing"] = None
-        return ItemBatch(**batch)
+        cat_forcing = self.cat_forcing()
+
+        return ItemBatch(inputs=cat_inputs, outputs=cat_outputs, forcing=cat_forcing)
 
 
 def collate_fn(items: List[Item]) -> ItemBatch:
@@ -265,27 +415,21 @@ def collate_fn(items: List[Item]) -> ItemBatch:
     # Here we postpone that for each batch the same dimension should be present.
     batch_of_items = {}
 
-    for attr in (f.name for f in fields(Item)):
-        batch_of_items[attr] = []
-        item_zero_field_value = getattr(items[0], attr)
+    # Iterate over inputs, outputs and forcing fields
+    for field_name in (f.name for f in fields(Item)):
+        batch_of_items[field_name] = []
+        item_zero_field_value = getattr(items[0], field_name)
         if item_zero_field_value is not None:
             for i in range(len(item_zero_field_value)):
-                new_values = collate_tensor_fn(
-                    [getattr(item, attr)[i].values for item in items]
+                new_tensor = collate_tensor_fn(
+                    [getattr(item, field_name)[i].tensor for item in items]
                 ).type(torch.float32)
-
-                new_state = StateVariable(
-                    ndims=item_zero_field_value[i].ndims,
-                    names=item_zero_field_value[
-                        i
-                    ].names,  # Contient le nom des différents niveaux
-                    values=new_values,
-                    coordinates_name=["batch"]
-                    + item_zero_field_value[i].coordinates_name,  # Nom des coordonnées
+                new_state = NamedTensor.expand_to_batch_like(
+                    new_tensor, item_zero_field_value[i]
                 )
-                batch_of_items[attr].append(new_state)
+                batch_of_items[field_name].append(new_state)
         else:
-            batch_of_items[attr] = None
+            batch_of_items[field_name] = None
     return ItemBatch(**batch_of_items)
 
 
@@ -298,13 +442,13 @@ class Statics(RegisterFieldsMixin):
     """
 
     # border_mask: torch.Tensor
-    grid_static_features: StateVariables
+    grid_static_features: NamedTensor
     grid_shape: Tuple[int, int]
     border_mask: torch.Tensor = field(init=False)
     interior_mask: torch.Tensor = field(init=False)
 
     def __post_init__(self):
-        self.border_mask = self.grid_static_features.border_mask
+        self.border_mask = self.grid_static_features["border_mask"]
         self.interior_mask = 1.0 - self.border_mask
 
     @cached_property
@@ -315,17 +459,13 @@ class Statics(RegisterFieldsMixin):
         return einops.rearrange(
             torch.cat(
                 [
-                    self.grid_static_features.x,
-                    self.grid_static_features.y,
+                    self.grid_static_features["x"],
+                    self.grid_static_features["y"],
                 ],
                 dim=-1,
             ),
             ("x y n -> n x y"),
         )
-
-    @cached_property
-    def N_interior(self):
-        return torch.sum(self.interior_mask).item()
 
 
 @dataclass
@@ -389,7 +529,7 @@ class DatasetInfo:
         """
         print(f"\n Summarizing {self.name} \n")
         print(f"Step_duration {self.step_duration}")
-        print(f"Static fields {self.statics.grid_static_features.names}]")
+        print(f"Static fields {self.statics.grid_static_features.feature_names}]")
 
         for p in ["forcing", "input_output", "diagnostic"]:
             names = self.shortnames(p)
@@ -520,9 +660,9 @@ class DatasetABC(ABC):
             raise ValueError("Your dataset should not be standardized.")
         # When computing stat may force every body to be input/ouput
         for batch in tqdm(self.torch_dataloader()):
-            # Here we postpone that data are in 2 or 3 D
-            inputs = torch.cat([x.values for x in batch.inputs], dim=-1)
-            outputs = torch.cat([x.values for x in batch.outputs], dim=-1)
+            # Here we assume that data are in 2 or 3 D
+            inputs = torch.cat([x.tensor for x in batch.inputs], dim=-1)
+            outputs = torch.cat([x.tensor for x in batch.outputs], dim=-1)
             # Check that no variable is a forcing variable
             f_names = [x.names for x in batch.forcing if x.ndims == 2]
             if len(f_names) > 0:
@@ -573,8 +713,8 @@ class DatasetABC(ABC):
             print("Otherwise consider standardizing your inputs.")
         for batch in tqdm(self.torch_dataloader()):
             # Here we postpone that data are in 2 or 3 D
-            inputs = torch.cat([x.values for x in batch.inputs], dim=-1)
-            outputs = torch.cat([x.values for x in batch.outputs], dim=-1)
+            inputs = torch.cat([x.tensor for x in batch.inputs], dim=-1)
+            outputs = torch.cat([x.tensor for x in batch.outputs], dim=-1)
             # Check that no variable is a forcing variable
             f_names = [x.names for x in batch.forcing if x.ndims == 2]
             if len(f_names) > 0:
@@ -608,7 +748,7 @@ class DatasetABC(ABC):
             }
         torch_save(store_d, self.cache_dir / "diff_stats.pt")
 
-    def dataset_extra_statics(self) -> List[StateVariable]:
+    def dataset_extra_statics(self) -> List[NamedTensor]:
         """
         Datasets can override this method to add
         more static data.
@@ -639,21 +779,20 @@ class DatasetABC(ABC):
         geopotential = (geopotential - gp_min) / (gp_max - gp_min)  # (N_x,N_y, 1)
         grid_border_mask = torch.tensor(self.border_mask).unsqueeze(2)  # (N_x, N_y,1)
 
-        batch_names = []
+        feature_names = []
         for x in self.dataset_extra_statics:
-            batch_names += x.names
-        state_var = StateVariables(
-            ndims=2,  # Champ 2D
-            values=torch.cat(
+            feature_names += x.feature_names
+        state_var = NamedTensor(
+            tensor=torch.cat(
                 [grid_xy, geopotential, grid_border_mask]
-                + [x.values for x in self.dataset_extra_statics],
+                + [x.tensor for x in self.dataset_extra_statics],
                 dim=-1,
             ),
-            names=["x", "y", "geopotential", "border_mask"]
-            + batch_names,  # Noms des champs 2D
-            coordinates_name=["lat", "lon", "features"],
+            feature_names=["x", "y", "geopotential", "border_mask"]
+            + feature_names,  # Noms des champs 2D
+            names=["lat", "lon", "features"],
         )
-        state_var.change_type(torch.float32)
+        state_var.type_(torch.float32)
         return state_var
 
     @cached_property

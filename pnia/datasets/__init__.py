@@ -30,7 +30,7 @@ try:
     from .titan import TitanDataset
 
     registry["titan"] = (TitanDataset, default_config_root / "titan.json")
-except ImportError:
+except (ImportError, FileNotFoundError):
     warnings.warn(f"Could not import TitanDataset. {traceback.format_exc()}")
 
 
