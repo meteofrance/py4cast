@@ -67,6 +67,14 @@ runai exec_gpu python bin/train.py --dataset smeagol --model halfunet --dataset_
 
 [More information here](./bin/Readme.md)
 
+## Available PyTorch's architecture
+
+| Model  | Research Paper  | Input Shape    | Notes  | Maintainer(s) |
+| :---:   | :---: | :---: | :---: | :---: |
+| halfunet | https://www.researchgate.net/publication/361186968_Half-UNet_A_Simplified_U-Net_Architecture_for_Medical_Image_Segmentation | (Batch, Height, Width, features)   | In prod/oper on espresso v2 with 128 filters and standard conv blocks instead of ghost |  Frank Guibert |
+| segformer | https://arxiv.org/abs/2105.15203   | (Batch, Height, Width, features) | on par with u-net like on deepsyg, added an upsampling stage. Adapted from [Lucidrains' github](https://github.com/lucidrains/segformer-pytorch) |  Frank Guibert |
+| hilam, graphlam | https://arxiv.org/abs/2309.17370  | (Batch, graph_node_id, features)   | Imported and adapted from [Joel's github](https://github.com/joeloskarsson/neural-lam) |  Vincent Chabot/Frank Guibert |
+
 ## Architecture
 
 - Le dossier `submodules` contient des submodules (au sens git) de plusieurs répo open source de codes de PN par IA (Pangu, ClimaX, Neural-LAM,...). On peut ainsi facilement importer des fonctions issues de ces projets dans nos codes.

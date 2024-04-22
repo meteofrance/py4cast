@@ -224,6 +224,7 @@ class Segformer(ModelABC, nn.Module):
     the input image size.
     """
 
+    onnx_supported = False
     settings_kls = SegformerSettings
 
     def __init__(
