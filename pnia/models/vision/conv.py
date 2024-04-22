@@ -71,6 +71,7 @@ class GhostModule(nn.Module):
 
 class HalfUnet(ModelABC, nn.Module):
     settings_kls = HalfUnetSettings
+    onnx_supported = True
 
     def __init__(
         self,

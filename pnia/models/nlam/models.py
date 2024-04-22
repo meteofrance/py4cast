@@ -157,6 +157,7 @@ class BaseGraphModel(ModelABC, nn.Module):
 
     settings_kls = GraphLamSettings
     hierarchical = False
+    onnx_supported = False
 
     @classmethod
     def rank_zero_setup(cls, settings: GraphLamSettings, statics: Statics):

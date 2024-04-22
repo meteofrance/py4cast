@@ -21,5 +21,6 @@ unit_test:
   image: pytorch/pytorch:2.1.2-cuda12.1-cudnn8-runtime
   script:
     - pip install --trusted-host pypi.org --trusted-host files.pythonhosted.org -r requirements.txt
+    - pip install pyg-lib==0.4.0 torch-scatter==2.1.2 torch-sparse==0.6.18 torch-cluster==1.6.2 torch-geometric==2.3.1 -f https://data.pyg.org/whl/torch-2.1.2+cpu.html
     - python -m pytest
   

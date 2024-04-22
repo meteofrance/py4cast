@@ -2,7 +2,7 @@
 Abstract Base Class for all models
 Contains also a few functionnality used in various model.
 """
-from abc import ABC, abstractmethod
+from abc import ABC, abstractmethod, abstractproperty
 from dataclasses import dataclass
 from typing import Tuple
 
@@ -35,6 +35,12 @@ class ModelABC(ABC):
         """
         Transform the batch into a set of tensors as expected
         by this model forward call.
+        """
+
+    @abstractproperty
+    def onnx_supported(self) -> bool:
+        """
+        Indicates if our model supports onnx export.
         """
 
 
