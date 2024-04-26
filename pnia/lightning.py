@@ -2,7 +2,7 @@ from copy import deepcopy
 from dataclasses import dataclass
 from functools import cached_property
 from pathlib import Path
-from typing import Tuple, Union
+from typing import List, Tuple, Union
 
 import einops
 import pytorch_lightning as pl
@@ -40,6 +40,8 @@ class ArLightningHyperParam:
     num_pred_steps_val_test: int = 2
     num_samples_to_plot: int = 1
 
+    training_strategy: str = "diff_ar"
+
     def __post_init__(self):
         """
         Check the configuration
@@ -51,6 +53,11 @@ class ArLightningHyperParam:
             raise AttributeError(
                 "It is not possible to have multiple input steps when num_inter_steps > 1."
                 f"Get num_input_steps :{self.num_input_steps} and num_inter_steps: {self.num_inter_steps}"
+            )
+        ALLOWED_STRATEGIES = ("diff_ar", "scaled_ar")
+        if self.training_strategy not in ALLOWED_STRATEGIES:
+            raise AttributeError(
+                f"Unknown strategy {self.training_strategy}, allowed strategies are {ALLOWED_STRATEGIES}"
             )
 
     def summary(self):
@@ -174,15 +181,76 @@ class AutoRegressiveLightning(pl.LightningModule):
 
         return opt
 
+    def _next_x(
+        self, batch: ItemBatch, prev_states: torch.Tensor, step_idx: int
+    ) -> torch.Tensor:
+        """
+        Build the next x input for the model at step_idx using the :
+        - previous states
+        - forcing
+        - static features
+        """
+        forcing = batch.forcing[0].tensor[:, step_idx]
+        x = torch.cat(
+            [prev_states[:, idx] for idx in range(batch.num_input_steps)]
+            + [self.grid_static_features[: batch.batch_size], forcing],
+            dim=-1,
+        )
+        return x
+
+    def _step_diffs(
+        self, feature_names: List[str], device: torch.device
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Get the mean and std of the differences between two consecutive states on the desired device.
+        """
+        step_diff_std = self.diff_stats.to_list("std", feature_names).to(
+            device, non_blocking=True
+        )
+        step_diff_mean = self.diff_stats.to_list("mean", feature_names).to(
+            device, non_blocking=True
+        )
+        return step_diff_std, step_diff_mean
+
+    def _strategy_params(self) -> Tuple[bool, bool, int]:
+        """
+        Return the parameters for the desired strategy:
+        - force_border
+        - scale_y
+        - num_inter_steps
+        """
+        force_border: bool = (
+            True if self.hparams["hparams"].training_strategy == "scaled_ar" else False
+        )
+        scale_y: bool = (
+            True if self.hparams["hparams"].training_strategy == "scaled_ar" else False
+        )
+        # raise if mismatch between strategy and num_inter_steps
+        if self.hparams["hparams"].training_strategy == "diff_ar":
+            if self.hparams["hparams"].num_inter_steps != 1:
+                raise ValueError(
+                    "Diff AR strategy requires exactly 1 intermediary step."
+                )
+
+        return force_border, scale_y, self.hparams["hparams"].num_inter_steps
+
     def common_step(self, batch: ItemBatch) -> Tuple[NamedTensor, NamedTensor]:
         """
-        Predict on single batch
-        init_states: (B,num_input_steps, N_grid, d_features)
-        or (B, num_input_steps, Nlat,Nlon, d_features) depend on the grid
-        target_states: (B, num_pred_steps, N_grid, d_features) or (B, num_pred_steps, Nlat,Nlon,, dfeatures)
-        forcing_features: (B, num_pred_steps, N_grid, d_forcing), where index 0
-            corresponds to index 1 of init_states -> Ngrid could also be (Nlat,Nlon)
+        Two Autoregressive strategies are implemented here:
+        - scaled_ar:
+            * Boundary forcing with y_true/true_state
+            * Scaled Differential update next_state = prev_state + y * std + mean
+            * Intermediary steps for which we have no y_true data
+
+        - diff_ar:
+            * No Boundary forcing
+            * Differential update next_state = prev_state + y
+            * No Intermediary steps
+
+        Derived/Inspired from https://github.com/joeloskarsson/neural-lam/
         """
+        force_border, scale_y, num_inter_steps = self._strategy_params()
+
         # Right now we postpone that we have a single input/output/forcing
         batch = self.model.transform_batch(batch)
         prev_states = batch.inputs[0].tensor
@@ -193,49 +261,41 @@ class AutoRegressiveLightning(pl.LightningModule):
         # for the desired number of ar steps.
         for i in range(batch.num_pred_steps):
 
-            forcing = batch.forcing[0].tensor[:, i]
             border_state = batch.outputs[0].tensor[:, i]
-            # Get stats from buffer.
-            # Set them to the good device.
-            step_diff_std = self.diff_stats.to_list(
-                "std", batch.outputs[0].feature_names
-            ).to(prev_states, non_blocking=True)
-            step_diff_mean = self.diff_stats.to_list(
-                "mean", batch.outputs[0].feature_names
-            ).to(prev_states, non_blocking=True)
+
+            if scale_y:
+                step_diff_std, step_diff_mean = self._step_diffs(
+                    batch.outputs[0].feature_names, prev_states.device
+                )
+
             # Intermediary steps for which we have no y_true data
             # Should be greater or equal to 1 (otherwise nothing is done).
-            for k in range(self.hparams["hparams"].num_inter_steps):
-                x = torch.cat(
-                    [prev_states[:, idx] for idx in range(batch.num_input_steps)]
-                    + [
-                        self.grid_static_features[: batch.batch_size],
-                        forcing,
-                    ],
-                    dim=-1,
-                )
+            for k in range(num_inter_steps):
+                x = self._next_x(batch, prev_states, i)
 
                 # Graph (B, N_grid, d_f) or Conv (B, N_lat,N_lon d_f)
                 y = self.model(x)
 
                 # We update the latest of our prev_states with the network output
-                predicted_state = (
-                    prev_states[:, -1] + y * step_diff_std + step_diff_mean
-                )
+                if scale_y:
+                    predicted_state = (
+                        prev_states[:, -1] + y * step_diff_std + step_diff_mean
+                    )
+                else:
+                    predicted_state = prev_states[:, -1] + y
 
                 # Overwrite border with true state
                 # Force it to true state for all intermediary step
-
-                new_state = (
-                    self.border_mask * border_state
-                    + self.interior_mask * predicted_state
-                )
+                if force_border:
+                    new_state = (
+                        self.border_mask * border_state
+                        + self.interior_mask * predicted_state
+                    )
+                else:
+                    new_state = predicted_state
 
                 # Only update the prev_states if we are not at the last step
-                if (
-                    i < batch.num_pred_steps - 1
-                    or k < self.hparams["hparams"].num_inter_steps - 1
-                ):
+                if i < batch.num_pred_steps - 1 or k < num_inter_steps - 1:
                     # Update input states for next iteration: drop oldest, append new_state
                     prev_states = torch.cat(
                         [prev_states[:, 1:], new_state.unsqueeze(1)], dim=1

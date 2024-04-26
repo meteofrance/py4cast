@@ -75,6 +75,22 @@ runai exec_gpu python bin/train.py --dataset smeagol --model halfunet --dataset_
 | segformer | https://arxiv.org/abs/2105.15203   | (Batch, Height, Width, features) | on par with u-net like on deepsyg, added an upsampling stage. Adapted from [Lucidrains' github](https://github.com/lucidrains/segformer-pytorch) |  Frank Guibert |
 | hilam, graphlam | https://arxiv.org/abs/2309.17370  | (Batch, graph_node_id, features)   | Imported and adapted from [Joel's github](https://github.com/joeloskarsson/neural-lam) |  Vincent Chabot/Frank Guibert |
 
+## Available Training strategies
+
+You can choose a training strategy using the **--strategy STRATEGY_NAME** cli argument. The strategy determines how the next timestep is computed
+in the forward pass. **x** are the neural network inputs and **model(x)** is the returned value by the neural network when fed **x** as input. 
+
+| Strategy Name | Reference | Update Rule | Boundary forcing |
+| :---:   | :---: | :---: | :---: |:---: |
+| scaled_ar | neural_lam with extra intermediary ar steps | next_state = previous_state + model(x)*diff_std + diff_mean | y_true  | 
+|  diff_ar | | next_state = previous_state + model(x) | No | 
+
+An exemple to use the **diff_ar** strategy:
+
+```bash
+runai exec_gpu python bin/train.py --dataset smeagol --model halfunet --strategy diff_ar
+```
+
 ## Architecture
 
 - Le dossier `submodules` contient des submodules (au sens git) de plusieurs répo open source de codes de PN par IA (Pangu, ClimaX, Neural-LAM,...). On peut ainsi facilement importer des fonctions issues de ces projets dans nos codes.
