@@ -80,10 +80,10 @@ runai exec_gpu python bin/train.py --dataset smeagol --model halfunet --dataset_
 You can choose a training strategy using the **--strategy STRATEGY_NAME** cli argument. The strategy determines how the next timestep is computed
 in the forward pass. **x** are the neural network inputs and **model(x)** is the returned value by the neural network when fed **x** as input. 
 
-| Strategy Name | Reference | Update Rule | Boundary forcing |
-| :---:   | :---: | :---: | :---: |:---: |
-| scaled_ar | neural_lam with extra intermediary ar steps | next_state = previous_state + model(x)*diff_std + diff_mean | y_true  | 
-|  diff_ar | | next_state = previous_state + model(x) | No | 
+| Strategy Name | Reference | Update Rule | Boundary forcing |  Intermediary Steps |
+| :---:   | :---: | :---: | :---: | :---: |
+| scaled_ar |  | next_state = previous_state + model(x)*diff_std + diff_mean | y_true  | Yes |
+|  diff_ar | | next_state = previous_state + model(x) | No |  No |
 
 An exemple to use the **diff_ar** strategy:
 
