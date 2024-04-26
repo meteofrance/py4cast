@@ -259,6 +259,12 @@ if __name__ == "__main__":
         default=None,
         help="Path to load model parameters from (default: None)",
     )
+    parser.add_argument(
+        "--strategy",
+        type=str,
+        default="diff_ar",
+        help="Strategy for training ('diff_ar', 'scaled_ar')",
+    )
     args, other = parser.parse_known_args()
 
     # Raise an exception if there are unknown arguments
@@ -287,6 +293,7 @@ if __name__ == "__main__":
         num_inter_steps=args.num_inter_steps,
         lr=args.lr,
         loss=args.loss,
+        training_strategy=args.strategy,
     )
 
     # Parametre pour le training uniquement
