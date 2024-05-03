@@ -2,13 +2,14 @@ from pathlib import Path
 from typing import Union
 
 from .nlam.models import GraphLAM, HiLAM, HiLAMParallel
-from .vision.conv import HalfUnet
+from .vision.conv import HalfUnet, Unet
 from .vision.transformers import Segformer
 
 # Models MUST be added to the registry
 # in order to be used by the training script.
 registry = {}
 registry["halfunet"] = HalfUnet
+registry["unet"] = Unet
 registry["graphlam"] = GraphLAM
 registry["hilam"] = HiLAM
 registry["hilamparallel"] = HiLAMParallel
