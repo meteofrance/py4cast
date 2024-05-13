@@ -91,6 +91,7 @@ def test_torch_training_loop():
         ("hilam", True),
         ("graphlam", True),
         ("halfunet", False),
+        ("unet", False),
         ("segformer", False),
     ):
         model_kls, model_settings = get_model_kls_and_settings(model_name)
