@@ -1,3 +1,4 @@
+import os
 import random
 import time
 from argparse import ArgumentParser, BooleanOptionalAction
@@ -103,9 +104,9 @@ def main(
     else:
         profiler = None
         print(f"No profiler set {tp.profiler}")
-
     trainer = pl.Trainer(
-        num_nodes=1,
+        num_nodes=int(os.environ.get("SLURM_NNODES", 1)),
+        devices=os.environ.get("SLURM_NTASKS_PER_NODE", "auto"),
         max_epochs=tp.epochs,
         deterministic=True,
         strategy="ddp",
@@ -141,7 +142,14 @@ def main(
 
 if __name__ == "__main__":
 
-    path = Path(__file__)
+    # Variables for multi-nodes multi-gpu training
+    if int(os.environ.get("SLURM_NNODES", 1)) > 1:
+        gpus_per_node = int(os.environ.get("SLURM_NTASKS_PER_NODE", 1))
+        global_rank = int(os.environ.get("SLURM_PROCID", 0))
+        local_rank = global_rank - gpus_per_node * (global_rank // gpus_per_node)
+        os.environ["LOCAL_RANK"] = str(local_rank)
+        os.environ["GLOBAL_RANK"] = os.environ.get("SLURM_PROCID", 0)
+        os.environ["NODE_RANK"] = os.environ.get("SLURM_NODEID", 0)
 
     parser = ArgumentParser(
         description="Train Neural networks for weather forecasting."
@@ -265,6 +273,7 @@ if __name__ == "__main__":
         default="diff_ar",
         help="Strategy for training ('diff_ar', 'scaled_ar')",
     )
+
     args, other = parser.parse_known_args()
 
     # Raise an exception if there are unknown arguments
