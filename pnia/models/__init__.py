@@ -1,5 +1,9 @@
+import importlib
+import pkgutil
 from pathlib import Path
 from typing import Union
+
+from pnia.models.base import ModelABC
 
 from .nlam.models import GraphLAM, HiLAM, HiLAMParallel
 from .vision.conv import HalfUnet, Unet
@@ -8,12 +12,29 @@ from .vision.transformers import Segformer
 # Models MUST be added to the registry
 # in order to be used by the training script.
 registry = {}
-registry["halfunet"] = HalfUnet
-registry["unet"] = Unet
-registry["graphlam"] = GraphLAM
-registry["hilam"] = HiLAM
-registry["hilamparallel"] = HiLAMParallel
-registry["segformer"] = Segformer
+for kls in (HalfUnet, Unet, GraphLAM, HiLAM, HiLAMParallel, Segformer):
+    registry[kls.__name__.lower()] = kls
+
+
+PLUGIN_PREFIX = "pnia_plugin_"
+discovered_modules = {
+    name: importlib.import_module(name)
+    for _, name, _ in pkgutil.iter_modules()
+    if name.startswith(PLUGIN_PREFIX)
+}
+
+# We now add to the registry all the models found in the plugins.
+# Valid models are ModelABC subclasses contained in a module prefixed by PLUGIN_PREFIX.
+# We explore all modules accessible to the Python interpreter added using pip install or PYTHONPATH.
+# Inspired from: https://packaging.python.org/en/latest/guides/creating-and-discovering-plugins
+for module_name, module in discovered_modules.items():
+    for name, kls in module.__dict__.items():
+        if isinstance(kls, type) and issubclass(kls, ModelABC):
+            if kls.__name__.lower() in registry:
+                raise ValueError(
+                    f"Model {kls.__name__} from plugin {module_name} already exists in the registry."
+                )
+            registry[kls.__name__.lower()] = kls
 
 
 def get_model_kls_and_settings(
