@@ -1,4 +1,4 @@
-# PNIA
+# PY4CAST
 
 This project built using **PyTorch** and **PyTorch-lightning** is designed to train a variety of Neural Network architectures (GNNs, CNNs, Vision Transformers, ...) on weather forecasting datasets.
 
@@ -20,7 +20,7 @@ This project is licensed under the [APACHE 2.0 license.](LICENSE-2.0.txt)
 
 **runai** is our docker wrapper for training neural networks. See our [repository](https://git.meteo.fr/dsm-labia/monorepo4ai) for installation instructions.
 
-`runai` commands must be issued at the root directory of the `pnia` project:
+`runai` commands must be issued at the root directory of the `py4cast` project:
 
 1. Run an interactive training session
 
@@ -171,7 +171,7 @@ Now your model can be either registered explicitely in the system (in case the c
 
 1. Model in the same git repository
 
-Add your **NewModel** class to the registry explicitly in the models package [__init__.py](pnia/models/__init__.py)
+Add your **NewModel** class to the registry explicitly in the models package [__init__.py](py4cast/models/__init__.py)
 
 ```python
 registry = {}
@@ -183,12 +183,12 @@ for kls in (HalfUnet, Unet, GraphLAM, HiLAM, HiLAMParallel, Segformer, NewModel)
 
 In order to be discovered, your model Python class MUST:
 
-* be contained in a python module prefixed with **pnia_plugin_**
+* be contained in a python module prefixed with **py4cast_plugin_**
 * inherit from **ModelABC** and **nn.Module**
 * have a different name than the models already present in the system
 * be discoverable by the system (e.g. in the PYTHONPATH or pip installed)
 
-We provide an example module [here](pnia_plugin_example.py) to help you create your own plugin. This approach is based on the [official python packaging guidelines](https://packaging.python.org/en/latest/guides/creating-and-discovering-plugins/).
+We provide an example module [here](py4cast_plugin_example.py) to help you create your own plugin. This approach is based on the [official python packaging guidelines](https://packaging.python.org/en/latest/guides/creating-and-discovering-plugins/).
 
 ## Available Training strategies
 
@@ -263,4 +263,4 @@ Features:
 
 ```
 
-See the implementation [here](pnia/datasets/base.py)
+See the implementation [here](py4cast/datasets/base.py)

@@ -4,7 +4,7 @@ Unit tests for datasets and NamedTensor.
 import pytest
 import torch
 
-from pnia.datasets.base import NamedTensor
+from py4cast.datasets.base import NamedTensor
 
 
 def test_named_tensor():

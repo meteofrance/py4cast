@@ -1,0 +1,4 @@
+generate/grib/
+generate/tar/
+generate/*.grib
+DIAG_BDAP
