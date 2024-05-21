@@ -14,11 +14,11 @@ from lightning.pytorch.loggers import TensorBoardLogger
 from lightning.pytorch.profilers import PyTorchProfiler
 from lightning_fabric.utilities import seed
 
-from pnia.datasets import get_datasets
-from pnia.datasets.base import DatasetABC, TorchDataloaderSettings
+from py4cast.datasets import get_datasets
+from py4cast.datasets.base import DatasetABC, TorchDataloaderSettings
 
 # From the package
-from pnia.lightning import ArLightningHyperParam, AutoRegressiveLightning
+from py4cast.lightning import ArLightningHyperParam, AutoRegressiveLightning
 
 
 @dataclass
@@ -89,14 +89,14 @@ def main(
         logger = None
     else:
         logger = TensorBoardLogger(
-            save_dir="/scratch/shared/pnia/logs",
+            save_dir="/scratch/shared/py4cast/logs",
             name=f"{args.model}/{args.dataset}",
             default_hp_metric=False,
         )
 
     if tp.profiler == "pytorch":
         profiler = PyTorchProfiler(
-            dirpath=f"/scratch/shared/pnia/logs/{args.model}/{args.dataset}",
+            dirpath=f"/scratch/shared/py4cast/logs/{args.model}/{args.dataset}",
             filename=f"profile_{tp.run_id}",
             export_to_chrome=True,
         )

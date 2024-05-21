@@ -18,7 +18,7 @@ import typer
 import xarray as xr
 
 app = typer.Typer()
-res_dir = Path("/scratch/shared/pnia/cache/tmp")
+res_dir = Path("/scratch/shared/py4cast/cache/tmp")
 res_dir.mkdir(parents=True, exist_ok=True)
 
 

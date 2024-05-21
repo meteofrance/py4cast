@@ -13,7 +13,7 @@ import onnx
 import onnxruntime
 import torch
 
-from pnia.models import get_model_kls_and_settings
+from py4cast.models import get_model_kls_and_settings
 
 
 def to_numpy(tensor):

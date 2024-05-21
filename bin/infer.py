@@ -4,9 +4,9 @@ from pathlib import Path
 import pytorch_lightning as pl
 from lightning.pytorch.loggers import TensorBoardLogger
 
-from pnia.datasets import get_datasets
-from pnia.datasets.base import TorchDataloaderSettings
-from pnia.lightning import ArLightningHyperParam, AutoRegressiveLightning
+from py4cast.datasets import get_datasets
+from py4cast.datasets.base import TorchDataloaderSettings
+from py4cast.lightning import ArLightningHyperParam, AutoRegressiveLightning
 
 path = Path(__file__)
 
@@ -71,7 +71,7 @@ if __name__ == "__main__":
         args.dataset, args.num_input_steps, 1, args.num_pred_steps, args.dataset_conf
     )
 
-    ckpt = "/home/mrpa/chabotv/pnia/saved_models/smeagol_franmgsp32hilam-040520:02-4832/last.ckpt"
+    ckpt = "/home/mrpa/chabotv/py4cast/saved_models/smeagol_franmgsp32hilam-040520:02-4832/last.ckpt"
     print(ckpt, args.ckpt)
 
     hp = ArLightningHyperParam(
@@ -89,7 +89,7 @@ if __name__ == "__main__":
 
     print("Starting Logger")
     logger = TensorBoardLogger(
-        save_dir="/scratch/shared/pnia/logs/infer/",
+        save_dir="/scratch/shared/py4cast/logs/infer/",
         name="test",
         default_hp_metric=False,
     )

@@ -4,8 +4,8 @@ import torch
 import typer
 from tqdm import tqdm
 
-from pnia.datasets import SmeagolDataset, TitanDataset
-from pnia.datasets.titan import TitanHyperParams
+from py4cast.datasets import SmeagolDataset, TitanDataset
+from py4cast.datasets.titan import TitanHyperParams
 
 torch.set_num_threads(8)
 path = Path(__file__)
@@ -28,7 +28,7 @@ def smeagol_stats(dataconf=path.parent.parent / "config/smeagolstats.json"):
 
 
 @smeagol_app.command("test")
-def testsmeagol(dataconf=path.parent.parent / "pnia/xp_conf/smeagol.json"):
+def testsmeagol(dataconf=path.parent.parent / "py4cast/xp_conf/smeagol.json"):
     """
     Used to test a particular function of smeagol.
     This function could change...
