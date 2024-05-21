@@ -11,10 +11,11 @@ This project is licensed under the [APACHE 2.0 license.](LICENSE-2.0.txt)
 # Table of contents
 
 1. [Running at MF](#running-using-runai-météo-france-internal)
-2. [Available PyTorch's architecture](#available-pytorchs-architecture)
+2. [Using micromamba](#running-using-micromamba)
+3. [Available PyTorch's architecture](#available-pytorchs-architecture)
     1. [Adding a new neural network architecture to the project.](#adding-a-new-neural-network-architecture-to-the-project)
-3. [Available Training strategies](#available-training-strategies)
-4. [NamedTensors](#namedtensors)
+4. [Available Training strategies](#available-training-strategies)
+5. [NamedTensors](#namedtensors)
 
 ## Running using **runai** (Météo-France internal)
 
@@ -49,6 +50,32 @@ runai sbatch_multi_node python bin/train.py --dataset smeagol --model hilam
 ```
 
 You can find more details about our **train.py** [here](./bin/Readme.md)
+
+## Running using micromamba 
+Please install the environment using : 
+```sh
+micromamba create -f env.yaml  
+```
+Then run your classic srun command to get an interactive shell on gpu : 
+```sh
+srun --job-name="MySuperJob" --cpus-per-task=15 --partition=node3 --gres=gpu:v100:1 --time=10:00:00 --ntasks-per-node=1 --pty bash
+```
+Activate your environnment :
+```sh 
+micromamba activate nlam
+```
+
+Go to pnia directory and do : 
+```sh
+export PYTHONPATH=`pwd`
+```
+You can also add directly the directory in your `.bashrc`. 
+
+This is done in order to register pnia package in the python path. 
+Then you can do a classical training such as 
+```sh 
+python3.10 bin/train.py  --dataset smeagol --model halfunet --dataset_conf config/smeagoldev.json --limit_train_batches 10 --epochs 2 --strategy scaled_ar
+```
 
 ## Available PyTorch's architecture
 
