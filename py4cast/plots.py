@@ -1,4 +1,3 @@
-import ssl
 from dataclasses import dataclass
 from typing import Tuple
 
@@ -7,8 +6,6 @@ import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 from tueplots import bundles, figsizes
-
-ssl._create_default_https_context = ssl._create_unverified_context
 
 
 @dataclass(slots=True)

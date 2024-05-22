@@ -1,3 +1,5 @@
+"""Displays graphs for all the parameters for one 1h sample from Titan."""
+
 from argparse import ArgumentParser
 from pathlib import Path
 
@@ -5,26 +7,23 @@ import cartopy.crs as ccrs
 import cartopy.feature as cfeature
 import matplotlib.pyplot as plt
 import xarray as xr
-from settings import SCRATCH_PATH
+from settings import METADATA, SCRATCH_PATH
 
-ulat, llat, llon, ulon = 55.4, 37.5, -12, 16
-EXTENT = (llon, ulon, llat, ulat)
+ulat, llat, llon, ulon = METADATA["GRIDS"]["PAAROME_1S100"]["extent"]
+EXTENT_ARO = (llon, ulon, llat, ulat)
 
-ulat, llat, llon, ulon = 72, 20, -32, 42
-EXTENT_PA = (llon, ulon, llat, ulat)
-
-
-def gribs_to_netcdf():
-    pass
+ulat, llat, llon, ulon = METADATA["GRIDS"]["PA_01D"]["extent"]
+EXTENT_ARP = (llon, ulon, llat, ulat)
 
 
-def plot_var(fig, ax, var, name="", arpege=False):
-    extent = EXTENT_PA if arpege else EXTENT
-    ax.imshow(var, extent=extent, interpolation="none")
+def plot_var(fig, ax, var, name="", arpege=False, colorbar=False):
+    extent = EXTENT_ARP if arpege else EXTENT_ARO
+    img = ax.imshow(var, extent=extent, interpolation="none")
     if name == "":
         name = f"{var.attrs['GRIB_name']} ({var.attrs['units']})"
     ax.set_title(name)
-    # fig.colorbar(img, ax=ax, fraction=0.046, pad=0.04)
+    if colorbar:
+        fig.colorbar(img, ax=ax, fraction=0.046, pad=0.04)
 
 
 def plot_arome_1s100(folder: Path):
@@ -34,28 +33,29 @@ def plot_arome_1s100(folder: Path):
 
     grib = folder / "PAAROME_1S100_ECH0_2M.grib"
     ds = xr.open_dataset(grib, engine="cfgrib")
-    plot_var(fig, axs[0, 0], ds.t2m)  # "Température à 2m (K)"
-    plot_var(fig, axs[0, 1], ds.r2)  # Humidité Relative à 2m (%
+    plot_var(fig, axs[0, 0], ds.t2m)
+    plot_var(fig, axs[0, 1], ds.r2)
 
     grib = folder / "PAAROME_1S100_ECH0_10M.grib"
     ds = xr.open_dataset(grib, engine="cfgrib")
-    plot_var(fig, axs[0, 2], ds.u10)  # Composante U du vent à 10m (m/s)
-    plot_var(fig, axs[0, 3], ds.v10)  # Composante V du vent à 10m (m/s)
+    plot_var(fig, axs[0, 2], ds.u10)
+    plot_var(fig, axs[0, 3], ds.v10)
 
     grib = folder / "PAAROME_1S100_ECH0_SOL.grib"
     ds = xr.open_dataset(grib, engine="cfgrib")
-    plot_var(fig, axs[0, 4], ds.sd)  # Snow depth water equivalent (kg/m²)
+    plot_var(fig, axs[0, 4], ds.sd)
 
     grib = folder / "PAAROME_1S100_ECH1_10M.grib"
     ds = xr.open_dataset(grib, engine="cfgrib")
-    plot_var(fig, axs[1, 0], ds.ugust)  # Composante U des raffales (m/s)
-    plot_var(fig, axs[1, 1], ds.vgust)  # Composante V des raffales (m/s)
+    plot_var(fig, axs[1, 0], ds.ugust)
+    plot_var(fig, axs[1, 1], ds.vgust)
 
     grib = folder / "PAAROME_1S100_ECH1_SOL.grib"
     ds = xr.open_dataset(grib, engine="cfgrib")
-    plot_var(fig, axs[1, 2], ds.tp)  # Précipitations cumulées (mm; HS)
-    plot_var(fig, axs[1, 3], ds.tirf)  # Time integral of rain flux (mm; HS)
-    plot_var(fig, axs[1, 4], ds.sprate)  # Snow precipitation rate (mm/s; HS)
+    print(ds)
+    plot_var(fig, axs[1, 2], ds.tp)
+    plot_var(fig, axs[1, 3], ds.rprate)
+    plot_var(fig, axs[1, 4], ds.sprate)
 
     for i in range(2):
         for j in range(5):
@@ -167,8 +167,8 @@ if __name__ == "__main__":
     parser.add_argument(
         "--folder",
         type=Path,
-        default=SCRATCH_PATH / "grib",
-        help="Folder where 1h gribs are stored.",
+        default=SCRATCH_PATH / "grib/2023-01-01_00h00/",
+        help="Folder where the gribs are stored for one timestep.",
     )
     args = parser.parse_args()
 
