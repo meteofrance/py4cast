@@ -1,6 +1,5 @@
 import datetime as dt
 import json
-import ssl
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from functools import cached_property, partial
@@ -25,7 +24,6 @@ from py4cast.datasets.base import (
 from py4cast.plots import DomainInfo
 from py4cast.settings import CACHE_DIR
 
-ssl._create_default_https_context = ssl._create_unverified_context
 # torch.set_num_threads(8)
 scratch_path = Path("/scratch/shared/smeagol")
 # Assuming no leap years in dataset (2024 is next)

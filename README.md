@@ -44,7 +44,7 @@ Here we use 2 nodes with 4 GPUs each.
 
 ```bash
 export RUNAI_SLURM_NNODES=2
-export RUNAI_SLURM_NTASKS_PER_NODE=4 
+export RUNAI_SLURM_NTASKS_PER_NODE=4
 export RUNAI_GRES="gpu:v100:4"
 runai sbatch_multi_node python bin/train.py --dataset smeagol --model hilam
 ```
@@ -76,6 +76,15 @@ Then you can do a classical training such as
 ```sh 
 python3.10 bin/train.py  --dataset smeagol --model halfunet --dataset_conf config/smeagoldev.json --limit_train_batches 10 --epochs 2 --strategy scaled_ar
 ```
+
+## Available datasets
+
+| Dataset  | Domain  | Description    | Documentation  | Maintainer(s) |
+| :---:   | :---: | :---: | :---: | :---: |
+| titan | France | AROME Analyses + ARPEGE Analyses and forecasts + 1h Rainfall; Timestep 1h; 2022-2023; [download link](https://huggingface.co/datasets/meteofrance/titan)  | [link](pnia/datasets/titan/README.md) | Léa Berthomier |
+| smeagol | France | WIP  | WIP |  Vincent Chabot |
+| dummy | WIP  | WIP | WIP |  WIP |
+
 
 ## Available PyTorch's architecture
 
@@ -149,7 +158,7 @@ class NewModelSettings:
 ```
 **num_input_features** is the number of features/channels of the input tensor. **num_output_features** is the number of features/channels of the output tensor, in our case the number of weather parameters to predict. **settings** is a **dataclass** instance with the settings of the model.
 
-5. Finally, the **ModelABC** is a Python **ABC** which forces you to implement (or be Exceptioned upon) 2 methods **transform_statics** and **transform_batch**. 
+5. Finally, the **ModelABC** is a Python **ABC** which forces you to implement (or be Exceptioned upon) 2 methods **transform_statics** and **transform_batch**.
 
 Below is a default working implementation for CNNs and VTs:
 
@@ -220,7 +229,7 @@ We provide an example module [here](py4cast_plugin_example.py) to help you creat
 ## Available Training strategies
 
 You can choose a training strategy using the **--strategy STRATEGY_NAME** cli argument. The strategy determines how the next timestep is computed
-in the forward pass. **x** are the neural network inputs and **model(x)** is the returned value by the neural network when fed **x** as input. 
+in the forward pass. **x** are the neural network inputs and **model(x)** is the returned value by the neural network when fed **x** as input.
 
 | Strategy Name | Reference | Update Rule | Boundary forcing |  Intermediary Steps |
 | :---:   | :---: | :---: | :---: | :---: |
@@ -237,7 +246,7 @@ runai exec_gpu python bin/train.py --dataset smeagol --model halfunet --strategy
 
 PyTorch provides an experimental feature called [**named tensors**](https://pytorch.org/docs/stable/named_tensor.html), at this time it is subject to change so we don't use it. That's why we provide our own implementation.
 
-NamedTensors are a way to give names to dimensions of tensors and to keep track of the names of the physical/weather parameters along the features dimension. 
+NamedTensors are a way to give names to dimensions of tensors and to keep track of the names of the physical/weather parameters along the features dimension.
 
 The **NamedTensor** class is a wrapper around a PyTorch tensor.
 

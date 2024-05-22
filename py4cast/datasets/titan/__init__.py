@@ -12,7 +12,6 @@ import pandas as pd
 import torch
 import tqdm
 import xarray as xr
-import yaml
 from cyeccodes import nested_dd_iterator
 from cyeccodes.eccodes import get_multi_messages_from_file
 from torch.utils.data import DataLoader, Dataset
@@ -25,20 +24,14 @@ from py4cast.datasets.base import (
     TorchDataloaderSettings,
     collate_fn,
 )
+from py4cast.datasets.titan.settings import (
+    DEFAULT_CONFIG,
+    FORMATSTR,
+    METADATA,
+    SCRATCH_PATH,
+)
 from py4cast.plots import DomainInfo
 from py4cast.settings import CACHE_DIR
-
-SCRATCH_PATH = Path("/scratch/shared/Titan")
-FORMATSTR = "%Y-%m-%d_%Hh%M"
-# Assuming no leap years in dataset (2024 is next)
-SECONDS_IN_YEAR = (
-    365 * 24 * 60 * 60
-)  # TODO: coder une fonction qui le calcule selon l'année
-
-with open(SCRATCH_PATH / "metadata.yaml", "r") as file:
-    METADATA = yaml.safe_load(file)
-
-DEFAULT_CONFIG = Path(__file__).parents[2] / "config" / "titan.json"
 
 
 def get_weight_per_lvl(level: int, kind: Literal["hPa", "m"]):
@@ -139,7 +132,7 @@ class Grid:
         longitudes = conf_ds.longitude[self.subgrid[2] : self.subgrid[3]]
         return np.tile(longitudes, (self.x, 1))
 
-    # TODO : à partir du grib, enregistrer un fichier npy lat lon h mask pour chacune des grilles
+    # TODO : from the grib, save a npy lat lon h mask for each grid
 
     @property
     def geopotential(self) -> np.array:
@@ -150,7 +143,7 @@ class Grid:
 
     @property
     def landsea_mask(self) -> np.array:
-        return np.zeros((self.x, self.y))  # TODO
+        return np.zeros((self.x, self.y))  # TODO : add real mask
 
     @property
     def border_mask(self) -> np.array:
@@ -249,7 +242,6 @@ class Param:
 
     @property
     def parameter_short_names(self) -> list:
-        # TODO : add type of lvl in name
         return [f"{self.name}_{level}{self.level_type}" for level in self.levels]
 
     @property
@@ -442,7 +434,9 @@ class TitanDataset(DatasetABC, Dataset):
         seconds_from_start_year = seconds_from_start_year[
             -self.settings.num_pred_steps :
         ]
-        year_angle = (seconds_from_start_year / SECONDS_IN_YEAR) * 2 * torch.pi
+        days_in_year = 366 if sample.date_t0.year % 4 == 0 else 365
+        seconds_in_year = days_in_year * 24 * 60 * 60
+        year_angle = (seconds_from_start_year / seconds_in_year) * 2 * torch.pi
         datetime_forcing = torch.stack(
             (
                 torch.sin(hour_angle),
@@ -714,19 +708,28 @@ class TitanDataset(DatasetABC, Dataset):
 
 
 # TODO :
-# - pouvoir gérer plusieurs niveaux
+# - be able to manage several different levels
+# - methods to load data should be in Sample and not in dataset
+# - add a method to plot a sample
+# - prepare dataset only if config or data has changed
 
 
 if __name__ == "__main__":
     import time
     from argparse import ArgumentParser
 
-    parser = ArgumentParser(description="Prepare Titan dataset.")
+    parser = ArgumentParser(description="Prepare Titan dataset and test loading speed.")
     parser.add_argument(
         "--path_config",
         default=DEFAULT_CONFIG,
         type=Path,
         help="Configuration file for the dataset.",
+    )
+    parser.add_argument(
+        "--n_iter",
+        default=5,
+        type=int,
+        help="Number of samples to test loading speed.",
     )
     args = parser.parse_args()
 
@@ -739,9 +742,13 @@ if __name__ == "__main__":
     print("Test __get_item__")
     print("Len dataset : ", len(train_ds))
 
-    beg = time.time()
-    for i in tqdm.tqdm(range(5)):
-        item = train_ds[i]
-    print("Time to load 5 sample : ", time.time() - beg)
-    print("Last Item description :")
-    print(item)
+    print("First Item description :")
+    print(train_ds[0])
+
+    start_time = time.time()
+    data_iter = iter(train_ds.torch_dataloader())
+    for i in tqdm.trange(args.n_iter, desc="Loading samples"):
+        _ = train_ds[i]
+    delta = time.time() - start_time
+    speed = args.n_iter / delta
+    print(f"Loading speed: {round(speed, 3)} sample(s)/sec")

@@ -1,107 +1,62 @@
 # TITAN : Training Inputs & Targets from Arome for Neural networks
 
-L'objectif est de créer un jeu de données permettant d'entraîner un modèle de PN par IA, à l'échelle de la France métropolitaine, avec les données dont nous disposons aujourd'hui.
+Titan is a dataset made to train an AI NWP emulator on France.
 
 ![Domaines](readme_imgs/titan_veryverylight.png)
 
-## Données
+## Data
 
-On souhaite disposer du "meilleur état connu" de l'atmosphère à un instant t sur la France Métropolitaine. Pour cela nous avons sélectionné les données suivantes :
+* 3 data sources: Analyses from AROME, ANTILOPE (rain data calibrated with rain gauges) and analyses and forecasts from ARPEGE (coupling model)
+* 1 hour timestep
+* Depth: 2 years
+* Format GRIB2 (conversion to npy possible)
 
-* 3 Sources de données : Analyses AROME, ANTILOPE (données de pluie) et Analyses et prévisions ARPEGE (modèle coupleur)
-* Pas de temps horaire
-* Profondeur : 1 an (au 31/10/2023)
-* Format GRIB2
+Download link : [HuggingFace](https://huggingface.co/datasets/meteofrance/titan)
 
 ![Domaines](readme_imgs/domaines.png)
 
 
-### Paramètres disponibles
+### Available parameters
 
-- **PAAROME** :
-    - Grille EURW1S100 (1.3 km) :
-        - Échéance 0h :
-            - Niveau 2m : **T, HU**
-            - Niveau 10m : **U, V**
-            - Niveau SOL : **RESR_NEIGE**
-        - Échéance 1h :
-            - Niveau 10m : **U_RAF, V_RAF**
-            - Niveau SOL : **PRECIP, EAU, NEIGE**
-    - Grille EURW1S40 (2.5 km) :
-        - Échéance 0h :
-            - Niveau mer : **P**
-            - Niveau isobares : **Z, T, U, V, VV2, HU, CIWC, CLD_WATER, CLD_RAIN, CLD_SNOW, CLD_GRAUPL**
-            - Niveau sol : **COLONNE_VAPO**
-        - Échéance 1h :
-            - Niveau sol : **FLTHERM, FLSOLAIRE**
-- **PA grille EURAT01 (0.1°)**, analyse ou prévision selon disponibilité :
-    - Niveau 2m : **T, HU**
-    - Niveau 10 : **U, V**
-    - Niveau mer : **P**
-    - Niveaux isobares : **Z, T, U, V**, **HU**
-- **ANTILOPE (ANTJP7CLIM) grille FRANXL1S100** (0.01°), échéance 60min, niveau sol : **Lame d'eau 1h** (cumul pour l'heure suivante)
+GRIB2 files are grouped in folders per hour. Each folder contains 14 grib files. Each grib file contains several parameters, grouped per model, grid, leadtime (0h ou 1h for flux) and level.
 
-## Stockage
+The parameters in each grib are described here:
 
-Le jeu de données est sauvegardé sur Hendrix : `/home/berthomierl/Titan`
-
-* Poids des fichiers GRIB2 pour une heure : ~ 480 Mo
-
-* Poids d'un fichier journalier **compressé** : ~ 6 Go
-
-* Poids du jeu de données **compressé** pour 1 an : ~ 2.2 To
+| File name  | Model | Grid | Level  | Parameters |
+| :---:   | :---: | :---: | :---: | :---: |
+| ANTJP7CLIM_1S100_60_SOL | ANTILOPE | FRANXL1S100  (0.01°)  | Ground |  Cumulated Rainfall on next 1h |
+| PA_01D_10M | ARPEGE | EURAT01 (0.1°)   | 10m |  U, V |
+| PA_01D_2M | ARPEGE  | EURAT01 (0.1°) | 2m |  T, HU |
+| PA_01D_ISOBARE | ARPEGE | EURAT01 (0.1°) | 24 Isobaric levels |  Z, T, U, V, HU |
+| PA_01D_MER | ARPEGE | EURAT01 (0.1°) | Sea |  P |
+| PAAROME_1S100_ECH0_10M | AROME | EURW1S100 (1.3 km) | 10m |  U, V |
+| PAAROME_1S100_ECH0_2M | AROME | EURW1S100 (1.3 km) | 2m |  T, HU |
+| PAAROME_1S100_ECH0_SOL | AROME | EURW1S100 (1.3 km) | Ground |  RESR_SNOW |
+| PAAROME_1S100_ECH1_10M | AROME | EURW1S100 (1.3 km) | 10m |  U_RAF, V_RAF |
+| PAAROME_1S100_ECH1_SOL | AROME | EURW1S100 (1.3 km) | Ground |  PRECIP, WATER, SNOW |
+| PAAROME_1S40_ECH0_ISOBARE | AROME | EURW1S40 (2.5 km) | 24 Isobaric levels |  Z, T, U, V, VV2, HU, CIWC, CLD_WATER, CLD_RAIN, CLD_SNOW, CLD_GRAUPL |
+| PAAROME_1S40_ECH0_MER | AROME | EURW1S40 (2.5 km) | Sea |  P |
+| PAAROME_1S40_ECH0_SOL | AROME | EURW1S40 (2.5 km) | Ground |  COLUMN_VAPO |
+| PAAROME_1S40_ECH1_SOL | AROME | EURW1S40 (2.5 km) | Ground |  FLTHERM, FLSOLAR |
 
 
-## Contenu d'un fichier
 
-Les données sont regroupées par jour dans des `.tar`. Chaque journée contient 24 `.tar.gz` avec les données correspondant à 1 heure.
+## Storage
 
-Chaque heure contient 14 fichiers GRIB2, regroupant les différents paramètres selon le modèle, la grille, l'échéance (0h ou 1h pour les flux) et le niveau de hauteur.
+* Size of GRIB2 files for 1 hour : ~ 480 Mo
 
-## Utilisation
+* Size of **compressed** file for one day : ~ 6 Go
 
-### Création du jeu de données
+* Size of **compressed** dataset for 1 year : ~ 2.2 To
 
-Sur sotrtm35-sidev, toujours commencer par :
+## Usage
 
-```
-source /usr/local/sopra/etc/config_taches.soprano-dev  # pour avoir l'utilitaire dap3
-source /opt/metwork-mfext-2.1/share/profile  # pour avoir python3
-```
+* All interfaces to use the dataset for training are in `__init__.py`
 
-Ecrire un fichier `.netrc` avec vos creds pour Hendrix.
+* Use the script `plot_data.py` to plot all the parameters for one time step.
 
-Ajoutez le dossier `py4cast` au PYTHONPATH :
+## Notes
 
-```
-export PYTHONPATH=/home/labia/berthomierl/py4cast/py4cast/datasets/titan/
-```
+* 2024/05/16 : At the moment, the dataloader only works with data from AROME, with one-level parameters. Options for multi-level and multi-grid data will be added later.
 
-Lancer :
-
-```
-python main.py DATE_DEBUT DATE_FIN
-```
-
-### Téléchargement (et conversion en NPY)
-
-Sur priam-sidev :
-
-```runai build```
-
-```runai python dl_and_convert.py DATE_DEBUT DATE_FIN```
-
-Les données seront regroupées dans 1 dossier par heure, contenant chacun 37 fichiers npy.
-
-Chaque fichier npy correspond à un paramètre pour une grille. L'ensemble de ces paramètres est décrit dans `settings.py`.
-
-* Poids d'un dossier pour une heure : ~ 1.3 Go
-
-* Poids d'un dossier pour un jour : ~ 31 Go
-
-* Poids d'un dossier pour un an : ~ 11.4 To
-
-
-```runai python write_metadata.py```
-
-Ce script va générer un fichier `metadata.yaml` qui contient toutes les infos sur les grilles et les paramètres météo (shortname, units, etc).
+* ANTILOPE data are commercial, so they will not be included in the public sample of the dataset.
