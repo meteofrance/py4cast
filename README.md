@@ -1,12 +1,16 @@
 # PY4CAST
 
-This project built using **PyTorch** and **PyTorch-lightning** is designed to train a variety of Neural Network architectures (GNNs, CNNs, Vision Transformers, ...) on weather forecasting datasets.
+This project built using **PyTorch** and **PyTorch-lightning** is designed to train a variety of Neural Network architectures (GNNs, CNNs, Vision Transformers, ...) on weather forecasting datasets. This is a **Work in Progress**, intented to share ideas and design concepts with partners.
 
 Developped at Météo-France by **DSM/Lab IA** and **CNRM/GMAP/PREV**.
 
 Contributions are welcome.
 
 This project is licensed under the [APACHE 2.0 license.](LICENSE-2.0.txt)
+
+# Acknowledgements
+
+This project started as a fork of neural-lam, a project by Joel Oskarsson, see [here](https://github.com/mllam/neural-lam). Thanks to Joel for his work.
 
 # Table of contents
 
@@ -16,6 +20,9 @@ This project is licensed under the [APACHE 2.0 license.](LICENSE-2.0.txt)
     1. [Adding a new neural network architecture to the project.](#adding-a-new-neural-network-architecture-to-the-project)
 4. [Available Training strategies](#available-training-strategies)
 5. [NamedTensors](#namedtensors)
+6. [Unit tests](#unit-tests)
+7. [Continuous Integration](#continuous-integration)
+8. [TLDR design choices](#tldr-design-choices)
 
 ## Running using **runai** (Météo-France internal)
 
@@ -160,19 +167,23 @@ class NewModelSettings:
 
 5. Finally, the **ModelABC** is a Python **ABC** which forces you to implement (or be Exceptioned upon) 2 methods **transform_statics** and **transform_batch**.
 
-Below is a default working implementation for CNNs and VTs:
+Below is a default working implementation for CNNs and VTs (no transformation):
 
 ```python
 def transform_statics(self, statics: Statics) -> Statics:
+    """
+    Statics are used 'as-is' by vision models.
+    """
     return statics
 
-def transform_batch(
-    self, batch: Item
-) -> Tuple[torch.tensor, torch.tensor, torch.tensor]:
-    return batch.cat_2D()
+def transform_batch(self, batch: ItemBatch) -> ItemBatch:
+    """
+    Batch are used 'as-is' by vision models.
+    """
+    return batch
 ```
 
-For GNNs we need to flatten the width and height to graph_node_ids, since our datasets produce gridded shape data.
+For GNNs we need to flatten the width and height dimensions to graph_node_ids, since our datasets produce gridded shape data.
 
 ```python
 
@@ -192,15 +203,11 @@ def transform_batch(self, batch: ItemBatch) -> ItemBatch:
     Our grided datasets produce tensor of shape (B, T, W, H, F)
     so we flatten (W,H) => (num_graph_nodes) for GNNs
     """
-    new_batch = batch.cat_2D()
+    batch.inputs.flatten_("ngrid", 2, 3)
+    batch.outputs.flatten_("ngrid", 2, 3)
+    batch.forcing.flatten_("ngrid", 2, 3)
 
-    new_batch.inputs[0].flatten_("ngrid", 2, 3)
-    new_batch.outputs[0].flatten_("ngrid", 2, 3)
-
-    if new_batch.forcing is not None:
-        new_batch.forcing[0].flatten_("ngrid", 2, 3)
-
-    return new_batch
+    return batch
 ```
 
 Now your model can be either registered explicitely in the system (in case the code is in this repository) or injected in the system as a plugin (in case the code is hosted on a third party repository).
@@ -248,7 +255,7 @@ PyTorch provides an experimental feature called [**named tensors**](https://pyto
 
 NamedTensors are a way to give names to dimensions of tensors and to keep track of the names of the physical/weather parameters along the features dimension.
 
-The **NamedTensor** class is a wrapper around a PyTorch tensor.
+The **NamedTensor** class is a wrapper around a PyTorch tensor, it allows us to pass consistent object linking data and metadata with extra utility methods (concat along features dimension, flatten in place, ...). See the implementation [here](py4cast/datasets/base.py)
 
 Some examples of NamedTensors usage, here for gridded data on a 256x256 grid:
 
@@ -299,4 +306,44 @@ Features:
 
 ```
 
-See the implementation [here](py4cast/datasets/base.py)
+## Unit tests
+
+We provide a first set of unit tests to ensure the correctness of the codebase. You can run them using the following command:
+
+```bash
+python -m pytest
+```
+
+Our tests cover:
+- The NamedTensor class
+- The models, we make sure they can be instanciated and trained in a pure PyTorch training loop.
+
+
+## Continuous Integration
+
+We have a gitlab CI pipeline that runs linting and tests on every push to the repository. See the [gitlab-ci.yml](.gitlab-ci.yml) file for more details.
+
+
+## TLDR design choices
+
+- We define **interface contracts** between the components of the system using [Python ABCs](https://docs.python.org/3/library/abc.html). As long as the Python classes respect the interface contract, they can be used interchangeably in the system and the underlying implementation can be very different. For instance datasets with any underlying storage (grib2, netcdf, mmap+numpy, ...) and real-time or ahead of time concat and pre-processing could be used with the same neural network architectures and training strategies.
+
+- Neural network architectures are Python classes that inherit from both **ModelABC** and PyTorch's **nn.Module**. The later means it is quick to insert a third-party pure PyTorch model in the system (see for instance the code for Lucidrains' Segformer or a U-Net).
+
+- We use **dataclasses** and **dataclass_json** to define the settings whenever possible. This allows us to easily serialize and deserialize the settings to/from json files with Schema validation.
+
+- The NamedTensor allows us to keep track of the physical/weather parameters along the features dimension and to pass a single consistent object in the system. It is also a way to factorize common operations on tensors (concat along features dimension, flatten in place, ...) while keeping the dimension and feature names metadata in sync.
+
+- We use **PyTorch-lightning** to train the models. This allows us to easily scale the training to multiple GPUs and to use the same training loop for all the models. We also use the **PyTorch-lightning** logging system to log the training metrics and the hyperparameters.
+
+### Ideas for future improvements
+
+- Ideally, we could end up with a simple based class system for the training strategies to allow for easy addition of new strategies.
+
+- The **ItemBatch** class attributes could be generalized to have multiple inputs, outputs and forcing tensors referenced by name, this would allow for more flexibility in the models and plug metnet-3 and Pangu.
+
+- The distinction between **prognostic** and **diagnostic** variables should be made explicit in the system.
+
+
+
+

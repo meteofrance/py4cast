@@ -4,13 +4,12 @@ A simple plugin example for py4cast model with a Identity model.
 
 
 from dataclasses import dataclass
-from typing import Tuple
 
 import torch
 from dataclasses_json import dataclass_json
 from torch import nn
 
-from py4cast.datasets.base import Item
+from py4cast.datasets.base import ItemBatch, Statics
 from py4cast.models.base import ModelABC
 
 
@@ -44,8 +43,8 @@ class Identity(ModelABC, nn.Module):
         """
         return x[..., : self.num_output_features] * self.scaler
 
-    def transform_batch(self, batch: Item) -> Tuple:
-        return batch.cat_2D()
+    def transform_batch(self, batch: ItemBatch) -> ItemBatch:
+        return batch
 
-    def transform_statics(self, statics):
+    def transform_statics(self, statics: Statics) -> Statics:
         return statics

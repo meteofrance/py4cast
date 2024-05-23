@@ -15,13 +15,9 @@ from dataclasses_json import dataclass_json
 from einops import rearrange
 from torch import einsum, nn
 
-from py4cast.datasets.base import Item, Statics
+from py4cast.datasets.base import ItemBatch, Statics
 from py4cast.models.base import ModelABC, ModelInfo
-from py4cast.models.vision.utils import (
-    features_last_to_second,
-    features_second_to_last,
-    transform_batch_vision,
-)
+from py4cast.models.vision.utils import features_last_to_second, features_second_to_last
 
 
 def exists(val):
@@ -308,10 +304,8 @@ class Segformer(ModelABC, nn.Module):
     def transform_statics(self, statics: Statics) -> Statics:
         return statics
 
-    def transform_batch(
-        self, batch: Item
-    ) -> Tuple[torch.tensor, torch.tensor, torch.tensor]:
-        return transform_batch_vision(batch)
+    def transform_batch(self, batch: ItemBatch) -> ItemBatch:
+        return batch
 
     def forward(self, x):
 

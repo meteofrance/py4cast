@@ -471,18 +471,6 @@ class SmeagolDataset(DatasetABC, Dataset):
                 res += param.number
         return res
 
-    @cached_property
-    def diagnostic_dim(self):
-        """
-        Return dimensions of output variable only
-        Not used yet
-        """
-        res = 0
-        for param in self.params:
-            if param.kind == "output":
-                res += param.number
-        return res
-
     def test_sample(self, index):
         """
         Test if the sample is present.
@@ -505,6 +493,9 @@ class SmeagolDataset(DatasetABC, Dataset):
             _ = ds[param.name].sel(step=sample.input_terms)
 
     def __getitem__(self, index):
+
+        # TODO : here we should directly build a single NamedTensor per inputs, outputs and forcing attribute
+
         sample = self.sample_list[index]
 
         # Datetime Forcing
@@ -603,7 +594,18 @@ class SmeagolDataset(DatasetABC, Dataset):
             except KeyError as e:
                 print("Error for param {param}")
                 raise e
-        return Item(inputs=linputs, outputs=loutputs, forcing=lforcings)
+
+        # TODO : here we should directly build a single NamedTensor per inputs, outputs and forcings
+
+        # Expand and unsqueeze our forcing fields to have the same dimension as our inputs
+        for lforcing in lforcings:
+            lforcing.unsqueeze_and_expand_from_(linputs[0])
+
+        return Item(
+            inputs=NamedTensor.concat(linputs),
+            outputs=NamedTensor.concat(loutputs),
+            forcing=NamedTensor.concat(lforcings),
+        )
 
     @classmethod
     def from_json(
@@ -716,14 +718,6 @@ class SmeagolDataset(DatasetABC, Dataset):
         with geopotential value for each datapoint
         """
         return self.grid.geopotential
-
-    @property
-    def limited_area(self) -> bool:
-        """
-        Returns True if the dataset is
-        compatible with Limited area models
-        """
-        return True
 
     @property
     def border_mask(self) -> np.array:
