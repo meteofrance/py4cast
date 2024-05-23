@@ -467,18 +467,6 @@ class TitanDataset(DatasetABC, Dataset):
                 res += param.number
         return res
 
-    @cached_property
-    def diagnostic_dim(self):
-        """
-        Return dimensions of output variable only
-        Not used yet
-        """
-        res = 0
-        for param in self.params:
-            if param.kind == "output":
-                res += param.number
-        return res
-
     def get_param_tensor(self, param: Param, dates: List[dt.datetime]) -> torch.tensor:
         if self.settings.standardize:
             names = param.parameter_short_names
@@ -494,7 +482,10 @@ class TitanDataset(DatasetABC, Dataset):
             array = (array - means) / std
         return torch.from_numpy(array)
 
-    def __getitem__(self, index):
+    def __getitem__(self, index: int) -> Item:
+
+        # TODO: build a single NamedTensor with all the inputs and outputs in one shot.
+
         sample = self.sample_list[index]
 
         # Datetime Forcing
@@ -548,7 +539,15 @@ class TitanDataset(DatasetABC, Dataset):
                     **deepcopy(state_kwargs),
                 )
                 linputs.append(tmp_state)
-        return Item(inputs=linputs, outputs=loutputs, forcing=lforcings)
+
+        for forcing in lforcings:
+            forcing.unsqueeze_and_expand_from_(linputs[0])
+
+        return Item(
+            inputs=NamedTensor.concat(linputs),
+            outputs=NamedTensor.concat(loutputs),
+            forcing=NamedTensor.concat(lforcings),
+        )
 
     @classmethod
     def from_dict(
@@ -618,11 +617,6 @@ class TitanDataset(DatasetABC, Dataset):
     def geopotential_info(self) -> np.array:
         """array of shape (num_lat, num_lon) with geopotential value for each datapoint"""
         return self.grid.geopotential
-
-    @property
-    def limited_area(self) -> bool:
-        """Returns True if the dataset is compatible with Limited area models"""
-        return True
 
     @property
     def border_mask(self) -> np.array:

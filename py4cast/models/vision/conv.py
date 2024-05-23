@@ -5,19 +5,14 @@ for pn-ia.
 from collections import OrderedDict
 from dataclasses import dataclass
 from functools import cached_property, reduce
-from typing import Tuple
 
 import torch
 from dataclasses_json import dataclass_json
 from torch import nn
 
-from py4cast.datasets.base import Item, Statics
+from py4cast.datasets.base import ItemBatch, Statics
 from py4cast.models.base import ModelABC, ModelInfo
-from py4cast.models.vision.utils import (
-    features_last_to_second,
-    features_second_to_last,
-    transform_batch_vision,
-)
+from py4cast.models.vision.utils import features_last_to_second, features_second_to_last
 
 
 @dataclass_json
@@ -159,10 +154,8 @@ class HalfUnet(ModelABC, nn.Module):
     def transform_statics(self, statics: Statics) -> Statics:
         return statics
 
-    def transform_batch(
-        self, batch: Item
-    ) -> Tuple[torch.tensor, torch.tensor, torch.tensor]:
-        return transform_batch_vision(batch)
+    def transform_batch(self, batch: ItemBatch) -> ItemBatch:
+        return batch
 
     def forward(self, x):
         x = features_last_to_second(x)
@@ -402,9 +395,13 @@ class Unet(ModelABC, nn.Module):
         )
 
     def transform_statics(self, statics: Statics) -> Statics:
+        """
+        Statics are used 'as-is' by vision models.
+        """
         return statics
 
-    def transform_batch(
-        self, batch: Item
-    ) -> Tuple[torch.tensor, torch.tensor, torch.tensor]:
-        return transform_batch_vision(batch)
+    def transform_batch(self, batch: ItemBatch) -> ItemBatch:
+        """
+        Batch are used 'as-is' by vision models.
+        """
+        return batch

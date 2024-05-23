@@ -190,7 +190,7 @@ class AutoRegressiveLightning(pl.LightningModule):
         - forcing
         - static features
         """
-        forcing = batch.forcing[0].tensor[:, step_idx]
+        forcing = batch.forcing.tensor[:, step_idx]
         x = torch.cat(
             [prev_states[:, idx] for idx in range(batch.num_input_steps)]
             + [self.grid_static_features[: batch.batch_size], forcing],
@@ -253,7 +253,7 @@ class AutoRegressiveLightning(pl.LightningModule):
 
         # Right now we postpone that we have a single input/output/forcing
         batch = self.model.transform_batch(batch)
-        prev_states = batch.inputs[0].tensor
+        prev_states = batch.inputs.tensor
 
         prediction_list = []
 
@@ -261,11 +261,11 @@ class AutoRegressiveLightning(pl.LightningModule):
         # for the desired number of ar steps.
         for i in range(batch.num_pred_steps):
 
-            border_state = batch.outputs[0].tensor[:, i]
+            border_state = batch.outputs.tensor[:, i]
 
             if scale_y:
                 step_diff_std, step_diff_mean = self._step_diffs(
-                    batch.outputs[0].feature_names, prev_states.device
+                    batch.outputs.feature_names, prev_states.device
                 )
 
             # Intermediary steps for which we have no y_true data
@@ -306,9 +306,9 @@ class AutoRegressiveLightning(pl.LightningModule):
         prediction = torch.stack(
             prediction_list, dim=1
         )  # Stacking is done on time step. (B, pred_steps, N_grid, d_f) or (B, pred_steps, N_lat, N_lon, d_f)
-        pred_out = NamedTensor.new_like(prediction, batch.outputs[0])
+        pred_out = NamedTensor.new_like(prediction, batch.outputs)
 
-        return pred_out, batch.outputs[0]
+        return pred_out, batch.outputs
 
     def on_train_start(self):
         self.train_plotters = []

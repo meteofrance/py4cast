@@ -285,16 +285,12 @@ class BaseGraphModel(ModelABC, nn.Module):
         Our grided datasets produce tensor of shape (B, T, W, H, F)
         so we flatten (W,H) => (num_graph_nodes) for GNNs
         """
-        new_batch = batch.cat_2D()
 
-        new_batch.inputs[0].flatten_("ngrid", 2, 3)
+        batch.inputs.flatten_("ngrid", 2, 3)
+        batch.outputs.flatten_("ngrid", 2, 3)
+        batch.forcing.flatten_("ngrid", 2, 3)
 
-        new_batch.outputs[0].flatten_("ngrid", 2, 3)
-
-        if new_batch.forcing is not None:
-            new_batch.forcing[0].flatten_("ngrid", 2, 3)
-
-        return new_batch
+        return batch
 
     def finalize_graph_model(self):
         """

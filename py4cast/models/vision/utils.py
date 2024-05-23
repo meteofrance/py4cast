@@ -5,18 +5,6 @@ Shared utilities for vision models (convolutional neural networks and vision tra
 import einops
 import torch
 
-from py4cast.datasets.base import ItemBatch
-
-
-def transform_batch_vision(
-    batch: ItemBatch,
-) -> ItemBatch:
-    """
-    Take a batch as inputs.
-    Return inputs, outputs, batch statics and forcing with the dimension appropriated for the vision model.
-    """
-    return batch.cat_2D()
-
 
 def features_last_to_second(x: torch.Tensor) -> torch.Tensor:
     """

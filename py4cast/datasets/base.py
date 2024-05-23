@@ -272,22 +272,15 @@ class NamedTensor(TensorWrapper):
 @dataclass(slots=True)
 class Item:
     """
-    Dataclass holding one Item
+    Dataclass holding one Item.
+    inputs has shape (timestep, lat, lon, features)
+    outputs has shape (timestep, lat, lon, features)
+    forcing has shape (timestep, lat, lon, features)
     """
 
-    inputs: List[NamedTensor]
-    outputs: List[NamedTensor]
-
-    forcing: Union[
-        List[NamedTensor], None
-    ] = None  # Pour les champs de forcage (SST, Rayonnement, ... )
-
-    # J'hesite entre inputs/outputs et pronostics/diagnostics
-    # Les concepts sont totalement different (les variables ne contiendrait pas la meme chose,
-    # le get_item serait different et le unroll_prediction aussi)
-    # A discuter. J'aurais tendance a m'orienter vers pronostics/diagnostics qui me parait plus adapter
-    # (et est en phase avec la denomination du CEP)
-    # Ca ferait peut etre moins de trucs etrange dans les denominations
+    inputs: NamedTensor
+    outputs: NamedTensor
+    forcing: NamedTensor
 
     def __str__(self) -> str:
         """
@@ -323,105 +316,44 @@ class Item:
 class ItemBatch(Item):
     """
     Dataclass holding a batch of items.
+    input has shape (batch, timestep, lat, lon, features)
+    output has shape (batch, timestep, lat, lon, features)
+    forcing has shape (batch, timestep, lat, lon, features)
     """
 
     @cached_property
     def batch_size(self):
-        return self.inputs[0].dim_size("batch")
+        return self.inputs.dim_size("batch")
 
     @cached_property
     def num_input_steps(self):
-        return self.inputs[0].dim_size("in_step")
+        return self.inputs.dim_size("in_step")
 
     @cached_property
     def num_pred_steps(self):
-        return self.outputs[0].dim_size("out_step")
-
-    def cat(
-        self, attr: Literal["inputs", "outputs", "forcing"], ndims: int
-    ) -> Union[NamedTensor, None]:
-        """
-        Cat all the NamedTensor of the same attr having a specific number of dims.
-
-        It assumes that all the variable are on the same grid
-        and only the last dimension is different
-
-        Args:
-            attr (str): inputs/outputs/forcing
-            dim (int): Dimension of the state variable to consider
-
-        """
-        tensors = [x for x in getattr(self, attr) if x.num_spatial_dims == ndims]
-
-        if len(tensors) == 0:
-            return None
-        else:
-            return NamedTensor.concat(tensors)
-
-    def warn_if_1d(self) -> None:
-        """
-        Issue a warning if 1D state variables are present in the batch.
-        """
-        extra_names_in = [x.names for x in self.inputs if x.num_spatial_dims == 0]
-        extra_names_out = [x.names for x in self.outputs if x.num_spatial_dims == 0]
-
-        if len(extra_names_in) > 0:
-            warnings.warn(f"1D inputs are ignored {extra_names_in}")
-        if len(extra_names_out) > 0:
-            warnings.warn(f"1D outputs are ignored {extra_names_out}")
-
-    def cat_forcing(self) -> Union[NamedTensor, None]:
-        """
-        Concat (Torch cat) all forcing in 2D fields along features dimension.
-        1D forcing values are replicated at all grid points.
-        """
-        f1 = self.cat("forcing", 0)
-
-        if f1 is not None:
-            f1.unsqueeze_and_expand_from_(self.inputs[0])
-
-        f2 = self.cat("forcing", 2)
-        return [f1 | f2] if any((f1, f2)) else None
-
-    def cat_2D(self) -> "ItemBatch":
-        """
-        Concat (Torch cat) all inputs/outputs/forcing in 2D fields along features dimension.
-        1d (ndims=1) state variables for input and outputs are ignored (only taken into account for forcing).
-        2d and 3d are concatenated.
-        """
-        cat_inputs = [self.cat("inputs", 2)]
-        cat_outputs = [self.cat("outputs", 2)]
-
-        self.warn_if_1d()
-
-        cat_forcing = self.cat_forcing()
-
-        return ItemBatch(inputs=cat_inputs, outputs=cat_outputs, forcing=cat_forcing)
+        return self.outputs.dim_size("out_step")
 
 
 def collate_fn(items: List[Item]) -> ItemBatch:
     """
-    Collate a list of item. Add one dimension to each state variable.
-    Necessary to form batch.
+    Collate a list of item. Add one dimension at index zero to each NamedTensor.
+    Necessary to form a batch from a list of items.
+    See https://pytorch.org/docs/stable/data.html#working-with-collate-fn
     """
     # Here we postpone that for each batch the same dimension should be present.
     batch_of_items = {}
 
     # Iterate over inputs, outputs and forcing fields
     for field_name in (f.name for f in fields(Item)):
-        batch_of_items[field_name] = []
-        item_zero_field_value = getattr(items[0], field_name)
-        if item_zero_field_value is not None:
-            for i in range(len(item_zero_field_value)):
-                new_tensor = collate_tensor_fn(
-                    [getattr(item, field_name)[i].tensor for item in items]
-                ).type(torch.float32)
-                new_state = NamedTensor.expand_to_batch_like(
-                    new_tensor, item_zero_field_value[i]
-                )
-                batch_of_items[field_name].append(new_state)
-        else:
-            batch_of_items[field_name] = None
+
+        batched_tensor = collate_tensor_fn(
+            [getattr(item, field_name).tensor for item in items]
+        ).type(torch.float32)
+
+        batch_of_items[field_name] = NamedTensor.expand_to_batch_like(
+            batched_tensor, getattr(items[0], field_name)
+        )
+
     return ItemBatch(**batch_of_items)
 
 
@@ -619,13 +551,6 @@ class DatasetABC(ABC):
         """
 
     @abstractproperty
-    def limited_area(self) -> bool:
-        """
-        Returns True if the dataset is
-        compatible with Limited area models
-        """
-
-    @abstractproperty
     def split(self) -> Literal["train", "valid", "test"]:
         pass
 
@@ -652,14 +577,17 @@ class DatasetABC(ABC):
             raise ValueError("Your dataset should not be standardized.")
         # When computing stat may force every body to be input/ouput
         for batch in tqdm(self.torch_dataloader()):
+
             # Here we assume that data are in 2 or 3 D
-            inputs = torch.cat([x.tensor for x in batch.inputs], dim=-1)
-            outputs = torch.cat([x.tensor for x in batch.outputs], dim=-1)
+
+            inputs = batch.inputs.tensor
+            outputs = batch.outputs.tensor
+
             # Check that no variable is a forcing variable
-            f_names = [x.names for x in batch.forcing if x.ndims == 2]
+            f_names = batch.forcing.feature_names
             if len(f_names) > 0:
-                raise ValueError(
-                    "During statistics computation no forcing are accepted. All variables should be in in/out mode."
+                warnings.warn(
+                    f"Forcing variables {f_names} are present but no statistics will be computed."
                 )
 
             in_out = torch.cat([inputs, outputs], dim=1)
@@ -682,11 +610,9 @@ class DatasetABC(ABC):
 
         # Store in dictionnary
         store_d = {}
-        # Get variables names
-        names = []
-        [names.extend(x.feature_names) for x in batch.inputs]
+
         # Storing variable statistics
-        for i, name in enumerate(names):
+        for i, name in enumerate(batch.inputs.feature_names):
             store_d[name] = {
                 "mean": mean[i],
                 "std": std[i],
@@ -704,15 +630,17 @@ class DatasetABC(ABC):
             )
             print("Otherwise consider standardizing your inputs.")
         for batch in tqdm(self.torch_dataloader()):
+
             # Here we postpone that data are in 2 or 3 D
-            inputs = torch.cat([x.tensor for x in batch.inputs], dim=-1)
-            outputs = torch.cat([x.tensor for x in batch.outputs], dim=-1)
+
+            inputs = batch.inputs.tensor
+            outputs = batch.outputs.tensor
 
             # Check that no variable is a forcing variable
-            f_names = [x.feature_names for x in batch.forcing if x.ndims == 2]
+            f_names = batch.forcing.feature_names
             if any(f_names):
-                raise ValueError(
-                    "During statistics computation no forcing are accepted. All variables should be in in/out mode."
+                warnings.warn(
+                    f"Forcing variables {f_names} are present but no statistics will be computed."
                 )
 
             in_out = torch.cat([inputs, outputs], dim=1)
@@ -730,11 +658,9 @@ class DatasetABC(ABC):
         diff_second_moment = torch.mean(torch.cat(diff_squares, dim=0), dim=0)
         diff_std = torch.sqrt(diff_second_moment - diff_mean**2)  # (d_features)
         store_d = {}
-        # Get variables names
-        names = []
-        [names.extend(x.feature_names) for x in batch.inputs]
+
         # Storing variable statistics
-        for i, name in enumerate(names):
+        for i, name in enumerate(batch.inputs.feature_names):
             store_d[name] = {
                 "mean": diff_mean[i],
                 "std": diff_std[i],
@@ -804,13 +730,6 @@ class DatasetABC(ABC):
     @cached_property
     def diff_stats(self) -> Stats:
         return Stats(fname=self.cache_dir / "diff_stats.pt")
-
-    @abstractproperty
-    def diagnostic_dim(self) -> int:
-        """
-        Return the number of diagnostic variables (output only)
-        """
-        pass
 
     @abstractclassmethod
     def from_json(
