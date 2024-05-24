@@ -9,7 +9,6 @@ import pytorch_lightning as pl
 import torch
 from lightning.pytorch.utilities import rank_zero_only
 from torch import nn
-from torch.distributed import barrier
 from torchinfo import summary
 
 from py4cast.datasets.base import DatasetInfo, ItemBatch, NamedTensor
@@ -141,7 +140,6 @@ class AutoRegressiveLightning(pl.LightningModule):
         # All processes should wait until rank zero
         # has done the initialization (like creating a graph)
         rank_zero_init(model_kls, model_settings, statics)
-        barrier()
 
         self.model, model_settings = build_model_from_settings(
             hparams.model_name,
