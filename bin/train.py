@@ -147,7 +147,9 @@ if __name__ == "__main__":
         gpus_per_node = len(os.environ.get("SLURM_STEP_GPUS", "1").split(","))
         global_rank = int(os.environ.get("SLURM_PROCID", 0))
         local_rank = global_rank - gpus_per_node * (global_rank // gpus_per_node)
-        print(f"Global rank: {global_rank}, Local rank: {local_rank}, Gpus per node: {gpus_per_node}")
+        print(
+            f"Global rank: {global_rank}, Local rank: {local_rank}, Gpus per node: {gpus_per_node}"
+        )
         os.environ["LOCAL_RANK"] = str(local_rank)
         os.environ["GLOBAL_RANK"] = os.environ.get("SLURM_PROCID", 0)
         os.environ["NODE_RANK"] = os.environ.get("SLURM_NODEID", 0)
