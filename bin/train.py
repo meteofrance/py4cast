@@ -106,7 +106,7 @@ def main(
         print(f"No profiler set {tp.profiler}")
     trainer = pl.Trainer(
         num_nodes=int(os.environ.get("SLURM_NNODES", 1)),
-        devices=os.environ.get("SLURM_NTASKS_PER_NODE", "auto"),
+        devices="auto",
         max_epochs=tp.epochs,
         deterministic=True,
         strategy="ddp",
@@ -144,7 +144,7 @@ if __name__ == "__main__":
 
     # Variables for multi-nodes multi-gpu training
     if int(os.environ.get("SLURM_NNODES", 1)) > 1:
-        gpus_per_node = int(os.environ.get("SLURM_NTASKS_PER_NODE", 1))
+        gpus_per_node = len(os.environ.get("SLURM_STEP_GPUS", "1").split(","))
         global_rank = int(os.environ.get("SLURM_PROCID", 0))
         local_rank = global_rank - gpus_per_node * (global_rank // gpus_per_node)
         os.environ["LOCAL_RANK"] = str(local_rank)
