@@ -137,6 +137,8 @@ class AutoRegressiveLightning(pl.LightningModule):
             hparams.model_name, hparams.model_conf
         )
 
+        # All processes should wait until rank zero
+        # has done the initialization (like creating a graph)
         rank_zero_init(model_kls, model_settings, statics)
 
         self.model, model_settings = build_model_from_settings(
