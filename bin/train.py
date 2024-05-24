@@ -74,15 +74,15 @@ def main(
     callback_list = []
     if not tp.no_log:
         print(f"Model and checkpoint will be saved in saved_models/{run_name}")
-        callback_list.append(
-            pl.callbacks.ModelCheckpoint(
-                dirpath=f"saved_models/{run_name}",
-                filename="min_val_loss",
-                monitor="val_mean_loss",
-                mode="min",
-                save_last=True,
-            )
+        checkpoint_callback = pl.callbacks.ModelCheckpoint(
+            dirpath=f"saved_models/{run_name}",
+            filename="{epoch:02d}-{val_mean_loss:.2f}",  # Custom filename pattern
+            monitor="val_mean_loss",
+            mode="min",
+            save_top_k=1,  # Save only the best model
+            save_last=True,  # Also save the last model
         )
+        callback_list.append(checkpoint_callback)
 
     # Logger
     if tp.no_log:
@@ -137,7 +137,14 @@ def main(
         val_dataloaders=val_loader,
     )
 
-    trainer.test(ckpt_path="best", dataloaders=test_loader)
+    best_checkpoint = checkpoint_callback.best_model_path
+    last_checkpoint = checkpoint_callback.last_model_path
+
+    model_to_test = best_checkpoint if best_checkpoint else last_checkpoint
+    print(
+        f"Testing using {'best' if best_checkpoint else 'last'} model at {model_to_test}"
+    )
+    trainer.test(ckpt_path=model_to_test, dataloaders=test_loader)
 
 
 if __name__ == "__main__":
