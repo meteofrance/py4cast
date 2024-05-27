@@ -20,9 +20,11 @@ This project started as a fork of neural-lam, a project by Joel Oskarsson, see [
     1. [Adding a new neural network architecture to the project.](#adding-a-new-neural-network-architecture-to-the-project)
 4. [Available Training strategies](#available-training-strategies)
 5. [NamedTensors](#namedtensors)
-6. [Unit tests](#unit-tests)
-7. [Continuous Integration](#continuous-integration)
-8. [TLDR design choices](#tldr-design-choices)
+6. [Plots](#plots)
+7. [Experiment tracking](#experiment-tracking)
+8. [Unit tests](#unit-tests)
+9. [Continuous Integration](#continuous-integration)
+10. [TLDR design choices](#tldr-design-choices)
 
 ## Running using **runai** (Météo-France internal)
 
@@ -255,7 +257,7 @@ PyTorch provides an experimental feature called [**named tensors**](https://pyto
 
 NamedTensors are a way to give names to dimensions of tensors and to keep track of the names of the physical/weather parameters along the features dimension.
 
-The **NamedTensor** class is a wrapper around a PyTorch tensor, it allows us to pass consistent object linking data and metadata with extra utility methods (concat along features dimension, flatten in place, ...). See the implementation [here](py4cast/datasets/base.py)
+The **NamedTensor** class is a wrapper around a PyTorch tensor, it allows us to pass consistent object linking data and metadata with extra utility methods (concat along features dimension, flatten in place, ...). See the implementation [here](py4cast/datasets/base.py) and usage for plots [here](py4cast/observer.py)
 
 Some examples of NamedTensors usage, here for gridded data on a 256x256 grid:
 
@@ -306,6 +308,72 @@ Features:
 
 ```
 
+## Plots
+
+Plots are done using the **matplotlib** library. We wrap each plot in a **ErrorObserver** class. Below is an example of a plot that shows the spatial distribution of the error for all the variables together. See our [observer.py](py4cast/observer.py) for more examples.
+
+```python
+class SpatialErrorPlot(ErrorObserver):
+    """
+    Produce a map which shows where the error are accumulating (all variables together).
+    """
+
+    def __init__(self, prefix: str = "Test"):
+        self.spatial_loss_maps = []
+        self.prefix = prefix
+
+    def update(
+        self,
+        obj: "AutoRegressiveLightning",
+        prediction: NamedTensor,
+        target: NamedTensor,
+    ) -> None:
+        spatial_loss = obj.loss(prediction, target, reduce_spatial_dim=False)
+        # Getting only spatial loss for the required val_step_errors
+        if obj.model.info.output_dim == 1:
+            spatial_loss = einops.rearrange(
+                spatial_loss, "b t (x y) -> b t x y ", x=obj.grid_shape[0]
+            )
+        self.spatial_loss_maps.append(spatial_loss)  # (B, N_log, N_lat, N_lon)
+
+    def on_step_end(self, obj: "AutoRegressiveLightning") -> None:
+        """
+        Make the summary figure
+        """
+```
+
+In order to add your own plot, you can create a new class that inherits from **ErrorObserver** and implement the **update** and **on_step_end** methods. You can then add your plot to the **AutoRegressiveLightning** class in the **valid_plotters** or **test_plotters** [list](py4cast/lightning.py).
+
+```python
+self.test_plotters = [
+    StateErrorPlot(metrics),
+    SpatialErrorPlot(),
+    PredictionPlot(self.hparams["hparams"].num_samples_to_plot),
+]
+```
+
+## Experiment tracking
+
+We use [Tensorboad](https://www.tensorflow.org/tensorboard) to track the experiments. You can launch a tensorboard server using the following command:
+
+1. At Météo-France
+
+
+**runai** will handle port forwarding for you.
+
+```bash
+runai tensorboard --logdir PATH_TO_YOUR_ROOT_PATH
+```
+
+2. Elsewhere
+
+```bash 
+tensorboard --logdir PATH_TO_YOUR_ROOT_PATH
+```
+
+
+Then you can access the tensorboard server at the following address: http://YOUR_SERVER_IP:YOUR_PORT/
+
 ## Unit tests
 
 We provide a first set of unit tests to ensure the correctness of the codebase. You can run them using the following command:
@@ -321,7 +389,7 @@ Our tests cover:
 
 ## Continuous Integration
 
-We have a gitlab CI pipeline that runs linting and tests on every push to the repository. See the [gitlab-ci.yml](.gitlab-ci.yml) file for more details.
+We have a gitlab CI pipeline that runs linting (flake8, isort, black, bandit) and tests on every push to the repository. See the [gitlab-ci.yml](.gitlab-ci.yml) file for more details.
 
 
 ## TLDR design choices
@@ -343,6 +411,8 @@ We have a gitlab CI pipeline that runs linting and tests on every push to the re
 - The **ItemBatch** class attributes could be generalized to have multiple inputs, outputs and forcing tensors referenced by name, this would allow for more flexibility in the models and plug metnet-3 and Pangu.
 
 - The distinction between **prognostic** and **diagnostic** variables should be made explicit in the system.
+
+- We should probably reshape back the GNN outputs to (lat, lon) gridded shape as early as possible to have this as a common/standard output format for all the models. This would simplify the post-processing, plotting, ... We still have if statements in the code to handle the different output shapes of the models.
 
 
 

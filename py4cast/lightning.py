@@ -343,7 +343,14 @@ class AutoRegressiveLightning(pl.LightningModule):
         l1_loss = ScaledL1Loss(reduction="none")
         l1_loss.prepare(self.interior_mask, self.hparams["hparams"].dataset_info)
         metrics = {"mae": l1_loss}
-        self.valid_plotters = [StateErrorPlot(metrics, kind="Validation")]
+        self.valid_plotters = [
+            StateErrorPlot(metrics, prefix="Validation"),
+            PredictionPlot(
+                num_samples_to_plot=1,
+                num_features_to_plot=4,
+                prefix="Validation",
+            ),
+        ]
 
     def validation_step(self, batch: ItemBatch, batch_idx):
         """
