@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from copy import deepcopy
-from typing import TYPE_CHECKING, Dict
+from typing import TYPE_CHECKING, Dict, Union
 
 import einops
 import matplotlib.pyplot as plt
@@ -13,6 +13,7 @@ from pytorch_lightning.strategies import (  # Use for homogeneity in gathering o
 if TYPE_CHECKING:
     from py4cast.lightning import AutoRegressiveLightning
 
+from py4cast.datasets.base import NamedTensor
 from py4cast.losses import Py4castLoss
 from py4cast.plots import plot_error_map, plot_prediction, plot_spatial_error
 
@@ -46,8 +47,8 @@ class ErrorObserver(ABC):
     def update(
         self,
         obj: "AutoRegressiveLightning",
-        prediction: torch.Tensor,
-        target: torch.Tensor,
+        prediction: NamedTensor,
+        target: NamedTensor,
     ) -> None:
         """
         Do an action when "step" is trigger
@@ -67,23 +68,30 @@ class PredictionPlot(ErrorObserver):
     Observer used to plot prediction and target
     """
 
-    def __init__(self, num_samples_to_plot: int, kind: str = "Test"):
-        self.num_samples_to_plot = num_samples_to_plot  # A prendre en parametre
-        print(f"Nombre de pred {num_samples_to_plot}")
+    def __init__(
+        self,
+        num_samples_to_plot: int,
+        num_features_to_plot: Union[None, int] = None,
+        prefix: str = "Test",
+    ):
+        self.num_samples_to_plot = num_samples_to_plot
         self.plotted_examples = 0
-        self.kind = kind
+        self.prefix = prefix
+        self.num_features_to_plot = num_features_to_plot
 
     def update(
         self,
         obj: "AutoRegressiveLightning",
-        prediction: torch.Tensor,
-        target: torch.Tensor,
+        prediction: NamedTensor,
+        target: NamedTensor,
     ) -> None:
         """
         Update. Should be call by "on_{training/validation/test}_step
         """
         pred = deepcopy(prediction).tensor  # In order to not modify the input
         targ = deepcopy(target).tensor  # In order to not modify the input
+
+        # Here we reshape output from GNNS to be on the grid
         if obj.model.info.output_dim == 1:
             pred = einops.rearrange(
                 pred, "b t (x y) n -> b t x y n", x=obj.grid_shape[0]
@@ -112,7 +120,7 @@ class PredictionPlot(ErrorObserver):
             target_rescaled = targ * std + mean
 
             # Iterate over the examples
-            # We postpone example are already on grid
+            # We assume examples are already on grid
             for pred_slice, target_slice in zip(
                 prediction_rescaled[:n_additional_examples],
                 target_rescaled[:n_additional_examples],
@@ -138,6 +146,12 @@ class PredictionPlot(ErrorObserver):
                 )  # (d_f,)
                 var_vranges = list(zip(var_vmin, var_vmax))
 
+                feature_names = (
+                    prediction.feature_names[: self.num_features_to_plot]
+                    if self.num_features_to_plot
+                    else prediction.feature_names
+                )
+
                 # Iterate over prediction horizon time steps
                 for t_i, (pred_t, target_t) in enumerate(
                     zip(pred_slice, target_slice), start=1
@@ -156,10 +170,10 @@ class PredictionPlot(ErrorObserver):
                         )
                         for var_i, (var_name, var_unit, var_vrange) in enumerate(
                             zip(
-                                prediction.feature_names,
+                                feature_names,
                                 [
                                     obj.hparams["hparams"].dataset_info.units[name]
-                                    for name in prediction.feature_names
+                                    for name in feature_names
                                 ],
                                 var_vranges,
                             )
@@ -171,9 +185,7 @@ class PredictionPlot(ErrorObserver):
                             f"{var_name}_example_{self.plotted_examples}", fig, t_i
                         )
                         for var_name, fig in zip(
-                            obj.hparams["hparams"].dataset_info.shortnames(
-                                kind="output"
-                            ),
+                            feature_names,
                             var_figs,
                         )
                     ]
@@ -193,9 +205,9 @@ class StateErrorPlot(ErrorObserver):
     with respect to step
     """
 
-    def __init__(self, metrics: Dict[str, Py4castLoss], kind: str = "Test"):
+    def __init__(self, metrics: Dict[str, Py4castLoss], prefix: str = "Test"):
         self.metrics = metrics
-        self.kind = kind
+        self.prefix = prefix
         self.losses = {}
         self.shortnames = []
         self.units = []
@@ -206,8 +218,8 @@ class StateErrorPlot(ErrorObserver):
     def update(
         self,
         obj: "AutoRegressiveLightning",
-        prediction: torch.Tensor,
-        target: torch.Tensor,
+        prediction: NamedTensor,
+        target: NamedTensor,
     ) -> None:
         """
         Compute the metric. Append to a dictionnary
@@ -240,7 +252,7 @@ class StateErrorPlot(ErrorObserver):
 
                     tensorboard = obj.logger.experiment
                     tensorboard.add_figure(
-                        f"{self.kind}_{name}", fig, obj.current_epoch
+                        f"{self.prefix}_{name}", fig, obj.current_epoch
                     )
         # Free memory
         [self.losses[name].clear() for name in self.metrics]
@@ -251,15 +263,15 @@ class SpatialErrorPlot(ErrorObserver):
     Produce a map which shows where the error are accumulating (all variables together).
     """
 
-    def __init__(self, kind: str = "Test"):
+    def __init__(self, prefix: str = "Test"):
         self.spatial_loss_maps = []
-        self.kind = kind
+        self.prefix = prefix
 
     def update(
         self,
         obj: "AutoRegressiveLightning",
-        prediction: torch.Tensor,
-        target: torch.Tensor,
+        prediction: NamedTensor,
+        target: NamedTensor,
     ) -> None:
         spatial_loss = obj.loss(prediction, target, reduce_spatial_dim=False)
         # Getting only spatial loss for the required val_step_errors
@@ -286,14 +298,14 @@ class SpatialErrorPlot(ErrorObserver):
                 plot_spatial_error(
                     loss_map,
                     obj.interior_2d[:, :, 0],
-                    title=f"{self.kind} loss, t={t_i} ({obj.hparams['hparams'].dataset_info.step_duration*t_i} h)",
+                    title=f"{self.prefix} loss, t={t_i} ({obj.hparams['hparams'].dataset_info.step_duration*t_i} h)",
                     domain_info=obj.hparams["hparams"].dataset_info.domain_info,
                 )
                 for t_i, loss_map in enumerate(mean_spatial_loss)
             ]
             tensorboard = obj.logger.experiment
             [
-                tensorboard.add_figure(f"{self.kind}_spatial_error", fig, t_i)
+                tensorboard.add_figure(f"{self.prefix}_spatial_error", fig, t_i)
                 for t_i, fig in enumerate(loss_map_figs)
             ]
             plt.close()
