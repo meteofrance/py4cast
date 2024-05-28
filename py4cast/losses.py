@@ -53,13 +53,13 @@ class WeightedLossMixin:
         )
 
         # Retrieve the weights for each feature
-        weight = torch.stack(
+        weights = torch.stack(
             [self.loss_state_weight[name] for name in prediction.feature_names]
         ).to(torch_loss, non_blocking=True)
 
         # Apply the weights and sum over the feature dimension
         weighted_loss = torch.sum(
-            torch_loss * weight, dim=-1
+            torch_loss * weights, dim=-1
         )
 
         # if no reduction on spatial dimension is required, return the weighted loss
