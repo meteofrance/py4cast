@@ -1,5 +1,7 @@
 import datetime as dt
 import json
+import traceback
+import warnings
 from copy import deepcopy
 from dataclasses import dataclass, field
 from functools import cached_property, lru_cache
@@ -12,8 +14,19 @@ import pandas as pd
 import torch
 import tqdm
 import xarray as xr
-from cyeccodes import nested_dd_iterator
-from cyeccodes.eccodes import get_multi_messages_from_file
+
+# Cyeccodes is a Cython module from Météo-France to read grib faster than xarray+cfgrib
+try:
+    from cyeccodes import nested_dd_iterator
+    from cyeccodes.eccodes import get_multi_messages_from_file
+
+    use_cyeccodes = True
+except ImportError:
+    warnings.warn(
+        f"Could not import Cyeccodes, switching to xarray+cfgrib. {traceback.format_exc()}"
+    )
+    use_cyeccodes = False
+
 from torch.utils.data import DataLoader, Dataset
 
 from py4cast.datasets.base import (
@@ -42,7 +55,9 @@ def get_weight_per_lvl(level: int, kind: Literal["hPa", "m"]):
 
 
 @lru_cache(256)
-def read_grib(path_grib: Path, names=None, levels=None):
+def read_grib_with_cyeccodes(
+    path_grib: Path, names=None, levels=None
+) -> Dict[str, Dict[int, np.ndarray]]:
     if names or levels:
         include_filters = {
             k: v for k, v in [("cfVarName", names), ("level", levels)] if v is not None
@@ -68,6 +83,18 @@ def read_grib(path_grib: Path, names=None, levels=None):
         level = int(level)
         grib_dict[name] = {}
         grib_dict[name][level] = array
+    return grib_dict
+
+
+@lru_cache(256)
+def read_grib_with_xarray(path_grib: Path) -> Dict[str, Dict[int, np.ndarray]]:
+    ds = xr.load_dataset(path_grib, engine="cfgrib", backend_kwargs={"indexpath": ""})
+    grib_dict = {}
+    for name in ds.data_vars:
+        level_name = ds[name].attrs["GRIB_typeOfLevel"]
+        level = int(ds[level_name].values)
+        grib_dict[name] = {}
+        grib_dict[name][level] = ds[name].values
     return grib_dict
 
 
@@ -273,7 +300,10 @@ class Param:
 
     def load_data_grib(self, date: dt.datetime) -> np.ndarray:
         path_grib = self.get_filepath(date, "grib")
-        param_dict = read_grib(path_grib)[self.grib_param]
+        if use_cyeccodes:
+            param_dict = read_grib_with_cyeccodes(path_grib)[self.grib_param]
+        else:
+            param_dict = read_grib_with_xarray(path_grib)[self.grib_param]
         array = param_dict[
             self.levels[0]
         ]  # warning : doesn't work with multiple levels for now
