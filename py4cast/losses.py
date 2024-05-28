@@ -66,7 +66,7 @@ class WeightedLossMixin:
 class RegisterBuffersMixin:
     """
     This Mixin is used to register the interior mask and the loss_state_weight buffer
-    with the lightning module.
+    with the lightning module. Compose this Mixin with a Torch loss class or subclass.
     See https://lightning.ai/docs/pytorch/stable/accelerators/accelerator_prepare.html
     """
 
