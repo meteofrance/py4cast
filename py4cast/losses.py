@@ -75,7 +75,7 @@ class WeightedLossMixin:
         return time_step_mean_loss
 
 
-class RegisterSpatialMixin:
+class RegisterBuffersMixin:
     """
     This Mixin is used to register the interior mask and the loss_state_weight buffer
     with the lightning module.
@@ -136,7 +136,7 @@ class Py4CastLoss(ABC):
         """
 
 
-class ScaledRMSELoss(RegisterSpatialMixin, MSELoss, Py4CastLoss):
+class ScaledRMSELoss(RegisterBuffersMixin, MSELoss, Py4CastLoss):
     def prepare(self, interior_mask: torch.Tensor, dataset_info: DatasetInfo) -> None:
         # build the dictionnary of weight
         loss_state_weight = {}
@@ -171,7 +171,7 @@ class ScaledRMSELoss(RegisterSpatialMixin, MSELoss, Py4CastLoss):
         return torch.sqrt(mean_mse_loss) * weights
 
 
-class ScaledL1Loss(RegisterSpatialMixin, ScaledLossMixin, L1Loss, Py4CastLoss):
+class ScaledL1Loss(RegisterBuffersMixin, ScaledLossMixin, L1Loss, Py4CastLoss):
     """
     Computes a scaled L1 loss function with a weight for each feature.
     """
