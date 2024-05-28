@@ -1,9 +1,9 @@
 """
 This module contains the loss functions used in the training of the models.
 We use Python Mixins to avoid code duplication. See https://serge-m.github.io/posts/mixins-in-python/
-Our losses inherit from PyTorch's losses and are further customized by stacking Mixins, 
+Our losses inherit from PyTorch's losses and are further customized by stacking Mixins,
 each Mixin injects one or more method/functionnality.
-In order to force the user to implement the prepare method, 
+In order to force the user to implement the prepare method,
 which is expected by the rest of the system, we use the Py4castLoss abstract class.
 """
 
