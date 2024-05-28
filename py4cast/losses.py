@@ -171,13 +171,13 @@ class ScaledRMSELoss(
         # Compute the mean loss value over spatial dimensions
         mean_mse_loss = torch.sum(torch_mse_loss, dim=self.aggregate_dims) / self.num_interior
 
-        # Retrieve the weights
-        weight = torch.stack(
+        # Retrieve the weights, one per feature
+        weights = torch.stack(
             [self.loss_state_weight[name] for name in prediction.feature_names]
         ).to(torch_mse_loss, non_blocking=True)
 
         # Apply the weights to the square-root of the loss hance the ScaledRMSE
-        return torch.sqrt(mean_mse_loss) * weight
+        return torch.sqrt(mean_mse_loss) * weights
 
 
 class ScaledL1Loss(RegisterSpatialMixin, SpatialLossMixin, L1Loss, Py4CastLoss):
