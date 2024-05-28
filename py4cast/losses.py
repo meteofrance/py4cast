@@ -115,13 +115,13 @@ class SpatialLossMixin:
             prediction.tensor, target.tensor
         )
         
-        # Retrieve weights
-        weight = torch.stack(
+        # Retrieve the weights
+        weights = torch.stack(
             [self.loss_state_weight[name] for name in prediction.feature_names]
         ).to(torch_loss, non_blocking=True)
 
         # Apply weights
-        torch_loss = torch_loss * weight
+        torch_loss = torch_loss * weights
 
         # Compute the mean loss value over spatial dimensions
         mean_loss = (
