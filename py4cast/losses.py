@@ -23,7 +23,7 @@ class Py4CastLoss(ABC):
     @abstractmethod
     def prepare(self, interior_mask: torch.Tensor, dataset_info: DatasetInfo) -> None:
         """
-        Prepare the loss function using the statics from the dataset
+        Prepare the loss function using the dataset informations and the interior mask
         """
 
     @abstractmethod
