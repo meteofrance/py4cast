@@ -63,6 +63,8 @@ class WeightedLossMixin:
 
         # Compute the mean loss over all spatial dimensions
         # Take (unweighted) mean over only non-border (interior) grid nodes/pixels
+        # We use forward indexing for the spatial_dim_idx of the target tensor
+        # so the code below works even if the feature dimension has been reduced
         # The final shape is (B, pred_steps)
 
         time_step_mean_loss = (
