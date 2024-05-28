@@ -1,8 +1,10 @@
 """
 This module contains the loss functions used in the training of the models.
 We use Python Mixins to avoid code duplication. See https://serge-m.github.io/posts/mixins-in-python/
-Our losses inherit from PyTorch's losses and are further customized by stacking Mixins, each Mixin injects one or more method/functionnality.
-In order to force the user to implement the prepare method, which is expected by the rest of the system, we use the Py4castLoss abstract class.
+Our losses inherit from PyTorch's losses and are further customized by stacking Mixins, 
+each Mixin injects one or more method/functionnality.
+In order to force the user to implement the prepare method, 
+which is expected by the rest of the system, we use the Py4castLoss abstract class.
 """
 
 from abc import ABC, abstractmethod
@@ -16,7 +18,8 @@ from py4cast.datasets.base import DatasetInfo, NamedTensor
 class WeightedLossMixin:
     """
     Compute a weighted loss function with a weight for each feature.
-    During the forward step, the loss is computed for each feature and then weighted and optionally averaged over the spatial dimensions.
+    During the forward step, the loss is computed for each feature and then weighted
+    and optionally averaged over the spatial dimensions.
     """
 
     def register_loss_state_buffers(
@@ -74,7 +77,7 @@ class RegisterSpatialMixin:
     """
     This Mixin is used to register the interior mask and the loss_state_weight buffer
     with the lightning module.
-    See https://lightning.ai/docs/pytorch/stable/accelerators/accelerator_prepare.html#init-tensors-using-tensor-to-and-register-buffer
+    See https://lightning.ai/docs/pytorch/stable/accelerators/accelerator_prepare.html
     """
 
     def register_loss_state_buffers(
