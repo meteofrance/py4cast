@@ -3,7 +3,10 @@ This module contains the loss functions used in the training of the models.
 """
 
 from abc import ABC, abstractmethod
+from functools import lru_cache
+from typing import Tuple
 
+import pytorch_lightning as pl
 import torch
 from torch.nn import MSELoss
 
@@ -21,7 +24,12 @@ class Py4CastLoss(ABC):
         self.loss = getattr(torch.nn, loss)(*args, **kwargs)
 
     @abstractmethod
-    def prepare(self, interior_mask: torch.Tensor, dataset_info: DatasetInfo) -> None:
+    def prepare(
+        self,
+        lm: pl.LightningModule,
+        interior_mask: torch.Tensor,
+        dataset_info: DatasetInfo,
+    ) -> None:
         """
         Prepare the loss function using the dataset informations and the interior mask
         """
@@ -34,6 +42,7 @@ class Py4CastLoss(ABC):
 
     def register_loss_state_buffers(
         self,
+        lm: pl.LightningModule,
         interior_mask: torch.Tensor,
         loss_state_weight: dict,
         squeeze_mask: bool = False,
@@ -44,14 +53,25 @@ class Py4CastLoss(ABC):
         """
 
         self.loss_state_weight = loss_state_weight
-        self.loss.register_buffer(
-            "interior_mask",
-            interior_mask.squeeze(-1) if squeeze_mask else interior_mask,
-        )
+        attr_name = "interior_mask_s" if squeeze_mask else "interior_mask"
+        if not hasattr(lm, attr_name):
+            lm.register_buffer(
+                attr_name,
+                interior_mask.squeeze(-1) if squeeze_mask else interior_mask,
+            )
         self.num_interior = torch.sum(interior_mask).item()
 
     def __call__(self, *args, **kwds):
         return self.forward(*args, **kwds)
+
+    @lru_cache(maxsize=8)
+    def weights(self, feature_names: Tuple[str], device: torch.device) -> torch.Tensor:
+        """
+        We build and cache the weights tensor for the given loss, feature names and device.
+        """
+        return torch.stack([self.loss_state_weight[name] for name in feature_names]).to(
+            device, non_blocking=True
+        )
 
 
 class WeightedLoss(Py4CastLoss):
@@ -61,7 +81,12 @@ class WeightedLoss(Py4CastLoss):
     and optionally averaged over the spatial dimensions.
     """
 
-    def prepare(self, interior_mask: torch.Tensor, dataset_info: DatasetInfo) -> None:
+    def prepare(
+        self,
+        lm: pl.LightningModule,
+        interior_mask: torch.Tensor,
+        dataset_info: DatasetInfo,
+    ) -> None:
         # build the dictionnary of weight
         loss_state_weight = {}
 
@@ -72,8 +97,9 @@ class WeightedLoss(Py4CastLoss):
                 dataset_info.diff_stats[name]["std"] ** exponent
             )
         self.register_loss_state_buffers(
-            interior_mask, loss_state_weight, squeeze_mask=True
+            lm, interior_mask, loss_state_weight, squeeze_mask=True
         )
+        self.lm = lm
 
     def forward(
         self,
@@ -91,9 +117,7 @@ class WeightedLoss(Py4CastLoss):
         torch_loss = self.loss(prediction.tensor, target.tensor)
 
         # Retrieve the weights for each feature
-        weights = torch.stack(
-            [self.loss_state_weight[name] for name in prediction.feature_names]
-        ).to(torch_loss, non_blocking=True)
+        weights = self.weights(tuple(prediction.feature_names), prediction.device)
 
         # Apply the weights and sum over the feature dimension
         weighted_loss = torch.sum(torch_loss * weights, dim=-1)
@@ -110,8 +134,7 @@ class WeightedLoss(Py4CastLoss):
 
         time_step_mean_loss = (
             torch.sum(
-                weighted_loss
-                * self.loss.interior_mask.to(torch_loss, non_blocking=True),
+                weighted_loss * self.lm.interior_mask_s,
                 dim=target.spatial_dim_idx,
             )
             / self.num_interior
@@ -121,12 +144,18 @@ class WeightedLoss(Py4CastLoss):
 
 
 class ScaledLoss(Py4CastLoss):
-    def prepare(self, interior_mask: torch.Tensor, dataset_info: DatasetInfo) -> None:
+    def prepare(
+        self,
+        lm: pl.LightningModule,
+        interior_mask: torch.Tensor,
+        dataset_info: DatasetInfo,
+    ) -> None:
         # build the dictionnary of weight
         loss_state_weight = {}
         for name in dataset_info.state_weights:
             loss_state_weight[name] = dataset_info.stats[name]["std"]
-        self.register_loss_state_buffers(interior_mask, loss_state_weight)
+        self.register_loss_state_buffers(lm, interior_mask, loss_state_weight)
+        self.lm = lm
 
     def forward(self, prediction: NamedTensor, target: NamedTensor) -> torch.Tensor:
         """
@@ -137,15 +166,10 @@ class ScaledLoss(Py4CastLoss):
         # Compute Torch loss (defined in the parent class when this Mixin is used)
         torch_loss = self.loss(prediction.tensor, target.tensor)
 
-        # Retrieve the weights
-        weights = torch.stack(
-            [self.loss_state_weight[name] for name in prediction.feature_names]
-        ).to(torch_loss, non_blocking=True)
-
         # Compute the mean loss value over spatial dimensions
         mean_loss = (
             torch.sum(
-                torch_loss * self.loss.interior_mask.to(torch_loss, non_blocking=True),
+                torch_loss * self.lm.interior_mask,
                 dim=target.spatial_dim_idx,
             )
             / self.num_interior
@@ -154,4 +178,6 @@ class ScaledLoss(Py4CastLoss):
         if self.loss.__class__ == MSELoss:
             mean_loss = torch.sqrt(mean_loss)
 
-        return mean_loss * weights
+        return mean_loss * self.weights(
+            tuple(prediction.feature_names), prediction.device
+        )

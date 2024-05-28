@@ -171,8 +171,7 @@ class AutoRegressiveLightning(pl.LightningModule):
         else:
             raise TypeError(f"Unknown loss function: {hparams.loss}")
 
-        # self.loss.prepare(statics)
-        self.loss.prepare(statics.interior_mask, hparams.dataset_info)
+        self.loss.prepare(self, statics.interior_mask, hparams.dataset_info)
 
     def configure_optimizers(self) -> torch.optim.Optimizer:
         opt = torch.optim.AdamW(
@@ -341,7 +340,7 @@ class AutoRegressiveLightning(pl.LightningModule):
         Add some observers when starting validation
         """
         l1_loss = ScaledLoss("L1Loss", reduction="none")
-        l1_loss.prepare(self.interior_mask, self.hparams["hparams"].dataset_info)
+        l1_loss.prepare(self, self.interior_mask, self.hparams["hparams"].dataset_info)
         metrics = {"mae": l1_loss}
         self.valid_plotters = [
             StateErrorPlot(metrics, prefix="Validation"),
@@ -393,8 +392,10 @@ class AutoRegressiveLightning(pl.LightningModule):
 
         l1_loss = ScaledLoss("L1Loss", reduction="none")
         rmse_loss = ScaledLoss("MSELoss", reduction="none")
-        l1_loss.prepare(self.interior_mask, self.hparams["hparams"].dataset_info)
-        rmse_loss.prepare(self.interior_mask, self.hparams["hparams"].dataset_info)
+        l1_loss.prepare(self, self.interior_mask, self.hparams["hparams"].dataset_info)
+        rmse_loss.prepare(
+            self, self.interior_mask, self.hparams["hparams"].dataset_info
+        )
 
         metrics = {"mae": l1_loss, "rmse": rmse_loss}
         # I do not like settings things outside the __init__

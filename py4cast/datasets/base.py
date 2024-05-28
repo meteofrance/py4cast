@@ -278,6 +278,10 @@ class NamedTensor(TensorWrapper):
             )
         return NamedTensor(tensor, ["batch"] + other.names, other.feature_names.copy())
 
+    @property
+    def device(self) -> torch.device:
+        return self.tensor.device
+
 
 @dataclass(slots=True)
 class Item:
