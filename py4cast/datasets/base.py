@@ -27,8 +27,9 @@ from py4cast.utils import RegisterFieldsMixin, torch_save
 class TensorWrapper:
     """
     Wrapper around a torch tensor.
-    We do this to allow lightning's introspection to see our batch size
-    and move our tensors to the right device.
+    We do this separated dataclass to allow lightning's introspection to see our batch size
+    and move our tensors to the right device, otherwise we have this error/warning:
+    "Trying to infer the `batch_size` from an ambiguous collection ..."
     """
 
     tensor: torch.Tensor
