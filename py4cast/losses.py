@@ -31,11 +31,6 @@ class WeightedLossMixin:
         self.register_buffer("interior_mask", interior_mask.squeeze(-1))
         self.num_interior = torch.sum(interior_mask).item()
 
-        # Store the aggregate on rmse which one should aggregate.
-        # This dimension is shape dependent (not the same for 1D and 2D NN outputs)
-        dims = len(self.interior_mask.shape)
-        self.aggregate_dims = tuple([-(x + 1) for x in range(0, dims)])
-
     def forward(
         self,
         prediction: NamedTensor,
@@ -44,7 +39,7 @@ class WeightedLossMixin:
     ) -> torch.Tensor:
         """
         Computed weighted loss function.
-        prediction/target: (B, pred_steps, N_grid, d_f)
+        prediction/target: (B, pred_steps, N_grid, d_f) or (B, pred_steps, W, H, d_f)
         returns (B, pred_steps)
         """
 
@@ -64,10 +59,11 @@ class WeightedLossMixin:
             return weighted_loss
 
         # Compute the mean loss over all spatial dimensions
-        # Take (unweighted) mean over only non-border (interior) grid nodes
+        # Take (unweighted) mean over only non-border (interior) grid nodes/pixels
         # The final shape is (B, pred_steps)
+
         time_step_mean_loss = (
-            torch.sum(weighted_loss * self.interior_mask, dim=self.aggregate_dims)
+            torch.sum(weighted_loss * self.interior_mask, dim=target.spatial_dim_idx)
             / self.num_interior
         )
 
@@ -92,13 +88,6 @@ class RegisterSpatialMixin:
         self.loss_state_weight = loss_state_weight
         self.register_buffer("interior_mask", interior_mask)
         self.num_interior = torch.sum(interior_mask).item()
-        # Store the aggregate on rmse which one should aggregate.
-        # This dimension is shape dependent (not the same for 1D and 2D NN outputs)
-        # As we do not squeeze (in order to be able to multiply) the dimension is changed
-        dims = len(self.interior_mask.shape) - 1
-        self.aggregate_dims = tuple(
-            [-(x + 2) for x in range(0, dims)]
-        )  # Not the same as WeightedLossMixin
 
 
 class ScaledLossMixin:
@@ -123,7 +112,7 @@ class ScaledLossMixin:
         mean_loss = (
             torch.sum(
                 torch_loss * self.interior_mask.to(torch_loss, non_blocking=True),
-                dim=self.aggregate_dims,
+                dim=target.spatial_dim_idx,
             )
             / self.num_interior
         )
@@ -165,7 +154,7 @@ class ScaledRMSELoss(RegisterSpatialMixin, MSELoss, Py4CastLoss):
 
         # Compute the mean loss value over spatial dimensions
         mean_mse_loss = (
-            torch.sum(torch_mse_loss, dim=self.aggregate_dims) / self.num_interior
+            torch.sum(torch_mse_loss, dim=target.spatial_dim_idx) / self.num_interior
         )
 
         # Retrieve the weights, one per feature
@@ -173,7 +162,7 @@ class ScaledRMSELoss(RegisterSpatialMixin, MSELoss, Py4CastLoss):
             [self.loss_state_weight[name] for name in prediction.feature_names]
         ).to(torch_mse_loss, non_blocking=True)
 
-        # Apply the weights to the square-root of the loss hance the ScaledRMSE
+        # Apply the weights to the square-root of the loss hence the ScaledRMSE
         return torch.sqrt(mean_mse_loss) * weights
 
 

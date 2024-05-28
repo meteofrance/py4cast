@@ -221,6 +221,16 @@ class NamedTensor(TensorWrapper):
         except ValueError as ve:
             raise ValueError(f"Dimension {dim_name} not found in {self.names}") from ve
 
+    @cached_property
+    def spatial_dim_idx(self) -> List[int]:
+        """
+        Return the indices of the spatial dimensions in the tensor.
+        """
+        return sorted(
+            self.names.index(name)
+            for name in set(self.SPATIAL_DIM_NAMES).intersection(set(self.names))
+        )
+
     def unsqueeze_and_expand_from_(self, other: "NamedTensor"):
         """
         Unsqueeze and expand the tensor to have the same number of spatial dimensions

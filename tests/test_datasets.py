@@ -53,6 +53,7 @@ def test_named_tensor():
         names=["batch", "lat", "lon", "levels"],
         feature_names=[f"feature_{i}" for i in range(50)],
     )
+    assert nt4.spatial_dim_idx == [1, 2]
     with pytest.raises(ValueError):
         nt | nt4
 
@@ -87,6 +88,7 @@ def test_named_tensor():
     nt6.flatten_("ngrid", 1, 2)
     assert nt6.tensor.shape == (3, 65536, 256)
     assert nt6.names == ["batch", "ngrid", "features"]
+    assert nt6.spatial_dim_idx == [1]
 
     # test creating a NamedTensor from another NamedTensor
     new_nt = NamedTensor.new_like(torch.rand(3, 256, 256, 50), nt)
