@@ -22,18 +22,6 @@ class WeightedLossMixin:
     and optionally averaged over the spatial dimensions.
     """
 
-    def register_loss_state_buffers(
-        self, interior_mask: torch.Tensor, loss_state_weight: dict
-    ) -> None:
-        """
-        We register the interior mask tensor with the lightning module.
-        loss_state_weight is no longer registered
-        and keep references to other buffers of interest
-        """
-        self.loss_state_weight = loss_state_weight
-        self.register_buffer("interior_mask", interior_mask.squeeze(-1))
-        self.num_interior = torch.sum(interior_mask).item()
-
     def forward(
         self,
         prediction: NamedTensor,
@@ -83,7 +71,10 @@ class RegisterBuffersMixin:
     """
 
     def register_loss_state_buffers(
-        self, interior_mask: torch.Tensor, loss_state_weight: dict
+        self,
+        interior_mask: torch.Tensor,
+        loss_state_weight: dict,
+        squeeze_mask: bool = False,
     ) -> None:
         """
         We register the state_weight buffer to the lightning module
@@ -91,7 +82,10 @@ class RegisterBuffersMixin:
         """
 
         self.loss_state_weight = loss_state_weight
-        self.register_buffer("interior_mask", interior_mask)
+        self.register_buffer(
+            "interior_mask",
+            interior_mask.squeeze(-1) if squeeze_mask else interior_mask,
+        )
         self.num_interior = torch.sum(interior_mask).item()
 
 
@@ -184,7 +178,7 @@ class ScaledL1Loss(RegisterBuffersMixin, ScaledLossMixin, L1Loss, Py4CastLoss):
         super().register_loss_state_buffers(interior_mask, loss_state_weight)
 
 
-class WeightedMSELoss(WeightedLossMixin, MSELoss, Py4CastLoss):
+class WeightedMSELoss(RegisterBuffersMixin, WeightedLossMixin, MSELoss, Py4CastLoss):
     def prepare(self, interior_mask: torch.Tensor, dataset_info: DatasetInfo) -> None:
         # build the dictionnary of weight
         loss_state_weight = {}
@@ -192,10 +186,12 @@ class WeightedMSELoss(WeightedLossMixin, MSELoss, Py4CastLoss):
             loss_state_weight[name] = dataset_info.state_weights[name] / (
                 dataset_info.diff_stats[name]["std"] ** 2.0
             )
-        super().register_loss_state_buffers(interior_mask, loss_state_weight)
+        super().register_loss_state_buffers(
+            interior_mask, loss_state_weight, squeeze_mask=True
+        )
 
 
-class WeightedL1Loss(WeightedLossMixin, L1Loss, Py4CastLoss):
+class WeightedL1Loss(RegisterBuffersMixin, WeightedLossMixin, L1Loss, Py4CastLoss):
     def prepare(self, interior_mask: torch.Tensor, dataset_info: DatasetInfo) -> None:
         # build the dictionnary of weight
         loss_state_weight = {}
@@ -203,4 +199,6 @@ class WeightedL1Loss(WeightedLossMixin, L1Loss, Py4CastLoss):
             loss_state_weight[name] = (
                 dataset_info.state_weights[name] / dataset_info.diff_stats[name]["std"]
             )
-        super().register_loss_state_buffers(interior_mask, loss_state_weight)
+        super().register_loss_state_buffers(
+            interior_mask, loss_state_weight, squeeze_mask=True
+        )
