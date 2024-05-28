@@ -128,6 +128,10 @@ You can also override the dataset default configuration file:
 runai exec_gpu python bin/train.py --dataset smeagol --model halfunet --dataset_conf config/smeagol.json
 ```
 
+The figure below illustrates the principal components of the Py4cast architecture.
+
+![py4cast](doc/figs/py4cast_diag.jpg)
+
 ### Adding a new neural network architecture to the project.
 
 1. Neural network architectures MUST be Python classes and inherit from both **ModelABC** and  **nn.Module**, in that order.
