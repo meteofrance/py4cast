@@ -12,7 +12,7 @@ from torch import nn
 from torchinfo import summary
 
 from py4cast.datasets.base import DatasetInfo, ItemBatch, NamedTensor
-from py4cast.losses import ScaledL1Loss, ScaledRMSELoss, WeightedL1Loss, WeightedMSELoss
+from py4cast.losses import ScaledLoss, WeightedLoss
 from py4cast.models import build_model_from_settings, get_model_kls_and_settings
 from py4cast.models.base import expand_to_batch
 from py4cast.observer import PredictionPlot, SpatialErrorPlot, StateErrorPlot
@@ -165,9 +165,9 @@ class AutoRegressiveLightning(pl.LightningModule):
         # Indeed, the statics used should be in the right dimensions.
         # MSE loss, need to do reduction ourselves to get proper weighting
         if hparams.loss == "mse":
-            self.loss = WeightedMSELoss(reduction="none")
+            self.loss = WeightedLoss("MSELoss", reduction="none")
         elif hparams.loss == "mae":
-            self.loss = WeightedL1Loss(reduction="none")
+            self.loss = WeightedLoss("L1Loss", reduction="none")
         else:
             raise TypeError(f"Unknown loss function: {hparams.loss}")
 
@@ -340,7 +340,7 @@ class AutoRegressiveLightning(pl.LightningModule):
         """
         Add some observers when starting validation
         """
-        l1_loss = ScaledL1Loss(reduction="none")
+        l1_loss = ScaledLoss("L1Loss", reduction="none")
         l1_loss.prepare(self.interior_mask, self.hparams["hparams"].dataset_info)
         metrics = {"mae": l1_loss}
         self.valid_plotters = [
@@ -391,8 +391,8 @@ class AutoRegressiveLightning(pl.LightningModule):
         # this is very strange that we need to do that
         # Think at this statics problem (may be we just need to have a self.statics).
 
-        l1_loss = ScaledL1Loss(reduction="none")
-        rmse_loss = ScaledRMSELoss(reduction="none")
+        l1_loss = ScaledLoss("L1Loss", reduction="none")
+        rmse_loss = ScaledLoss("MSELoss", reduction="none")
         l1_loss.prepare(self.interior_mask, self.hparams["hparams"].dataset_info)
         rmse_loss.prepare(self.interior_mask, self.hparams["hparams"].dataset_info)
 
