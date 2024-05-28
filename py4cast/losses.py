@@ -103,7 +103,7 @@ class RegisterSpatialMixin:
         )  # Not the same as WeightedLossMixin
 
 
-class SpatialLossMixin:
+class ScaledLossMixin:
     def forward(self, prediction: NamedTensor, target: NamedTensor) -> torch.Tensor:
         """
         Computed weighted loss function averaged over all spatial dimensions.
@@ -180,7 +180,7 @@ class ScaledRMSELoss(
         return torch.sqrt(mean_mse_loss) * weights
 
 
-class ScaledL1Loss(RegisterSpatialMixin, SpatialLossMixin, L1Loss, Py4CastLoss):
+class ScaledL1Loss(RegisterSpatialMixin, ScaledLossMixin, L1Loss, Py4CastLoss):
     """
     Computes a scaled L1 loss function with a weight for each feature.
     """
