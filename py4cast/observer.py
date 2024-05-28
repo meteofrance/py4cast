@@ -14,7 +14,7 @@ if TYPE_CHECKING:
     from py4cast.lightning import AutoRegressiveLightning
 
 from py4cast.datasets.base import NamedTensor
-from py4cast.losses import Py4castLoss
+from py4cast.losses import Py4CastLoss
 from py4cast.plots import plot_error_map, plot_prediction, plot_spatial_error
 
 
@@ -205,7 +205,7 @@ class StateErrorPlot(ErrorObserver):
     with respect to step
     """
 
-    def __init__(self, metrics: Dict[str, Py4castLoss], prefix: str = "Test"):
+    def __init__(self, metrics: Dict[str, Py4CastLoss], prefix: str = "Test"):
         self.metrics = metrics
         self.prefix = prefix
         self.losses = {}
