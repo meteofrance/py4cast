@@ -1,5 +1,6 @@
 import datetime as dt
 import json
+import os
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from functools import cached_property, partial
@@ -22,10 +23,9 @@ from py4cast.datasets.base import (
     collate_fn,
 )
 from py4cast.plots import DomainInfo
-from py4cast.settings import CACHE_DIR
 
 # torch.set_num_threads(8)
-scratch_path = Path("/scratch/shared/smeagol")
+scratch_path = Path(os.environ.get("PY4CAST_SMEAGOL_PATH", "/scratch/shared/smeagol"))
 # Assuming no leap years in dataset (2024 is next)
 SECONDS_IN_YEAR = 365 * 24 * 60 * 60
 
@@ -84,8 +84,6 @@ class Grid:
     border_size: int = 0
     # Subgrid selection. If (0,0,0,0) the whole grid is kept.
     subgrid: Tuple[int] = (0, 0, 0, 0)
-    # lat: np.array = field(init=False)
-    # lon: np.array = field(init=False)
     x: int = field(init=False)  # X dimension
     y: int = field(init=False)  # Y dimension
 
@@ -156,9 +154,9 @@ class Grid:
         ds = xr.open_dataset(self.grid_name)
         grid_limits = [  # In projection
             ds.x[self.subgrid[0]].values,  # min x
-            ds.x[self.subgrid[1]].values,  # max x
+            ds.x[self.subgrid[1] - 1].values,  # max x
             ds.y[self.subgrid[2]].values,  # min y
-            ds.y[self.subgrid[3]].values,  # max y
+            ds.y[self.subgrid[3] - 1].values,  # max y
         ]
         return grid_limits
 
@@ -310,12 +308,13 @@ class Sample:
 
 @dataclass(slots=True)
 class SmeagolSettings:
-    term: dict  # Pas vraiment a mettre ici. Voir où le mettre
+    term: dict  # Terms used in this configuration. Should be present in nc files.
     num_input_steps: int = 2  # Number of input timesteps
     num_pred_steps: int = 1  # Number of output timesteps
-    standardize: bool = True
-    # Pas vraiment a mettre ici. Voir où le mettre
-    members: Tuple[int] = (0,)
+    standardize: bool = True  # Do we need to standardize our data ?
+    members: Tuple[int] = (
+        0,
+    )  # Number of member used in this configuration. Each member is independant.
 
     @property
     def num_total_steps(self):
@@ -335,7 +334,7 @@ class SmeagolDataset(DatasetABC, Dataset):
         self.period = period
         self.params = params
         self.settings = settings
-        self._cache_dir = CACHE_DIR / "neural_lam" / str(self)
+        self._cache_dir = scratch_path / str(self)
         self.shuffle = self.split == "train"
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self.step_duration = self.settings.term["timestep"]
@@ -349,11 +348,16 @@ class SmeagolDataset(DatasetABC, Dataset):
         Returns:
             DatasetInfo: _description_
         """
+        shortnames = {
+            "forcing": self.shortnames("forcing"),
+            "input_output": self.shortnames("input_output"),
+            "diagnostic": self.shortnames("diagnostic"),
+        }
         return DatasetInfo(
             name=str(self),
             domain_info=self.domain_info,
             units=self.units,
-            shortnames=self.shortnames,
+            shortnames=shortnames,
             weather_dim=self.weather_dim,
             forcing_dim=self.forcing_dim,
             step_duration=self.step_duration,
@@ -368,7 +372,6 @@ class SmeagolDataset(DatasetABC, Dataset):
         """
         Create a list of sample from information
         """
-        print("Start forming samples")
         terms = list(
             np.arange(
                 self.settings.term["start"],
@@ -423,7 +426,10 @@ class SmeagolDataset(DatasetABC, Dataset):
         ]
 
     def __len__(self):
-        return len(self.sample_list)
+        length = len(self.sample_list)
+        if length < 1:
+            raise ValueError("No valid sample in the dataset.")
+        return length
 
     def get_year_hour_forcing(self, sample: Sample):
         """

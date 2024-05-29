@@ -14,17 +14,31 @@ This project started as a fork of neural-lam, a project by Joel Oskarsson, see [
 
 # Table of contents
 
-1. [Running at MF](#running-using-runai-météo-france-internal)
-2. [Using micromamba](#running-using-micromamba)
-3. [Available PyTorch's architecture](#available-pytorchs-architecture)
+1. [Environnment variables](#Setting-environment-variables) 
+2. [Running at MF](#running-using-runai-météo-france-internal)
+3. [Running using Conda and friends](#running-without-runai )
+    1. [Micromamba](#running-using-micromamba)
+    2. [Conda](#running-using-micromamba)
+    3. [Specifying your sbatch card](#specifying-your-sbatch-card)
+4. [Available PyTorch's architecture](#available-pytorchs-architecture)
     1. [Adding a new neural network architecture to the project.](#adding-a-new-neural-network-architecture-to-the-project)
-4. [Available Training strategies](#available-training-strategies)
-5. [NamedTensors](#namedtensors)
-6. [Plots](#plots)
-7. [Experiment tracking](#experiment-tracking)
-8. [Unit tests](#unit-tests)
-9. [Continuous Integration](#continuous-integration)
-10. [TLDR design choices](#tldr-design-choices)
+5. [Available Training strategies](#available-training-strategies)
+6. [NamedTensors](#namedtensors)
+7. [Plots](#plots)
+8. [Experiment tracking](#experiment-tracking)
+9. [Unit tests](#unit-tests)
+10. [Continuous Integration](#continuous-integration)
+11. [TLDR design choices](#tldr-design-choices)
+
+
+## Setting environment variables 
+
+In order to be able to run the code on different machines, some environment variables can be set. 
+You may add them in your `.bashrc` or modify them just before launching an experiment. 
+
+- `PY4CAST_ROOTDIR` : Specify the ROOT DIR for your experiment. It also modifies the CACHE_DIR.
+- `PY4CAST_SMEAGOL_PATH`: Specify where the smeagol dataset is stored. Not that it is only needed if you want to use the smeagol dataset. **Should be moved in the configuration file**.  
+If you plan to use micromamba or conda you should also add `py4cast` to your **PYTHONPATH** by expanding it (Export or change your `PYTHONPATH`).
 
 ## Running using **runai** (Météo-France internal)
 
@@ -60,7 +74,9 @@ runai sbatch_multi_node python bin/train.py --dataset smeagol --model hilam
 
 You can find more details about our **train.py** [here](./bin/Readme.md)
 
-## Running using micromamba 
+
+## Running without runai 
+### Running using micromamba 
 Please install the environment using : 
 ```sh
 micromamba create -f env.yaml  
@@ -85,6 +101,40 @@ Then you can do a classical training such as
 ```sh 
 python3.10 bin/train.py  --dataset smeagol --model halfunet --dataset_conf config/smeagoldev.json --limit_train_batches 10 --epochs 2 --strategy scaled_ar
 ```
+### Running using conda 
+You can install a conda environment using 
+```sh 
+conda env create --file env_conda.yaml
+```
+Note that this environment is a bit different from the micromamba one. Both should be merged in a near future. 
+
+### Specifying your sbatch card 
+To do so, you will need a small `sh` script. 
+
+```sh 
+#!/usr/bin/bash
+#SBATCH --partition=ndl 
+#SBATCH --nodes=1 # Specify the number of GPU node you required 
+#SBATCH --gres=gpu:1 # Specify the number of GPU required per Node 
+#SBATCH --time=05:00:00 # Specify your experiment Time limit 
+#SBATCH --ntasks-per-node=1 # Specify the number of task per node. This should match the number of GPU Required per Node 
+
+# Note that other variable could be set (according to you machine). For example you may need to set the number of CPU or the memory used by your experiment. 
+# On our hpc, this is proportional to the number of GPU required per node. This is not the case on other machine (e.g MétéoFrance AILab machine). 
+
+source ~/.bashrc  # Be sure that all your environment variables are set 
+conda activate py4cast # Activate your environment (installed by micromamba or conda)
+cd $PY4CAST_PATH # Go to Py4CAST (you can either add an environment variable or hard code it here)
+# Launch your favorite command. 
+srun python bin/train.py --model halfunet --dataset smeagol --dataset_conf config/smeagolsmall.json --num_pred_steps_val_test 4 --strategy scaled_ar --num_inter_steps 4 --num_input_steps 1 --batch_size 10
+```
+Then just launch this script using 
+```sh
+sbatch my_tiny_script.sh
+```
+
+
+
 
 ## Available datasets
 

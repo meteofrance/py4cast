@@ -63,8 +63,10 @@ class ArLightningHyperParam:
     def summary(self):
         self.dataset_info.summary()
         print(f"Number of input_steps : {self.num_input_steps}")
-        print(f"Number of pred_steps : {self.num_pred_steps_train}")
+        print(f"Number of pred_steps (training) : {self.num_pred_steps_train}")
+        print(f"Number of pred_steps (test/val) : {self.num_pred_steps_val_test}")
         print(f"Number of intermediary steps :{self.num_inter_steps}")
+        print(f"Training strategy :{self.training_strategy}")
         print(
             f"Model step duration : {self.dataset_info.step_duration /self.num_inter_steps}"
         )
@@ -453,6 +455,8 @@ class AutoRegressiveLightning(pl.LightningModule):
     def load_from_checkpoint(cls, checkpoint_path, hparams):
         """
         Overwrite the load_from_checkpoint method in order to be able to read our parameters.
+
+        hparams : if not None will overwrite ArLightningHyperParam
         """
         from io import BytesIO
 
@@ -460,7 +464,8 @@ class AutoRegressiveLightning(pl.LightningModule):
             checkpoint_path, map_location=lambda storage, loc: storage
         )
         # remove hyperparameters
-        checkpoint["hyper_parameters"] = {}
+        if hparams is not None:
+            checkpoint["hyper_parameters"] = {}
         # Do no iniate loss state (as it has been changed from previous version)
         keys = list(checkpoint["state_dict"].keys())
         # Relmoving information for loss and statistics
@@ -470,5 +475,9 @@ class AutoRegressiveLightning(pl.LightningModule):
         buffer = BytesIO()
         torch.save(checkpoint, buffer)
         buffer.seek(0)
-        # Don't do strict mode. Indeed a lot of variable had changed (but are initiate in the __init__).
-        return super().load_from_checkpoint(buffer, hparams=hparams, strict=False)
+        # We don't do strict mode to allow for slight changes in hyperparams
+        # and still be able to load previous trainings
+        if hparams is not None:
+            return super().load_from_checkpoint(buffer, hparams=hparams, strict=False)
+        else:
+            return super().load_from_checkpoint(buffer, strict=False)

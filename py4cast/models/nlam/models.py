@@ -133,8 +133,7 @@ class GraphLamSettings:
     Settings for graph-based models
     """
 
-    tmp_dir: Path = Path("/tmp")  # nosec B108
-
+    tmp_dir: Path | str = "/tmp"  # nosec B108
     hidden_dims: int = 64
     hidden_layers: int = 1
     processor_layers: int = 4
@@ -144,6 +143,10 @@ class GraphLamSettings:
 
     mesh_aggr: str = "sum"
     processor_layers: int = 4
+
+    def __post_init__(self):
+        if isinstance(self.tmp_dir, str):
+            self.tmp_dir = Path(self.tmp_dir)
 
     def __str__(self) -> str:
         return f"ModelCOnfig : {self.hidden_dims}x{self.hidden_layers}x{self.processor_layers}"

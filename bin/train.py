@@ -19,6 +19,7 @@ from py4cast.datasets.base import DatasetABC, TorchDataloaderSettings
 
 # From the package
 from py4cast.lightning import ArLightningHyperParam, AutoRegressiveLightning
+from py4cast.settings import ROOTDIR
 
 
 @dataclass
@@ -89,14 +90,14 @@ def main(
         logger = None
     else:
         logger = TensorBoardLogger(
-            save_dir="/scratch/shared/py4cast/logs",
+            save_dir=ROOTDIR / "logs",
             name=f"{args.model}/{args.dataset}",
             default_hp_metric=False,
         )
 
     if tp.profiler == "pytorch":
         profiler = PyTorchProfiler(
-            dirpath=f"/scratch/shared/py4cast/logs/{args.model}/{args.dataset}",
+            dirpath=ROOTDIR / f"logs/{args.model}/{args.dataset}",
             filename=f"profile_{tp.run_id}",
             export_to_chrome=True,
         )
@@ -104,13 +105,14 @@ def main(
     else:
         profiler = None
         print(f"No profiler set {tp.profiler}")
+
     trainer = pl.Trainer(
         num_nodes=int(os.environ.get("SLURM_NNODES", 1)),
         devices="auto",
         max_epochs=tp.epochs,
         deterministic=True,
         strategy="ddp",
-        accumulate_grad_batches=30,
+        accumulate_grad_batches=10,
         accelerator=device_name,
         logger=logger,
         profiler=profiler,

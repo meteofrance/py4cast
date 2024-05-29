@@ -9,7 +9,7 @@ from dataclasses import dataclass, field, fields
 from functools import cached_property
 from itertools import chain
 from pathlib import Path
-from typing import Callable, Dict, List, Literal, Tuple, Union
+from typing import Dict, List, Literal, Tuple, Union
 
 import einops
 import numpy as np
@@ -478,7 +478,7 @@ class DatasetInfo:
     stats: Stats
     diff_stats: Stats
     state_weights: Dict[str, float]
-    shortnames: Callable = None
+    shortnames: Dict[str, List[str]] = None
 
     def summary(self):
         """
@@ -489,7 +489,7 @@ class DatasetInfo:
         print(f"Static fields {self.statics.grid_static_features.feature_names}]")
 
         for p in ["forcing", "input_output", "diagnostic"]:
-            names = self.shortnames(p)
+            names = self.shortnames[p]
             mean = self.stats.to_list("mean", names)
             std = self.stats.to_list("std", names)
             mini = self.stats.to_list("min", names)
