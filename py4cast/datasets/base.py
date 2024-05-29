@@ -282,30 +282,48 @@ class Item:
     outputs: NamedTensor
     forcing: NamedTensor
 
+    def __post_init__(self):
+        """
+        Checks that the dimensions of the inputs, outputs are consistent.
+        This is necessary for our auto-regressive training.
+        """
+        if self.inputs.names != self.outputs.names:
+            raise ValueError(
+                f"Inputs and outputs must have the same dim names, got {self.inputs.names} and {self.outputs.names}"
+            )
+
+        # Also check feature names
+        if self.inputs.feature_names != self.outputs.feature_names:
+            raise ValueError(
+                f"Inputs and outputs must have the same feature names, "
+                f"got {self.inputs.feature_names} and {self.outputs.feature_names}"
+            )
+
     def __str__(self) -> str:
         """
         Utility method to explore a batch/item shapes and names.
         """
         table = []
         for attr in (f.name for f in fields(self)):
-            if getattr(self, attr) is not None:
-                for item in getattr(self, attr):
-                    names = item.names[0] if len(item.names) == 1 else item.names
+            nt: NamedTensor = getattr(self, attr)
+            if nt is not None:
+                for feature_name in nt.feature_names:
+                    tensor = nt[feature_name]
                     table.append(
                         [
                             attr,
-                            names,
-                            list(item.tensor.shape),
-                            item.feature_names,
-                            item.tensor.min(),
-                            item.tensor.max(),
+                            nt.names,
+                            list(nt[feature_name].shape),
+                            feature_name,
+                            tensor.min(),
+                            tensor.max(),
                         ]
                     )
         headers = [
             "Type",
             "Dimension Names",
             "Torch Shape",
-            "feature names",
+            "feature name",
             "Min",
             "Max",
         ]
@@ -327,11 +345,11 @@ class ItemBatch(Item):
 
     @cached_property
     def num_input_steps(self):
-        return self.inputs.dim_size("in_step")
+        return self.inputs.dim_size("timestep")
 
     @cached_property
     def num_pred_steps(self):
-        return self.outputs.dim_size("out_step")
+        return self.outputs.dim_size("timestep")
 
 
 def collate_fn(items: List[Item]) -> ItemBatch:

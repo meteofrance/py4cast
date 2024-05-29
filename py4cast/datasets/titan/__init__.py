@@ -538,7 +538,7 @@ class TitanDataset(DatasetABC, Dataset):
         for param in self.params:
             state_kwargs = {
                 "feature_names": param.parameter_short_names,
-                "names": ["out_step", "lat", "lon", "features"],
+                "names": ["timestep", "lat", "lon", "features"],
             }
 
             if param.kind == "input":
@@ -556,14 +556,14 @@ class TitanDataset(DatasetABC, Dataset):
 
             else:  # input_output
                 tensor = self.get_param_tensor(param, sample.dates)
-                state_kwargs["names"][0] = "out_step"
+                state_kwargs["names"][0] = "timestep"
                 tmp_state = NamedTensor(
                     tensor=tensor[-self.settings.num_pred_steps :],
                     **deepcopy(state_kwargs),
                 )
 
                 loutputs.append(tmp_state)
-                state_kwargs["names"][0] = "in_step"
+                state_kwargs["names"][0] = "timestep"
                 tmp_state = NamedTensor(
                     tensor=tensor[: self.settings.num_input_steps],
                     **deepcopy(state_kwargs),

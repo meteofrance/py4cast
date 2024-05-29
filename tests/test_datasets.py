@@ -4,7 +4,7 @@ Unit tests for datasets and NamedTensor.
 import pytest
 import torch
 
-from py4cast.datasets.base import NamedTensor
+from py4cast.datasets.base import Item, NamedTensor, collate_fn
 
 
 def test_named_tensor():
@@ -130,3 +130,86 @@ def test_named_tensor():
         f"v_{i}" for i in range(10)
     ] + [f"u_{i}" for i in range(10)]
     assert nt_cat.names == ["batch", "lat", "lon", "features"]
+
+
+def test_item():
+    """
+    Creates an item with NamedTensors and test it
+    """
+    tensor = torch.rand(256, 256, 5)
+    inputs = NamedTensor(
+        tensor,
+        names=["lat", "lon", "features"],
+        feature_names=[f"feature_{i}" for i in range(5)],
+    )
+    outputs = NamedTensor(
+        torch.rand(256, 256, 5),
+        names=["lat", "lon", "features"],
+        feature_names=[f"feature_{i}" for i in range(5)],
+    )
+
+    forcing = NamedTensor(
+        torch.rand(256, 256, 2),
+        names=["lat", "lon", "features"],
+        feature_names=[f"forcing_{i}" for i in range(2)],
+    )
+    item = Item(inputs=inputs, outputs=outputs, forcing=forcing)
+    print(item)
+
+    # test collate_fn
+    items = [item, item, item]
+    batch = collate_fn(items)
+    print(batch)
+
+    # Assert a New Batch dimension has been added with size 3
+    assert batch.inputs.tensor.shape == (3, 256, 256, 5)
+    assert batch.outputs.tensor.shape == (3, 256, 256, 5)
+    assert batch.forcing.tensor.shape == (3, 256, 256, 2)
+
+    # Input and Output must have the same number of features
+    with pytest.raises(ValueError):
+
+        inputs = NamedTensor(
+            tensor,
+            names=["lat", "lon", "features"],
+            feature_names=[f"feature_{i}" for i in range(5)],
+        )
+        outputs = NamedTensor(
+            torch.rand(256, 256, 5),
+            names=["lat", "lon", "features"],
+            feature_names=[f"feature_{i}" for i in range(4)],
+        )
+
+        item = Item(inputs=inputs, outputs=outputs, forcing=forcing)
+
+    # Input and Output must have the same feature names
+    with pytest.raises(ValueError):
+
+        inputs = NamedTensor(
+            tensor,
+            names=["lat", "lon", "features"],
+            feature_names=[f"feature_{i}" for i in range(5)],
+        )
+        outputs = NamedTensor(
+            torch.rand(256, 256, 5),
+            names=["lat", "lon", "features"],
+            feature_names=[f"f_{i}" for i in range(5)],
+        )
+
+        item = Item(inputs=inputs, outputs=outputs, forcing=forcing)
+
+    # Input and Output must have the same dim names
+    with pytest.raises(ValueError):
+
+        inputs = NamedTensor(
+            tensor,
+            names=["lat", "lon", "features"],
+            feature_names=[f"feature_{i}" for i in range(5)],
+        )
+        outputs = NamedTensor(
+            torch.rand(256, 256, 5),
+            names=["lat", "lon", "wrong_name"],
+            feature_names=[f"feature_{i}" for i in range(5)],
+        )
+
+        item = Item(inputs=inputs, outputs=outputs, forcing=forcing)
