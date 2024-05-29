@@ -144,6 +144,10 @@ sbatch my_tiny_script.sh
 | smeagol | France | WIP  | WIP |  Vincent Chabot |
 | dummy | WIP  | WIP | WIP |  WIP |
 
+### Adding a new dataset 
+A dataset should expose a few methods to be used in py4cast. 
+It should have 
+
 
 ## Available PyTorch's architecture
 

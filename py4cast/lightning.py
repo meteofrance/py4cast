@@ -253,7 +253,6 @@ class AutoRegressiveLightning(pl.LightningModule):
         Derived/Inspired from https://github.com/joeloskarsson/neural-lam/
         """
         force_border, scale_y, num_inter_steps = self._strategy_params()
-
         # Right now we postpone that we have a single input/output/forcing
         batch = self.model.transform_batch(batch)
         prev_states = batch.inputs.tensor
@@ -262,6 +261,7 @@ class AutoRegressiveLightning(pl.LightningModule):
 
         # Here we do the autoregressive prediction looping
         # for the desired number of ar steps.
+
         for i in range(batch.num_pred_steps):
 
             border_state = batch.outputs.tensor[:, i]
@@ -275,7 +275,6 @@ class AutoRegressiveLightning(pl.LightningModule):
             # Should be greater or equal to 1 (otherwise nothing is done).
             for k in range(num_inter_steps):
                 x = self._next_x(batch, prev_states, i)
-
                 # Graph (B, N_grid, d_f) or Conv (B, N_lat,N_lon d_f)
                 y = self.model(x)
 
@@ -321,7 +320,6 @@ class AutoRegressiveLightning(pl.LightningModule):
         Train on single batch
         """
         prediction, target = self.common_step(batch)
-
         # Compute loss
         batch_loss = torch.mean(
             self.loss(prediction, target)

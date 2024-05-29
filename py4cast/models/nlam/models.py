@@ -170,6 +170,7 @@ class BaseGraphModel(ModelABC, nn.Module):
         on rank zero before instantiating the model.
         """
         # this doesn't take long and it prevents discrepencies
+        print(statics.meshgrid)
         build_graph_for_grid(
             statics.meshgrid,
             settings.tmp_dir,
@@ -226,7 +227,7 @@ class BaseGraphModel(ModelABC, nn.Module):
 
         # GNNs
         # encoder
-        print(len(self.g2m_edge_index))
+
         print(
             "Hideem_dims",
             self.settings.hidden_dims,
@@ -347,14 +348,12 @@ class BaseGraphModel(ModelABC, nn.Module):
         # Map from grid to mesh
         mesh_emb_expanded = expand_to_batch(mesh_emb, batch_size)  # (B, N_mesh, d_h)
         g2m_emb_expanded = expand_to_batch(g2m_emb, batch_size)
-
         # This also splits representation into grid and mesh
         mesh_rep = self.g2m_gnn(
             grid_emb, mesh_emb_expanded, g2m_emb_expanded
         )  # (B, N_mesh, d_h)
         # Also MLP with residual for grid representation
         grid_rep = grid_emb + self.encoding_grid_mlp(grid_emb)  # (B, N_grid, d_h)
-
         # Run processor step
         mesh_rep = self.process_step(mesh_rep)
 
