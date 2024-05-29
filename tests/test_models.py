@@ -149,3 +149,21 @@ def test_torch_training_loop():
             if is_graph:
                 sample = sample.flatten(1, 2)
             onnx_export_load_infer(model, dst.name, sample)
+
+
+def test_model_registry():
+    """
+    Imports the registry and checks that all models are available
+    and also that there is no 'intruder' detected by our plugin system.
+    """
+    from py4cast.models import registry
+
+    assert set(registry.keys()) == {
+        "hilam",
+        "graphlam",
+        "halfunet",
+        "unet",
+        "segformer",
+        "identity",
+        "hilamparallel",
+    }

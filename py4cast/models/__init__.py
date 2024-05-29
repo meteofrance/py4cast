@@ -29,7 +29,7 @@ discovered_modules = {
 # Inspired from: https://packaging.python.org/en/latest/guides/creating-and-discovering-plugins
 for module_name, module in discovered_modules.items():
     for name, kls in module.__dict__.items():
-        if isinstance(kls, type) and issubclass(kls, ModelABC):
+        if isinstance(kls, type) and issubclass(kls, ModelABC) and kls != ModelABC:
             if kls.__name__.lower() in registry:
                 raise ValueError(
                     f"Model {kls.__name__} from plugin {module_name} already exists in the registry."
