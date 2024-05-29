@@ -1,6 +1,6 @@
 from copy import deepcopy
 from dataclasses import dataclass
-from functools import cached_property
+from functools import cached_property, lru_cache
 from pathlib import Path
 from typing import List, Tuple, Union
 
@@ -387,18 +387,12 @@ class AutoRegressiveLightning(pl.LightningModule):
         """
         Attach observer when starting test
         """
-        # this is very strange that we need to do that
-        # Think at this statics problem (may be we just need to have a self.statics).
+        metrics = {}
+        for torch_loss, alias in ("L1Loss", "mae"), ("MSELoss", "rmse"):
+            loss = ScaledLoss(torch_loss, reduction="none")
+            loss.prepare(self, self.interior_mask, self.hparams["hparams"].dataset_info)
+            metrics[alias] = loss
 
-        l1_loss = ScaledLoss("L1Loss", reduction="none")
-        rmse_loss = ScaledLoss("MSELoss", reduction="none")
-        l1_loss.prepare(self, self.interior_mask, self.hparams["hparams"].dataset_info)
-        rmse_loss.prepare(
-            self, self.interior_mask, self.hparams["hparams"].dataset_info
-        )
-
-        metrics = {"mae": l1_loss, "rmse": rmse_loss}
-        # I do not like settings things outside the __init__
         self.test_plotters = [
             StateErrorPlot(metrics),
             SpatialErrorPlot(),
@@ -429,13 +423,13 @@ class AutoRegressiveLightning(pl.LightningModule):
         for plotter in self.test_plotters:
             plotter.update(self, prediction=prediction, target=target)
 
-    @cached_property
-    def interior_2d(self) -> torch.Tensor:
+    @lru_cache(maxsize=1)
+    def interior_2d(self, num_spatial_dim: int) -> torch.Tensor:
         """
         Get the interior mask as a 2d mask.
         Usefull when stored as 1D in statics.
         """
-        if self.model.info.output_dim == 1:
+        if num_spatial_dim == 1:
             return einops.rearrange(
                 self.interior_mask, "(x y) h -> x y h", x=self.grid_shape[0]
             )

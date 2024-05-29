@@ -16,7 +16,7 @@ from einops import rearrange
 from torch import einsum, nn
 
 from py4cast.datasets.base import ItemBatch, Statics
-from py4cast.models.base import ModelABC, ModelInfo
+from py4cast.models.base import ModelABC
 from py4cast.models.vision.utils import features_last_to_second, features_second_to_last
 
 
@@ -318,8 +318,3 @@ class Segformer(ModelABC, nn.Module):
         ]
         fused = torch.cat(fused, dim=1)
         return features_second_to_last(self.upsampler(fused))
-
-    @cached_property
-    def info(self) -> ModelInfo:
-        """Return information on this model"""
-        return ModelInfo(output_dim=2)

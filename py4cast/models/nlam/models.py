@@ -9,13 +9,7 @@ from dataclasses_json import dataclass_json
 from torch import nn
 
 from py4cast.datasets.base import ItemBatch, Statics
-from py4cast.models.base import (
-    BufferList,
-    ModelABC,
-    ModelInfo,
-    expand_to_batch,
-    offload_to_cpu,
-)
+from py4cast.models.base import BufferList, ModelABC, expand_to_batch, offload_to_cpu
 from py4cast.models.nlam.create_mesh import build_graph_for_grid
 from py4cast.models.nlam.interaction_net import InteractionNet, make_mlp
 
@@ -265,13 +259,6 @@ class BaseGraphModel(ModelABC, nn.Module):
 
         # subclasses should override this method
         self.finalize_graph_model()
-
-    @cached_property
-    def info(self) -> ModelInfo:
-        """
-        Return information on this model
-        """
-        return ModelInfo(output_dim=1)
 
     def transform_statics(self, statics: Statics) -> Statics:
         """

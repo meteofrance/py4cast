@@ -44,15 +44,6 @@ class ModelABC(ABC):
         """
 
 
-@dataclass(slots=True)
-class ModelInfo:
-    """
-    Information specific to a model
-    """
-
-    output_dim: int  # Spatial dimension of the output
-
-
 def offload_to_cpu(model: nn.ModuleList):
     return nn.ModuleList([offload_wrapper(x) for x in model])
 

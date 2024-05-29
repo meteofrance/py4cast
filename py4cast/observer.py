@@ -92,7 +92,8 @@ class PredictionPlot(ErrorObserver):
         targ = deepcopy(target).tensor  # In order to not modify the input
 
         # Here we reshape output from GNNS to be on the grid
-        if obj.model.info.output_dim == 1:
+        num_spatial_dims = prediction.num_spatial_dims
+        if num_spatial_dims == 1:
             pred = einops.rearrange(
                 pred, "b t (x y) n -> b t x y n", x=obj.grid_shape[0]
             )
@@ -162,7 +163,7 @@ class PredictionPlot(ErrorObserver):
                         plot_prediction(
                             pred_t[:, :, var_i],
                             target_t[:, :, var_i],
-                            obj.interior_2d[:, :, 0],
+                            obj.interior_2d(num_spatial_dims)[:, :, 0],
                             title=f"{var_name} ({var_unit}), "
                             f"t={t_i} ({obj.hparams['hparams'].dataset_info.step_duration*t_i} h)",
                             vrange=var_vrange,
@@ -275,11 +276,12 @@ class SpatialErrorPlot(ErrorObserver):
     ) -> None:
         spatial_loss = obj.loss(prediction, target, reduce_spatial_dim=False)
         # Getting only spatial loss for the required val_step_errors
-        if obj.model.info.output_dim == 1:
+        if prediction.num_spatial_dims == 1:
             spatial_loss = einops.rearrange(
                 spatial_loss, "b t (x y) -> b t x y ", x=obj.grid_shape[0]
             )
         self.spatial_loss_maps.append(spatial_loss)  # (B, N_log, N_lat, N_lon)
+        self.num_spatial_dims = prediction.num_spatial_dims
 
     def on_step_end(self, obj: "AutoRegressiveLightning") -> None:
         """
@@ -297,7 +299,7 @@ class SpatialErrorPlot(ErrorObserver):
             loss_map_figs = [
                 plot_spatial_error(
                     loss_map,
-                    obj.interior_2d[:, :, 0],
+                    obj.interior_2d(self.num_spatial_dims)[:, :, 0],
                     title=f"{self.prefix} loss, t={t_i} ({obj.hparams['hparams'].dataset_info.step_duration*t_i} h)",
                     domain_info=obj.hparams["hparams"].dataset_info.domain_info,
                 )

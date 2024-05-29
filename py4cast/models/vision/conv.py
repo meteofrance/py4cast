@@ -11,7 +11,7 @@ from dataclasses_json import dataclass_json
 from torch import nn
 
 from py4cast.datasets.base import ItemBatch, Statics
-from py4cast.models.base import ModelABC, ModelInfo
+from py4cast.models.base import ModelABC
 from py4cast.models.vision.utils import features_last_to_second, features_second_to_last
 
 
@@ -173,13 +173,6 @@ class HalfUnet(ModelABC, nn.Module):
         dec = self.decoder(summed)
 
         return features_second_to_last(self.activation(self.outconv(dec)))
-
-    @cached_property
-    def info(self) -> ModelInfo:
-        """
-        Return information on this model
-        """
-        return ModelInfo(output_dim=2)
 
     @staticmethod
     def _block(
