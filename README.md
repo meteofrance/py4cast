@@ -37,7 +37,8 @@ In order to be able to run the code on different machines, some environment vari
 You may add them in your `.bashrc` or modify them just before launching an experiment. 
 
 - `PY4CAST_ROOTDIR` : Specify the ROOT DIR for your experiment. It also modifies the CACHE_DIR.
-- `PY4CAST_SMEAGOL_PATH`: Specify where the smeagol dataset is stored. Not that it is only needed if you want to use the smeagol dataset. **Should be moved in the configuration file**.  
+- `PY4CAST_SMEAGOL_PATH`: Specify where the smeagol dataset is stored. Only needed if you want to use the smeagol dataset. **Should be moved in the configuration file**.  
+- `PY4CAST_TITAN_PATH`: Specify where the titan dataset is stored. Only needed if you want to use the titan dataset.
 If you plan to use micromamba or conda you should also add `py4cast` to your **PYTHONPATH** by expanding it (Export or change your `PYTHONPATH`).
 
 ## Running using **runai** (Météo-France internal)
