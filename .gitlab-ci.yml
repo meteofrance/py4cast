@@ -17,6 +17,8 @@ complexity:
     - sourcery-analytics assess .
 
 unit_test:
+  variables:
+    PYTHONPATH: "${PYTHONPATH}:${CI_PROJECT_DIR}"
   stage: test
   image: pytorch/pytorch:2.1.2-cuda12.1-cudnn8-runtime
   script:
