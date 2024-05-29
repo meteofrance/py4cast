@@ -1,8 +1,9 @@
+import os
 from pathlib import Path
 
 import yaml
 
-SCRATCH_PATH = Path("/scratch/shared/Titan")
+SCRATCH_PATH = Path(os.environ.get("PY4CAST_TITAN_PATH", "/scratch/shared/Titan"))
 FORMATSTR = "%Y-%m-%d_%Hh%M"
 
 with open(SCRATCH_PATH / "metadata.yaml", "r") as file:

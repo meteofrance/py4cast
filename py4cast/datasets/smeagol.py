@@ -25,7 +25,7 @@ from py4cast.datasets.base import (
 from py4cast.plots import DomainInfo
 
 # torch.set_num_threads(8)
-scratch_path = Path(os.environ.get("PY4CAST_SMEAGOL_PATH", "/scratch/shared/smeagol"))
+SCRATCH_PATH = Path(os.environ.get("PY4CAST_SMEAGOL_PATH", "/scratch/shared/smeagol"))
 # Assuming no leap years in dataset (2024 is next)
 SECONDS_IN_YEAR = 365 * 24 * 60 * 60
 
@@ -101,7 +101,7 @@ class Grid:
     @property
     def grid_name(self):
         return (
-            scratch_path / "nc" / constant_fname(self.domain, self.model, self.geometry)
+            SCRATCH_PATH / "nc" / constant_fname(self.domain, self.model, self.geometry)
         )
 
     @cached_property
@@ -225,7 +225,7 @@ class Param:
         """
         Return the filename. Even if term is not used for this example it could be (e.g. for radars).
         """
-        return scratch_path / "nc" / self.fnamer(date=date, member=member, term=term)
+        return SCRATCH_PATH / "nc" / self.fnamer(date=date, member=member, term=term)
 
     def load_data(self, member: int, date: dt.datetime, terms: List):
         flist = []
@@ -334,7 +334,7 @@ class SmeagolDataset(DatasetABC, Dataset):
         self.period = period
         self.params = params
         self.settings = settings
-        self._cache_dir = scratch_path / str(self)
+        self._cache_dir = SCRATCH_PATH / str(self)
         self.shuffle = self.split == "train"
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self.step_duration = self.settings.term["timestep"]
