@@ -58,6 +58,7 @@ class Py4CastLoss(ABC):
             lm.register_buffer(
                 attr_name,
                 interior_mask.squeeze(-1) if squeeze_mask else interior_mask,
+                persistent=False,
             )
         self.num_interior = torch.sum(interior_mask).item()
 
