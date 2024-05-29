@@ -416,10 +416,15 @@ class TitanDataset(DatasetABC, Dataset):
         Returns:
             DatasetInfo: _description_
         """
+        shortnames = {
+            "forcing": self.shortnames("forcing"),
+            "input_output": self.shortnames("input_output"),
+            "diagnostic": self.shornames("diagnostic"),
+        }
         return DatasetInfo(
             name=str(self),
             domain_info=self.domain_info,
-            shortnames=self.shortnames,
+            shortnames=shortnames,
             units=self.units,
             weather_dim=self.weather_dim,
             forcing_dim=self.forcing_dim,
