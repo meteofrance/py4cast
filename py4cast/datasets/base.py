@@ -487,7 +487,7 @@ class DatasetInfo:
         print(f"\n Summarizing {self.name} \n")
         print(f"Step_duration {self.step_duration}")
         print(f"Static fields {self.statics.grid_static_features.feature_names}]")
-
+        print(self.statics.grid_static_features)
         for p in ["forcing", "input_output", "diagnostic"]:
             names = self.shortnames[p]
             mean = self.stats.to_list("mean", names)
@@ -582,10 +582,6 @@ class DatasetABC(ABC):
         array of shape (num_lat, num_lon)
         with geopotential value for each datapoint
         """
-
-    @abstractproperty
-    def split(self) -> Literal["train", "valid", "test"]:
-        pass
 
     @abstractproperty
     def cache_dir(self) -> Path:
@@ -700,6 +696,7 @@ class DatasetABC(ABC):
             }
         torch_save(store_d, self.cache_dir / "diff_stats.pt")
 
+    @property
     def dataset_extra_statics(self) -> List[NamedTensor]:
         """
         Datasets can override this method to add
@@ -716,9 +713,10 @@ class DatasetABC(ABC):
         xy = self.meshgrid  # (2, N_x, N_y)
         grid_xy = torch.tensor(xy)
         # Need to rearange
-        pos_max = torch.max(torch.abs(grid_xy))
-        grid_xy = (
-            einops.rearrange(grid_xy, ("n x y -> x y n")) / pos_max
+        pos_max = torch.max(torch.max(grid_xy, dim=1).values, dim=1).values
+        pos_min = torch.min(torch.min(grid_xy, dim=1).values, dim=1).values
+        grid_xy = (einops.rearrange(grid_xy, ("n x y -> x y n")) - pos_min) / (
+            pos_max - pos_min
         )  # Rearange and divide  by maximum coordinate
 
         # (Nx, Ny, 1)
@@ -728,7 +726,12 @@ class DatasetABC(ABC):
         gp_min = torch.min(geopotential)
         gp_max = torch.max(geopotential)
         # Rescale geopotential to [0,1]
-        geopotential = (geopotential - gp_min) / (gp_max - gp_min)  # (N_x,N_y, 1)
+        if gp_max != gp_min:
+            geopotential = (geopotential - gp_min) / (gp_max - gp_min)  # (N_x,N_y, 1)
+        else:
+            warnings.warn("Geopotential is constant. Set it to 1")
+            geopotential = geopotential / gp_max
+
         grid_border_mask = torch.tensor(self.border_mask).unsqueeze(2)  # (N_x, N_y,1)
 
         feature_names = []

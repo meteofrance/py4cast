@@ -15,10 +15,10 @@ from lightning.pytorch.profilers import PyTorchProfiler
 from lightning_fabric.utilities import seed
 
 from py4cast.datasets import get_datasets
+from py4cast.datasets import registry as dataset_registry
 from py4cast.datasets.base import DatasetABC, TorchDataloaderSettings
-
-# From the package
 from py4cast.lightning import ArLightningHyperParam, AutoRegressiveLightning
+from py4cast.models import registry as model_registry
 from py4cast.settings import ROOTDIR
 
 
@@ -138,15 +138,16 @@ def main(
         train_dataloaders=train_loader,
         val_dataloaders=val_loader,
     )
+    if not tp.no_log:
+        # If we have saved a model, we test it.
+        best_checkpoint = checkpoint_callback.best_model_path
+        last_checkpoint = checkpoint_callback.last_model_path
 
-    best_checkpoint = checkpoint_callback.best_model_path
-    last_checkpoint = checkpoint_callback.last_model_path
-
-    model_to_test = best_checkpoint if best_checkpoint else last_checkpoint
-    print(
-        f"Testing using {'best' if best_checkpoint else 'last'} model at {model_to_test}"
-    )
-    trainer.test(ckpt_path=model_to_test, dataloaders=test_loader)
+        model_to_test = best_checkpoint if best_checkpoint else last_checkpoint
+        print(
+            f"Testing using {'best' if best_checkpoint else 'last'} model at {model_to_test}"
+        )
+        trainer.test(ckpt_path=model_to_test, dataloaders=test_loader)
 
 
 if __name__ == "__main__":
@@ -172,7 +173,7 @@ if __name__ == "__main__":
         type=str,
         default="titan",
         help="Dataset to use",
-        choices=["titan", "smeagol"],
+        choices=dataset_registry.keys(),
     )
     parser.add_argument(
         "--dataset_conf",
@@ -186,6 +187,7 @@ if __name__ == "__main__":
         type=str,
         default="halfunet",
         help="Neural Network architecture to train",
+        choices=model_registry.keys(),
     )
 
     parser.add_argument(

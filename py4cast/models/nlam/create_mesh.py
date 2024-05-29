@@ -84,6 +84,8 @@ def from_networkx_with_start_index(nx_graph, start_index):
 def mk_2d_graph(xy, nx, ny):
     xm, xM = np.amin(xy[0][0, :]), np.amax(xy[0][0, :])
     ym, yM = np.amin(xy[1][:, 0]), np.amax(xy[1][:, 0])
+    if xm == xM or ym == yM:
+        raise ValueError("Your graph is constant either on x dimension or y dimension.")
 
     # avoid nodes on border
     dx = (xM - xm) / nx
@@ -339,6 +341,7 @@ def build_graph_for_grid(
     mesh_features = [pos / pos_max for pos in mesh_features]
 
     print("In create grid_mesh mesh_pos", mesh_features[0].shape)
+
     # Save mesh positions
     torch_save(
         mesh_features, cache_dir_path / "mesh_features.pt"

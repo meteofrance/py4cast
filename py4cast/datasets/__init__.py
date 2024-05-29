@@ -33,6 +33,13 @@ try:
 except (ImportError, FileNotFoundError, ModuleNotFoundError):
     warnings.warn(f"Could not import TitanDataset. {traceback.format_exc()}")
 
+try:
+    from .dummy import DummyDataset
+
+    registry["dummy"] = (DummyDataset, "")
+except ImportError:
+    warnings.warn(f"Could not import DummyDataset. {traceback.format_exc()}")
+
 
 def get_datasets(
     name: str,
