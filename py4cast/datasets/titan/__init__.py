@@ -419,7 +419,7 @@ class TitanDataset(DatasetABC, Dataset):
         shortnames = {
             "forcing": self.shortnames("forcing"),
             "input_output": self.shortnames("input_output"),
-            "diagnostic": self.shornames("diagnostic"),
+            "diagnostic": self.shortnames("diagnostic"),
         }
         return DatasetInfo(
             name=str(self),
@@ -533,7 +533,7 @@ class TitanDataset(DatasetABC, Dataset):
                     "sin_doy",
                 ],  # doy : day_of_year
                 tensor=self.get_year_hour_forcing(sample).type(torch.float32),
-                names=["out_step", "features"],
+                names=["timestep", "features"],
             )
         ]
         linputs = []
