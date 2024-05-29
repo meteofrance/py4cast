@@ -27,8 +27,9 @@ from py4cast.utils import RegisterFieldsMixin, torch_save
 class TensorWrapper:
     """
     Wrapper around a torch tensor.
-    We do this to allow lightning's introspection to see our batch size
-    and move our tensors to the right device.
+    We do this separated dataclass to allow lightning's introspection to see our batch size
+    and move our tensors to the right device, otherwise we have this error/warning:
+    "Trying to infer the `batch_size` from an ambiguous collection ..."
     """
 
     tensor: torch.Tensor
@@ -221,6 +222,16 @@ class NamedTensor(TensorWrapper):
         except ValueError as ve:
             raise ValueError(f"Dimension {dim_name} not found in {self.names}") from ve
 
+    @cached_property
+    def spatial_dim_idx(self) -> List[int]:
+        """
+        Return the indices of the spatial dimensions in the tensor.
+        """
+        return sorted(
+            self.names.index(name)
+            for name in set(self.SPATIAL_DIM_NAMES).intersection(set(self.names))
+        )
+
     def unsqueeze_and_expand_from_(self, other: "NamedTensor"):
         """
         Unsqueeze and expand the tensor to have the same number of spatial dimensions
@@ -267,6 +278,10 @@ class NamedTensor(TensorWrapper):
                 f"Tensor dim {tensor.dim()} must match number of names {len(names)} with extra batch dim"
             )
         return NamedTensor(tensor, ["batch"] + other.names, other.feature_names.copy())
+
+    @property
+    def device(self) -> torch.device:
+        return self.tensor.device
 
 
 @dataclass(slots=True)
