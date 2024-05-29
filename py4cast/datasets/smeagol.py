@@ -507,7 +507,7 @@ class SmeagolDataset(DatasetABC, Dataset):
                     "sin_hour",
                 ],  # doy : day_of_year
                 tensor=datetime_forcing[:, :2],
-                names=["out_step", "features"],
+                names=["timestep", "features"],
             ),
             NamedTensor(
                 feature_names=[
@@ -515,7 +515,7 @@ class SmeagolDataset(DatasetABC, Dataset):
                     "sin_doy",
                 ],  # doy : day_of_year
                 tensor=datetime_forcing[:, 2:],
-                names=["out_step", "features"],
+                names=["timestep", "features"],
             ),
         ]
         linputs = []
@@ -557,7 +557,7 @@ class SmeagolDataset(DatasetABC, Dataset):
                     tmp_state = NamedTensor(
                         tensor=torch.from_numpy(tmp_in),
                         feature_names=param.parameter_short_name,
-                        names=["in_step", "lat", "lon", "features"],
+                        names=["timestep", "lat", "lon", "features"],
                     )
                     linputs.append(tmp_state)
 
@@ -574,7 +574,7 @@ class SmeagolDataset(DatasetABC, Dataset):
                     tmp_state = NamedTensor(
                         tensor=torch.from_numpy(tmp_in),
                         feature_names=param.parameter_short_name,
-                        names=["out_step", "lat", "lon", "features"],
+                        names=["timestep", "lat", "lon", "features"],
                     )
                     lforcings.append(tmp_state)
                 # Read outputs.
@@ -588,7 +588,7 @@ class SmeagolDataset(DatasetABC, Dataset):
                     tmp_state = NamedTensor(
                         tensor=torch.from_numpy(tmp_out),
                         feature_names=param.parameter_short_name,
-                        names=["out_step", "lat", "lon", "features"],
+                        names=["timestep", "lat", "lon", "features"],
                     )
                     loutputs.append(tmp_state)
             except KeyError as e:
