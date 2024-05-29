@@ -134,8 +134,6 @@ sbatch my_tiny_script.sh
 ```
 
 
-
-
 ## Available datasets
 
 | Dataset  | Domain  | Description    | Documentation  | Maintainer(s) |
@@ -410,7 +408,7 @@ self.test_plotters = [
 ]
 ```
 
-## Experiment tracking
+## Experiment tracking
 
 We use [Tensorboad](https://www.tensorflow.org/tensorboard) to track the experiments. You can launch a tensorboard server using the following command:
 
@@ -448,6 +446,8 @@ Our tests cover:
 ## Continuous Integration
 
 We have a gitlab CI pipeline that runs linting (flake8, isort, black, bandit) and tests on every push to the repository. See the [gitlab-ci.yml](.gitlab-ci.yml) file for more details.
+
+Our CI also launches two runs of the full system (*bin/train.py*) with our **Dummy** dataset using **HiLam** and **HalfUnet32**.
 
 
 ## TLDR design choices
