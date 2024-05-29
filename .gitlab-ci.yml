@@ -17,6 +17,8 @@ complexity:
     - sourcery-analytics assess .
 
 unit_test:
+  tags:
+    - dind
   variables:
     PYTHONPATH: "${PYTHONPATH}:${CI_PROJECT_DIR}"
   stage: test
