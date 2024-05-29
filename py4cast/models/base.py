@@ -3,7 +3,6 @@ Abstract Base Class for all models
 Contains also a few functionnality used in various model.
 """
 from abc import ABC, abstractmethod, abstractproperty
-from dataclasses import dataclass
 from typing import Tuple
 
 import torch

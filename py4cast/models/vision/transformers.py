@@ -6,7 +6,7 @@ and adapted to our needs (upsampler + extra settings)
 
 
 from dataclasses import dataclass
-from functools import cached_property, partial
+from functools import partial
 from math import sqrt
 from typing import Tuple
 

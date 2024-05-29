@@ -4,7 +4,7 @@ for pn-ia.
 """
 from collections import OrderedDict
 from dataclasses import dataclass
-from functools import cached_property, reduce
+from functools import reduce
 
 import torch
 from dataclasses_json import dataclass_json
