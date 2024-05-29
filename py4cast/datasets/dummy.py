@@ -25,8 +25,8 @@ from py4cast.settings import CACHE_DIR
 @dataclass
 class Grid:
     border_size: int = 10
-    x: int = 128  # X dimension
-    y: int = 128  # Y dimension
+    x: int = 64  # X dimension
+    y: int = 64  # Y dimension
 
     @cached_property
     def lat(self) -> np.array:

@@ -23,4 +23,17 @@ unit_test:
     - pip install --timeout 1000 --trusted-host pypi.org --trusted-host files.pythonhosted.org -r requirements.txt
     - pip install --timeout 1000 --trusted-host data.pyg.org --trusted-host pypi.org --trusted-host files.pythonhosted.org pyg-lib==0.4.0 torch-scatter==2.1.2 torch-sparse==0.6.18 torch-cluster==1.6.2 torch-geometric==2.3.1 -f https://data.pyg.org/whl/torch-2.1.2+cpu.html
     - python -m pytest
+
+integration_test:
+  image: pytorch/pytorch:2.1.2-cuda12.1-cudnn8-runtime
+  tags:
+    - dind
+  variables:
+    PYTHONPATH: "${PYTHONPATH}:${CI_PROJECT_DIR}"
+  stage: test
+  script:
+    - pip install --timeout 1000 --trusted-host pypi.org --trusted-host files.pythonhosted.org -r requirements.txt
+    - pip install --timeout 1000 --trusted-host data.pyg.org --trusted-host pypi.org --trusted-host files.pythonhosted.org pyg-lib==0.4.0 torch-scatter==2.1.2 torch-sparse==0.6.18 torch-cluster==1.6.2 torch-geometric==2.3.1 -f https://data.pyg.org/whl/torch-2.1.2+cpu.html
+    - python bin/train.py --model halfunet --model_conf config/halfunet32.json --dataset dummy --epochs 1 --batch_size 1 --num_pred_steps_train 1 --limit_train_batches 1 
+    - python bin/train.py --model hilam --dataset dummy --epochs 1 --batch_size 1 --num_pred_steps_train 1 --limit_train_batches 1 
   
