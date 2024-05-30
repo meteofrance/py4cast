@@ -191,11 +191,11 @@ class Grid:
     @cached_property
     def grid_limits(self):
         conf_ds = xr.open_dataset(SCRATCH_PATH / "conf.grib")
-        grid_limits = [  # In projection
-            float(conf_ds.latitude[self.subgrid[0]].values),  # min x
-            float(conf_ds.latitude[self.subgrid[1] - 1].values),  # max x
+        grid_limits = [  # In projection (llon, ulon, llat, ulat)
             float(conf_ds.longitude[self.subgrid[2]].values),  # min y
             float(conf_ds.longitude[self.subgrid[3] - 1].values),  # max y
+            float(conf_ds.latitude[self.subgrid[1] - 1].values),  # max x
+            float(conf_ds.latitude[self.subgrid[0]].values),  # min x
         ]
         return grid_limits
 

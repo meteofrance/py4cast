@@ -14,7 +14,7 @@ This project started as a fork of neural-lam, a project by Joel Oskarsson, see [
 
 # Table of contents
 
-1. [Environnment variables](#Setting-environment-variables) 
+1. [Environnment variables](#Setting-environment-variables)
 2. [Running at MF](#running-using-runai-météo-france-internal)
 3. [Running using Conda and friends](#running-without-runai )
     1. [Micromamba](#running-using-micromamba)
@@ -31,13 +31,13 @@ This project started as a fork of neural-lam, a project by Joel Oskarsson, see [
 11. [TLDR design choices](#tldr-design-choices)
 
 
-## Setting environment variables 
+## Setting environment variables
 
-In order to be able to run the code on different machines, some environment variables can be set. 
-You may add them in your `.bashrc` or modify them just before launching an experiment. 
+In order to be able to run the code on different machines, some environment variables can be set.
+You may add them in your `.bashrc` or modify them just before launching an experiment.
 
 - `PY4CAST_ROOTDIR` : Specify the ROOT DIR for your experiment. It also modifies the CACHE_DIR.
-- `PY4CAST_SMEAGOL_PATH`: Specify where the smeagol dataset is stored. Only needed if you want to use the smeagol dataset. **Should be moved in the configuration file**.  
+- `PY4CAST_SMEAGOL_PATH`: Specify where the smeagol dataset is stored. Only needed if you want to use the smeagol dataset. **Should be moved in the configuration file**.
 - `PY4CAST_TITAN_PATH`: Specify where the titan dataset is stored. Only needed if you want to use the titan dataset.
 If you plan to use micromamba or conda you should also add `py4cast` to your **PYTHONPATH** by expanding it (Export or change your `PYTHONPATH`).
 
@@ -76,60 +76,60 @@ runai sbatch_multi_node python bin/train.py --dataset smeagol --model hilam
 You can find more details about our **train.py** [here](./bin/Readme.md)
 
 
-## Running without runai 
-### Running using micromamba 
-Please install the environment using : 
+## Running without runai
+### Running using micromamba
+Please install the environment using :
 ```sh
-micromamba create -f env.yaml  
+micromamba create -f env.yaml
 ```
-Then run your classic srun command to get an interactive shell on gpu : 
+Then run your classic srun command to get an interactive shell on gpu :
 ```sh
 srun --job-name="MySuperJob" --cpus-per-task=15 --partition=node3 --gres=gpu:v100:1 --time=10:00:00 --ntasks-per-node=1 --pty bash
 ```
 Activate your environnment :
-```sh 
+```sh
 micromamba activate nlam
 ```
 
-Go to pnia directory and do : 
+Go to pnia directory and do :
 ```sh
 export PYTHONPATH=`pwd`
 ```
-You can also add directly the directory in your `.bashrc`. 
+You can also add directly the directory in your `.bashrc`.
 
-This is done in order to register pnia package in the python path. 
-Then you can do a classical training such as 
-```sh 
-python3.10 bin/train.py  --dataset smeagol --model halfunet --dataset_conf config/smeagoldev.json --limit_train_batches 10 --epochs 2 --strategy scaled_ar
+This is done in order to register pnia package in the python path.
+Then you can do a classical training such as
+```sh
+python3.10 bin/train.py  --dataset smeagol --model halfunet --dataset_conf config/datasets/smeagoldev.json --limit_train_batches 10 --epochs 2 --strategy scaled_ar
 ```
-### Running using conda 
-You can install a conda environment using 
-```sh 
+### Running using conda
+You can install a conda environment using
+```sh
 conda env create --file env_conda.yaml
 ```
-Note that this environment is a bit different from the micromamba one. Both should be merged in a near future. 
+Note that this environment is a bit different from the micromamba one. Both should be merged in a near future.
 
-### Specifying your sbatch card 
-To do so, you will need a small `sh` script. 
+### Specifying your sbatch card
+To do so, you will need a small `sh` script.
 
-```sh 
+```sh
 #!/usr/bin/bash
-#SBATCH --partition=ndl 
-#SBATCH --nodes=1 # Specify the number of GPU node you required 
-#SBATCH --gres=gpu:1 # Specify the number of GPU required per Node 
-#SBATCH --time=05:00:00 # Specify your experiment Time limit 
-#SBATCH --ntasks-per-node=1 # Specify the number of task per node. This should match the number of GPU Required per Node 
+#SBATCH --partition=ndl
+#SBATCH --nodes=1 # Specify the number of GPU node you required
+#SBATCH --gres=gpu:1 # Specify the number of GPU required per Node
+#SBATCH --time=05:00:00 # Specify your experiment Time limit
+#SBATCH --ntasks-per-node=1 # Specify the number of task per node. This should match the number of GPU Required per Node
 
-# Note that other variable could be set (according to you machine). For example you may need to set the number of CPU or the memory used by your experiment. 
-# On our hpc, this is proportional to the number of GPU required per node. This is not the case on other machine (e.g MétéoFrance AILab machine). 
+# Note that other variable could be set (according to you machine). For example you may need to set the number of CPU or the memory used by your experiment.
+# On our hpc, this is proportional to the number of GPU required per node. This is not the case on other machine (e.g MétéoFrance AILab machine).
 
-source ~/.bashrc  # Be sure that all your environment variables are set 
+source ~/.bashrc  # Be sure that all your environment variables are set
 conda activate py4cast # Activate your environment (installed by micromamba or conda)
 cd $PY4CAST_PATH # Go to Py4CAST (you can either add an environment variable or hard code it here)
-# Launch your favorite command. 
+# Launch your favorite command.
 srun python bin/train.py --model halfunet --dataset smeagol --dataset_conf config/smeagolsmall.json --num_pred_steps_val_test 4 --strategy scaled_ar --num_inter_steps 4 --num_input_steps 1 --batch_size 10
 ```
-Then just launch this script using 
+Then just launch this script using
 ```sh
 sbatch my_tiny_script.sh
 ```
@@ -143,9 +143,9 @@ sbatch my_tiny_script.sh
 | smeagol | France | WIP  | WIP |  Vincent Chabot |
 | dummy | WIP  | WIP | WIP |  WIP |
 
-### Adding a new dataset 
-A dataset should expose a few methods to be used in py4cast. 
-It should have 
+### Adding a new dataset
+A dataset should expose a few methods to be used in py4cast.
+It should have
 
 
 ## Available PyTorch's architecture
@@ -172,13 +172,13 @@ runai exec_gpu python bin/train.py --dataset smeagol --model segformer
 You can override some settings of the model using a json config file (here we increase the number of filter to 128 and use ghost modules):
 
 ```bash
-runai exec_gpu python bin/train.py --dataset smeagol --model halfunet --model_conf config/halfunet128_ghost.json
+runai exec_gpu python bin/train.py --dataset smeagol --model halfunet --model_conf config/models/halfunet128_ghost.json
 ```
 
 You can also override the dataset default configuration file:
 
 ```bash
-runai exec_gpu python bin/train.py --dataset smeagol --model halfunet --dataset_conf config/smeagol.json
+runai exec_gpu python bin/train.py --dataset smeagol --model halfunet --dataset_conf config/datasets/smeagol.json
 ```
 
 The figure below illustrates the principal components of the Py4cast architecture.
@@ -424,7 +424,7 @@ runai tensorboard --logdir PATH_TO_YOUR_ROOT_PATH
 
 2. Elsewhere
 
-```bash 
+```bash
 tensorboard --logdir PATH_TO_YOUR_ROOT_PATH
 ```
 
@@ -472,7 +472,3 @@ Our CI also launches two runs of the full system (*bin/train.py*) with our **Dum
 - The distinction between **prognostic** and **diagnostic** variables should be made explicit in the system.
 
 - We should probably reshape back the GNN outputs to (lat, lon) gridded shape as early as possible to have this as a common/standard output format for all the models. This would simplify the post-processing, plotting, ... We still have if statements in the code to handle the different output shapes of the models.
-
-
-
-
