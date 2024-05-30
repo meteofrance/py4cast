@@ -158,6 +158,8 @@ class AutoRegressiveLightning(pl.LightningModule):
         # Register interior and border mask.
         statics.register_buffers(self)
 
+        self.num_spatial_dims = statics.grid_static_features.num_spatial_dims
+
         self.register_buffer(
             "grid_static_features",
             expand_to_batch(statics.grid_static_features.tensor, hparams.batch_size),
@@ -387,18 +389,12 @@ class AutoRegressiveLightning(pl.LightningModule):
         """
         Attach observer when starting test
         """
-        # this is very strange that we need to do that
-        # Think at this statics problem (may be we just need to have a self.statics).
+        metrics = {}
+        for torch_loss, alias in ("L1Loss", "mae"), ("MSELoss", "rmse"):
+            loss = ScaledLoss(torch_loss, reduction="none")
+            loss.prepare(self, self.interior_mask, self.hparams["hparams"].dataset_info)
+            metrics[alias] = loss
 
-        l1_loss = ScaledLoss("L1Loss", reduction="none")
-        rmse_loss = ScaledLoss("MSELoss", reduction="none")
-        l1_loss.prepare(self, self.interior_mask, self.hparams["hparams"].dataset_info)
-        rmse_loss.prepare(
-            self, self.interior_mask, self.hparams["hparams"].dataset_info
-        )
-
-        metrics = {"mae": l1_loss, "rmse": rmse_loss}
-        # I do not like settings things outside the __init__
         self.test_plotters = [
             StateErrorPlot(metrics),
             SpatialErrorPlot(),
@@ -435,7 +431,7 @@ class AutoRegressiveLightning(pl.LightningModule):
         Get the interior mask as a 2d mask.
         Usefull when stored as 1D in statics.
         """
-        if self.model.info.output_dim == 1:
+        if self.num_spatial_dims == 1:
             return einops.rearrange(
                 self.interior_mask, "(x y) h -> x y h", x=self.grid_shape[0]
             )

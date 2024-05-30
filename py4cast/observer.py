@@ -92,7 +92,7 @@ class PredictionPlot(ErrorObserver):
         targ = deepcopy(target).tensor  # In order to not modify the input
 
         # Here we reshape output from GNNS to be on the grid
-        if obj.model.info.output_dim == 1:
+        if prediction.num_spatial_dims == 1:
             pred = einops.rearrange(
                 pred, "b t (x y) n -> b t x y n", x=obj.grid_shape[0]
             )
@@ -275,7 +275,7 @@ class SpatialErrorPlot(ErrorObserver):
     ) -> None:
         spatial_loss = obj.loss(prediction, target, reduce_spatial_dim=False)
         # Getting only spatial loss for the required val_step_errors
-        if obj.model.info.output_dim == 1:
+        if prediction.num_spatial_dims == 1:
             spatial_loss = einops.rearrange(
                 spatial_loss, "b t (x y) -> b t x y ", x=obj.grid_shape[0]
             )

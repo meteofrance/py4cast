@@ -3,7 +3,6 @@ Abstract Base Class for all models
 Contains also a few functionnality used in various model.
 """
 from abc import ABC, abstractmethod, abstractproperty
-from dataclasses import dataclass
 from typing import Tuple
 
 import torch
@@ -42,15 +41,6 @@ class ModelABC(ABC):
         """
         Indicates if our model supports onnx export.
         """
-
-
-@dataclass(slots=True)
-class ModelInfo:
-    """
-    Information specific to a model
-    """
-
-    output_dim: int  # Spatial dimension of the output
 
 
 def offload_to_cpu(model: nn.ModuleList):
