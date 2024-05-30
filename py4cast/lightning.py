@@ -158,7 +158,7 @@ class AutoRegressiveLightning(pl.LightningModule):
         # Register interior and border mask.
         statics.register_buffers(self)
 
-        self.num_spatial_dim = statics.grid_static_features.num_spatial_dim
+        self.num_spatial_dims = statics.grid_static_features.num_spatial_dims
 
         self.register_buffer(
             "grid_static_features",
@@ -431,7 +431,7 @@ class AutoRegressiveLightning(pl.LightningModule):
         Get the interior mask as a 2d mask.
         Usefull when stored as 1D in statics.
         """
-        if self.num_spatial_dim == 1:
+        if self.num_spatial_dims == 1:
             return einops.rearrange(
                 self.interior_mask, "(x y) h -> x y h", x=self.grid_shape[0]
             )
