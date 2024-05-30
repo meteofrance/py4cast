@@ -5,6 +5,7 @@ for pn-ia.
 from collections import OrderedDict
 from dataclasses import dataclass
 from functools import reduce
+from typing import Tuple
 
 import torch
 from dataclasses_json import dataclass_json
@@ -67,6 +68,8 @@ class GhostModule(nn.Module):
 class HalfUnet(ModelABC, nn.Module):
     settings_kls = HalfUnetSettings
     onnx_supported = True
+    input_dims: Tuple[str, ...] = ("batch", "height", "width", "features")
+    output_dims: Tuple[str, ...] = ("batch", "height", "width", "features")
 
     def __init__(
         self,
@@ -265,6 +268,8 @@ class Unet(ModelABC, nn.Module):
 
     settings_kls = UnetSettings
     onnx_supported = True
+    input_dims: Tuple[str, ...] = ("batch", "height", "width", "features")
+    output_dims: Tuple[str, ...] = ("batch", "height", "width", "features")
 
     def __init__(
         self,

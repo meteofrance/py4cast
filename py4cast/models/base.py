@@ -42,6 +42,18 @@ class ModelABC(ABC):
         Indicates if our model supports onnx export.
         """
 
+    @abstractproperty
+    def input_dims(self) -> Tuple[str, ...]:
+        """
+        List the names of the input dimensions.
+        """
+
+    @abstractproperty
+    def output_dims(self) -> Tuple[str, ...]:
+        """
+        List the names of the output dimensions.
+        """
+
 
 def offload_to_cpu(model: nn.ModuleList):
     return nn.ModuleList([offload_wrapper(x) for x in model])

@@ -222,6 +222,8 @@ class Segformer(ModelABC, nn.Module):
 
     onnx_supported = False
     settings_kls = SegformerSettings
+    input_dims: Tuple[str, ...] = ("batch", "height", "width", "features")
+    output_dims: Tuple[str, ...] = ("batch", "height", "width", "features")
 
     def __init__(
         self,
