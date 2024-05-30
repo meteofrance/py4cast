@@ -406,7 +406,7 @@ class TitanDataset(DatasetABC, Dataset):
         self.params = params
         self.settings = settings
         self._cache_dir = CACHE_DIR / "datasets" / str(self)
-        self.shuffle = self.split == "train"
+        self.shuffle = self.period.name == "train"
         self.cache_dir.mkdir(parents=True, exist_ok=True)
 
     @cached_property
@@ -656,10 +656,6 @@ class TitanDataset(DatasetABC, Dataset):
     @property
     def border_mask(self) -> np.array:
         return self.grid.border_mask
-
-    @property
-    def split(self) -> Literal["train", "valid", "test"]:
-        return self.period.name
 
     def shortnames(
         self,

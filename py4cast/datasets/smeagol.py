@@ -729,10 +729,6 @@ class SmeagolDataset(DatasetABC, Dataset):
     def border_mask(self) -> np.array:
         return self.grid.border_mask
 
-    @property
-    def split(self) -> Literal["train", "valid", "test"]:
-        return self.period.name
-
     def __get_params_attr(
         self,
         attribute: str,
