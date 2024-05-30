@@ -1,6 +1,6 @@
 from copy import deepcopy
 from dataclasses import dataclass
-from functools import lru_cache
+from functools import cached_property
 from pathlib import Path
 from typing import List, Tuple, Union
 
@@ -157,6 +157,8 @@ class AutoRegressiveLightning(pl.LightningModule):
         statics = self.model.transform_statics(statics)
         # Register interior and border mask.
         statics.register_buffers(self)
+
+        self.num_spatial_dim = statics.grid_static_features.num_spatial_dim
 
         self.register_buffer(
             "grid_static_features",
@@ -423,13 +425,13 @@ class AutoRegressiveLightning(pl.LightningModule):
         for plotter in self.test_plotters:
             plotter.update(self, prediction=prediction, target=target)
 
-    @lru_cache(maxsize=1)
-    def interior_2d(self, num_spatial_dim: int) -> torch.Tensor:
+    @cached_property
+    def interior_2d(self) -> torch.Tensor:
         """
         Get the interior mask as a 2d mask.
         Usefull when stored as 1D in statics.
         """
-        if num_spatial_dim == 1:
+        if self.num_spatial_dim == 1:
             return einops.rearrange(
                 self.interior_mask, "(x y) h -> x y h", x=self.grid_shape[0]
             )

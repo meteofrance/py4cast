@@ -163,7 +163,7 @@ class PredictionPlot(ErrorObserver):
                         plot_prediction(
                             pred_t[:, :, var_i],
                             target_t[:, :, var_i],
-                            obj.interior_2d(num_spatial_dims)[:, :, 0],
+                            obj.interior_2d[:, :, 0],
                             title=f"{var_name} ({var_unit}), "
                             f"t={t_i} ({obj.hparams['hparams'].dataset_info.step_duration*t_i} h)",
                             vrange=var_vrange,
@@ -299,7 +299,7 @@ class SpatialErrorPlot(ErrorObserver):
             loss_map_figs = [
                 plot_spatial_error(
                     loss_map,
-                    obj.interior_2d(self.num_spatial_dims)[:, :, 0],
+                    obj.interior_2d[:, :, 0],
                     title=f"{self.prefix} loss, t={t_i} ({obj.hparams['hparams'].dataset_info.step_duration*t_i} h)",
                     domain_info=obj.hparams["hparams"].dataset_info.domain_info,
                 )
