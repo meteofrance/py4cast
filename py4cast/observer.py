@@ -92,8 +92,7 @@ class PredictionPlot(ErrorObserver):
         targ = deepcopy(target).tensor  # In order to not modify the input
 
         # Here we reshape output from GNNS to be on the grid
-        num_spatial_dims = prediction.num_spatial_dims
-        if num_spatial_dims == 1:
+        if prediction.num_spatial_dims == 1:
             pred = einops.rearrange(
                 pred, "b t (x y) n -> b t x y n", x=obj.grid_shape[0]
             )
