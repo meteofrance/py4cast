@@ -154,6 +154,8 @@ class BaseGraphModel(ModelABC, nn.Module):
     settings_kls = GraphLamSettings
     hierarchical = False
     onnx_supported = False
+    input_dims: str = ("batch", "ngrid", "features")
+    output_dims: str = ("batch", "ngrid", "features")
 
     @classmethod
     def rank_zero_setup(cls, settings: GraphLamSettings, statics: Statics):
