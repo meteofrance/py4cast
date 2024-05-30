@@ -1,23 +1,23 @@
 {
     "periods": {
         "train": {
-            "start": 2023030106,
-            "end": 2023030918,
+            "start": 2023010106,
+            "end": 2023053123,
             "step": 3
         },
         "valid": {
-            "start": 2023031006,
-            "end": 2023031918,
+            "start": 2023060100,
+            "end": 2023083123,
             "step": 3
         },
         "test": {
-            "start": 2023032006,
-            "end": 2023033118,
+            "start": 2023090100,
+            "end": 2023123123,
             "step": 3
         }
     },
     "grid":{
-        "name": "PAAROME_1S100", 
+        "name": "PAAROME_1S100",
         "border_size": 0,
         "subgrid": [383,1407,888,1912]
     },
@@ -46,6 +46,6 @@
         "aro_r2": {
             "levels": [2],
             "kind": "input_output"
-        }        
+        }
     }
 }

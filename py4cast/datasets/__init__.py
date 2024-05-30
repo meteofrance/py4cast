@@ -15,7 +15,7 @@ registry = {}
 # NEW DATASETS MUST BE REGISTERED HERE
 
 
-default_config_root = Path(__file__).parents[2] / "config"
+default_config_root = Path(__file__).parents[2] / "config/datasets/"
 
 
 try:

@@ -1,0 +1,1010 @@
+GRIB_PARAMS:
+  ANTJP7CLIM_1S100_60_SOL.grib:
+  - ant_prec
+  PAAROME_1S100_ECH0_10M.grib:
+  - aro_u10
+  - aro_v10
+  PAAROME_1S100_ECH0_2M.grib:
+  - aro_t2m
+  - aro_r2
+  PAAROME_1S100_ECH0_SOL.grib:
+  - aro_sd
+  PAAROME_1S100_ECH1_10M.grib:
+  - aro_ugust
+  - aro_vgust
+  PAAROME_1S100_ECH1_SOL.grib:
+  - aro_tp
+  - aro_tirf
+  - aro_sprate
+  PAAROME_1S40_ECH0_ISOBARE.grib:
+  - aro_z
+  - aro_t
+  - aro_u
+  - aro_v
+  - aro_wz
+  - aro_r
+  - aro_ciwc
+  - aro_clwc
+  - aro_crwc
+  - aro_cswc
+  - aro_unknown
+  PAAROME_1S40_ECH0_MER.grib:
+  - aro_prmsl
+  PAAROME_1S40_ECH0_SOL.grib:
+  - aro_tciwv
+  PAAROME_1S40_ECH1_SOL.grib:
+  - aro_str
+  - aro_ssr
+  PA_01D_10M.grib:
+  - arp_u10
+  - arp_v10
+  PA_01D_2M.grib:
+  - arp_t2m
+  - arp_r2
+  PA_01D_ISOBARE.grib:
+  - arp_z
+  - arp_t
+  - arp_u
+  - arp_v
+  - arp_r
+  PA_01D_MER.grib:
+  - arp_prmsl
+GRIDS:
+  ANTJP7CLIM_1S100:
+    extent: &id001
+    - 51.5
+    - 41.0
+    - -6.0
+    - 10.5
+    prefix: ant
+    resolution: 0.01
+    size: &id002
+    - 1051
+    - 1651
+  PAAROME_1S100:
+    extent: &id005
+    - 55.4
+    - 37.5
+    - -12.0
+    - 16.0
+    prefix: aro
+    resolution: 0.01
+    size: &id006
+    - 1791
+    - 2801
+  PAAROME_1S40:
+    extent: &id003
+    - 55.4
+    - 37.5
+    - -12.0
+    - 16.0
+    prefix: aro
+    resolution: 0.25
+    size: &id004
+    - 717
+    - 1121
+  PA_01D:
+    extent: &id007
+    - 72.0
+    - 20.0
+    - -32.0
+    - 42.0
+    prefix: arp
+    resolution: 0.1
+    size: &id008
+    - 521
+    - 741
+ISOBARIC_LEVELS_HPA:
+- 1000
+- 950
+- 925
+- 900
+- 850
+- 800
+- 750
+- 700
+- 650
+- 600
+- 550
+- 500
+- 450
+- 400
+- 350
+- 300
+- 275
+- 250
+- 225
+- 200
+- 175
+- 150
+- 125
+- 100
+WEATHER_PARAMS:
+  ant_prec:
+    cumulative: true
+    extent: *id001
+    grib: ANTJP7CLIM_1S100_60_SOL.grib
+    grid: ANTJP7CLIM_1S100
+    levels: 0
+    long_name: Antilope Precipitation
+    model: Antilope
+    name: ant_prec
+    param: prec
+    prefix_model: ant
+    shape: *id002
+    type_level: surface
+    unit: kg m**-2
+  aro_ciwc:
+    cumulative: false
+    extent: *id003
+    grib: PAAROME_1S40_ECH0_ISOBARE.grib
+    grid: PAAROME_1S40
+    levels:
+    - 1000
+    - 950
+    - 925
+    - 900
+    - 850
+    - 800
+    - 750
+    - 700
+    - 650
+    - 600
+    - 550
+    - 500
+    - 450
+    - 400
+    - 350
+    - 300
+    - 275
+    - 250
+    - 225
+    - 200
+    - 175
+    - 150
+    - 125
+    - 100
+    long_name: Arome Specific cloud ice water content
+    model: Arome
+    name: aro_ciwc
+    param: ciwc
+    prefix_model: aro
+    shape: *id004
+    type_level: isobaricInhPa
+    unit: kg kg**-1
+  aro_clwc:
+    cumulative: false
+    extent: *id003
+    grib: PAAROME_1S40_ECH0_ISOBARE.grib
+    grid: PAAROME_1S40
+    levels:
+    - 1000
+    - 950
+    - 925
+    - 900
+    - 850
+    - 800
+    - 750
+    - 700
+    - 650
+    - 600
+    - 550
+    - 500
+    - 450
+    - 400
+    - 350
+    - 300
+    - 275
+    - 250
+    - 225
+    - 200
+    - 175
+    - 150
+    - 125
+    - 100
+    long_name: Arome Specific cloud liquid water content
+    model: Arome
+    name: aro_clwc
+    param: clwc
+    prefix_model: aro
+    shape: *id004
+    type_level: isobaricInhPa
+    unit: kg kg**-1
+  aro_crwc:
+    cumulative: false
+    extent: *id003
+    grib: PAAROME_1S40_ECH0_ISOBARE.grib
+    grid: PAAROME_1S40
+    levels:
+    - 1000
+    - 950
+    - 925
+    - 900
+    - 850
+    - 800
+    - 750
+    - 700
+    - 650
+    - 600
+    - 550
+    - 500
+    - 450
+    - 400
+    - 350
+    - 300
+    - 275
+    - 250
+    - 225
+    - 200
+    - 175
+    - 150
+    - 125
+    - 100
+    long_name: Arome Specific rain water content
+    model: Arome
+    name: aro_crwc
+    param: crwc
+    prefix_model: aro
+    shape: *id004
+    type_level: isobaricInhPa
+    unit: kg kg**-1
+  aro_cswc:
+    cumulative: false
+    extent: *id003
+    grib: PAAROME_1S40_ECH0_ISOBARE.grib
+    grid: PAAROME_1S40
+    levels:
+    - 1000
+    - 950
+    - 925
+    - 900
+    - 850
+    - 800
+    - 750
+    - 700
+    - 650
+    - 600
+    - 550
+    - 500
+    - 450
+    - 400
+    - 350
+    - 300
+    - 275
+    - 250
+    - 225
+    - 200
+    - 175
+    - 150
+    - 125
+    - 100
+    long_name: Arome Specific snow water content
+    model: Arome
+    name: aro_cswc
+    param: cswc
+    prefix_model: aro
+    shape: *id004
+    type_level: isobaricInhPa
+    unit: kg kg**-1
+  aro_prmsl:
+    cumulative: false
+    extent: *id003
+    grib: PAAROME_1S40_ECH0_MER.grib
+    grid: PAAROME_1S40
+    levels: 0
+    long_name: Arome Pressure reduced to MSL
+    model: Arome
+    name: aro_prmsl
+    param: prmsl
+    prefix_model: aro
+    shape: *id004
+    type_level: meanSea
+    unit: Pa
+  aro_r:
+    cumulative: false
+    extent: *id003
+    grib: PAAROME_1S40_ECH0_ISOBARE.grib
+    grid: PAAROME_1S40
+    levels:
+    - 1000
+    - 950
+    - 925
+    - 900
+    - 850
+    - 800
+    - 750
+    - 700
+    - 650
+    - 600
+    - 550
+    - 500
+    - 450
+    - 400
+    - 350
+    - 300
+    - 275
+    - 250
+    - 225
+    - 200
+    - 175
+    - 150
+    - 125
+    - 100
+    long_name: Arome Relative humidity
+    model: Arome
+    name: aro_r
+    param: r
+    prefix_model: aro
+    shape: *id004
+    type_level: isobaricInhPa
+    unit: '%'
+  aro_r2:
+    cumulative: false
+    extent: *id005
+    grib: PAAROME_1S100_ECH0_2M.grib
+    grid: PAAROME_1S100
+    levels: 2
+    long_name: Arome 2 metre relative humidity
+    model: Arome
+    name: aro_r2
+    param: r2
+    prefix_model: aro
+    shape: *id006
+    type_level: heightAboveGround
+    unit: '%'
+  aro_sd:
+    cumulative: false
+    extent: *id005
+    grib: PAAROME_1S100_ECH0_SOL.grib
+    grid: PAAROME_1S100
+    levels: 0
+    long_name: Arome Snow depth water equivalent
+    model: Arome
+    name: aro_sd
+    param: sd
+    prefix_model: aro
+    shape: *id006
+    type_level: surface
+    unit: kg m**-2
+  aro_sprate:
+    cumulative: true
+    extent: *id005
+    grib: PAAROME_1S100_ECH1_SOL.grib
+    grid: PAAROME_1S100
+    levels: 0
+    long_name: Arome Snow precipitation rate
+    model: Arome
+    name: aro_sprate
+    param: sprate
+    prefix_model: aro
+    shape: *id006
+    type_level: surface
+    unit: kg m**-2 s**-1
+  aro_ssr:
+    cumulative: true
+    extent: *id003
+    grib: PAAROME_1S40_ECH1_SOL.grib
+    grid: PAAROME_1S40
+    levels: 0
+    long_name: Arome Surface net solar radiation
+    model: Arome
+    name: aro_ssr
+    param: ssr
+    prefix_model: aro
+    shape: *id004
+    type_level: surface
+    unit: J m**-2
+  aro_str:
+    cumulative: true
+    extent: *id003
+    grib: PAAROME_1S40_ECH1_SOL.grib
+    grid: PAAROME_1S40
+    levels: 0
+    long_name: Arome Surface net thermal radiation
+    model: Arome
+    name: aro_str
+    param: str
+    prefix_model: aro
+    shape: *id004
+    type_level: surface
+    unit: J m**-2
+  aro_t:
+    cumulative: false
+    extent: *id003
+    grib: PAAROME_1S40_ECH0_ISOBARE.grib
+    grid: PAAROME_1S40
+    levels:
+    - 1000
+    - 950
+    - 925
+    - 900
+    - 850
+    - 800
+    - 750
+    - 700
+    - 650
+    - 600
+    - 550
+    - 500
+    - 450
+    - 400
+    - 350
+    - 300
+    - 275
+    - 250
+    - 225
+    - 200
+    - 175
+    - 150
+    - 125
+    - 100
+    long_name: Arome Temperature
+    model: Arome
+    name: aro_t
+    param: t
+    prefix_model: aro
+    shape: *id004
+    type_level: isobaricInhPa
+    unit: K
+  aro_t2m:
+    cumulative: false
+    extent: *id005
+    grib: PAAROME_1S100_ECH0_2M.grib
+    grid: PAAROME_1S100
+    levels: 2
+    long_name: Arome 2 metre temperature
+    model: Arome
+    name: aro_t2m
+    param: t2m
+    prefix_model: aro
+    shape: *id006
+    type_level: heightAboveGround
+    unit: K
+  aro_tciwv:
+    cumulative: false
+    extent: *id003
+    grib: PAAROME_1S40_ECH0_SOL.grib
+    grid: PAAROME_1S40
+    levels: 0
+    long_name: Arome Total column integrated water vapour
+    model: Arome
+    name: aro_tciwv
+    param: tciwv
+    prefix_model: aro
+    shape: *id004
+    type_level: surface
+    unit: kg m**-2
+  aro_tirf:
+    cumulative: true
+    extent: *id005
+    grib: PAAROME_1S100_ECH1_SOL.grib
+    grid: PAAROME_1S100
+    levels: 0
+    long_name: Arome Time integral of rain flux
+    model: Arome
+    name: aro_tirf
+    param: tirf
+    prefix_model: aro
+    shape: *id006
+    type_level: surface
+    unit: kg m**-2
+  aro_tp:
+    cumulative: true
+    extent: *id005
+    grib: PAAROME_1S100_ECH1_SOL.grib
+    grid: PAAROME_1S100
+    levels: 0
+    long_name: Arome Total Precipitation
+    model: Arome
+    name: aro_tp
+    param: tp
+    prefix_model: aro
+    shape: *id006
+    type_level: surface
+    unit: kg m**-2
+  aro_u:
+    cumulative: false
+    extent: *id003
+    grib: PAAROME_1S40_ECH0_ISOBARE.grib
+    grid: PAAROME_1S40
+    levels:
+    - 1000
+    - 950
+    - 925
+    - 900
+    - 850
+    - 800
+    - 750
+    - 700
+    - 650
+    - 600
+    - 550
+    - 500
+    - 450
+    - 400
+    - 350
+    - 300
+    - 275
+    - 250
+    - 225
+    - 200
+    - 175
+    - 150
+    - 125
+    - 100
+    long_name: Arome U component of wind
+    model: Arome
+    name: aro_u
+    param: u
+    prefix_model: aro
+    shape: *id004
+    type_level: isobaricInhPa
+    unit: m s**-1
+  aro_u10:
+    cumulative: false
+    extent: *id005
+    grib: PAAROME_1S100_ECH0_10M.grib
+    grid: PAAROME_1S100
+    levels: 10
+    long_name: Arome 10 metre U wind component
+    model: Arome
+    name: aro_u10
+    param: u10
+    prefix_model: aro
+    shape: *id006
+    type_level: heightAboveGround
+    unit: m s**-1
+  aro_ugust:
+    cumulative: false
+    extent: *id005
+    grib: PAAROME_1S100_ECH1_10M.grib
+    grid: PAAROME_1S100
+    levels: 10
+    long_name: Arome u-component of wind (gust)
+    model: Arome
+    name: aro_ugust
+    param: ugust
+    prefix_model: aro
+    shape: *id006
+    type_level: heightAboveGround
+    unit: m s**-1
+  aro_unknown:
+    cumulative: false
+    extent: *id003
+    grib: PAAROME_1S40_ECH0_ISOBARE.grib
+    grid: PAAROME_1S40
+    levels:
+    - 1000
+    - 950
+    - 925
+    - 900
+    - 850
+    - 800
+    - 750
+    - 700
+    - 650
+    - 600
+    - 550
+    - 500
+    - 450
+    - 400
+    - 350
+    - 300
+    - 275
+    - 250
+    - 225
+    - 200
+    - 175
+    - 150
+    - 125
+    - 100
+    long_name: Arome unknown
+    model: Arome
+    name: aro_unknown
+    param: unknown
+    prefix_model: aro
+    shape: *id004
+    type_level: isobaricInhPa
+    unit: unknown
+  aro_v:
+    cumulative: false
+    extent: *id003
+    grib: PAAROME_1S40_ECH0_ISOBARE.grib
+    grid: PAAROME_1S40
+    levels:
+    - 1000
+    - 950
+    - 925
+    - 900
+    - 850
+    - 800
+    - 750
+    - 700
+    - 650
+    - 600
+    - 550
+    - 500
+    - 450
+    - 400
+    - 350
+    - 300
+    - 275
+    - 250
+    - 225
+    - 200
+    - 175
+    - 150
+    - 125
+    - 100
+    long_name: Arome V component of wind
+    model: Arome
+    name: aro_v
+    param: v
+    prefix_model: aro
+    shape: *id004
+    type_level: isobaricInhPa
+    unit: m s**-1
+  aro_v10:
+    cumulative: false
+    extent: *id005
+    grib: PAAROME_1S100_ECH0_10M.grib
+    grid: PAAROME_1S100
+    levels: 10
+    long_name: Arome 10 metre V wind component
+    model: Arome
+    name: aro_v10
+    param: v10
+    prefix_model: aro
+    shape: *id006
+    type_level: heightAboveGround
+    unit: m s**-1
+  aro_vgust:
+    cumulative: false
+    extent: *id005
+    grib: PAAROME_1S100_ECH1_10M.grib
+    grid: PAAROME_1S100
+    levels: 10
+    long_name: Arome v-component of wind (gust)
+    model: Arome
+    name: aro_vgust
+    param: vgust
+    prefix_model: aro
+    shape: *id006
+    type_level: heightAboveGround
+    unit: m s**-1
+  aro_wz:
+    cumulative: false
+    extent: *id003
+    grib: PAAROME_1S40_ECH0_ISOBARE.grib
+    grid: PAAROME_1S40
+    levels:
+    - 1000
+    - 950
+    - 925
+    - 900
+    - 850
+    - 800
+    - 750
+    - 700
+    - 650
+    - 600
+    - 550
+    - 500
+    - 450
+    - 400
+    - 350
+    - 300
+    - 275
+    - 250
+    - 225
+    - 200
+    - 175
+    - 150
+    - 125
+    - 100
+    long_name: Arome Geometric vertical velocity
+    model: Arome
+    name: aro_wz
+    param: wz
+    prefix_model: aro
+    shape: *id004
+    type_level: isobaricInhPa
+    unit: m s**-1
+  aro_z:
+    cumulative: false
+    extent: *id003
+    grib: PAAROME_1S40_ECH0_ISOBARE.grib
+    grid: PAAROME_1S40
+    levels:
+    - 1000
+    - 950
+    - 925
+    - 900
+    - 850
+    - 800
+    - 750
+    - 700
+    - 650
+    - 600
+    - 550
+    - 500
+    - 450
+    - 400
+    - 350
+    - 300
+    - 275
+    - 250
+    - 225
+    - 200
+    - 175
+    - 150
+    - 125
+    - 100
+    long_name: Arome Geopotential
+    model: Arome
+    name: aro_z
+    param: z
+    prefix_model: aro
+    shape: *id004
+    type_level: isobaricInhPa
+    unit: m**2 s**-2
+  arp_prmsl:
+    cumulative: false
+    extent: *id007
+    grib: PA_01D_MER.grib
+    grid: PA_01D
+    levels: 0
+    long_name: Arpege Pressure reduced to MSL
+    model: Arpege
+    name: arp_prmsl
+    param: prmsl
+    prefix_model: arp
+    shape: *id008
+    type_level: meanSea
+    unit: Pa
+  arp_r:
+    cumulative: false
+    extent: *id007
+    grib: PA_01D_ISOBARE.grib
+    grid: PA_01D
+    levels:
+    - 1000
+    - 950
+    - 925
+    - 900
+    - 850
+    - 800
+    - 750
+    - 700
+    - 650
+    - 600
+    - 550
+    - 500
+    - 450
+    - 400
+    - 350
+    - 300
+    - 275
+    - 250
+    - 225
+    - 200
+    - 175
+    - 150
+    - 125
+    - 100
+    long_name: Arpege Relative humidity
+    model: Arpege
+    name: arp_r
+    param: r
+    prefix_model: arp
+    shape: *id008
+    type_level: isobaricInhPa
+    unit: '%'
+  arp_r2:
+    cumulative: false
+    extent: *id007
+    grib: PA_01D_2M.grib
+    grid: PA_01D
+    levels: 2
+    long_name: Arpege 2 metre relative humidity
+    model: Arpege
+    name: arp_r2
+    param: r2
+    prefix_model: arp
+    shape: *id008
+    type_level: heightAboveGround
+    unit: '%'
+  arp_t:
+    cumulative: false
+    extent: *id007
+    grib: PA_01D_ISOBARE.grib
+    grid: PA_01D
+    levels:
+    - 1000
+    - 950
+    - 925
+    - 900
+    - 850
+    - 800
+    - 750
+    - 700
+    - 650
+    - 600
+    - 550
+    - 500
+    - 450
+    - 400
+    - 350
+    - 300
+    - 275
+    - 250
+    - 225
+    - 200
+    - 175
+    - 150
+    - 125
+    - 100
+    long_name: Arpege Temperature
+    model: Arpege
+    name: arp_t
+    param: t
+    prefix_model: arp
+    shape: *id008
+    type_level: isobaricInhPa
+    unit: K
+  arp_t2m:
+    cumulative: false
+    extent: *id007
+    grib: PA_01D_2M.grib
+    grid: PA_01D
+    levels: 2
+    long_name: Arpege 2 metre temperature
+    model: Arpege
+    name: arp_t2m
+    param: t2m
+    prefix_model: arp
+    shape: *id008
+    type_level: heightAboveGround
+    unit: K
+  arp_u:
+    cumulative: false
+    extent: *id007
+    grib: PA_01D_ISOBARE.grib
+    grid: PA_01D
+    levels:
+    - 1000
+    - 950
+    - 925
+    - 900
+    - 850
+    - 800
+    - 750
+    - 700
+    - 650
+    - 600
+    - 550
+    - 500
+    - 450
+    - 400
+    - 350
+    - 300
+    - 275
+    - 250
+    - 225
+    - 200
+    - 175
+    - 150
+    - 125
+    - 100
+    long_name: Arpege U component of wind
+    model: Arpege
+    name: arp_u
+    param: u
+    prefix_model: arp
+    shape: *id008
+    type_level: isobaricInhPa
+    unit: m s**-1
+  arp_u10:
+    cumulative: false
+    extent: *id007
+    grib: PA_01D_10M.grib
+    grid: PA_01D
+    levels: 10
+    long_name: Arpege 10 metre U wind component
+    model: Arpege
+    name: arp_u10
+    param: u10
+    prefix_model: arp
+    shape: *id008
+    type_level: heightAboveGround
+    unit: m s**-1
+  arp_v:
+    cumulative: false
+    extent: *id007
+    grib: PA_01D_ISOBARE.grib
+    grid: PA_01D
+    levels:
+    - 1000
+    - 950
+    - 925
+    - 900
+    - 850
+    - 800
+    - 750
+    - 700
+    - 650
+    - 600
+    - 550
+    - 500
+    - 450
+    - 400
+    - 350
+    - 300
+    - 275
+    - 250
+    - 225
+    - 200
+    - 175
+    - 150
+    - 125
+    - 100
+    long_name: Arpege V component of wind
+    model: Arpege
+    name: arp_v
+    param: v
+    prefix_model: arp
+    shape: *id008
+    type_level: isobaricInhPa
+    unit: m s**-1
+  arp_v10:
+    cumulative: false
+    extent: *id007
+    grib: PA_01D_10M.grib
+    grid: PA_01D
+    levels: 10
+    long_name: Arpege 10 metre V wind component
+    model: Arpege
+    name: arp_v10
+    param: v10
+    prefix_model: arp
+    shape: *id008
+    type_level: heightAboveGround
+    unit: m s**-1
+  arp_z:
+    cumulative: false
+    extent: *id007
+    grib: PA_01D_ISOBARE.grib
+    grid: PA_01D
+    levels:
+    - 1000
+    - 950
+    - 925
+    - 900
+    - 850
+    - 800
+    - 750
+    - 700
+    - 650
+    - 600
+    - 550
+    - 500
+    - 450
+    - 400
+    - 350
+    - 300
+    - 275
+    - 250
+    - 225
+    - 200
+    - 175
+    - 150
+    - 125
+    - 100
+    long_name: Arpege Geopotential
+    model: Arpege
+    name: arp_z
+    param: z
+    prefix_model: arp
+    shape: *id008
+    type_level: isobaricInhPa
+    unit: m**2 s**-2
