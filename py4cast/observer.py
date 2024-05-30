@@ -281,7 +281,6 @@ class SpatialErrorPlot(ErrorObserver):
                 spatial_loss, "b t (x y) -> b t x y ", x=obj.grid_shape[0]
             )
         self.spatial_loss_maps.append(spatial_loss)  # (B, N_log, N_lat, N_lon)
-        self.num_spatial_dims = prediction.num_spatial_dims
 
     def on_step_end(self, obj: "AutoRegressiveLightning") -> None:
         """
