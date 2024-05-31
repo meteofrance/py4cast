@@ -153,7 +153,7 @@ class TitanDataset(DatasetABC, Dataset):
 
 ### Adding Training Plots
 
-Plots are done using the **matplotlib** library. We wrap each plot in a **ErrorObserver** class. Below is an example of a plot that shows the spatial distribution of the error for all the variables together. See our [observer.py](py4cast/observer.py) for more examples.
+Plots are done using the **matplotlib** library. We wrap each plot in a **ErrorObserver** class. Below is an example of a plot that shows the spatial distribution of the error for all the variables together. See our [observer.py](../py4cast/observer.py#L40) for more examples.
 
 ```python
 class SpatialErrorPlot(ErrorObserver):
@@ -214,6 +214,10 @@ Our tests cover:
 
 ### Continuous Integration
 
-We have a gitlab CI pipeline that runs linting (flake8, isort, black, bandit) and tests on every push to the repository. See the [gitlab-ci.yml](.gitlab-ci.yml) file for more details.
+We have a gitlab CI pipeline that runs linting (flake8, isort, black, bandit) and tests on every push to the repository. See the [gitlab-ci.yml](../.gitlab-ci.yml) file for more details.
 
 Our CI also launches two runs of the full system (*bin/train.py*) with our **Dummy** dataset using **HiLam** and **HalfUnet32**.
+
+```bash
+python bin/train.py --model hilam --dataset dummy --epochs 1 --batch_size 1 --num_pred_steps_train 1 --limit_train_batches 1
+```
