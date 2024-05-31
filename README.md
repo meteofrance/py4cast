@@ -319,6 +319,10 @@ The figure below illustrates the principal components of the Py4cast architectur
 
 - **Adding a model, a dataset, a loss, a plot, a training strategy, ... should be as simple as creating a new Python class that complies with the interface contract**.
 
+- Dataset produce **Item**, collated into **ItemBatch**, both having **NamedTensor** attributes. 
+
+- Dataset produce tensors with the following dimensions: (batch, timestep, lat, lon, features). Models can flatten or reshape spatial dimension in the **prepare_batch** but the rest of the system expects **features** to be **always the last dimension of the tensors**.  
+
 - Neural network architectures are Python classes that inherit from both **ModelABC** and PyTorch's **nn.Module**. The later means it is quick to insert a third-party pure PyTorch model in the system (see for instance the code for Lucidrains' Segformer or a U-Net).
 
 - We use **dataclasses** and **dataclass_json** to define the settings whenever possible. This allows us to easily serialize and deserialize the settings to/from json files with Schema validation.

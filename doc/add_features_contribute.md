@@ -23,12 +23,13 @@ class NewModel(ModelABC, nn.Module):
     input_dims: Tuple[str, ...] = ("batch", "height", "width", "features")
     output_dims: Tuple[str, ...] = ("batch", "height", "width", "features")
 ```
+2. **features** MUST be the last dimension both for the input and output tensors. See our Half-UNet implementation for how to deal with that in forward pass [here](../py4cast/models/vision/conv.py#L163).
 
-2. The **onnx_supported** attribute MUST be present and set to **True** if the architecture is onnx exportable, see [our unit tests](tests/test_models.py).
+3. The **onnx_supported** attribute MUST be present and set to **True** if the architecture is onnx exportable, see [our unit tests](tests/test_models.py).
 
-3. the **input_dims** and **output_dims** attributes MUST be present to explicit the model's input and output tensor shapes.
+4. the **input_dims** and **output_dims** attributes MUST be present to explicit the model's input and output tensor shapes.
 
-4. The **settings_kls** attribute MUST be present and set to the **dataclass_json** setting class of the architecture.
+5. The **settings_kls** attribute MUST be present and set to the **dataclass_json** setting class of the architecture.
 
 
 ```python
