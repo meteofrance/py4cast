@@ -132,8 +132,10 @@ class Period:
 class Grid:
     name: Literal["ANTJP7CLIM_1S100", "PAAROME_1S100", "PAAROME_1S40", "PA_01D"]
     border_size: int = 10
-    # Subgrid selection: If (0,0,0,0) the whole grid is kept.
-    subgrid: Tuple[int] = (0, 0, 0, 0)
+    # subdomain selection: If (0,0,0,0) the whole domain is kept.
+    subdomain: Tuple[int] = (0, 0, 0, 0)
+    # Note : training won't work with the full domain on some NN because the size
+    # can't be divided by 2. Minimal domain : [0,1776,0,2800]
     x: int = field(init=False)  # X dimension
     y: int = field(init=False)  # Y dimension
 
@@ -141,22 +143,22 @@ class Grid:
         grid_info = METADATA["GRIDS"][self.name]
         x, y = grid_info["size"]
 
-        # Setting correct subgrid if no subgrid is selected.
-        if sum(self.subgrid) == 0:
-            self.subgrid = (0, x, 0, y)
-        self.x = self.subgrid[1] - self.subgrid[0]
-        self.y = self.subgrid[3] - self.subgrid[2]
+        # Setting correct subdomain if no subdomain is selected.
+        if sum(self.subdomain) == 0:
+            self.subdomain = (0, x, 0, y)
+        self.x = self.subdomain[1] - self.subdomain[0]
+        self.y = self.subdomain[3] - self.subdomain[2]
 
     @cached_property
     def lat(self) -> np.array:
         conf_ds = xr.open_dataset(SCRATCH_PATH / "conf.grib")
-        latitudes = conf_ds.latitude[self.subgrid[0] : self.subgrid[1]]
+        latitudes = conf_ds.latitude[self.subdomain[0] : self.subdomain[1]]
         return np.transpose(np.tile(latitudes, (self.y, 1)))
 
     @cached_property
     def lon(self) -> np.array:
         conf_ds = xr.open_dataset(SCRATCH_PATH / "conf.grib")
-        longitudes = conf_ds.longitude[self.subgrid[2] : self.subgrid[3]]
+        longitudes = conf_ds.longitude[self.subdomain[2] : self.subdomain[3]]
         return np.tile(longitudes, (self.x, 1))
 
     # TODO : from the grib, save a npy lat lon h mask for each grid
@@ -165,7 +167,7 @@ class Grid:
     def geopotential(self) -> np.array:
         conf_ds = xr.open_dataset(SCRATCH_PATH / "conf.grib")
         return conf_ds.h.values[
-            self.subgrid[0] : self.subgrid[1], self.subgrid[2] : self.subgrid[3]
+            self.subdomain[0] : self.subdomain[1], self.subdomain[2] : self.subdomain[3]
         ]
 
     @property
@@ -192,10 +194,10 @@ class Grid:
     def grid_limits(self):
         conf_ds = xr.open_dataset(SCRATCH_PATH / "conf.grib")
         grid_limits = [  # In projection (llon, ulon, llat, ulat)
-            float(conf_ds.longitude[self.subgrid[2]].values),  # min y
-            float(conf_ds.longitude[self.subgrid[3] - 1].values),  # max y
-            float(conf_ds.latitude[self.subgrid[1] - 1].values),  # max x
-            float(conf_ds.latitude[self.subgrid[0]].values),  # min x
+            float(conf_ds.longitude[self.subdomain[2]].values),  # min y
+            float(conf_ds.longitude[self.subdomain[3] - 1].values),  # max y
+            float(conf_ds.latitude[self.subdomain[1] - 1].values),  # max x
+            float(conf_ds.latitude[self.subdomain[0]].values),  # min x
         ]
         return grid_limits
 
@@ -203,8 +205,8 @@ class Grid:
     def meshgrid(self) -> np.array:
         """Build a meshgrid from coordinates position."""
         conf_ds = xr.open_dataset(SCRATCH_PATH / "conf.grib")
-        latitudes = conf_ds.latitude[self.subgrid[0] : self.subgrid[1]]
-        longitudes = conf_ds.longitude[self.subgrid[2] : self.subgrid[3]]
+        latitudes = conf_ds.latitude[self.subdomain[0] : self.subdomain[1]]
+        longitudes = conf_ds.longitude[self.subdomain[2] : self.subdomain[3]]
         meshgrid = np.array(np.meshgrid(longitudes, latitudes))
         return meshgrid  # shape (2, x, y)
 
@@ -288,8 +290,8 @@ class Param:
 
     def load_data_npy(self, date: dt.datetime) -> np.ndarray:
         array = np.load(self.get_filepath(date, "npy"))
-        subgrid = self.grid.subgrid
-        array = array[subgrid[0] : subgrid[1], subgrid[2] : subgrid[3]]
+        subdomain = self.grid.subdomain
+        array = array[subdomain[0] : subdomain[1], subdomain[2] : subdomain[3]]
         if self.native_grid != self.grid.name:
             # TODO : interpolation d'un champ sur une grille différente
             raise NotImplementedError(
@@ -307,8 +309,8 @@ class Param:
         array = param_dict[
             self.levels[0]
         ]  # warning : doesn't work with multiple levels for now
-        subgrid = self.grid.subgrid
-        array = array[subgrid[0] : subgrid[1], subgrid[2] : subgrid[3]]
+        subdomain = self.grid.subdomain
+        array = array[subdomain[0] : subdomain[1], subdomain[2] : subdomain[3]]
         array = array[::-1]  # invert latitude
         return array
 
