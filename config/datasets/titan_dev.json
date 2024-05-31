@@ -19,7 +19,7 @@
     "grid":{
         "name": "PAAROME_1S100",
         "border_size": 0,
-        "subgrid": [512,1024,512,1024]
+        "subdomain": [512,1024,512,1024]
     },
     "settings":{
         "step_duration": 1,
