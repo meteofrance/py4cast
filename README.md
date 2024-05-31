@@ -52,7 +52,7 @@ This project started as a fork of neural-lam, a project by Joel Oskarsson, see [
 * simple command line to lauch a training
 * config files to change the parameters of your dataset or neural network during training
 * experiment tracking with tensorboard and plots of forecasts with matplotlib
-* implementation of [NamedTensors](doc/features.md/#namedtensors) to tracks features and dimensions of tensors at each step of the training
+* implementation of [NamedTensors](doc/features.md#namedtensors) to tracks features and dimensions of tensors at each step of the training
 
 See [here](doc/features.md) for details on the available datasets, neural networks, training strategies, losses, and explanation of our NamedTensor.
 
