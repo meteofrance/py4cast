@@ -308,8 +308,9 @@ class Param:
             self.levels[0]
         ]  # warning : doesn't work with multiple levels for now
         subgrid = self.grid.subgrid
+        array = array[subgrid[0] : subgrid[1], subgrid[2] : subgrid[3]]
         array = array[::-1]  # invert latitude
-        return array[subgrid[0] : subgrid[1], subgrid[2] : subgrid[3]]
+        return array
 
     def load_data(
         self, date: dt.datetime, file_format: Literal["npy", "grib"] = "grib"
