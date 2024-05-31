@@ -148,7 +148,6 @@ Here we use 2 nodes with 4 GPUs each.
 
 ```bash
 export RUNAI_SLURM_NNODES=2
-export RUNAI_SLURM_NTASKS_PER_NODE=4
 export RUNAI_GRES="gpu:v100:4"
 runai sbatch_multi_node python bin/train.py --dataset titan --model hilam
 ```
