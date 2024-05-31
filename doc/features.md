@@ -27,7 +27,7 @@ Currently we support the following datasets:
 
 | Dataset  | Domain  | Description    | Documentation  | Maintainer(s) |
 | :---:   | :---: | :---: | :---: | :---: |
-| titan | France | AROME Analyses + ARPEGE Analyses and forecasts + 1h Rainfall; Timestep 1h; 2022-2023; [download link](https://huggingface.co/datasets/meteofrance/titan)  | [link](pnia/datasets/titan/README.md) | Léa Berthomier |
+| titan| France | AROME Analyses + ARPEGE Analyses and forecasts + 1h Rainfall; Timestep 1h; 2022-2023; [download link](https://huggingface.co/datasets/meteofrance/titan)  | [link](titan.md) | Léa Berthomier |
 | smeagol | France | WIP  | WIP |  Vincent Chabot |
 | dummy | WIP  | WIP | WIP |  WIP |
 
@@ -46,7 +46,7 @@ in the forward pass. **x** are the neural network inputs and **model(x)** is the
 
 Implemented losses are based on RMSE and MAE measurements between each element in the input **x** and the output **y**. Their weighted versions are also proposed. Py4CastLoss class is designed to inherit from 'ABC'. This class serves as a template for defining custom loss functions in a PyTorch Lightning system, ensuring that subclasses implement the necessary preparation and computation methods. It also includes functionality to manage and register additional state information required for these loss functions. For that:
 
-'prepare' is an abstract method which prepares the loss function using the dataset information and an interior mask. 
+'prepare' is an abstract method which prepares the loss function using the dataset information and an interior mask.
 
 ```python
 @abstractmethod

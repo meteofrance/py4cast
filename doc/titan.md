@@ -2,7 +2,7 @@
 
 Titan is a dataset made to train an AI NWP emulator on France.
 
-![Domaines](readme_imgs/titan_veryverylight.png)
+![Domaines](figs/titan_veryverylight.png)
 
 ## Data
 
@@ -11,9 +11,20 @@ Titan is a dataset made to train an AI NWP emulator on France.
 * Depth: 2 years
 * Format GRIB2 (conversion to npy possible)
 
-Download link : [HuggingFace](https://huggingface.co/datasets/meteofrance/titan)
+3 days of data stored on [HuggingFace](https://huggingface.co/datasets/meteofrance/titan)
 
-![Domaines](readme_imgs/domaines.png)
+To download :
+
+```bash
+# Make sure you have git-lfs installed (https://git-lfs.com)
+git lfs install
+
+git clone https://huggingface.co/datasets/meteofrance/titan
+```
+
+Then adapt the `PY4CAST_TITAN_PATH` env variable to put your titan path (cf [doc](../README.md/#setting-environment-variables)).
+
+![Domaines](figs/titan_domaines.png)
 
 
 ### Available parameters
