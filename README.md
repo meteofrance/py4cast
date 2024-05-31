@@ -66,7 +66,7 @@ cd py4cast
 
 ### At Météo-France
 
-Wehn working at Météo-France, you can use either runai + Docker or Conda/Micromamba to setup a working environment. On the AI Lab cluster we recommend using runai, Conda on our HPC.
+When working at Météo-France, you can use either runai + Docker or Conda/Micromamba to setup a working environment. On the AI Lab cluster we recommend using runai, Conda on our HPC.
 
 See the [runai repository](https://git.meteo.fr/dsm-labia/monorepo4ai) for installation instructions.
 
