@@ -354,6 +354,12 @@ class AutoRegressiveLightning(pl.LightningModule):
             ),
         ]
 
+        if self.logger:
+            dict_log = asdict(self.hparams["hparams"])
+            dict_log["username"] = getpass.getuser()
+            self.logger.log_hyperparams(dict_log, metrics={"val_mean_loss": 0.0})
+            # TODO : save dataset and model configs in folder
+
     def validation_step(self, batch: ItemBatch, batch_idx):
         """
         Run validation on single batch
@@ -383,16 +389,6 @@ class AutoRegressiveLightning(pl.LightningModule):
         """
         Compute val metrics at the end of val epoch
         """
-
-        if self.logger:
-            dict_log = asdict(self.hparams["hparams"])
-            dict_log["username"] = getpass.getuser()
-            # TODO: fix this and log all hyperparams
-            self.logger.log_hyperparams(
-                dict_log, metrics={"val_mean_loss": self.val_mean_loss}
-            )
-            # TODO : save dataset and model configs in folder
-
         # Notify every plotter that this is the end
         for plotter in self.valid_plotters:
             plotter.on_step_end(self)
