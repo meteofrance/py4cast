@@ -1,0 +1,35 @@
+{
+    "periods": {
+        "train": {
+            "start": 2023010106,
+            "end": 2023010223,
+            "step": 3
+        },
+        "valid": {
+            "start": 2023010300,
+            "end": 2023010423,
+            "step": 3
+        },
+        "test": {
+            "start": 2023010300,
+            "end": 2023010423,
+            "step": 3
+        }
+    },
+    "grid":{
+        "name": "PAAROME_1S100",
+        "border_size": 0,
+        "subgrid": [512,1024,512,1024]
+    },
+    "settings":{
+        "step_duration": 1,
+        "standardize": true,
+        "file_format": "grib"
+    },
+    "params": {
+        "aro_t2m": {
+            "levels": [2],
+            "kind": "input_output"
+        }
+    }
+}
