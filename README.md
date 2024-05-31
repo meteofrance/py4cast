@@ -4,7 +4,7 @@ This project, built using **PyTorch** and **PyTorch-lightning**, is designed to 
 
 Developped at Météo-France by **DSM/AI Lab** and **CNRM/GMAP/PREV**.
 
-Contributions are welcome.
+Contributions are welcome (Issues, Pull Requests, ...).
 
 This project is licensed under the [APACHE 2.0 license.](LICENSE-2.0.txt)
 
@@ -12,9 +12,6 @@ This project is licensed under the [APACHE 2.0 license.](LICENSE-2.0.txt)
 
 This project started as a fork of neural-lam, a project by Joel Oskarsson, see [here](https://github.com/mllam/neural-lam). Many thanks to Joel for his work!
 
-# Contacts
-
-Feel free to contact us at: <lea.berthomier@meteo.fr>, <vincent.chabot@meteo.fr>, <frank.guibert@meteo.fr>
 
 # Table of contents
 

@@ -146,7 +146,7 @@ class TitanDataset(DatasetABC, Dataset):
         ...
 ```
 
-4. It is HIGHLY RECOMMENDED that your `__getitem__` method returns Items containing NamedTensors with precise feature and dimension names.
+4. It is MANDATORY that your `__getitem__` method returns [Item](../py4cast/datasets/base.py#L288) instances containing NamedTensors with precise feature and dimension names. By convention we use these names for tensor dimensions: **("batch", "timestep", "lat", "lon", "features")**.
 
 5. It is HIGHLY RECOMMENDED that your dataset implements a `prepare` method to easily compute and save all the statics needed by your dataset.
 
