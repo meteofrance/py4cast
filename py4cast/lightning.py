@@ -1,5 +1,6 @@
+import getpass
 from copy import deepcopy
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from functools import cached_property
 from pathlib import Path
 from typing import List, Tuple, Union
@@ -98,7 +99,7 @@ class AutoRegressiveLightning(pl.LightningModule):
     def __init__(self, hparams: ArLightningHyperParam, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self.save_hyperparameters()
+        self.save_hyperparameters()  # write hparams.yaml in save folder
 
         # Load static features for grid/data
         # We do not want to change dataset statics inplace
@@ -372,6 +373,7 @@ class AutoRegressiveLightning(pl.LightningModule):
         }
         val_log_dict["val_mean_loss"] = mean_loss
         self.log_dict(val_log_dict, on_step=False, on_epoch=True, sync_dist=True)
+        self.val_mean_loss = mean_loss
 
         # Notify every plotters
         for plotter in self.valid_plotters:
@@ -381,6 +383,16 @@ class AutoRegressiveLightning(pl.LightningModule):
         """
         Compute val metrics at the end of val epoch
         """
+
+        if self.logger:
+            dict_log = asdict(self.hparams["hparams"])
+            dict_log["username"] = getpass.getuser()
+            # TODO: fix this and log all hyperparams
+            self.logger.log_hyperparams(
+                dict_log, metrics={"val_mean_loss": self.val_mean_loss}
+            )
+            # TODO : save dataset and model configs in folder
+
         # Notify every plotter that this is the end
         for plotter in self.valid_plotters:
             plotter.on_step_end(self)

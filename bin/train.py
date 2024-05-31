@@ -1,10 +1,17 @@
+"""
+Main script to first train the model
+using the (train, val) datasets and lightning .fit
+and then evaluate the model on the test dataset calling .test
+"""
+
+import getpass
 import os
 import random
-import time
 from argparse import ArgumentParser, BooleanOptionalAction
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
 
 import pytorch_lightning as pl
 
@@ -16,7 +23,7 @@ from lightning_fabric.utilities import seed
 
 from py4cast.datasets import get_datasets
 from py4cast.datasets import registry as dataset_registry
-from py4cast.datasets.base import DatasetABC, TorchDataloaderSettings
+from py4cast.datasets.base import TorchDataloaderSettings
 from py4cast.lightning import ArLightningHyperParam, AutoRegressiveLightning
 from py4cast.models import registry as model_registry
 from py4cast.settings import ROOTDIR
@@ -37,117 +44,6 @@ class TrainerParams:
         if self.dev_mode:
             self.epochs = 3
             self.limit_train_batches = 3
-
-
-def main(
-    tp: TrainerParams,
-    hp: ArLightningHyperParam,
-    dl_settings: TorchDataloaderSettings,
-    datasets: Tuple[DatasetABC, DatasetABC, DatasetABC],
-):
-    """
-    Main function to first train the model
-    using the (train, val) datasets and lightning .fit
-    and then evaluate the model on the test dataset calling .test
-    """
-    train_ds, val_ds, test_ds = datasets
-
-    train_loader = train_ds.torch_dataloader(dl_settings)
-    val_loader = val_ds.torch_dataloader(dl_settings)
-    test_loader = test_ds.torch_dataloader(dl_settings)
-
-    # Instatiate model + trainer
-    if torch.cuda.is_available():
-        device_name = "cuda"
-        torch.backends.cuda.matmul.allow_tf32 = True
-        torch.backends.cudnn.allow_tf32 = True
-        # torch.set_float32_matmul_precision("high") # Allows using Tensor Cores on A100s
-    else:
-        device_name = "cpu"
-
-    prefix = ""
-
-    run_name = (
-        f"{prefix}{str(hp.dataset_info.name)}{hp.model_name}-"
-        f"{time.strftime('%m%d%H:%M')}-{tp.run_id}"
-    )
-
-    callback_list = []
-    if not tp.no_log:
-        print(f"Model and checkpoint will be saved in saved_models/{run_name}")
-        checkpoint_callback = pl.callbacks.ModelCheckpoint(
-            dirpath=f"saved_models/{run_name}",
-            filename="{epoch:02d}-{val_mean_loss:.2f}",  # Custom filename pattern
-            monitor="val_mean_loss",
-            mode="min",
-            save_top_k=1,  # Save only the best model
-            save_last=True,  # Also save the last model
-        )
-        callback_list.append(checkpoint_callback)
-
-    # Logger
-    if tp.no_log:
-        logger = None
-    else:
-        logger = TensorBoardLogger(
-            save_dir=ROOTDIR / "logs",
-            name=f"{args.model}/{args.dataset}",
-            default_hp_metric=False,
-        )
-
-    if tp.profiler == "pytorch":
-        profiler = PyTorchProfiler(
-            dirpath=ROOTDIR / f"logs/{args.model}/{args.dataset}",
-            filename=f"profile_{tp.run_id}",
-            export_to_chrome=True,
-        )
-        print("Initiate pytorchProfiler")
-    else:
-        profiler = None
-        print(f"No profiler set {tp.profiler}")
-
-    trainer = pl.Trainer(
-        num_nodes=int(os.environ.get("SLURM_NNODES", 1)),
-        devices="auto",
-        max_epochs=tp.epochs,
-        deterministic=True,
-        strategy="ddp",
-        accumulate_grad_batches=10,
-        accelerator=device_name,
-        logger=logger,
-        profiler=profiler,
-        log_every_n_steps=1,
-        callbacks=callback_list,
-        check_val_every_n_epoch=tp.val_interval,
-        precision=tp.precision,
-        limit_train_batches=tp.limit_train_batches,
-        limit_val_batches=tp.limit_train_batches,  # No reason to spend hours on validation if we limit the training.
-        limit_test_batches=tp.limit_train_batches,
-    )
-    if args.load_model_ckpt:
-        lightning_module = AutoRegressiveLightning.load_from_checkpoint(
-            args.load_model_ckpt, hparams=hp
-        )
-    else:
-        lightning_module = AutoRegressiveLightning(hp)
-
-    # Train model
-    print("Starting training !")
-    trainer.fit(
-        model=lightning_module,
-        train_dataloaders=train_loader,
-        val_dataloaders=val_loader,
-    )
-    if not tp.no_log:
-        # If we have saved a model, we test it.
-        best_checkpoint = checkpoint_callback.best_model_path
-        last_checkpoint = checkpoint_callback.last_model_path
-
-        model_to_test = best_checkpoint if best_checkpoint else last_checkpoint
-        print(
-            f"Testing using {'best' if best_checkpoint else 'last'} model at {model_to_test}"
-        )
-        trainer.test(ckpt_path=model_to_test, dataloaders=test_loader)
 
 
 if __name__ == "__main__":
@@ -287,8 +183,17 @@ if __name__ == "__main__":
         default="diff_ar",
         help="Strategy for training ('diff_ar', 'scaled_ar')",
     )
+    parser.add_argument(
+        "--campaign_name",
+        "-cn",
+        type=str,
+        default="camp0",
+        help="Name of folder that regroups runs.",
+    )
 
     args, other = parser.parse_known_args()
+    username = getpass.getuser()
+    date = datetime.now()
 
     # Raise an exception if there are unknown arguments
     if other:
@@ -319,7 +224,7 @@ if __name__ == "__main__":
         training_strategy=args.strategy,
     )
 
-    # Parametre pour le training uniquement
+    # Parameters for training only
     tp = TrainerParams(
         precision=args.precision,
         val_interval=args.val_interval,
@@ -332,4 +237,107 @@ if __name__ == "__main__":
     )
     dl_settings = TorchDataloaderSettings(batch_size=args.batch_size)
 
-    main(tp, hp, dl_settings, datasets)
+    train_ds, val_ds, test_ds = datasets
+    train_loader = train_ds.torch_dataloader(dl_settings)
+    val_loader = val_ds.torch_dataloader(dl_settings)
+    test_loader = test_ds.torch_dataloader(dl_settings)
+
+    # Instatiate model + trainer
+    if torch.cuda.is_available():
+        device_name = "cuda"
+        torch.backends.cuda.matmul.allow_tf32 = True
+        torch.backends.cudnn.allow_tf32 = True
+        # torch.set_float32_matmul_precision("high") # Allows using Tensor Cores on A100s
+    else:
+        device_name = "cpu"
+
+    # Get Log folders
+    log_dir = ROOTDIR / "logs"
+    folder = Path(args.campaign_name) / args.dataset / args.model
+    run_name = f"{username[:4]}"
+    if args.dev_mode:
+        run_name += "_dev"
+    list_subdirs = list((log_dir / folder).glob(f"{run_name}*"))
+    list_versions = sorted([int(d.name.split("_")[-1]) for d in list_subdirs])
+    version = 0 if list_subdirs == [] else list_versions[-1] + 1
+    subfolder = f"{run_name}_{version}"
+    save_path = log_dir / folder / subfolder
+
+    # Logger & checkpoint callback
+    callback_list = []
+    if tp.no_log:
+        logger = None
+    else:
+        print(
+            f"--> Model, checkpoints, and tensorboard artifacts \
+              will be saved in {save_path}."
+        )
+        logger = TensorBoardLogger(
+            save_dir=log_dir,
+            name=folder,
+            version=subfolder,
+            default_hp_metric=False,
+        )
+        checkpoint_callback = pl.callbacks.ModelCheckpoint(
+            dirpath=save_path,
+            filename="{epoch:02d}-{val_mean_loss:.2f}",  # Custom filename pattern
+            monitor="val_mean_loss",
+            mode="min",
+            save_top_k=1,  # Save only the best model
+            save_last=True,  # Also save the last model
+        )
+        callback_list.append(checkpoint_callback)
+
+    if tp.profiler == "pytorch":
+        profiler = PyTorchProfiler(
+            dirpath=ROOTDIR / f"logs/{args.model}/{args.dataset}",
+            filename=f"profile_{tp.run_id}",
+            export_to_chrome=True,
+        )
+        print("Initiate pytorchProfiler")
+    else:
+        profiler = None
+        print(f"No profiler set {tp.profiler}")
+
+    trainer = pl.Trainer(
+        num_nodes=int(os.environ.get("SLURM_NNODES", 1)),
+        devices="auto",
+        max_epochs=tp.epochs,
+        deterministic=True,
+        strategy="ddp",
+        accumulate_grad_batches=10,
+        accelerator=device_name,
+        logger=logger,
+        profiler=profiler,
+        log_every_n_steps=1,
+        callbacks=callback_list,
+        check_val_every_n_epoch=tp.val_interval,
+        precision=tp.precision,
+        limit_train_batches=tp.limit_train_batches,
+        limit_val_batches=tp.limit_train_batches,  # No reason to spend hours on validation if we limit the training.
+        limit_test_batches=tp.limit_train_batches,
+    )
+    if args.load_model_ckpt:
+        lightning_module = AutoRegressiveLightning.load_from_checkpoint(
+            args.load_model_ckpt, hparams=hp
+        )
+    else:
+        lightning_module = AutoRegressiveLightning(hp)
+
+    # Train model
+    print("Starting training !")
+    trainer.fit(
+        model=lightning_module,
+        train_dataloaders=train_loader,
+        val_dataloaders=val_loader,
+    )
+    if not tp.no_log:
+        # If we have saved a model, we test it.
+        best_checkpoint = checkpoint_callback.best_model_path
+        last_checkpoint = checkpoint_callback.last_model_path
+
+        model_to_test = best_checkpoint if best_checkpoint else last_checkpoint
+        print(
+            f"Testing using {'best' if best_checkpoint else 'last'} model at {model_to_test}"
+        )
+        trainer.test(ckpt_path=model_to_test, dataloaders=test_loader)
