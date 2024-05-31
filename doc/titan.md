@@ -66,6 +66,8 @@ The parameters in each grib are described here:
 
 * Use the script `plot_data.py` to plot all the parameters for one time step.
 
+* The Titan default configuration uses only a very small subdomain on britany and only one parameter 2m temperature, on the 3 day sample dataset (2023-01-01 to 2023-01-03). It should work for training out of the box. The `titan_full` configuration uses 2 years of data, more parameters and a bigger domain.
+
 ## Notes
 
 * 2024/05/16 : At the moment, the dataloader only works with data from AROME, with one-level parameters. Options for multi-level and multi-grid data will be added later.

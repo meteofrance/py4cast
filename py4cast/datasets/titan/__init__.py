@@ -107,7 +107,7 @@ def read_grib_with_xarray(path_grib: Path) -> Dict[str, Dict[int, np.ndarray]]:
 class Period:
     start: dt.datetime
     end: dt.datetime
-    step: int  # In hours
+    step: int  # In hours, step btw the t0 of 2 samples
     name: str
 
     def __init__(self, start: int, end: int, step: int, name: str):
@@ -741,6 +741,7 @@ class TitanDataset(DatasetABC, Dataset):
 # - methods to load data should be in Sample and not in dataset
 # - add a method to plot a sample
 # - prepare dataset only if config or data has changed
+# - remove Nan from border when working on full domain
 
 
 if __name__ == "__main__":
