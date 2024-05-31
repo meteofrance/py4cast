@@ -64,11 +64,37 @@ git clone https://github.com/meteofrance/py4cast.git
 cd py4cast
 ```
 
+### Setting environment variables
+
+In order to be able to run the code on different machines, some environment variables can be set.
+You may add them in your `.bashrc` or modify them just before launching an experiment.
+
+- `PY4CAST_ROOTDIR` : Specify the ROOT DIR for your experiment. It also modifies the CACHE_DIR. This is where the files created during the experiment will be stored.
+- `PY4CAST_SMEAGOL_PATH`: Specify where the smeagol dataset is stored. Only needed if you want to use the smeagol dataset.
+- `PY4CAST_TITAN_PATH`: Specify where the titan dataset is stored. Only needed if you want to use the titan dataset.
+
+This should be done by 
+```sh
+export PY4CAST_ROOTDIR="/my/dir/"
+```
+
+If you plan to use micromamba or conda you should also add `py4cast` to your **PYTHONPATH** by expanding it (Export or change your `PYTHONPATH`). 
+
+
+
 ### At Météo-France
 
 When working at Météo-France, you can use either runai + Docker or Conda/Micromamba to setup a working environment. On the AI Lab cluster we recommend using runai, Conda on our HPC.
 
 See the [runai repository](https://git.meteo.fr/dsm-labia/monorepo4ai) for installation instructions.
+
+### Install with conda
+
+You can install a conda environment using
+```sh
+conda env create --file env_conda.yaml
+```
+
 
 ### Install with micromamba
 
@@ -77,44 +103,6 @@ Please install the environment using :
 micromamba create -f env.yaml
 ```
 
-Depending on your machine, you may have to run a specific command to be able to use the GPUs. For instance, on a machine with `slurm`, you could run a classic srun command to get an interactive shell on gpu:
-
-```sh
-srun --job-name="MySuperJob" --cpus-per-task=15 --partition=node3 --gres=gpu:v100:1 --time=10:00:00 --ntasks-per-node=1 --pty bash
-```
-
-Activate your environnment :
-```sh
-micromamba activate nlam
-```
-
-Go to py4cast directory and do :
-```sh
-export PYTHONPATH=`pwd`
-```
-
-You can also add directly the directory in your `.bashrc`.
-
-This is done in order to register the py4cast package in the python path.
-
-### Install with conda
-
-You can install a conda environment using
-```sh
-conda env create --file env_conda.yaml
-```
-Note that this environment is a bit different from the micromamba one. Both should be merged in a near future.
-
-
-### Setting environment variables
-
-In order to be able to run the code on different machines, some environment variables can be set.
-You may add them in your `.bashrc` or modify them just before launching an experiment.
-
-- `PY4CAST_ROOTDIR` : Specify the ROOT DIR for your experiment. It also modifies the CACHE_DIR.
-- `PY4CAST_SMEAGOL_PATH`: Specify where the smeagol dataset is stored. Only needed if you want to use the smeagol dataset. **Should be moved in the configuration file**.
-- `PY4CAST_TITAN_PATH`: Specify where the titan dataset is stored. Only needed if you want to use the titan dataset.
-If you plan to use micromamba or conda you should also add `py4cast` to your **PYTHONPATH** by expanding it (Export or change your `PYTHONPATH`).
 
 ## Usage
 
@@ -158,16 +146,19 @@ For the rest of the documentation, you must preprend each python command with `r
 
 ### Conda or Micromamba
 
-Once your micromamba environment is setup, you can do a classical training such as
+Once your micromamba environment is setup, you should : 
+ - activate your environment `conda activate py4cast` or `micromamba activate nlam`
+ - launch a training  
+
+A very simple training can be launch (on your current node)
 ```sh
-python3.10 bin/train.py  --dataset titan --model halfunet
+python bin/train.py  --dataset dummy --model halfunet --epochs 2
 ```
 
-For the rest of the documentation, you must replace each python command with `python3.10`.
 
-### Specifying your sbatch card
+#### Example of script  to launch on gpu 
 
-To do so, you will need a small `sh` script.
+To do so, you will need to create a small `sh` script.
 
 ```sh
 #!/usr/bin/bash
@@ -182,16 +173,22 @@ To do so, you will need a small `sh` script.
 
 source ~/.bashrc  # Be sure that all your environment variables are set
 conda activate py4cast # Activate your environment (installed by micromamba or conda)
-cd $PY4CAST_PATH # Go to Py4CAST (you can either add an environment variable or hard code it here)
+cd $PY4CAST_PATH # Go to Py4CAST (you can either add an environment variable or hard code it here). 
 # Launch your favorite command.
-srun python bin/train.py --model halfunet --dataset smeagol --dataset_conf config/smeagolsmall.json --num_pred_steps_val_test 4 --strategy scaled_ar --num_inter_steps 4 --num_input_steps 1 --batch_size 10
+srun python bin/train.py --model halfunet --dataset dummy --epochs 2
 ```
+
 
 Then just launch this script using
 
 ```sh
 sbatch my_tiny_script.sh
 ```
+**NB** Note that you may have some trouble with SSL certificates (for cartopy). You may need to explicitely export the certificate as :
+```sh  
+ export SSL_CERT_FILE="/opt/softs/certificats/proxy1.pem"
+```
+with the proxy path depending on your machine. 
 
 ### Dataset configuration & simple training
 
