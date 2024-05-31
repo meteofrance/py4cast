@@ -87,7 +87,7 @@ def register_loss_state_buffers(
 
 ## Available Plots
 
-Plots are done using the **matplotlib** library. We wrap each plot in a **ErrorObserver** class. Below is an example of a plot that shows the spatial distribution of the error for all the variables together. See our [observer.py](py4cast/observer.py) for more examples.
+Plots are done using the **matplotlib** library. We wrap each plot in a **ErrorObserver** class. Below is an example of a plot that shows the spatial distribution of the error for all the variables together. See our [observer.py](../py4cast/observer.py#L40) for more examples.
 
 ```python
 class SpatialErrorPlot(ErrorObserver):
@@ -119,7 +119,7 @@ class SpatialErrorPlot(ErrorObserver):
         """
 ```
 
-In order to add your own plot, you can create a new class that inherits from **ErrorObserver** and implement the **update** and **on_step_end** methods. You can then add your plot to the **AutoRegressiveLightning** class in the **valid_plotters** or **test_plotters** [list](py4cast/lightning.py).
+In order to add your own plot, you can create a new class that inherits from **ErrorObserver** and implement the **update** and **on_step_end** methods. You can then add your plot to the **AutoRegressiveLightning** class in the **valid_plotters** or [**test_plotters** list](../py4cast/lightning.py#L398).
 
 ```python
 self.test_plotters = [
@@ -134,7 +134,7 @@ PyTorch provides an experimental feature called [**named tensors**](https://pyto
 
 NamedTensors are a way to give names to dimensions of tensors and to keep track of the names of the physical/weather parameters along the features dimension.
 
-The **NamedTensor** class is a wrapper around a PyTorch tensor, it allows us to pass consistent object linking data and metadata with extra utility methods (concat along features dimension, flatten in place, ...). See the implementation [here](py4cast/datasets/base.py) and usage for plots [here](py4cast/observer.py)
+The [**NamedTensor**](../py4cast/datasets/base.py#L38) class is a wrapper around a PyTorch tensor, it allows us to pass consistent object linking data and metadata with extra utility methods (concat along features dimension, flatten in place, ...). See the implementation [here](../py4cast/datasets/base.py#L38) and usage for plots [here](../py4cast/observer.py)
 
 Some examples of NamedTensors usage, here for gridded data on a 256x256 grid:
 

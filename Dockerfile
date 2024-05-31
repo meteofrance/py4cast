@@ -4,8 +4,8 @@ ARG INJECT_MF_CERT
 
 COPY mf.crt /usr/local/share/ca-certificates/mf.crt
 
+# The following two lines are necessary to deal with the MITM sniffing proxy we have internally.
 RUN ( test $INJECT_MF_CERT -eq 1 && update-ca-certificates ) || echo "MF certificate not injected"
-
 ENV MY_APT='apt -o "Acquire::https::Verify-Peer=false" -o "Acquire::AllowInsecureRepositories=true" -o "Acquire::AllowDowngradeToInsecureRepositories=true" -o "Acquire::https::Verify-Host=false"'
 
 RUN $MY_APT update && $MY_APT install -y software-properties-common && add-apt-repository ppa:ubuntugis/ppa
