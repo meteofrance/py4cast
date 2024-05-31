@@ -12,9 +12,14 @@ This project is licensed under the [APACHE 2.0 license.](LICENSE-2.0.txt)
 
 This project started as a fork of neural-lam, a project by Joel Oskarsson, see [here](https://github.com/mllam/neural-lam). Many thanks to Joel for his work!
 
+# Contacts
+
+Feel free to contact us at: <lea.berthomier@meteo.fr>, <vincent.chabot@meteo.fr>, <frank.guibert@meteo.fr>
+
 # Table of contents
 
-1. [Features](#features)
+0. [Overview](#overview)
+1. [Features](doc/features.md)
     1. [Neural network architectures](doc/features.md#available-pytorchs-architectures)
     2. [Datasets](doc/features.md#available-datasets)
     3. [Losses](doc/features.md#available-losses)
@@ -23,8 +28,8 @@ This project started as a fork of neural-lam, a project by Joel Oskarsson, see [
     6. [NamedTensors](doc/features.md#namedtensors)
 2. [Installation](#installation)
 3. [Usage](#usage)
-    1. [At Météo-France](#at-météo-france-with-runai)
-    2. [Elsewhere (conda or micromamba)](#elsewhere-conda-or-micromamba)
+    1. [Docker and runai (MF)](#docker-and-runai)
+    2. [Conda or Micromamba](#conda-or-micromamba)
     3. [Specifying your sbatch card](#specifying-your-sbatch-card)
     4. [Dataset configuration & simple training](#dataset-configuration--simple-training)
     5. [Training options](#training-options)
@@ -38,7 +43,7 @@ This project started as a fork of neural-lam, a project by Joel Oskarsson, see [
 7. [Continuous Integration](doc/add_features_contribute.md#continuous-integration)
 
 
-## Features
+## Overview
 
 * 5 neural network architectures : Half-Unet, U-Net, SegFormer, HiLam, GraphLam
 * 1 dataset with samples available on Huggingface : Titan
@@ -52,7 +57,7 @@ This project started as a fork of neural-lam, a project by Joel Oskarsson, see [
 * experiment tracking with tensorboard and plots of forecasts with matplotlib
 * implementation of [NamedTensors](doc/features.md/#namedtensors) to tracks features and dimensions of tensors at each step of the training
 
-See [here](doc/features.md) for details on the available datasets, neural networks, training strategies, losses, and explanation of the NamedTensor.
+See [here](doc/features.md) for details on the available datasets, neural networks, training strategies, losses, and explanation of our NamedTensor.
 
 ## Installation
 
@@ -64,7 +69,9 @@ cd py4cast
 
 ### At Météo-France
 
-We use **runai** as a docker wrapper for training neural networks. See the [runai repository](https://git.meteo.fr/dsm-labia/monorepo4ai) for installation instructions.
+Wehn working at Météo-France, you can use either runai + Docker or Conda/Micromamba to setup a working environment. On the AI Lab cluster we recommend using runai, Conda on our HPC.
+
+See the [runai repository](https://git.meteo.fr/dsm-labia/monorepo4ai) for installation instructions.
 
 ### Install with micromamba
 
@@ -114,7 +121,9 @@ If you plan to use micromamba or conda you should also add `py4cast` to your **P
 
 ## Usage
 
-### At Météo-France, with runai
+### Docker and runai
+
+For now this works only for internal Météo-France users.
 
 <details>
 <summary>Click to expand</summary>
@@ -151,7 +160,7 @@ For the rest of the documentation, you must preprend each python command with `r
 </details>
 
 
-### Elsewhere (conda or micromamba)
+### Conda or Micromamba
 
 Once your micromamba environment is setup, you can do a classical training such as
 ```sh
@@ -310,7 +319,9 @@ The figure below illustrates the principal components of the Py4cast architectur
 
 ![py4cast](doc/figs/py4cast_diag.jpg)
 
-- We define **interface contracts** between the components of the system using [Python ABCs](https://docs.python.org/3/library/abc.html). As long as the Python classes respect the interface contract, they can be used interchangeably in the system and the underlying implementation can be very different. For instance datasets with any underlying storage (grib2, netcdf, mmap+numpy, ...) and real-time or ahead of time concat and pre-processing could be used with the same neural network architectures and training strategies.
+- We define **interface contracts** between the components of the system using [Python ABCs](https://docs.python.org/3/library/abc.html). As long as the Python classes respect the interface contract, they can be used interchangeably in the system and the underlying implementation can be very different. For instance datasets with any underlying storage (grib2, netcdf, mmap+numpy, ...) and real-time or ahead of time concat and pre-processing could be used with the same neural network architectures and training strategies. 
+
+- **Adding a model, a dataset, a loss, a plot, a training strategy, ... should be as simple as creating a new Python class that complies with the interface contract**.
 
 - Neural network architectures are Python classes that inherit from both **ModelABC** and PyTorch's **nn.Module**. The later means it is quick to insert a third-party pure PyTorch model in the system (see for instance the code for Lucidrains' Segformer or a U-Net).
 
