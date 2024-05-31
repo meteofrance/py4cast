@@ -335,7 +335,7 @@ class SmeagolDataset(DatasetABC, Dataset):
         self.params = params
         self.settings = settings
         self._cache_dir = SCRATCH_PATH / str(self)
-        self.shuffle = self.split == "train"
+        self.shuffle = self.period.name == "train"
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self.step_duration = self.settings.term["timestep"]
 
