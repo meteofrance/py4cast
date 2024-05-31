@@ -15,10 +15,10 @@ Currently we support the following neural network architectures:
 
 | Model  | Research Paper  | Input Shape    | Notes  | Maintainer(s) |
 | :---:   | :---: | :---: | :---: | :---: |
-| halfunet | [researchgate link](https://www.researchgate.net/publication/361186968_Half-UNet_A_Simplified_U-Net_Architecture_for_Medical_Image_Segmentation) | (Batch, Height, Width, features)   | In prod/oper on [Espresso](https://www.mdpi.com/2674-0494/2/4/25) V2 with 128 filters and standard conv blocks instead of ghost |  Frank Guibert |
-| unet | [arxiv link](https://arxiv.org/pdf/1505.04597.pdf) | (Batch, Height, Width, features)   | Vanilla U-Net |  Sara Akodad / Frank Guibert |
-| segformer | [arxiv link](https://arxiv.org/abs/2105.15203)   | (Batch, Height, Width, features) | On par with u-net like on Deepsyg (MF internal), added an upsampling stage. Adapted from [Lucidrains' github](https://github.com/lucidrains/segformer-pytorch) |  Frank Guibert |
-| hilam, graphlam | [arxiv link](https://arxiv.org/abs/2309.17370)  | (Batch, graph_node_id, features)   | Imported and adapted from [Joel's github](https://github.com/joeloskarsson/neural-lam) |  Vincent Chabot/Frank Guibert |
+| [halfunet](../py4cast/models/vision/conv.py#L68) | [researchgate link](https://www.researchgate.net/publication/361186968_Half-UNet_A_Simplified_U-Net_Architecture_for_Medical_Image_Segmentation) | (Batch, Height, Width, features)   | In prod/oper on [Espresso](https://www.mdpi.com/2674-0494/2/4/25) V2 with 128 filters and standard conv blocks instead of ghost |  Frank Guibert |
+| [unet](../py4cast/models/vision/conv.py#L262) | [arxiv link](https://arxiv.org/pdf/1505.04597.pdf) | (Batch, Height, Width, features)   | Vanilla U-Net |  Sara Akodad / Frank Guibert |
+| [segformer](../py4cast/models/vision/transformers.py#L216) | [arxiv link](https://arxiv.org/abs/2105.15203)   | (Batch, Height, Width, features) | On par with u-net like on Deepsyg (MF internal), added an upsampling stage. Adapted from [Lucidrains' github](https://github.com/lucidrains/segformer-pytorch) |  Frank Guibert |
+| [hilam](../py4cast/models/nlam/models.py#L754), graphlam | [arxiv link](https://arxiv.org/abs/2309.17370)  | (Batch, graph_node_id, features)   | Imported and adapted from [Joel's github](https://github.com/joeloskarsson/neural-lam) |  Vincent Chabot/Frank Guibert |
 
 
 ## Available datasets
@@ -28,8 +28,8 @@ Currently we support the following datasets:
 | Dataset  | Domain  | Description    | Documentation  | Maintainer(s) |
 | :---:   | :---: | :---: | :---: | :---: |
 | titan| France | AROME Analyses + ARPEGE Analyses and forecasts + 1h Rainfall; Timestep 1h; 2022-2023; [download link](https://huggingface.co/datasets/meteofrance/titan)  | [link](titan.md) | Léa Berthomier |
-| smeagol | France | WIP  | WIP |  Vincent Chabot |
-| dummy | WIP  | WIP | WIP |  WIP |
+| smeagol | France | A private dataset for assimilation research  | ... |  Vincent Chabot |
+| dummy | Persian Gulf  | A 64x64 dataset for doc and testing purposes using random data, also used in our CI to test the whole system | See [the code](../py4cast/datasets/dummy.py) |  Vincent Chabot / Frank Guibert |
 
 ## Available Training strategies
 
