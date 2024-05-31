@@ -25,7 +25,7 @@ class NewModel(ModelABC, nn.Module):
 ```
 2. **features** MUST be the last dimension both for the input and output tensors. See our Half-UNet implementation for how to deal with that in forward pass [here](../py4cast/models/vision/conv.py#L163).
 
-3. The **onnx_supported** attribute MUST be present and set to **True** if the architecture is onnx exportable, see [our unit tests](tests/test_models.py).
+3. The **onnx_supported** attribute MUST be present and set to **True** if the architecture is onnx exportable, see [our unit tests](../tests/test_models.py).
 
 4. the **input_dims** and **output_dims** attributes MUST be present to explicit the model's input and output tensor shapes.
 
@@ -106,7 +106,7 @@ Now your model can be either registered explicitely in the system (in case the c
 
 1. Model in the same git repository
 
-Add your **NewModel** class to the registry explicitly in the models package [__init__.py](py4cast/models/__init__.py)
+Add your **NewModel** class to the registry explicitly in the models package [__init__.py](../py4cast/models/__init__.py)
 
 ```python
 registry = {}
@@ -123,7 +123,7 @@ In order to be discovered, your model Python class MUST:
 * have a different name than the models already present in the system
 * be discoverable by the system (e.g. in the PYTHONPATH or pip installed)
 
-We provide an example module [here](py4cast_plugin_example.py) to help you create your own plugin. This approach is based on the [official python packaging guidelines](https://packaging.python.org/en/latest/guides/creating-and-discovering-plugins/).
+We provide an example module [here](../py4cast_plugin_example.py) to help you create your own plugin. This approach is based on the [official python packaging guidelines](https://packaging.python.org/en/latest/guides/creating-and-discovering-plugins/).
 
 
 ### Adding a new dataset
@@ -186,7 +186,7 @@ class SpatialErrorPlot(ErrorObserver):
         """
 ```
 
-In order to add your own plot, you can create a new class that inherits from **ErrorObserver** and implement the **update** and **on_step_end** methods. You can then add your plot to the **AutoRegressiveLightning** class in the **valid_plotters** or **test_plotters** [list](py4cast/lightning.py).
+In order to add your own plot, you can create a new class that inherits from **ErrorObserver** and implement the **update** and **on_step_end** methods. You can then add your plot to the **AutoRegressiveLightning** class in the **valid_plotters** or [**test_plotters** list](../py4cast/lightning.py#L398).
 
 ```python
 self.test_plotters = [
