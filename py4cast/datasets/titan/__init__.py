@@ -4,7 +4,7 @@ import traceback
 import warnings
 from copy import deepcopy
 from dataclasses import dataclass, field
-from functools import cached_property, lru_cache
+from functools import cached_property
 from pathlib import Path
 from typing import Dict, List, Literal, Tuple
 
@@ -54,7 +54,6 @@ def get_weight_per_lvl(level: int, kind: Literal["hPa", "m"]):
         return 2
 
 
-@lru_cache(256)
 def read_grib_with_cyeccodes(
     path_grib: Path, names=None, levels=None
 ) -> Dict[str, Dict[int, np.ndarray]]:
@@ -86,7 +85,6 @@ def read_grib_with_cyeccodes(
     return grib_dict
 
 
-@lru_cache(256)
 def read_grib_with_xarray(path_grib: Path) -> Dict[str, Dict[int, np.ndarray]]:
     ds = xr.load_dataset(path_grib, engine="cfgrib", backend_kwargs={"indexpath": ""})
     grib_dict = {}
