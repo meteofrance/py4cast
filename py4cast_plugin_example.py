@@ -9,7 +9,6 @@ import torch
 from dataclasses_json import dataclass_json
 from torch import nn
 
-from py4cast.datasets.base import ItemBatch, Statics
 from py4cast.models.base import ModelABC
 
 
@@ -21,7 +20,19 @@ class IdentitySettings:
 
 class Identity(ModelABC, nn.Module):
     settings_kls = IdentitySettings
-    onnx_supported = True
+    onnx_supported = False
+    input_dims = (
+        "batch",
+        "height",
+        "width",
+        "features",
+    )
+    output_dims = (
+        "batch",
+        "height",
+        "width",
+        "features",
+    )
 
     def __init__(
         self,
@@ -42,9 +53,3 @@ class Identity(ModelABC, nn.Module):
         the uselesness of a model not requiring grad descent.
         """
         return x[..., : self.num_output_features] * self.scaler
-
-    def transform_batch(self, batch: ItemBatch) -> ItemBatch:
-        return batch
-
-    def transform_statics(self, statics: Statics) -> Statics:
-        return statics

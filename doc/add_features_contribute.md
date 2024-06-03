@@ -56,51 +56,9 @@ class NewModelSettings:
     ):
 ```
 **num_input_features** is the number of features/channels of the input tensor. **num_output_features** is the number of features/channels of the output tensor, in our case the number of weather parameters to predict. **settings** is a **dataclass** instance with the settings of the model.
+For now we support ("batch", "height", "width", "features") and ("batch", "ngrid", "features") input/output dims.
 
-5. Finally, the **ModelABC** is a Python **ABC** which forces you to implement (or be Exceptioned upon) 2 methods **transform_statics** and **transform_batch**.
-
-Below is a default working implementation for CNNs and VTs (no transformation):
-
-```python
-def transform_statics(self, statics: Statics) -> Statics:
-    """
-    Statics are used 'as-is' by vision models.
-    """
-    return statics
-
-def transform_batch(self, batch: ItemBatch) -> ItemBatch:
-    """
-    Batch are used 'as-is' by vision models.
-    """
-    return batch
-```
-
-For GNNs we need to flatten the width and height dimensions to graph_node_ids, since our datasets produce gridded shape data.
-
-```python
-
-def transform_statics(self, statics: Statics) -> Statics:
-    """
-    Take the statics in inputs.
-    Return the statics as expected by the model.
-    """
-    statics.grid_static_features.flatten_("ngrid", 0, 1)
-    statics.border_mask = statics.border_mask.flatten(0, 1)
-    statics.interior_mask = statics.interior_mask.flatten(0, 1)
-    return statics
-
-def transform_batch(self, batch: ItemBatch) -> ItemBatch:
-    """
-    Transform the batch for our GNNS
-    Our grided datasets produce tensor of shape (B, T, W, H, F)
-    so we flatten (W,H) => (num_graph_nodes) for GNNs
-    """
-    batch.inputs.flatten_("ngrid", 2, 3)
-    batch.outputs.flatten_("ngrid", 2, 3)
-    batch.forcing.flatten_("ngrid", 2, 3)
-
-    return batch
-```
+5. Finally, the **ModelABC** is a Python **ABC** which forces you to implement all the required attributes or there will an Exception raised.
 
 Now your model can be either registered explicitely in the system (in case the code is in this repository) or injected in the system as a plugin (in case the code is hosted on a third party repository).
 

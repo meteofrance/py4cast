@@ -11,7 +11,6 @@ import torch
 from dataclasses_json import dataclass_json
 from torch import nn
 
-from py4cast.datasets.base import ItemBatch, Statics
 from py4cast.models.base import ModelABC
 from py4cast.models.vision.utils import features_last_to_second, features_second_to_last
 
@@ -153,12 +152,6 @@ class HalfUnet(ModelABC, nn.Module):
         )
 
         self.activation = getattr(nn, settings.last_activation)()
-
-    def transform_statics(self, statics: Statics) -> Statics:
-        return statics
-
-    def transform_batch(self, batch: ItemBatch) -> ItemBatch:
-        return batch
 
     def forward(self, x):
         x = features_last_to_second(x)
@@ -391,15 +384,3 @@ class Unet(ModelABC, nn.Module):
                 ]
             )
         )
-
-    def transform_statics(self, statics: Statics) -> Statics:
-        """
-        Statics are used 'as-is' by vision models.
-        """
-        return statics
-
-    def transform_batch(self, batch: ItemBatch) -> ItemBatch:
-        """
-        Batch are used 'as-is' by vision models.
-        """
-        return batch

@@ -1,7 +1,7 @@
 import importlib
 import pkgutil
 from pathlib import Path
-from typing import Union
+from typing import Any, Tuple, Union
 
 from py4cast.models.base import ModelABC
 
@@ -66,7 +66,7 @@ def build_model_from_settings(
     settings_path: Union[Path, None],
     *args,
     **kwargs,
-):
+) -> Tuple[ModelABC, Any]:
     """
     Instanciates a model based on its name and an optional settings file.
     """
