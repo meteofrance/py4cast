@@ -155,7 +155,12 @@ class AutoRegressiveLightning(pl.LightningModule):
 
         # We transform and register the statics after the model has been set up
         # This change the dimension of all statics
-        statics = self.model.transform_statics(statics)
+        if len(self.model.input_dims) == 3:
+            # Graph model, we flatten the statics spatial dims
+            statics.grid_static_features.flatten_("ngrid", 0, 1)
+            statics.border_mask = statics.border_mask.flatten(0, 1)
+            statics.interior_mask = statics.interior_mask.flatten(0, 1)
+
         # Register interior and border mask.
         statics.register_buffers(self)
 
@@ -257,7 +262,13 @@ class AutoRegressiveLightning(pl.LightningModule):
         """
         force_border, scale_y, num_inter_steps = self._strategy_params()
         # Right now we postpone that we have a single input/output/forcing
-        batch = self.model.transform_batch(batch)
+
+        if len(self.model.input_dims) == 3:
+            # Graph model, we flatten the batch spatial dims
+            batch.inputs.flatten_("ngrid", 2, 3)
+            batch.outputs.flatten_("ngrid", 2, 3)
+            batch.forcing.flatten_("ngrid", 2, 3)
+
         prev_states = batch.inputs.tensor
 
         prediction_list = []

@@ -7,7 +7,7 @@ import torch_geometric as pyg
 from dataclasses_json import dataclass_json
 from torch import nn
 
-from py4cast.datasets.base import ItemBatch, Statics
+from py4cast.datasets.base import Statics
 from py4cast.models.base import BufferList, ModelABC, expand_to_batch, offload_to_cpu
 from py4cast.models.nlam.create_mesh import build_graph_for_grid
 from py4cast.models.nlam.interaction_net import InteractionNet, make_mlp
@@ -260,29 +260,6 @@ class BaseGraphModel(ModelABC, nn.Module):
 
         # subclasses should override this method
         self.finalize_graph_model()
-
-    def transform_statics(self, statics: Statics) -> Statics:
-        """
-        Take the statics in inputs.
-        Return the statics as expected by the model.
-        """
-        statics.grid_static_features.flatten_("ngrid", 0, 1)
-        statics.border_mask = statics.border_mask.flatten(0, 1)
-        statics.interior_mask = statics.interior_mask.flatten(0, 1)
-        return statics
-
-    def transform_batch(self, batch: ItemBatch) -> ItemBatch:
-        """
-        Transform the batch for our GNNS
-        Our grided datasets produce tensor of shape (B, T, W, H, F)
-        so we flatten (W,H) => (num_graph_nodes) for GNNs
-        """
-
-        batch.inputs.flatten_("ngrid", 2, 3)
-        batch.outputs.flatten_("ngrid", 2, 3)
-        batch.forcing.flatten_("ngrid", 2, 3)
-
-        return batch
 
     def finalize_graph_model(self):
         """

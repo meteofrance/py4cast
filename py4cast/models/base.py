@@ -2,15 +2,13 @@
 Abstract Base Class for all models
 Contains also a few functionnality used in various model.
 """
-from abc import ABC, abstractmethod, abstractproperty
+from abc import ABC, abstractproperty
 from typing import Tuple
 
 import torch
 import torch.nn as nn
 from torch.distributed.algorithms._checkpoint.checkpoint_wrapper import offload_wrapper
 from torch.utils.checkpoint import checkpoint
-
-from py4cast.datasets.base import Item, Statics
 
 
 class ModelABC(ABC):
@@ -19,22 +17,6 @@ class ModelABC(ABC):
     It provides the two methods to plug
     a nn.Module subclass with our Statics and Item classes.
     """
-
-    @abstractmethod
-    def transform_statics(self, statics: Statics) -> Statics:
-        """
-        Transform the dataset static features according to this model
-        expected input shapes.
-        """
-
-    @abstractmethod
-    def transform_batch(
-        self, batch: Item
-    ) -> Tuple[torch.tensor, torch.tensor, torch.tensor]:
-        """
-        Transform the batch into a set of tensors as expected
-        by this model forward call.
-        """
 
     @abstractproperty
     def onnx_supported(self) -> bool:

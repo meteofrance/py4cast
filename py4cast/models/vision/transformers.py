@@ -15,7 +15,6 @@ from dataclasses_json import dataclass_json
 from einops import rearrange
 from torch import einsum, nn
 
-from py4cast.datasets.base import ItemBatch, Statics
 from py4cast.models.base import ModelABC
 from py4cast.models.vision.utils import features_last_to_second, features_second_to_last
 
@@ -302,12 +301,6 @@ class Segformer(ModelABC, nn.Module):
             nn.UpsamplingBilinear2d(scale_factor=2),
             nn.Conv2d(dim_out // 4, num_output_features, kernel_size=3, padding=1),
         )
-
-    def transform_statics(self, statics: Statics) -> Statics:
-        return statics
-
-    def transform_batch(self, batch: ItemBatch) -> ItemBatch:
-        return batch
 
     def forward(self, x):
 

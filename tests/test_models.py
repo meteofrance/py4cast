@@ -87,12 +87,13 @@ def test_torch_training_loop():
     NUM_INPUTS = 2
     NUM_OUTPUTS = 1
 
-    for model_name, is_graph in (
-        ("hilam", True),
-        ("graphlam", True),
-        ("halfunet", False),
-        ("unet", False),
-        ("segformer", False),
+    for model_name in (
+        "hilam",
+        "graphlam",
+        "halfunet",
+        "unet",
+        "segformer",
+        "identity",
     ):
         model_kls, model_settings = get_model_kls_and_settings(model_name)
 
@@ -113,7 +114,7 @@ def test_torch_training_loop():
         ds = FakeSumDataset(GRID_HEIGHT, GRID_WIDTH, NUM_INPUTS)
         training_loader = torch.utils.data.DataLoader(ds, batch_size=2)
 
-        for i, data in enumerate(training_loader):
+        for _, data in enumerate(training_loader):
             # Every data instance is an input + label pair
             inputs, targets = data
 
@@ -121,7 +122,7 @@ def test_torch_training_loop():
             optimizer.zero_grad()
 
             # Flatten (H, W) -> ngrid for GNNs
-            if is_graph:
+            if len(model.input_dims) == 3:
                 inputs = inputs.flatten(1, 2)
                 targets = targets.flatten(1, 2)
 
@@ -138,7 +139,7 @@ def test_torch_training_loop():
     # Make a prediction in eval mode
     model.eval()
     sample = ds[0][0].unsqueeze(0)
-    sample = sample.flatten(1, 2) if is_graph else sample
+    sample = sample.flatten(1, 2) if len(model.input_dims) == 3 else sample
     model(sample)
 
     # We test if models claiming to be onnx exportable really are post training.
@@ -146,7 +147,7 @@ def test_torch_training_loop():
     if model.onnx_supported:
         with tempfile.NamedTemporaryFile(mode="w", suffix=".onnx") as dst:
             sample = torch.rand((1, GRID_HEIGHT, GRID_WIDTH, NUM_INPUTS))
-            if is_graph:
+            if len(model.input_dims) == 3:
                 sample = sample.flatten(1, 2)
             onnx_export_load_infer(model, dst.name, sample)
 
