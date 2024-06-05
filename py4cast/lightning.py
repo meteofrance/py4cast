@@ -183,6 +183,17 @@ class AutoRegressiveLightning(pl.LightningModule):
 
         self.loss.prepare(self, statics.interior_mask, hparams.dataset_info)
 
+    @rank_zero_only
+    def log_hparams_tb(self):
+        if self.logger:
+            dict_log = asdict(self.hparams["hparams"])
+            dict_log["username"] = getpass.getuser()
+            self.logger.log_hyperparams(dict_log, metrics={"val_mean_loss": 0.0})
+            # TODO : save dataset and model configs in folder
+
+    def on_fit_start(self):
+        self.log_hparams_tb()
+
     def configure_optimizers(self) -> torch.optim.Optimizer:
         opt = torch.optim.AdamW(
             self.parameters(), lr=self.hparams["hparams"].lr, betas=(0.9, 0.95)
@@ -364,12 +375,6 @@ class AutoRegressiveLightning(pl.LightningModule):
                 prefix="Validation",
             ),
         ]
-
-        if self.logger:
-            dict_log = asdict(self.hparams["hparams"])
-            dict_log["username"] = getpass.getuser()
-            self.logger.log_hyperparams(dict_log, metrics={"val_mean_loss": 0.0})
-            # TODO : save dataset and model configs in folder
 
     def validation_step(self, batch: ItemBatch, batch_idx):
         """
