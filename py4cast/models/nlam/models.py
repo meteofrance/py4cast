@@ -129,7 +129,6 @@ class GraphLamSettings:
     tmp_dir: Path | str = "/tmp"  # nosec B108
     hidden_dims: int = 64
     hidden_layers: int = 1
-    processor_layers: int = 4
 
     use_checkpointing: bool = False
     offload_to_cpu: bool = False
@@ -165,7 +164,6 @@ class BaseGraphModel(ModelABC, nn.Module):
         on rank zero before instantiating the model.
         """
         # this doesn't take long and it prevents discrepencies
-        print(statics.meshgrid)
         build_graph_for_grid(
             statics.meshgrid,
             settings.tmp_dir,
@@ -686,7 +684,7 @@ class HiLAMParallel(BaseHiGraphModel):
         total_edge_index = torch.cat(total_edge_index_list, dim=1)
         self.edge_split_sections = [ei.shape[1] for ei in total_edge_index_list]
 
-        if self.processor_layers == 0:
+        if self.settings.processor_layers == 0:
             self.processor = lambda x, edge_attr: (x, edge_attr)
         else:
             processor_nets = [
