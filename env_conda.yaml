@@ -33,6 +33,7 @@ dependencies:
   - wandb>=0.13.10
   - shapely>=2.0.1
   - netCDF4==1.6.5
+  - monai==1.3.1
   - pip:
      - tensorboard-plugin-profile
      - torch-tb-profiler==0.4.1
