@@ -88,6 +88,7 @@ def test_torch_training_loop():
     NUM_OUTPUTS = 1
 
     for model_name in (
+        "swinunetr",
         "hilam",
         "graphlam",
         "halfunet",
@@ -167,4 +168,5 @@ def test_model_registry():
         "segformer",
         "identity",
         "hilamparallel",
+        "swinunetr",
     }

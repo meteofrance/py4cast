@@ -7,12 +7,12 @@ from py4cast.models.base import ModelABC
 
 from .nlam.models import GraphLAM, HiLAM, HiLAMParallel
 from .vision.conv import HalfUnet, Unet
-from .vision.transformers import Segformer
+from .vision.transformers import Segformer, SwinUNETR
 
 # Models MUST be added to the registry
 # in order to be used by the training script.
 registry = {}
-for kls in (HalfUnet, Unet, GraphLAM, HiLAM, HiLAMParallel, Segformer):
+for kls in (HalfUnet, Unet, GraphLAM, HiLAM, HiLAMParallel, Segformer, SwinUNETR):
     registry[kls.__name__.lower()] = kls
 
 
