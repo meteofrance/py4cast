@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from copy import deepcopy
-from typing import TYPE_CHECKING, Dict, Union
+from typing import TYPE_CHECKING, Dict, List, Union
 
 import einops
 import matplotlib.pyplot as plt
@@ -63,9 +63,9 @@ class ErrorObserver(ABC):
         pass
 
 
-class PredictionPlot(ErrorObserver):
+class MapPlot(ErrorObserver):
     """
-    Observer used to plot prediction and target
+    Abstract Observer used to plot maps during training
     """
 
     def __init__(
@@ -100,7 +100,6 @@ class PredictionPlot(ErrorObserver):
                 targ, "b t (x y) n -> b t x y n", x=obj.grid_shape[0]
             )
 
-        # Starting by plotting images
         if (
             obj.trainer.is_global_zero
             and self.plotted_examples < self.num_samples_to_plot
@@ -128,22 +127,8 @@ class PredictionPlot(ErrorObserver):
                 # Each slice is (pred_steps, Nlat, Nlon, features)
                 self.plotted_examples += 1  # Increment already here
 
-                var_vmin = (
-                    torch.minimum(
-                        pred_slice.flatten(0, 2).min(dim=0)[0],
-                        target_slice.flatten(0, 2).min(dim=0)[0],
-                    )
-                    .cpu()
-                    .numpy()
-                )  # (d_f,)
-                var_vmax = (
-                    torch.maximum(
-                        pred_slice.flatten(0, 2).max(dim=0)[0],
-                        target_slice.flatten(0, 2).max(dim=0)[0],
-                    )
-                    .cpu()
-                    .numpy()
-                )  # (d_f,)
+                var_vmin = target_slice.flatten(0, 2).min(dim=0)[0].cpu().numpy()
+                var_vmax = target_slice.flatten(0, 2).max(dim=0)[0].cpu().numpy()
                 var_vranges = list(zip(var_vmin, var_vmax))
 
                 feature_names = (
@@ -152,51 +137,128 @@ class PredictionPlot(ErrorObserver):
                     else prediction.feature_names
                 )
 
-                # Iterate over prediction horizon time steps
-                for t_i, (pred_t, target_t) in enumerate(
-                    zip(pred_slice, target_slice), start=1
-                ):
-                    # Create one figure per variable at this time step
-                    # This generate a matplotlib warning as more than 20 figures are plotted.
-                    var_figs = [
-                        plot_prediction(
-                            pred_t[:, :, var_i],
-                            target_t[:, :, var_i],
-                            obj.interior_2d[:, :, 0],
-                            title=f"{var_name} ({var_unit}), "
-                            f"t={t_i} ({obj.hparams['hparams'].dataset_info.step_duration*t_i} h)",
-                            vrange=var_vrange,
-                            domain_info=obj.hparams["hparams"].dataset_info.domain_info,
-                        )
-                        for var_i, (var_name, var_unit, var_vrange) in enumerate(
-                            zip(
-                                feature_names,
-                                [
-                                    obj.hparams["hparams"].dataset_info.units[name]
-                                    for name in feature_names
-                                ],
-                                var_vranges,
-                            )
-                        )
-                    ]
-                    tensorboard = obj.logger.experiment
-                    [
-                        tensorboard.add_figure(
-                            f"{var_name}_example_{self.plotted_examples}", fig, t_i
-                        )
-                        for var_name, fig in zip(
-                            feature_names,
-                            var_figs,
-                        )
-                    ]
+                self.plot_map(
+                    obj,
+                    pred_slice,
+                    target_slice,
+                    feature_names,
+                    var_vranges,
+                )
 
-                    plt.close("all")  # Close all figs for this time step, saves memory
+    @abstractmethod
+    def plot_map(
+        self,
+        obj: "AutoRegressiveLightning",
+        prediction: torch.tensor,
+        target: torch.tensor,
+        feature_names: List[str],
+        var_vranges: List,
+    ) -> None:
+        pass
 
     def on_step_end(self, obj: "AutoRegressiveLightning") -> None:
         """
         Do an action when "end" is trigger
         """
         pass
+
+
+class PredictionTimestepPlot(MapPlot):
+    """
+    Observer used to plot prediction and target for each timestep.
+    """
+
+    def plot_map(
+        self,
+        obj: "AutoRegressiveLightning",
+        prediction: torch.tensor,
+        target: torch.tensor,
+        feature_names: List[str],
+        var_vranges: List,
+    ) -> None:
+
+        # Prediction and target: (pred_steps, Nlat, Nlon, features)
+        # Iterate over prediction horizon time steps
+        for t_i, (pred_t, target_t) in enumerate(zip(prediction, target), start=1):
+            # Create one figure per variable at this time step
+            # This generate a matplotlib warning as more than 20 figures are plotted.
+            units = [
+                obj.hparams["hparams"].dataset_info.units[name]
+                for name in feature_names
+            ]
+            var_figs = [
+                plot_prediction(
+                    pred_t[:, :, var_i],
+                    target_t[:, :, var_i],
+                    obj.interior_2d[:, :, 0],
+                    title=f"{var_name} ({var_unit}), "
+                    f"t={t_i} ({obj.hparams['hparams'].dataset_info.step_duration*t_i} h)",
+                    vrange=var_vrange,
+                    domain_info=obj.hparams["hparams"].dataset_info.domain_info,
+                )
+                for var_i, (var_name, var_unit, var_vrange) in enumerate(
+                    zip(feature_names, units, var_vranges)
+                )
+            ]
+            tensorboard = obj.logger.experiment
+            for var_name, fig in zip(feature_names, var_figs):
+                fig_name = f"timestep_evol_per_param/{var_name}_example_{self.plotted_examples}"
+                tensorboard.add_figure(fig_name, fig, t_i)
+
+            plt.close("all")  # Close all figs for this time step, saves memory
+
+
+class PredictionEpochPlot(MapPlot):
+    """
+    Observer used to plot prediction and target for max timestep at each epoch.
+    Used to visualize improvement of model over epochs
+    """
+
+    def plot_map(
+        self,
+        obj: "AutoRegressiveLightning",
+        prediction: torch.tensor,
+        target: torch.tensor,
+        feature_names: List[str],
+        var_vranges: List,
+    ) -> None:
+
+        # We keep only the max timestep of the pred and target: shape (Nlat, Nlon, features)
+        max_step = prediction.shape[0]
+        pred_t, target_t = prediction[max_step - 1], target[max_step - 1]
+
+        # Create one figure per variable at this time step
+        # This generate a matplotlib warning as more than 20 figures are plotted.
+        var_figs = [
+            plot_prediction(
+                pred_t[:, :, var_i],
+                target_t[:, :, var_i],
+                obj.interior_2d[:, :, 0],
+                title=f"{var_name} ({var_unit}), "
+                f"t={max_step} ({obj.hparams['hparams'].dataset_info.step_duration*max_step} h)",
+                vrange=var_vrange,
+                domain_info=obj.hparams["hparams"].dataset_info.domain_info,
+            )
+            for var_i, (var_name, var_unit, var_vrange) in enumerate(
+                zip(
+                    feature_names,
+                    [
+                        obj.hparams["hparams"].dataset_info.units[name]
+                        for name in feature_names
+                    ],
+                    var_vranges,
+                )
+            )
+        ]
+
+        tensorboard = obj.logger.experiment
+        for var_name, fig in zip(feature_names, var_figs):
+            fig_name = (
+                f"epoch_evol_per_param/{var_name}_example_{self.plotted_examples}"
+            )
+            tensorboard.add_figure(fig_name, fig, obj.current_epoch)
+
+        plt.close("all")  # Close all figs for this time step, saves memory
 
 
 class StateErrorPlot(ErrorObserver):
@@ -252,7 +314,7 @@ class StateErrorPlot(ErrorObserver):
 
                     tensorboard = obj.logger.experiment
                     tensorboard.add_figure(
-                        f"{self.prefix}_{name}", fig, obj.current_epoch
+                        f"score_cards/{self.prefix}_{name}", fig, obj.current_epoch
                     )
         # Free memory
         [self.losses[name].clear() for name in self.metrics]
@@ -304,10 +366,8 @@ class SpatialErrorPlot(ErrorObserver):
                 for t_i, loss_map in enumerate(mean_spatial_loss)
             ]
             tensorboard = obj.logger.experiment
-            [
-                tensorboard.add_figure(f"{self.prefix}_spatial_error", fig, t_i)
-                for t_i, fig in enumerate(loss_map_figs)
-            ]
+            for t_i, fig in enumerate(loss_map_figs):
+                tensorboard.add_figure(f"spatial_error/{self.prefix}_loss", fig, t_i)
             plt.close()
 
         self.spatial_loss_maps.clear()
