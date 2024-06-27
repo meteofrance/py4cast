@@ -16,7 +16,12 @@ from py4cast.datasets.base import DatasetInfo, ItemBatch, NamedTensor
 from py4cast.losses import ScaledLoss, WeightedLoss
 from py4cast.models import build_model_from_settings, get_model_kls_and_settings
 from py4cast.models.base import expand_to_batch
-from py4cast.observer import PredictionPlot, SpatialErrorPlot, StateErrorPlot
+from py4cast.observer import (
+    PredictionEpochPlot,
+    PredictionTimestepPlot,
+    SpatialErrorPlot,
+    StateErrorPlot,
+)
 
 
 @dataclass
@@ -121,6 +126,10 @@ class AutoRegressiveLightning(pl.LightningModule):
 
         # For storing spatial loss maps during evaluation
         self.spatial_loss_maps = []
+
+        # class variables to log loss during training, for tensorboad custom scalar
+        self.training_step_losses = []
+        self.validation_step_losses = []
 
         # Set model input/output grid features based on dataset tensor shapes
         num_grid_static_features = statics.grid_static_features.dim_size("features")
@@ -340,25 +349,34 @@ class AutoRegressiveLightning(pl.LightningModule):
     def on_train_start(self):
         self.train_plotters = []
 
+    def _shared_epoch_end(self, outputs: List[torch.Tensor], label: str) -> None:
+        """Computes and logs the averaged metrics at the end of an epoch.
+        Step shared by training and validation epochs.
+        """
+        avg_loss = torch.stack([x for x in outputs]).mean()
+        tb = self.logger.experiment
+        tb.add_scalar(f"mean_loss_epoch/{label}", avg_loss, self.current_epoch)
+
     def training_step(self, batch: ItemBatch) -> torch.Tensor:
         """
         Train on single batch
         """
         prediction, target = self.common_step(batch)
-        # Compute loss
-        batch_loss = torch.mean(
-            self.loss(prediction, target)
-        )  # mean over unrolled times and batch
+        # Compute loss: mean over unrolled times and batch
+        batch_loss = torch.mean(self.loss(prediction, target))
 
-        log_dict = {"train_loss": batch_loss}
-        self.log_dict(
-            log_dict, prog_bar=True, on_step=True, on_epoch=True, sync_dist=True
-        )
+        self.training_step_losses.append(batch_loss)
+
         # Notify every plotters
         for plotter in self.train_plotters:
             plotter.update(self, prediction=prediction, target=target)
 
         return batch_loss
+
+    def on_train_epoch_end(self):
+        outputs = self.training_step_losses
+        self._shared_epoch_end(outputs, "train")
+        self.training_step_losses.clear()  # free memory
 
     def on_validation_start(self):
         """
@@ -369,7 +387,12 @@ class AutoRegressiveLightning(pl.LightningModule):
         metrics = {"mae": l1_loss}
         self.valid_plotters = [
             StateErrorPlot(metrics, prefix="Validation"),
-            PredictionPlot(
+            PredictionTimestepPlot(
+                num_samples_to_plot=1,
+                num_features_to_plot=4,
+                prefix="Validation",
+            ),
+            PredictionEpochPlot(
                 num_samples_to_plot=1,
                 num_features_to_plot=4,
                 prefix="Validation",
@@ -385,16 +408,19 @@ class AutoRegressiveLightning(pl.LightningModule):
         time_step_loss = torch.mean(
             self.loss(prediction, target), dim=0
         )  # (time_steps-1)
-
         mean_loss = torch.mean(time_step_loss)
 
         # Log loss per time step forward and mean
-        val_log_dict = {
-            f"val_loss_unroll{step}": time_step_loss[step - 1]
+        unroll_dict = {
+            f"timestep_losses/val_step_{step}": time_step_loss[step]
             for step in range(time_step_loss.shape[0])
         }
-        val_log_dict["val_mean_loss"] = mean_loss
-        self.log_dict(val_log_dict, on_step=False, on_epoch=True, sync_dist=True)
+        self.log_dict(unroll_dict, on_epoch=True, sync_dist=True)
+        self.log(
+            "val_mean_loss", mean_loss, on_epoch=True, sync_dist=True, prog_bar=True
+        )
+        self.validation_step_losses.append(mean_loss)
+
         self.val_mean_loss = mean_loss
 
         # Notify every plotters
@@ -405,6 +431,9 @@ class AutoRegressiveLightning(pl.LightningModule):
         """
         Compute val metrics at the end of val epoch
         """
+        outputs = self.validation_step_losses
+        self._shared_epoch_end(outputs, "validation")
+        self.validation_step_losses.clear()  # free memory
         # Notify every plotter that this is the end
         for plotter in self.valid_plotters:
             plotter.on_step_end(self)
@@ -422,7 +451,8 @@ class AutoRegressiveLightning(pl.LightningModule):
         self.test_plotters = [
             StateErrorPlot(metrics),
             SpatialErrorPlot(),
-            PredictionPlot(self.hparams["hparams"].num_samples_to_plot),
+            PredictionTimestepPlot(self.hparams["hparams"].num_samples_to_plot),
+            PredictionEpochPlot(self.hparams["hparams"].num_samples_to_plot),
         ]
 
     def test_step(self, batch: ItemBatch, batch_idx):
@@ -439,7 +469,7 @@ class AutoRegressiveLightning(pl.LightningModule):
 
         # Log loss per time step forward and mean
         test_log_dict = {
-            f"test_loss_unroll{step}": time_step_loss[step - 1]
+            f"timestep_losses/test_step_{step}": time_step_loss[step]
             for step in range(time_step_loss.shape[0])
         }
         test_log_dict["test_mean_loss"] = mean_loss

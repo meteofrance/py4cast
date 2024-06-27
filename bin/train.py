@@ -28,6 +28,12 @@ from py4cast.lightning import ArLightningHyperParam, AutoRegressiveLightning
 from py4cast.models import registry as model_registry
 from py4cast.settings import ROOTDIR
 
+layout = {
+    "Check Overfit": {
+        "loss": ["Multiline", ["mean_loss_epoch/train", "mean_loss_epoch/validation"]],
+    },
+}
+
 
 @dataclass
 class TrainerParams:
@@ -190,6 +196,13 @@ if __name__ == "__main__":
         default="camp0",
         help="Name of folder that regroups runs.",
     )
+    parser.add_argument(
+        "--run_name",
+        "-rn",
+        type=str,
+        default="run",
+        help="Name of the run.",
+    )
 
     args, other = parser.parse_known_args()
     username = getpass.getuser()
@@ -254,7 +267,7 @@ if __name__ == "__main__":
     # Get Log folders
     log_dir = ROOTDIR / "logs"
     folder = Path(args.campaign_name) / args.dataset / args.model
-    run_name = f"{username[:4]}"
+    run_name = f"{username[:4]}_{args.run_name}"
     if args.dev_mode:
         run_name += "_dev"
     list_subdirs = list((log_dir / folder).glob(f"{run_name}*"))
@@ -278,6 +291,7 @@ if __name__ == "__main__":
             version=subfolder,
             default_hp_metric=False,
         )
+        logger.experiment.add_custom_scalars(layout)
         checkpoint_callback = pl.callbacks.ModelCheckpoint(
             dirpath=save_path,
             filename="{epoch:02d}-{val_mean_loss:.2f}",  # Custom filename pattern

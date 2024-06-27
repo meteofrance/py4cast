@@ -443,7 +443,7 @@ class TitanDataset(DatasetABC, Dataset):
         print("Start forming samples...")
         samples = [Sample(date, self.settings) for date in self.period.date_list]
         samples = [sample for sample in samples if sample.is_valid(self.params)]
-        print("All samples are now defined")
+        print(f"All {self.period.name} samples are now defined")
         return samples
 
     @cached_property
@@ -771,12 +771,13 @@ if __name__ == "__main__":
     print("Len dataset : ", len(train_ds))
 
     print("First Item description :")
-    print(train_ds[0])
-
-    start_time = time.time()
     data_iter = iter(train_ds.torch_dataloader())
+    print(next(data_iter))
+
+    print("Speed test:")
+    start_time = time.time()
     for i in tqdm.trange(args.n_iter, desc="Loading samples"):
-        _ = train_ds[i]
+        _ = next(data_iter)
     delta = time.time() - start_time
     speed = args.n_iter / delta
     print(f"Loading speed: {round(speed, 3)} sample(s)/sec")
