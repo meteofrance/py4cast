@@ -17,9 +17,9 @@
         }
     },
     "grid":{
-        "name": "PAAROME_1S100",
+        "name": "PAAROME_1S40",
         "border_size": 0,
-        "subdomain": [256,1664,512,2304]
+        "subdomain": [64, 640, 192, 960]
     },
     "settings":{
         "step_duration": 1,
@@ -28,6 +28,10 @@
     },
     "params": {
         "aro_t2m": {
+            "levels": [2],
+            "kind": "input_output"
+        },
+        "aro_r2": {
             "levels": [2],
             "kind": "input_output"
         },
@@ -43,8 +47,20 @@
             "levels": [10],
             "kind": "input_output"
         },
-        "aro_r2": {
-            "levels": [2],
+        "aro_t": {
+            "levels": [250, 500, 700, 850],
+            "kind": "input_output"
+        },
+        "aro_u": {
+            "levels": [250, 500, 700, 850],
+            "kind": "input_output"
+        },
+        "aro_v": {
+            "levels": [250, 500, 700, 850],
+            "kind": "input_output"
+        },
+        "aro_z": {
+            "levels": [250, 500, 700, 850],
             "kind": "input_output"
         }
     }

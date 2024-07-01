@@ -19,7 +19,7 @@ argparse-dataclass==2.0.0
 tensorboard==2.13.0
 typer==0.9.0
 netCDF4==1.6.5
-tensorboard-plugin-profile 
+tensorboard-plugin-profile
 torch-tb-profiler==0.4.1
 einops==0.7.0
 torchinfo==1.8.0
@@ -29,3 +29,5 @@ onnx==1.16.0
 onnxscript==0.1.0.dev20240421
 onnxruntime==1.17.3
 monai==1.3.1
+gif==23.3.0
+scikit-image==0.24.0
