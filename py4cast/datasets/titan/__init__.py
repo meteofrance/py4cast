@@ -9,11 +9,14 @@ from pathlib import Path
 from typing import Dict, List, Literal, Tuple
 
 import cartopy
+import gif
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import torch
 import tqdm
 import xarray as xr
+from skimage.transform import resize
 
 # Cyeccodes is a Cython module from Météo-France to read grib faster than xarray+cfgrib
 try:
@@ -34,6 +37,7 @@ from py4cast.datasets.base import (
     DatasetInfo,
     Item,
     NamedTensor,
+    Stats,
     TorchDataloaderSettings,
     collate_fn,
 )
@@ -55,11 +59,11 @@ def get_weight_per_lvl(level: int, kind: Literal["hPa", "m"]):
 
 
 def read_grib_with_cyeccodes(
-    path_grib: Path, names=None, levels=None
+    path_grib: Path, name=None, level=None
 ) -> Dict[str, Dict[int, np.ndarray]]:
-    if names or levels:
+    if name or level:
         include_filters = {
-            k: v for k, v in [("cfVarName", names), ("level", levels)] if v is not None
+            k: v for k, v in [("cfVarName", name), ("level", [level])] if v is not None
         }
     else:
         include_filters = None
@@ -73,15 +77,15 @@ def read_grib_with_cyeccodes(
 
     grib_dict = {}
     for metakey, result in nested_dd_iterator(results):
-        array = result["values"]
+        arr = result["values"]
         grid = (result["metadata"]["Nj"], result["metadata"]["Ni"])
         mv = result["metadata"]["missingValue"]
-        array = np.reshape(array, grid)
-        array = np.where(array == mv, np.nan, array)
+        arr = np.reshape(arr, grid)
+        arr = np.where(arr == mv, np.nan, arr)
         name, level = metakey.split("-")
         level = int(level)
         grib_dict[name] = {}
-        grib_dict[name][level] = array
+        grib_dict[name][level] = arr
     return grib_dict
 
 
@@ -139,23 +143,24 @@ class Grid:
 
     def __post_init__(self):
         grid_info = METADATA["GRIDS"][self.name]
-        x, y = grid_info["size"]
+        self.full_size = grid_info["size"]
+        self.path_config = SCRATCH_PATH / f"conf_{self.name}.grib"
 
         # Setting correct subdomain if no subdomain is selected.
         if sum(self.subdomain) == 0:
-            self.subdomain = (0, x, 0, y)
+            self.subdomain = (0, self.full_size[0], 0, self.full_size[1])
         self.x = self.subdomain[1] - self.subdomain[0]
         self.y = self.subdomain[3] - self.subdomain[2]
 
     @cached_property
     def lat(self) -> np.array:
-        conf_ds = xr.open_dataset(SCRATCH_PATH / "conf.grib")
+        conf_ds = xr.open_dataset(self.path_config)
         latitudes = conf_ds.latitude[self.subdomain[0] : self.subdomain[1]]
         return np.transpose(np.tile(latitudes, (self.y, 1)))
 
     @cached_property
     def lon(self) -> np.array:
-        conf_ds = xr.open_dataset(SCRATCH_PATH / "conf.grib")
+        conf_ds = xr.open_dataset(self.path_config)
         longitudes = conf_ds.longitude[self.subdomain[2] : self.subdomain[3]]
         return np.tile(longitudes, (self.x, 1))
 
@@ -163,7 +168,7 @@ class Grid:
 
     @property
     def geopotential(self) -> np.array:
-        conf_ds = xr.open_dataset(SCRATCH_PATH / "conf.grib")
+        conf_ds = xr.open_dataset(self.path_config)
         return conf_ds.h.values[
             self.subdomain[0] : self.subdomain[1], self.subdomain[2] : self.subdomain[3]
         ]
@@ -190,7 +195,7 @@ class Grid:
 
     @cached_property
     def grid_limits(self):
-        conf_ds = xr.open_dataset(SCRATCH_PATH / "conf.grib")
+        conf_ds = xr.open_dataset(self.path_config)
         grid_limits = [  # In projection (llon, ulon, llat, ulat)
             float(conf_ds.longitude[self.subdomain[2]].values),  # min y
             float(conf_ds.longitude[self.subdomain[3] - 1].values),  # max y
@@ -202,7 +207,7 @@ class Grid:
     @cached_property
     def meshgrid(self) -> np.array:
         """Build a meshgrid from coordinates position."""
-        conf_ds = xr.open_dataset(SCRATCH_PATH / "conf.grib")
+        conf_ds = xr.open_dataset(self.path_config)
         latitudes = conf_ds.latitude[self.subdomain[0] : self.subdomain[1]]
         longitudes = conf_ds.longitude[self.subdomain[2] : self.subdomain[3]]
         meshgrid = np.array(np.meshgrid(longitudes, latitudes))
@@ -221,7 +226,7 @@ class Grid:
 @dataclass(slots=True)
 class Param:
     name: str
-    levels: Tuple[int]  # desired levels
+    level: int
     grid: Grid
     # Parameter status :
     # input = forcings, output = diagnostic, input_output = classical weather var
@@ -244,37 +249,36 @@ class Param:
             self.level_type = "hPa"
         self.long_name = param_info["long_name"]
         self.native_grid = param_info["grid"]
-        if self.grid.name != "PAAROME_1S100":
-            raise NotImplementedError
+        if self.native_grid not in ["PAAROME_1S100", "PAAROME_1S40"]:
+            raise NotImplementedError(
+                "Parameter native grid must be in ['PAAROME_1S100', 'PAAROME_1S40']"
+            )
 
     @property
     def number(self) -> int:
         """Get the number of parameters."""
-        return len(self.levels)
+        return 1
 
     @property  # Does not accept a cached property with slots=True
     def ndims(self) -> str:
-        if len(self.levels) > 1:
-            return 3
-        else:
-            return 2
+        return 2
 
     @property
     def state_weights(self) -> list:
-        return [get_weight_per_lvl(level, self.level_type) for level in self.levels]
+        return [get_weight_per_lvl(self.level, self.level_type)]
 
     @property
     def parameter_name(self) -> list:
-        return [f"{self.long_name} {level}{self.level_type}" for level in self.levels]
+        return [f"{self.long_name} {self.level}{self.level_type}"]
 
     @property
     def parameter_short_names(self) -> list:
-        return [f"{self.name}_{level}{self.level_type}" for level in self.levels]
+        return [f"{self.name}_{self.level}{self.level_type}"]
 
     @property
     def units(self) -> list:
         """For a given variable, the unit is the same accross all levels."""
-        return [self.unit for _ in self.levels]
+        return [self.unit]
 
     def get_filepath(
         self, date: dt.datetime, file_format: Literal["npy", "grib"]
@@ -286,39 +290,39 @@ class Param:
         else:
             return folder / self.grib_name
 
+    def fit_to_grid(self, arr: np.ndarray) -> np.ndarray:
+        if self.grid.name == self.native_grid:
+            return arr
+        anti_aliasing = self.grid.name == "PAAROME_1S40"  # True if downsampling
+        return resize(arr, self.grid.full_size, anti_aliasing=anti_aliasing)
+
     def load_data_npy(self, date: dt.datetime) -> np.ndarray:
-        array = np.load(self.get_filepath(date, "npy"))
-        subdomain = self.grid.subdomain
-        array = array[subdomain[0] : subdomain[1], subdomain[2] : subdomain[3]]
-        if self.native_grid != self.grid.name:
-            # TODO : interpolation d'un champ sur une grille différente
-            raise NotImplementedError(
-                f"Unable to load data with grid {self.native_grid}"
-            )
+        arr = np.load(self.get_filepath(date, "npy"))
         # TODO : select only desired levels -> save dataset as npz with dico level
-        return array
+        return arr
 
     def load_data_grib(self, date: dt.datetime) -> np.ndarray:
         path_grib = self.get_filepath(date, "grib")
         if use_cyeccodes:
-            param_dict = read_grib_with_cyeccodes(path_grib)[self.grib_param]
+            param_dict = read_grib_with_cyeccodes(
+                path_grib, name=self.grib_param, level=self.level
+            )[self.grib_param]
         else:
             param_dict = read_grib_with_xarray(path_grib)[self.grib_param]
-        array = param_dict[
-            self.levels[0]
-        ]  # warning : doesn't work with multiple levels for now
-        subdomain = self.grid.subdomain
-        array = array[subdomain[0] : subdomain[1], subdomain[2] : subdomain[3]]
-        array = array[::-1]  # invert latitude
-        return array
+        arr = param_dict[self.level]
+        return arr
 
     def load_data(
         self, date: dt.datetime, file_format: Literal["npy", "grib"] = "grib"
     ):
         if file_format == "npy":
-            return self.load_data_npy(date)
+            arr = self.load_data_npy(date)
         else:
-            return self.load_data_grib(date)
+            arr = self.load_data_grib(date)
+        arr = self.fit_to_grid(arr)
+        subdomain = self.grid.subdomain
+        arr = arr[subdomain[0] : subdomain[1], subdomain[2] : subdomain[3]]
+        return arr[::-1]  # invert latitude  # TODO : WTF ? plots tensorboard ?
 
     def exist(self, date: dt.datetime, file_format: Literal["npy", "grib"] = "grib"):
         filepath = self.get_filepath(date, file_format)
@@ -350,6 +354,9 @@ class Sample:
 
     date_t0: dt.datetime
     settings: TitanSettings
+    params: List[Param]
+    stats: Stats
+    grid: Grid
     terms: Tuple[float] = field(init=False)  # gap in hours btw step and t0
     dates: Tuple[dt.datetime] = field(init=False)  # date of each step
 
@@ -375,7 +382,7 @@ class Sample:
         seconds = [(date - start_of_year).total_seconds() for date in self.dates]
         return np.asarray(seconds)
 
-    def is_valid(self, param_list: List[Param]) -> bool:
+    def is_valid(self) -> bool:
         """Check that all the files necessary for this sample exist.
 
         Args:
@@ -384,10 +391,169 @@ class Sample:
             Boolean: Whether the sample is available or not
         """
         for date in self.dates:
-            for param in param_list:
+            for param in self.params:
                 if not param.exist(date, self.settings.file_format):
                     return False
         return True
+
+    def get_year_hour_forcing(self):
+        """Get the forcing term dependent of the sample time"""
+        hour_angle = (torch.Tensor(self.hours_of_day) / 12) * torch.pi  # (sample_len)
+        seconds_from_start_year = torch.Tensor(self.seconds_from_start_of_year)
+        # Keep only pred steps for forcing
+        hour_angle = hour_angle[-self.settings.num_pred_steps :]
+        seconds_from_start_year = seconds_from_start_year[
+            -self.settings.num_pred_steps :
+        ]
+        days_in_year = 366 if self.date_t0.year % 4 == 0 else 365
+        seconds_in_year = days_in_year * 24 * 60 * 60
+        year_angle = (seconds_from_start_year / seconds_in_year) * 2 * torch.pi
+        datetime_forcing = torch.stack(
+            (
+                torch.sin(hour_angle),
+                torch.cos(hour_angle),
+                torch.sin(year_angle),
+                torch.cos(year_angle),
+            ),
+            dim=1,
+        )  # (sample_len, 4)
+        datetime_forcing = (datetime_forcing + 1) / 2  # Rescale to [0,1]
+        return datetime_forcing
+
+    def get_param_tensor(
+        self, param: Param, dates: List[dt.datetime], no_standardize: bool = False
+    ) -> torch.tensor:
+        if self.settings.standardize and not no_standardize:
+            names = param.parameter_short_names
+            means = np.asarray([self.stats[name]["mean"] for name in names])
+            std = np.asarray([self.stats[name]["std"] for name in names])
+        arrays = [param.load_data(date, self.settings.file_format) for date in dates]
+        arr = np.stack(arrays)
+        # Extend dimension to match 3D (level dimension)
+        if len(arr.shape) != 4:
+            arr = np.expand_dims(arr, axis=1)
+        arr = np.transpose(arr, axes=[0, 2, 3, 1])  # shape = (steps, lvl, x, y)
+        if self.settings.standardize and not no_standardize:
+            arr = (arr - means) / std
+        return torch.from_numpy(arr)
+
+    def load(self, no_standardize: bool = False) -> Item:
+        linputs, loutputs, lforcings = [], [], []
+
+        # Reading parameters from files
+        for param in self.params:
+            state_kwargs = {
+                "feature_names": param.parameter_short_names,
+                "names": ["timestep", "lat", "lon", "features"],
+            }
+
+            if param.kind == "input":
+                # forcing is taken for every predicted step
+                dates = self.dates[-self.settings.num_pred_steps :]
+                tensor = self.get_param_tensor(param, dates, no_standardize)
+                tmp_state = NamedTensor(tensor=tensor, **deepcopy(state_kwargs))
+                lforcings.append(tmp_state)
+
+            elif param.kind == "output":
+                dates = self.dates[-self.settings.num_pred_steps :]
+                tensor = self.get_param_tensor(param, dates, no_standardize)
+                tmp_state = NamedTensor(tensor=tensor, **deepcopy(state_kwargs))
+                loutputs.append(tmp_state)
+
+            else:  # input_output
+                tensor = self.get_param_tensor(param, self.dates, no_standardize)
+                state_kwargs["names"][0] = "timestep"
+                tmp_state = NamedTensor(
+                    tensor=tensor[-self.settings.num_pred_steps :],
+                    **deepcopy(state_kwargs),
+                )
+
+                loutputs.append(tmp_state)
+                state_kwargs["names"][0] = "timestep"
+                tmp_state = NamedTensor(
+                    tensor=tensor[: self.settings.num_input_steps],
+                    **deepcopy(state_kwargs),
+                )
+                linputs.append(tmp_state)
+
+        time_forcing = NamedTensor(  # doy : day_of_year
+            feature_names=["cos_hour", "sin_hour", "cos_doy", "sin_doy"],
+            tensor=self.get_year_hour_forcing().type(torch.float32),
+            names=["timestep", "features"],
+        )
+        lforcings.append(time_forcing)
+        for forcing in lforcings:
+            forcing.unsqueeze_and_expand_from_(linputs[0])
+        return Item(
+            inputs=NamedTensor.concat(linputs),
+            outputs=NamedTensor.concat(loutputs),
+            forcing=NamedTensor.concat(lforcings),
+        )
+
+    def plot(self, item: Item, step: int, save_path: Path = None) -> None:
+        # Retrieve the named tensor
+        ntensor = item.inputs if step <= 0 else item.outputs
+
+        # Retrieve the timestep data index
+        if step <= 0:  # input step
+            index_tensor = step + self.settings.num_input_steps - 1
+        else:  # output step
+            index_tensor = step - 1
+
+        # Sort parameters by level, to plot each level on one line
+        levels = sorted(list(set([param.level for param in self.params])))
+        dict_params = {level: [] for level in levels}
+        for param in self.params:
+            dict_params[param.level].append(param)
+
+        # Groups levels 0m, 2m and 10m on one "surf" level
+        dict_params["surf"] = []
+        for lvl in [0, 2, 10]:
+            if lvl in levels:
+                dict_params["surf"] += dict_params.pop(lvl)
+
+        # Plot settings
+        kwargs = {"projection": self.grid.projection}
+        nrows = len(dict_params.keys())
+        ncols = max([len(param_list) for param_list in dict_params.values()])
+        fig, axs = plt.subplots(nrows, ncols, figsize=(20, 15), subplot_kw=kwargs)
+
+        for i, level in enumerate(dict_params.keys()):
+            for j, param in enumerate(dict_params[level]):
+                pname = param.parameter_short_names[0]
+                tensor = ntensor[pname][index_tensor, :, :, 0]
+                arr = tensor.numpy()[::-1]  # invert latitude # TODO WTF tensorboard ?
+                vmin, vmax = self.stats[pname]["min"], self.stats[pname]["max"]
+                img = axs[i, j].imshow(
+                    arr, vmin=vmin, vmax=vmax, extent=self.grid.grid_limits
+                )
+                axs[i, j].set_title(pname)
+                axs[i, j].coastlines(resolution="50m")
+                cbar = fig.colorbar(img, ax=axs[i, j], fraction=0.04, pad=0.04)
+                cbar.set_label(param.unit)
+
+        hours_delta = dt.timedelta(hours=self.settings.step_duration * step)
+        plt.suptitle(f"Run: {self.date_t0} - Valid time: {self.date_t0 + hours_delta}")
+        plt.tight_layout()
+
+        if save_path is not None:
+            plt.savefig(save_path)
+            plt.close()
+
+    @gif.frame
+    def plot_frame(self, item: Item, step: int) -> None:
+        self.plot(item, step)
+
+    def plot_gif(self, save_path: Path):
+        # We don't want to standardize data for plots
+        item = self.load(no_standardize=True)
+        frames = []
+        n_inputs, n_preds = self.settings.num_input_steps, self.settings.num_pred_steps
+        steps = list(range(-n_inputs + 1, n_preds + 1))
+        for step in tqdm.tqdm(steps, desc="Making gif"):
+            frame = self.plot_frame(item, step)
+            frames.append(frame)
+        gif.save(frames, str(save_path), duration=250)
 
 
 #############################################################
@@ -402,8 +568,10 @@ class TitanDataset(DatasetABC, Dataset):
         self, grid: Grid, period: Period, params: List[Param], settings: TitanSettings
     ):
         self.grid = grid
-        if grid.name != "PAAROME_1S100":
-            raise NotImplementedError
+        if grid.name not in ["PAAROME_1S100", "PAAROME_1S40"]:
+            raise NotImplementedError(
+                "Grid must be in ['PAAROME_1S100', 'PAAROME_1S40']"
+            )
         self.period = period
         self.params = params
         self.settings = settings
@@ -441,8 +609,12 @@ class TitanDataset(DatasetABC, Dataset):
     def sample_list(self):
         """Creates the list of samples."""
         print("Start forming samples...")
-        samples = [Sample(date, self.settings) for date in self.period.date_list]
-        samples = [sample for sample in samples if sample.is_valid(self.params)]
+        stats = self.stats if self.settings.standardize else None
+        samples = [
+            Sample(date, self.settings, self.params, stats, self.grid)
+            for date in self.period.date_list
+        ]
+        samples = [sample for sample in samples if sample.is_valid()]
         print(f"All {self.period.name} samples are now defined")
         return samples
 
@@ -462,30 +634,6 @@ class TitanDataset(DatasetABC, Dataset):
     def __len__(self):
         return len(self.sample_list)
 
-    def get_year_hour_forcing(self, sample: Sample):
-        """Get the forcing term dependent of the sample time"""
-        hour_angle = (torch.Tensor(sample.hours_of_day) / 12) * torch.pi  # (sample_len)
-        seconds_from_start_year = torch.Tensor(sample.seconds_from_start_of_year)
-        # Keep only pred steps for forcing
-        hour_angle = hour_angle[-self.settings.num_pred_steps :]
-        seconds_from_start_year = seconds_from_start_year[
-            -self.settings.num_pred_steps :
-        ]
-        days_in_year = 366 if sample.date_t0.year % 4 == 0 else 365
-        seconds_in_year = days_in_year * 24 * 60 * 60
-        year_angle = (seconds_from_start_year / seconds_in_year) * 2 * torch.pi
-        datetime_forcing = torch.stack(
-            (
-                torch.sin(hour_angle),
-                torch.cos(hour_angle),
-                torch.sin(year_angle),
-                torch.cos(year_angle),
-            ),
-            dim=1,
-        )  # (sample_len, 4)
-        datetime_forcing = (datetime_forcing + 1) / 2  # Rescale to [0,1]
-        return datetime_forcing
-
     @cached_property
     def forcing_dim(self) -> int:
         """Return the number of forcings."""
@@ -504,87 +652,12 @@ class TitanDataset(DatasetABC, Dataset):
                 res += param.number
         return res
 
-    def get_param_tensor(self, param: Param, dates: List[dt.datetime]) -> torch.tensor:
-        if self.settings.standardize:
-            names = param.parameter_short_names
-            means = np.asarray([self.stats[name]["mean"] for name in names])
-            std = np.asarray([self.stats[name]["std"] for name in names])
-        arrays = [param.load_data(date, self.settings.file_format) for date in dates]
-        array = np.stack(arrays)
-        # Extend dimension to match 3D (level dimension)
-        if len(array.shape) != 4:
-            array = np.expand_dims(array, axis=1)
-        array = np.transpose(array, axes=[0, 2, 3, 1])  # shape = (steps, lvl, x, y)
-        if self.settings.standardize:
-            array = (array - means) / std
-        return torch.from_numpy(array)
-
     def __getitem__(self, index: int) -> Item:
 
         # TODO: build a single NamedTensor with all the inputs and outputs in one shot.
-
         sample = self.sample_list[index]
-
-        # Datetime Forcing
-        lforcings = [
-            NamedTensor(
-                feature_names=[
-                    "cos_hour",
-                    "sin_hour",
-                    "cos_doy",
-                    "sin_doy",
-                ],  # doy : day_of_year
-                tensor=self.get_year_hour_forcing(sample).type(torch.float32),
-                names=["timestep", "features"],
-            )
-        ]
-        linputs = []
-        loutputs = []
-
-        # Reading parameters from files
-        for param in self.params:
-            state_kwargs = {
-                "feature_names": param.parameter_short_names,
-                "names": ["timestep", "lat", "lon", "features"],
-            }
-
-            if param.kind == "input":
-                # forcing is taken for every predicted step
-                dates = sample.dates[-self.settings.num_pred_steps :]
-                tensor = self.get_param_tensor(param, dates)
-                tmp_state = NamedTensor(tensor=tensor, **deepcopy(state_kwargs))
-                lforcings.append(tmp_state)
-
-            elif param.kind == "output":
-                dates = sample.dates[-self.settings.num_pred_steps :]
-                tensor = self.get_param_tensor(param, dates)
-                tmp_state = NamedTensor(tensor=tensor, **deepcopy(state_kwargs))
-                loutputs.append(tmp_state)
-
-            else:  # input_output
-                tensor = self.get_param_tensor(param, sample.dates)
-                state_kwargs["names"][0] = "timestep"
-                tmp_state = NamedTensor(
-                    tensor=tensor[-self.settings.num_pred_steps :],
-                    **deepcopy(state_kwargs),
-                )
-
-                loutputs.append(tmp_state)
-                state_kwargs["names"][0] = "timestep"
-                tmp_state = NamedTensor(
-                    tensor=tensor[: self.settings.num_input_steps],
-                    **deepcopy(state_kwargs),
-                )
-                linputs.append(tmp_state)
-
-        for forcing in lforcings:
-            forcing.unsqueeze_and_expand_from_(linputs[0])
-
-        return Item(
-            inputs=NamedTensor.concat(linputs),
-            outputs=NamedTensor.concat(loutputs),
-            forcing=NamedTensor.concat(lforcings),
-        )
+        item = sample.load()
+        return item
 
     @classmethod
     def from_dict(
@@ -595,10 +668,11 @@ class TitanDataset(DatasetABC, Dataset):
         num_pred_steps_val_test: int,
     ) -> Tuple["TitanDataset", "TitanDataset", "TitanDataset"]:
         grid = Grid(**conf["grid"])
-        param_list = [
-            Param(name=name, levels=values["levels"], kind=values["kind"], grid=grid)
-            for name, values in conf["params"].items()
-        ]
+        param_list = []
+        for name, values in conf["params"].items():
+            for lvl in values["levels"]:
+                param = Param(name=name, level=lvl, kind=values["kind"], grid=grid)
+                param_list.append(param)
 
         train_settings = TitanSettings(
             num_input_steps, num_pred_steps_train, **conf["settings"]
@@ -735,11 +809,12 @@ class TitanDataset(DatasetABC, Dataset):
 
 
 # TODO :
-# - be able to manage several different levels
-# - methods to load data should be in Sample and not in dataset
-# - add a method to plot a sample
 # - prepare dataset only if config or data has changed
 # - remove Nan from border when working on full domain
+# - check weights in loss
+# - Check why we need to invert arrays when loading them
+# - Improve loading time of item (28s in full config)
+# - adapt everywhere that 1 param = 1 lvl
 
 
 if __name__ == "__main__":
@@ -767,7 +842,6 @@ if __name__ == "__main__":
     train_ds, _, _ = TitanDataset.from_json(args.path_config, 2, 3, 3)
     train_ds.dataset_info.summary()
 
-    print("Test __get_item__")
     print("Len dataset : ", len(train_ds))
 
     print("First Item description :")
@@ -781,3 +855,11 @@ if __name__ == "__main__":
     delta = time.time() - start_time
     speed = args.n_iter / delta
     print(f"Loading speed: {round(speed, 3)} sample(s)/sec")
+
+    print("Plot gif of one sample...")
+    sample = train_ds.sample_list[0]
+    sample.plot_gif("test.gif")
+
+    print("Plot png of one step of sample")
+    item = sample.load(no_standardize=True)
+    sample.plot(item, 0, "test.png")
