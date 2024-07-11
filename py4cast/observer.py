@@ -355,7 +355,6 @@ class SpatialErrorPlot(ErrorObserver):
             mean_spatial_loss = torch.mean(
                 spatial_loss_tensor, dim=0
             )  # (N_log, N_lat, N_lon)
-            print(mean_spatial_loss.shape)
             loss_map_figs = [
                 plot_spatial_error(
                     loss_map,

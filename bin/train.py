@@ -282,8 +282,8 @@ if __name__ == "__main__":
         logger = None
     else:
         print(
-            f"--> Model, checkpoints, and tensorboard artifacts \
-              will be saved in {save_path}."
+            "--> Model, checkpoints, and tensorboard artifacts "
+            + f"will be saved in {save_path}."
         )
         logger = TensorBoardLogger(
             save_dir=log_dir,

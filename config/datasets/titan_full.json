@@ -1,17 +1,17 @@
 {
     "periods": {
         "train": {
-            "start": 2022010106,
-            "end": 2022123123,
+            "start": 2021010103,
+            "end": 2021123123,
             "step": 3
         },
         "valid": {
-            "start": 2023010100,
-            "end": 2023053123,
+            "start": 2022010103,
+            "end": 2022123123,
             "step": 3
         },
         "test": {
-            "start": 2023060100,
+            "start": 2023010103,
             "end": 2023123123,
             "step": 3
         }
@@ -24,7 +24,7 @@
     "settings":{
         "step_duration": 1,
         "standardize": true,
-        "file_format": "grib"
+        "file_format": "npy"
     },
     "params": {
         "aro_t2m": {
