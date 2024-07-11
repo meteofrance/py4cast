@@ -1,5 +1,6 @@
 import datetime as dt
 import json
+import time
 import traceback
 import warnings
 from copy import deepcopy
@@ -15,6 +16,7 @@ import numpy as np
 import pandas as pd
 import torch
 import tqdm
+import typer
 import xarray as xr
 from skimage.transform import resize
 
@@ -49,6 +51,8 @@ from py4cast.datasets.titan.settings import (
 )
 from py4cast.plots import DomainInfo
 from py4cast.settings import CACHE_DIR
+
+app = typer.Typer()
 
 
 def get_weight_per_lvl(level: int, kind: Literal["hPa", "m"]):
@@ -286,7 +290,7 @@ class Param:
         """Return the file path."""
         folder = SCRATCH_PATH / file_format / date.strftime(FORMATSTR)
         if file_format == "npy":
-            return folder / f"{self.name}.npy"
+            return folder / f"{self.name}_{self.level}{self.level_type.lower()}.npy"
         else:
             return folder / self.grib_name
 
@@ -298,7 +302,6 @@ class Param:
 
     def load_data_npy(self, date: dt.datetime) -> np.ndarray:
         arr = np.load(self.get_filepath(date, "npy"))
-        # TODO : select only desired levels -> save dataset as npz with dico level
         return arr
 
     def load_data_grib(self, date: dt.datetime) -> np.ndarray:
@@ -322,6 +325,7 @@ class Param:
         arr = self.fit_to_grid(arr)
         subdomain = self.grid.subdomain
         arr = arr[subdomain[0] : subdomain[1], subdomain[2] : subdomain[3]]
+
         return arr[::-1]  # invert latitude  # TODO : WTF ? plots tensorboard ?
 
     def exist(self, date: dt.datetime, file_format: Literal["npy", "grib"] = "grib"):
@@ -579,6 +583,10 @@ class TitanDataset(DatasetABC, Dataset):
         self.shuffle = self.period.name == "train"
         self.cache_dir.mkdir(parents=True, exist_ok=True)
 
+        n_input, n_pred = self.settings.num_input_steps, self.settings.num_pred_steps
+        filename = f"valid_samples_{self.period.name}_{n_input}_{n_pred}.txt"
+        self.valid_samples_file = self._cache_dir / filename
+
     @cached_property
     def dataset_info(self) -> DatasetInfo:
         """Returns a DatasetInfo object describing the dataset.
@@ -605,17 +613,35 @@ class TitanDataset(DatasetABC, Dataset):
             state_weights=self.state_weights,
         )
 
+    def write_list_valid_samples(self):
+        print(f"Writing list of valid samples for {self.period.name} set...")
+        with open(self.valid_samples_file, "w") as f:
+            for date in tqdm.tqdm(self.period.date_list, "Samples validation"):
+                sample = Sample(date, self.settings, self.params, self.stats, self.grid)
+                if sample.is_valid():
+                    f.write(f"{date.strftime('%Y-%m-%d_%Hh%M')}\n")
+
     @cached_property
     def sample_list(self):
         """Creates the list of samples."""
-        print("Start forming samples...")
+        print("Start creating samples...")
         stats = self.stats if self.settings.standardize else None
-        samples = [
-            Sample(date, self.settings, self.params, stats, self.grid)
-            for date in self.period.date_list
-        ]
-        samples = [sample for sample in samples if sample.is_valid()]
-        print(f"All {self.period.name} samples are now defined")
+        if self.valid_samples_file.exists():
+            with open(self.valid_samples_file, "r") as f:
+                dates_str = [line[:-1] for line in f.readlines()]
+                dateformat = "%Y-%m-%d_%Hh%M"
+                dates = [dt.datetime.strptime(ds, dateformat) for ds in dates_str]
+                samples = [
+                    Sample(date, self.settings, self.params, stats, self.grid)
+                    for date in dates
+                ]
+        else:
+            samples = []
+            for date in tqdm.tqdm(self.period.date_list):
+                sample = Sample(date, self.settings, self.params, stats, self.grid)
+                if sample.is_valid():
+                    samples.append(sample)
+        print(f"--> All {len(samples)} {self.period.name} samples are now defined")
         return samples
 
     @cached_property
@@ -790,7 +816,13 @@ class TitanDataset(DatasetABC, Dataset):
         )
 
     @classmethod
-    def prepare(cls, path_config: Path):
+    def prepare(
+        cls,
+        path_config: Path,
+        num_input_steps: int,
+        num_pred_steps_train: int,
+        num_pred_steps_val_test: int,
+    ):
         print("--> Preparing Titan Dataset...")
 
         print("Load train dataset configuration...")
@@ -799,12 +831,19 @@ class TitanDataset(DatasetABC, Dataset):
 
         print("Computing stats on each parameter...")
         conf["settings"]["standardize"] = False
-        train_ds, _, _ = TitanDataset.from_dict(conf, 2, 3, 3)
+        train_ds, valid_ds, test_ds = TitanDataset.from_dict(
+            conf, num_input_steps, num_pred_steps_train, num_pred_steps_val_test
+        )
+        train_ds.write_list_valid_samples()
+        valid_ds.write_list_valid_samples()
+        test_ds.write_list_valid_samples()
         train_ds.compute_parameters_stats()
 
         print("Computing time stats on each parameters, between 2 timesteps...")
         conf["settings"]["standardize"] = True
-        train_ds, _, _ = TitanDataset.from_dict(conf, 2, 3, 3)
+        train_ds, valid_ds, test_ds = TitanDataset.from_dict(
+            conf, num_input_steps, num_pred_steps_train, num_pred_steps_val_test
+        )
         train_ds.compute_time_step_stats()
 
 
@@ -813,53 +852,61 @@ class TitanDataset(DatasetABC, Dataset):
 # - remove Nan from border when working on full domain
 # - check weights in loss
 # - Check why we need to invert arrays when loading them
-# - Improve loading time of item (28s in full config)
 # - adapt everywhere that 1 param = 1 lvl
+# - save param 1S100 at resolution 1S40 à l'avance
 
 
-if __name__ == "__main__":
-    import time
-    from argparse import ArgumentParser
-
-    parser = ArgumentParser(description="Prepare Titan dataset and test loading speed.")
-    parser.add_argument(
-        "--path_config",
-        default=DEFAULT_CONFIG,
-        type=Path,
-        help="Configuration file for the dataset.",
+@app.command()
+def prepare(
+    path_config: Path = DEFAULT_CONFIG,
+    num_input_steps: int = 2,
+    num_pred_steps_train: int = 1,
+    num_pred_steps_val_test: int = 5,
+):
+    """Prepares Titan by computing statistics on all weather parameters."""
+    TitanDataset.prepare(
+        path_config, num_input_steps, num_pred_steps_train, num_pred_steps_val_test
     )
-    parser.add_argument(
-        "--n_iter",
-        default=5,
-        type=int,
-        help="Number of samples to test loading speed.",
-    )
-    args = parser.parse_args()
 
-    TitanDataset.prepare(args.path_config)
 
-    print("Dataset info : ")
-    train_ds, _, _ = TitanDataset.from_json(args.path_config, 2, 3, 3)
+@app.command()
+def describe(path_config: Path = DEFAULT_CONFIG):
+    """Describes Titan."""
+    train_ds, _, _ = TitanDataset.from_json(path_config, 2, 1, 5)
     train_ds.dataset_info.summary()
-
     print("Len dataset : ", len(train_ds))
-
     print("First Item description :")
     data_iter = iter(train_ds.torch_dataloader())
     print(next(data_iter))
 
-    print("Speed test:")
-    start_time = time.time()
-    for i in tqdm.trange(args.n_iter, desc="Loading samples"):
-        _ = next(data_iter)
-    delta = time.time() - start_time
-    speed = args.n_iter / delta
-    print(f"Loading speed: {round(speed, 3)} sample(s)/sec")
 
+@app.command()
+def plot(path_config: Path = DEFAULT_CONFIG):
+    """Plots a png and a gif for one sample."""
+    train_ds, _, _ = TitanDataset.from_json(path_config, 2, 1, 5)
     print("Plot gif of one sample...")
     sample = train_ds.sample_list[0]
     sample.plot_gif("test.gif")
-
-    print("Plot png of one step of sample")
+    print("Plot png for one step of sample...")
     item = sample.load(no_standardize=True)
     sample.plot(item, 0, "test.png")
+
+
+@app.command()
+def speedtest(path_config: Path = DEFAULT_CONFIG, n_iter: int = 5):
+    """Makes a loading speed test."""
+    train_ds, _, _ = TitanDataset.from_json(path_config, 2, 1, 5)
+    data_iter = iter(train_ds.torch_dataloader())
+    print("Dataset file_format: ", train_ds.settings.file_format)
+    print("Speed test:")
+    start_time = time.time()
+    for i in tqdm.trange(n_iter, desc="Loading samples"):
+        _ = next(data_iter)
+    delta = time.time() - start_time
+    print("Elapsed time : ", delta)
+    speed = n_iter / delta
+    print(f"Loading speed: {round(speed, 3)} sample(s)/sec")
+
+
+if __name__ == "__main__":
+    app()

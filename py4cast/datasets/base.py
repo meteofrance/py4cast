@@ -605,7 +605,7 @@ class DatasetABC(ABC):
         if self.settings.standardize:
             raise ValueError("Your dataset should not be standardized.")
         # When computing stat may force every body to be input/ouput
-        for batch in tqdm(self.torch_dataloader()):
+        for batch in tqdm(self.torch_dataloader(), desc="Computing stats"):
 
             # Here we assume that data are in 2 or 3 D
 
