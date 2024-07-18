@@ -34,13 +34,6 @@ except (ImportError, FileNotFoundError, ModuleNotFoundError):
     warnings.warn(f"Could not import TitanDataset. {traceback.format_exc()}")
 
 try:
-    from .poesy import PoesyDataset
-
-    registry["poesy"] = (PoesyDataset, default_config_root / "poesy.json")
-except ImportError:
-    warnings.warn(f"Could not import PoesyDataset. {traceback.format_exc()}")
-
-try:
     from .dummy import DummyDataset
 
     registry["dummy"] = (DummyDataset, "")
