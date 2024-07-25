@@ -1,0 +1,65 @@
+{
+    "periods": {
+        "train": {
+            "start": 2020061521,
+            "end": 2021061521,
+            "step": 24
+        },
+        "test": {
+            "start": 2021061621,
+            "end": 2021071621,
+            "step": 24
+        },
+        "valid": {
+            "start": 2021071721,
+            "end": 2021111521,
+            "step": 24
+        }
+    },
+    "grid":{
+        "geometry":"EURW1S40", 
+        "border_size":10, 
+        "domain":"france",
+        "model":"arome",
+        "subgrid":[0,512,0,512]
+    }, 
+    "settings":{
+        "step_duration": 1,
+        "standardize": true,
+        "file_format": "npy"
+    },
+    "dataset": {
+        "arome": {
+            "members": [
+                0,
+                1, 
+                2,
+                3,
+                4,
+                5,
+                6,
+                7,
+                8,
+                9,
+                10,
+                11,
+                12,
+                13,
+                14,
+                15,
+                16
+            ],
+            "term": {
+                "start": 0,
+                "end": 44,
+                "timestep": 1
+            },
+            "var": {
+                "TEMPERATURE_2m": {"shortname":"t2m", "level": [1]},
+                "PRECIPITATIONS_DECUM":{"shortname":"rrdecum","level": [1]},
+                "WIND.U.PHYS":{"shortname":"u","level": [1]},
+                "WIND.V.PHYS":{"shortname":"v","level": [1]}
+                }
+            }
+        }
+}

@@ -22,7 +22,7 @@ if __name__ == "__main__":
         type=str,
         default="smeagol",
         help="Dataset to use",
-        choices=["titan", "smeagol"],
+        choices=["titan", "smeagol", "poesy"],
     )
     parser.add_argument(
         "--dataset_conf",
