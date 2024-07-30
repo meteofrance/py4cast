@@ -213,6 +213,16 @@ class NamedTensor(TensorWrapper):
             self.names[:start_dim] + [flatten_dim_name] + self.names[end_dim + 1 :]
         )
 
+    def unflatten_(
+        self, dim: int, unflattened_size: torch.Size, unflatten_dim_name: List
+    ):
+        """
+        Unflatten the dimension dim of the underlying tensor.
+        Insert unflattened_size dimension instead
+        """
+        self.tensor = self.tensor.unflatten(dim, unflattened_size)
+        self.names = self.names[:dim] + [*unflatten_dim_name] + self.names[dim + 1 :]
+
     def dim_size(self, dim_name: str) -> int:
         """
         Return the size of a dimension given its name.
