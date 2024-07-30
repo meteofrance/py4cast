@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import List, Tuple, Union
 
 import einops
+import matplotlib
 import pytorch_lightning as pl
 import torch
 from lightning.pytorch.utilities import rank_zero_only
@@ -14,6 +15,7 @@ from torchinfo import summary
 
 from py4cast.datasets.base import DatasetInfo, ItemBatch, NamedTensor
 from py4cast.losses import ScaledLoss, WeightedLoss
+from py4cast.metrics import MetricPSDK, MetricPSDVar
 from py4cast.models import build_model_from_settings, get_model_kls_and_settings
 from py4cast.models.base import expand_to_batch
 from py4cast.observer import (
@@ -192,6 +194,10 @@ class AutoRegressiveLightning(pl.LightningModule):
 
         self.loss.prepare(self, statics.interior_mask, hparams.dataset_info)
 
+        # Metrics
+        self.rmse_psd_plot_metric = MetricPSDVar()
+        self.psd_plot_metric = MetricPSDK()
+
     @rank_zero_only
     def log_hparams_tb(self):
         if self.logger:
@@ -283,14 +289,17 @@ class AutoRegressiveLightning(pl.LightningModule):
         force_border, scale_y, num_inter_steps = self._strategy_params()
         # Right now we postpone that we have a single input/output/forcing
 
+        self.original_shape = None
+
         if len(self.model.input_dims) == 3:
+            # Stack original shape to reshape later
+            self.original_shape = batch.inputs.tensor.shape
             # Graph model, we flatten the batch spatial dims
             batch.inputs.flatten_("ngrid", 2, 3)
             batch.outputs.flatten_("ngrid", 2, 3)
             batch.forcing.flatten_("ngrid", 2, 3)
 
         prev_states = batch.inputs.tensor
-
         prediction_list = []
 
         # Here we do the autoregressive prediction looping
@@ -369,7 +378,7 @@ class AutoRegressiveLightning(pl.LightningModule):
 
         # Notify every plotters
         for plotter in self.train_plotters:
-            plotter.update(self, prediction=prediction, target=target)
+            plotter.update(self, prediction=self.prediction, target=self.target)
 
         return batch_loss
 
@@ -404,6 +413,29 @@ class AutoRegressiveLightning(pl.LightningModule):
         Run validation on single batch
         """
         prediction, target = self.common_step(batch)
+        # Reshape for metrics.update()
+        if self.original_shape is not None:
+            unflatten_dims_name = ["Lon", "Lat"]
+            unflattened_size = self.original_shape[2:4]
+            dim = 2
+            # reshape tensor from (batch_size, num_pred_steps, grid, nb_channels)
+            # to (batch_size, num_pred_steps, lon, lat, nb_channels)
+            prediction.unflatten_(dim, unflattened_size, unflatten_dims_name)
+            target.unflatten_(dim, unflattened_size, unflatten_dims_name)
+
+            # Compute metrics
+            self.psd_plot_metric.update(prediction, target)
+            self.rmse_psd_plot_metric.update(prediction, target)
+
+            # reshape tensor from (batch_size, num_pred_steps, lon, lat, nb_channels)
+            # to (batch_size, num_pred_steps, grid, nb_channels)
+            prediction.flatten_("ngrid", 2, 3)
+            target.flatten_("ngrid", 2, 3)
+
+        else:
+            # Compute metrics
+            self.psd_plot_metric.update(prediction, target)
+            self.rmse_psd_plot_metric.update(prediction, target)
 
         time_step_loss = torch.mean(
             self.loss(prediction, target), dim=0
@@ -431,10 +463,31 @@ class AutoRegressiveLightning(pl.LightningModule):
         """
         Compute val metrics at the end of val epoch
         """
+
+        # Get dict of metrics' results
+        dict_metrics = dict()
+        dict_metrics.update(self.psd_plot_metric.compute())
+        dict_metrics.update(self.rmse_psd_plot_metric.compute())
+
+        for name, elmnt in dict_metrics.items():
+            if isinstance(elmnt, matplotlib.figure.Figure):
+                self.logger.experiment.add_figure(f"{name}", elmnt, self.current_epoch)
+            elif isinstance(elmnt, torch.Tensor):
+                self.log_dict(
+                    {name: elmnt},
+                    prog_bar=True,
+                    on_step=False,
+                    on_epoch=True,
+                    sync_dist=True,
+                )
+
         outputs = self.validation_step_losses
         self._shared_epoch_end(outputs, "validation")
-        self.validation_step_losses.clear()  # free memory
-        # Notify every plotter that this is the end
+
+        # free memory
+        self.validation_step_losses.clear()
+
+        # Notify every plotters
         for plotter in self.valid_plotters:
             plotter.on_step_end(self)
 

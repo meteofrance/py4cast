@@ -78,6 +78,19 @@ def plot_error_map(errors, shortnames, units, title=None, step_duration=3):
     return fig
 
 
+# Plot psd_pred and psd_target in function of k
+def plot_log_psd(k: np.ndarray, psd_pred: np.ndarray, psd_target: np.ndarray):
+    fig, ax = plt.subplots(figsize=(15, 10))
+    ax.plot(k, psd_pred, label="pred")
+    ax.plot(k, psd_target, label="target")
+    ax.set_xlabel("k")
+    ax.set_ylabel("psd_k")
+    ax.legend()
+    plt.yscale("log")
+    plt.close()
+    return fig
+
+
 @matplotlib.rc_context(fractional_plot_bundle(1))
 def plot_prediction(
     pred,

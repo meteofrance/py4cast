@@ -140,7 +140,6 @@ class WeightedLoss(Py4CastLoss):
             )
             / self.num_interior
         )
-
         return time_step_mean_loss
 
 
