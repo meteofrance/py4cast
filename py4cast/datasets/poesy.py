@@ -31,6 +31,9 @@ SCRATCH_PATH = Path("/scratch/shared/poesy/poesy_crop")
 OROGRAPHY_FNAME = "PEARO_EURW1S40_Orography_crop.npy"
 LATLON_FNAME = "latlon_crop.npy"
 
+# Shape of cropped poesy data (lon x lat x leadtimes x members)
+DATA_SHAPE = (600, 600, 45, 16)
+
 # Assuming no leap years in dataset (2024 is next)
 SECONDS_IN_YEAR = 365 * 24 * 60 * 60
 
@@ -217,12 +220,14 @@ class Param:
         date : Date of file.
         term : Position of leadtimes in file.
         """
-        data_array = np.load(self.filename(date=date))
-        data_array = data_array[:, :, term]
+        data_array = np.memmap(
+            self.filename(date=date), dtype="float32", mode="r", shape=DATA_SHAPE
+        )
+
         return data_array[
             self.grid.subgrid[0] : self.grid.subgrid[1],
             self.grid.subgrid[2] : self.grid.subgrid[3],
-            :,
+            term,
             member,
         ]
 
@@ -234,8 +239,8 @@ class Param:
 @dataclass(slots=True)
 class PoesySettings:
     term: dict
-    num_input_steps: int = 2  # Number of input timesteps
-    num_pred_steps: int = 1  # Number of output timesteps
+    num_input_steps: int  # = 2  # Number of input timesteps
+    num_pred_steps: int  # = 1  # Number of output timesteps
     standardize: bool = False
     members: Tuple[int] = (0,)
 
@@ -253,7 +258,7 @@ class PoesySettings:
 class Sample:
     # Describe a sample
     # TODO consider members
-    # member: int
+    member: int
     settings: PoesySettings
     date: dt.datetime
     input_terms: Tuple[float]
@@ -384,32 +389,34 @@ class PoesyDataset(DatasetABC, Dataset):
         number = 0
 
         for date in self.period.date_list:
-            for sample in range(0, sample_by_date):
+            for member in self.settings.members:
+                for sample in range(0, sample_by_date):
 
-                input_terms = terms[
-                    sample
-                    * self.settings.num_total_steps : sample
-                    * self.settings.num_total_steps
-                    + self.settings.num_input_steps
-                ]
-                output_terms = terms[
-                    sample * self.settings.num_total_steps
-                    + self.settings.num_input_steps : sample
-                    * self.settings.num_total_steps
-                    + self.settings.num_input_steps
-                    + self.settings.num_pred_steps
-                ]
-                samp = Sample(
-                    settings=PoesySettings,
-                    date=date,
-                    input_terms=input_terms,
-                    output_terms=output_terms,
-                )
+                    input_terms = terms[
+                        sample
+                        * self.settings.num_total_steps : sample
+                        * self.settings.num_total_steps
+                        + self.settings.num_input_steps
+                    ]
+                    output_terms = terms[
+                        sample * self.settings.num_total_steps
+                        + self.settings.num_input_steps : sample
+                        * self.settings.num_total_steps
+                        + self.settings.num_input_steps
+                        + self.settings.num_pred_steps
+                    ]
+                    samp = Sample(
+                        settings=PoesySettings,
+                        date=date,
+                        member=member,
+                        input_terms=input_terms,
+                        output_terms=output_terms,
+                    )
 
-                if samp.is_valid(self.params):
+                    if samp.is_valid(self.params):
 
-                    samples.append(samp)
-                    number += 1
+                        samples.append(samp)
+                        number += 1
         print("All samples are now defined")
 
         return samples
@@ -816,7 +823,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--n_iter",
-        default=5,
+        default=10,
         type=int,
         help="Number of samples to test loading speed.",
     )

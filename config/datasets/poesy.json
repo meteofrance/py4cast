@@ -21,7 +21,7 @@
         "border_size":10, 
         "domain":"france",
         "model":"arome",
-        "subgrid":[0,512,0,512]
+        "subgrid":[50,178,50,178]
     }, 
     "settings":{
         "step_duration": 1,
