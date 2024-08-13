@@ -20,6 +20,7 @@ import torch
 from lightning.pytorch.loggers import TensorBoardLogger
 from lightning.pytorch.profilers import PyTorchProfiler
 from lightning_fabric.utilities import seed
+from pytorch_lightning.callbacks import LearningRateMonitor
 
 from py4cast.datasets import get_datasets
 from py4cast.datasets import registry as dataset_registry
@@ -55,7 +56,8 @@ class TrainerParams:
 if __name__ == "__main__":
 
     # Variables for multi-nodes multi-gpu training
-    if int(os.environ.get("SLURM_NNODES", 1)) > 1:
+    nb_nodes = int(os.environ.get("SLURM_NNODES", 1))
+    if nb_nodes > 1:
         gpus_per_node = len(os.environ.get("SLURM_STEP_GPUS", "1").split(","))
         global_rank = int(os.environ.get("SLURM_PROCID", 0))
         local_rank = global_rank - gpus_per_node * (global_rank // gpus_per_node)
@@ -166,6 +168,18 @@ if __name__ == "__main__":
         help="Number of model steps between two samples",
     )
     parser.add_argument(
+        "--num_workers",
+        type=int,
+        default=10,
+        help="Number of workers for dataloaders",
+    )
+    parser.add_argument(
+        "--prefetch_factor",
+        type=int,
+        default=None,
+        help="Number of batches loaded in advance by each worker",
+    )
+    parser.add_argument(
         "--no_log",
         action=BooleanOptionalAction,
         default=False,
@@ -176,6 +190,12 @@ if __name__ == "__main__":
         action=BooleanOptionalAction,
         default=False,
         help="When activated, reduce number of epoch and steps.",
+    )
+    parser.add_argument(
+        "--use_lr_scheduler",
+        action=BooleanOptionalAction,
+        default=False,
+        help="When activated, uses OneCycle LR scheduler.",
     )
     parser.add_argument(
         "--load_model_ckpt",
@@ -223,20 +243,6 @@ if __name__ == "__main__":
         args.dataset_conf,
     )
 
-    hp = ArLightningHyperParam(
-        dataset_info=datasets[0].dataset_info,
-        batch_size=args.batch_size,
-        model_name=args.model,
-        model_conf=args.model_conf,
-        num_input_steps=args.num_input_steps,
-        num_pred_steps_train=args.num_pred_steps_train,
-        num_pred_steps_val_test=args.num_pred_steps_val_test,
-        num_inter_steps=args.num_inter_steps,
-        lr=args.lr,
-        loss=args.loss,
-        training_strategy=args.strategy,
-    )
-
     # Parameters for training only
     tp = TrainerParams(
         precision=args.precision,
@@ -248,7 +254,11 @@ if __name__ == "__main__":
         run_id=random_run_id,
         limit_train_batches=args.limit_train_batches,
     )
-    dl_settings = TorchDataloaderSettings(batch_size=args.batch_size)
+    dl_settings = TorchDataloaderSettings(
+        batch_size=args.batch_size,
+        num_workers=args.num_workers,
+        prefetch_factor=args.prefetch_factor,
+    )
 
     train_ds, val_ds, test_ds = datasets
     train_loader = train_ds.torch_dataloader(dl_settings)
@@ -261,8 +271,10 @@ if __name__ == "__main__":
         torch.backends.cuda.matmul.allow_tf32 = True
         torch.backends.cudnn.allow_tf32 = True
         # torch.set_float32_matmul_precision("high") # Allows using Tensor Cores on A100s
+        len_loader = len(train_loader) // (torch.cuda.device_count() * nb_nodes)
     else:
         device_name = "cpu"
+        len_loader = len(train_loader)
 
     # Get Log folders
     log_dir = ROOTDIR / "logs"
@@ -275,6 +287,23 @@ if __name__ == "__main__":
     version = 0 if list_subdirs == [] else list_versions[-1] + 1
     subfolder = f"{run_name}_{version}"
     save_path = log_dir / folder / subfolder
+
+    hp = ArLightningHyperParam(
+        dataset_info=datasets[0].dataset_info,
+        batch_size=args.batch_size,
+        model_name=args.model,
+        model_conf=args.model_conf,
+        num_input_steps=args.num_input_steps,
+        num_pred_steps_train=args.num_pred_steps_train,
+        num_pred_steps_val_test=args.num_pred_steps_val_test,
+        num_inter_steps=args.num_inter_steps,
+        lr=args.lr,
+        loss=args.loss,
+        training_strategy=args.strategy,
+        len_train_loader=len_loader,
+        save_path=save_path,
+        use_lr_scheduler=args.use_lr_scheduler,
+    )
 
     # Logger & checkpoint callback
     callback_list = []
@@ -301,6 +330,7 @@ if __name__ == "__main__":
             save_last=True,  # Also save the last model
         )
         callback_list.append(checkpoint_callback)
+        callback_list.append(LearningRateMonitor(logging_interval="step"))
 
     if tp.profiler == "pytorch":
         profiler = PyTorchProfiler(

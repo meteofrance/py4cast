@@ -18,6 +18,7 @@ import torch
 import tqdm
 import typer
 import xarray as xr
+from joblib import Parallel, delayed
 from skimage.transform import resize
 
 # Cyeccodes is a Cython module from Météo-France to read grib faster than xarray+cfgrib
@@ -57,7 +58,7 @@ app = typer.Typer()
 
 def get_weight_per_lvl(level: int, kind: Literal["hPa", "m"]):
     if kind == "hPa":
-        return 1 + (level) / (90)
+        return 1 + (level) / (1000)
     else:
         return 2
 
@@ -285,14 +286,24 @@ class Param:
         return [self.unit]
 
     def get_filepath(
-        self, date: dt.datetime, file_format: Literal["npy", "grib"]
+        self, date: dt.datetime, file_format: Literal["npy", "grib", "dataset"]
     ) -> Path:
-        """Return the file path."""
+        """
+        Returns the path of the file containing the parameter data.
+        - in npy format, data is grouped per weather param.
+        - in grib format, data is grouped by level type.
+        - in "dataset" format, data is saved as npy and each 2D array is saved as one
+        file to optimize IO during training."""
         folder = SCRATCH_PATH / file_format / date.strftime(FORMATSTR)
+        filename = f"{self.name}_{self.level}{self.level_type.lower()}.npy"
         if file_format == "npy":
-            return folder / f"{self.name}_{self.level}{self.level_type.lower()}.npy"
-        else:
+            return folder / filename
+        elif file_format == "grib":
             return folder / self.grib_name
+        else:
+            str_subdomain = "-".join([str(i) for i in self.grid.subdomain])
+            dataset_path = SCRATCH_PATH / f"dataset_{self.grid.name}_{str_subdomain}"
+            return dataset_path / date.strftime(FORMATSTR) / filename
 
     def fit_to_grid(self, arr: np.ndarray) -> np.ndarray:
         if self.grid.name == self.native_grid:
@@ -316,19 +327,24 @@ class Param:
         return arr
 
     def load_data(
-        self, date: dt.datetime, file_format: Literal["npy", "grib"] = "grib"
+        self, date: dt.datetime, file_format: Literal["npy", "grib", "dataset"] = "grib"
     ):
-        if file_format == "npy":
-            arr = self.load_data_npy(date)
+        if file_format in ["npy", "grib"]:
+            if file_format == "npy":
+                arr = self.load_data_npy(date)
+            else:
+                arr = self.load_data_grib(date)
+            arr = self.fit_to_grid(arr)
+            subdomain = self.grid.subdomain
+            arr = arr[subdomain[0] : subdomain[1], subdomain[2] : subdomain[3]]
+
+            return arr[::-1]  # invert latitude  # TODO : WTF ? plots tensorboard ?
         else:
-            arr = self.load_data_grib(date)
-        arr = self.fit_to_grid(arr)
-        subdomain = self.grid.subdomain
-        arr = arr[subdomain[0] : subdomain[1], subdomain[2] : subdomain[3]]
+            return np.load(self.get_filepath(date, file_format))
 
-        return arr[::-1]  # invert latitude  # TODO : WTF ? plots tensorboard ?
-
-    def exist(self, date: dt.datetime, file_format: Literal["npy", "grib"] = "grib"):
+    def exist(
+        self, date: dt.datetime, file_format: Literal["npy", "grib", "dataset"] = "grib"
+    ):
         filepath = self.get_filepath(date, file_format)
         return filepath.exists()
 
@@ -344,7 +360,7 @@ class TitanSettings:
     num_pred_steps: int  # Number of output timesteps
     step_duration: float  # duration in hour
     standardize: bool = True
-    file_format: Literal["npy", "grib"] = "grib"
+    file_format: Literal["npy", "grib", "dataset"] = "grib"
 
 
 #############################################################
@@ -686,6 +702,15 @@ class TitanDataset(DatasetABC, Dataset):
         return item
 
     @classmethod
+    def get_param_list(cls, conf: dict, grid: Grid) -> List[Param]:
+        param_list = []
+        for name, values in conf["params"].items():
+            for lvl in values["levels"]:
+                param = Param(name=name, level=lvl, kind=values["kind"], grid=grid)
+                param_list.append(param)
+        return param_list
+
+    @classmethod
     def from_dict(
         cls,
         conf: dict,
@@ -694,11 +719,7 @@ class TitanDataset(DatasetABC, Dataset):
         num_pred_steps_val_test: int,
     ) -> Tuple["TitanDataset", "TitanDataset", "TitanDataset"]:
         grid = Grid(**conf["grid"])
-        param_list = []
-        for name, values in conf["params"].items():
-            for lvl in values["levels"]:
-                param = Param(name=name, level=lvl, kind=values["kind"], grid=grid)
-                param_list.append(param)
+        param_list = cls.get_param_list(conf, grid)
 
         train_settings = TitanSettings(
             num_input_steps, num_pred_steps_train, **conf["settings"]
@@ -848,25 +869,66 @@ class TitanDataset(DatasetABC, Dataset):
 
 
 # TODO :
-# - prepare dataset only if config or data has changed
-# - remove Nan from border when working on full domain
-# - check weights in loss
-# - Check why we need to invert arrays when loading them
 # - adapt everywhere that 1 param = 1 lvl
-# - save param 1S100 at resolution 1S40 à l'avance
+# - readme commandes typer
 
 
 @app.command()
 def prepare(
     path_config: Path = DEFAULT_CONFIG,
-    num_input_steps: int = 2,
+    num_input_steps: int = 1,
     num_pred_steps_train: int = 1,
-    num_pred_steps_val_test: int = 5,
+    num_pred_steps_val_test: int = 3,
 ):
     """Prepares Titan by computing statistics on all weather parameters."""
     TitanDataset.prepare(
         path_config, num_input_steps, num_pred_steps_train, num_pred_steps_val_test
     )
+
+
+def save_sample_dataset(
+    date_folder: str, dest: Path, params: List[Param], fformat: str
+):
+    """Saves each 2D parameter data of the given date as one NPY file."""
+    date = dt.datetime.strptime(date_folder, "%Y-%m-%d_%Hh%M")
+    (dest / date_folder).mkdir(exist_ok=True)
+    for param in params:
+        filename = param.get_filepath(date, "npy").name
+        dest_file = dest / date_folder / filename
+        if not dest_file.exists():
+            try:
+                arr = param.load_data(date, fformat)
+                np.save(dest_file, arr)
+            except FileNotFoundError:
+                print(f"WARNING: Could not load data {param.name} {date}. Skipping.")
+
+
+@app.command()
+def rescale(
+    path_config: Path = DEFAULT_CONFIG, num_workers: int = 30, src_format: str = "npy"
+):
+    """Prepares Titan files by rescaling and cropping fields in advance."""
+    with open(path_config, "r") as fp:
+        conf = json.load(fp)
+    str_subdomain = "-".join([str(i) for i in conf["grid"]["subdomain"]])
+    dest_path = SCRATCH_PATH / f"dataset_{conf['grid']['name']}_{str_subdomain}"
+    dest_path.mkdir(exist_ok=True)
+    src_path = SCRATCH_PATH / src_format
+    print(f"Preparing {dest_path.name}...")
+    print(f"Source data: {src_path}")
+
+    grid = Grid(**conf["grid"])
+    param_list = TitanDataset.get_param_list(conf, grid)
+
+    date_folders = [path.name for path in sorted(list(src_path.glob("*")))]
+    # We use "threads" to avoid _pickle.PicklingError: Could not pickle the task to send it to the workers
+    # see https://stackoverflow.com/questions/56884020/
+    # spacy-with-joblib-library-generates-pickle-picklingerror-could-not-pickle-the
+    Parallel(n_jobs=num_workers, prefer="threads")(
+        delayed(save_sample_dataset)(fld, dest_path, param_list, src_format)
+        for fld in tqdm.tqdm(date_folders)
+    )
+    print(f"Dataset saved in {dest_path}")
 
 
 @app.command()

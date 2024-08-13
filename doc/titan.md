@@ -62,14 +62,26 @@ The parameters in each grib are described here:
 
 ## Usage
 
-* All interfaces to use the dataset for training are in `__init__.py`
+The Titan default configuration uses only a very small subdomain on britany and only one parameter 2m temperature, on the 3 day sample dataset (2023-01-01 to 2023-01-03). It should work for training out of the box. The `titan_full` configuration uses 2 years of data, more parameters and a bigger domain.
 
-* Use the script `plot_data.py` to plot all the parameters for one time step.
+1. Presave the dataset and save time during training : `python py4cast/datasets/titan/__init__.py rescale --path-config config/datasets/titan_full.json`
 
-* The Titan default configuration uses only a very small subdomain on britany and only one parameter 2m temperature, on the 3 day sample dataset (2023-01-01 to 2023-01-03). It should work for training out of the box. The `titan_full` configuration uses 2 years of data, more parameters and a bigger domain.
+2. Prepare the dataset and precompute stats : `python py4cast/datasets/titan/__init__.py prepare --path-config config/datasets/titan_full.json`
+
+3. Launch a training : `python bin/train.py --dataset titan --dataset_conf config/datasets/titan_full.son`
+
+Other usefull commands:
+
+* Print informations about the dataset: `python py4cast/datasets/titan/__init__.py describe --path-config config/datasets/titan_full.json`
+
+* Plot one sample of the dataset: `python py4cast/datasets/titan/__init__.py plot --path-config config/datasets/titan_full.json`
+
+* Data loading speed test: `python py4cast/datasets/titan/__init__.py speedtest --path-config config/datasets/titan_full.json`
+
+* Plot all the parameters available in Titan for one time step: `python py4cast/datasets/titan/plot_data.py`
 
 ## Notes
 
-* 2024/05/16 : At the moment, the dataloader only works with data from AROME, with one-level parameters. Options for multi-level and multi-grid data will be added later.
+* 2024/07/26 : At the moment, the dataloader only works with data from AROME, with parameters from the 0.01° and 0.025° grids. Options for multi-model data will be added later.
 
 * ANTILOPE data are commercial, so they will not be included in the public sample of the dataset.

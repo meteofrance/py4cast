@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from copy import deepcopy
+from pathlib import Path
 from typing import TYPE_CHECKING, Dict, List, Union
 
 import einops
@@ -73,11 +74,13 @@ class MapPlot(ErrorObserver):
         num_samples_to_plot: int,
         num_features_to_plot: Union[None, int] = None,
         prefix: str = "Test",
+        save_path: Path = None,
     ):
         self.num_samples_to_plot = num_samples_to_plot
         self.plotted_examples = 0
         self.prefix = prefix
         self.num_features_to_plot = num_features_to_plot
+        self.save_path = save_path
 
     def update(
         self,
@@ -204,6 +207,10 @@ class PredictionTimestepPlot(MapPlot):
             for var_name, fig in zip(feature_names, var_figs):
                 fig_name = f"timestep_evol_per_param/{var_name}_example_{self.plotted_examples}"
                 tensorboard.add_figure(fig_name, fig, t_i)
+                if self.save_path is not None:
+                    dest_file = self.save_path / f"{fig_name}_{t_i}.png"
+                    dest_file.parent.mkdir(exist_ok=True)
+                    fig.savefig(dest_file)
 
             plt.close("all")  # Close all figs for this time step, saves memory
 
@@ -257,6 +264,10 @@ class PredictionEpochPlot(MapPlot):
                 f"epoch_evol_per_param/{var_name}_example_{self.plotted_examples}"
             )
             tensorboard.add_figure(fig_name, fig, obj.current_epoch)
+            if self.save_path is not None:
+                dest_file = self.save_path / f"{fig_name}_{obj.current_epoch}.png"
+                dest_file.parent.mkdir(exist_ok=True)
+                fig.savefig(dest_file)
 
         plt.close("all")  # Close all figs for this time step, saves memory
 
@@ -313,9 +324,8 @@ class StateErrorPlot(ErrorObserver):
                     )
 
                     tensorboard = obj.logger.experiment
-                    tensorboard.add_figure(
-                        f"score_cards/{self.prefix}_{name}", fig, obj.current_epoch
-                    )
+                    fig_name = f"score_cards/{self.prefix}_{name}"
+                    tensorboard.add_figure(fig_name, fig, obj.current_epoch)
         # Free memory
         [self.losses[name].clear() for name in self.metrics]
 
