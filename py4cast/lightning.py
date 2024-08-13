@@ -50,6 +50,10 @@ class ArLightningHyperParam:
 
     training_strategy: str = "diff_ar"
 
+    len_train_loader: int = 1
+    save_path: Path = None
+    use_lr_scheduler: bool = False
+
     def __post_init__(self):
         """
         Check the configuration
@@ -210,13 +214,26 @@ class AutoRegressiveLightning(pl.LightningModule):
         self.log_hparams_tb()
 
     def configure_optimizers(self) -> torch.optim.Optimizer:
-        opt = torch.optim.AdamW(
-            self.parameters(), lr=self.hparams["hparams"].lr, betas=(0.9, 0.95)
-        )
+        lr = self.hparams["hparams"].lr
+        opt = torch.optim.AdamW(self.parameters(), lr=lr, betas=(0.9, 0.95))
         if self.opt_state:
             opt.load_state_dict(self.opt_state)
 
-        return opt
+        if self.hparams["hparams"].use_lr_scheduler:
+
+            len_loader = self.hparams["hparams"].len_train_loader
+            epochs = self.trainer.max_epochs
+            # For configuration of OneCycleLR scheduler, see:
+            # https://github.com/Lightning-AI/pytorch-lightning/issues/1120#issuecomment-598331924
+            lr_scheduler = torch.optim.lr_scheduler.OneCycleLR(
+                opt, max_lr=lr, steps_per_epoch=len_loader, epochs=epochs
+            )
+            return {
+                "optimizer": opt,
+                "lr_scheduler": {"scheduler": lr_scheduler, "interval": "step"},
+            }
+        else:
+            return opt
 
     def _next_x(
         self, batch: ItemBatch, prev_states: torch.Tensor, step_idx: int
@@ -394,17 +411,20 @@ class AutoRegressiveLightning(pl.LightningModule):
         l1_loss = ScaledLoss("L1Loss", reduction="none")
         l1_loss.prepare(self, self.interior_mask, self.hparams["hparams"].dataset_info)
         metrics = {"mae": l1_loss}
+        save_path = self.hparams["hparams"].save_path
         self.valid_plotters = [
             StateErrorPlot(metrics, prefix="Validation"),
             PredictionTimestepPlot(
                 num_samples_to_plot=1,
                 num_features_to_plot=4,
                 prefix="Validation",
+                save_path=save_path,
             ),
             PredictionEpochPlot(
                 num_samples_to_plot=1,
                 num_features_to_plot=4,
                 prefix="Validation",
+                save_path=save_path,
             ),
         ]
 
@@ -412,7 +432,9 @@ class AutoRegressiveLightning(pl.LightningModule):
         """
         Run validation on single batch
         """
-        prediction, target = self.common_step(batch)
+        with torch.no_grad():
+            prediction, target = self.common_step(batch)
+
         # Reshape for metrics.update()
         if self.original_shape is not None:
             unflatten_dims_name = ["Lon", "Lat"]
@@ -440,6 +462,7 @@ class AutoRegressiveLightning(pl.LightningModule):
         time_step_loss = torch.mean(
             self.loss(prediction, target), dim=0
         )  # (time_steps-1)
+
         mean_loss = torch.mean(time_step_loss)
 
         # Log loss per time step forward and mean

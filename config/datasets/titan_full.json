@@ -2,12 +2,12 @@
     "periods": {
         "train": {
             "start": 2021010103,
-            "end": 2021123123,
+            "end": 2022123123,
             "step": 3
         },
         "valid": {
-            "start": 2022010103,
-            "end": 2022123123,
+            "start": 2023010103,
+            "end": 2023123123,
             "step": 3
         },
         "test": {
@@ -19,12 +19,12 @@
     "grid":{
         "name": "PAAROME_1S40",
         "border_size": 0,
-        "subdomain": [64, 640, 192, 960]
+        "subdomain": [100, 612, 240, 880]
     },
     "settings":{
         "step_duration": 1,
         "standardize": true,
-        "file_format": "npy"
+        "file_format": "dataset"
     },
     "params": {
         "aro_t2m": {
