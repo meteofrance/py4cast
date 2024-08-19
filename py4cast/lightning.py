@@ -25,6 +25,12 @@ from py4cast.observer import (
     StateErrorPlot,
 )
 
+# learning rate scheduling period in steps (update every nth step)
+LR_SCHEDULER_PERIOD: int = 10
+
+# PNG plots period in epochs. Plots are made, logged and saved every nth epoch.
+PLOT_PERIOD: int = 10
+
 
 @dataclass
 class ArLightningHyperParam:
@@ -221,7 +227,7 @@ class AutoRegressiveLightning(pl.LightningModule):
 
         if self.hparams["hparams"].use_lr_scheduler:
 
-            len_loader = self.hparams["hparams"].len_train_loader
+            len_loader = self.hparams["hparams"].len_train_loader // LR_SCHEDULER_PERIOD
             epochs = self.trainer.max_epochs
             # For configuration of OneCycleLR scheduler, see:
             # https://github.com/Lightning-AI/pytorch-lightning/issues/1120#issuecomment-598331924
@@ -230,7 +236,11 @@ class AutoRegressiveLightning(pl.LightningModule):
             )
             return {
                 "optimizer": opt,
-                "lr_scheduler": {"scheduler": lr_scheduler, "interval": "step"},
+                "lr_scheduler": {
+                    "scheduler": lr_scheduler,
+                    "interval": "step",
+                    "frequency": 1,
+                },
             }
         else:
             return opt
@@ -479,8 +489,9 @@ class AutoRegressiveLightning(pl.LightningModule):
         self.val_mean_loss = mean_loss
 
         # Notify every plotters
-        for plotter in self.valid_plotters:
-            plotter.update(self, prediction=prediction, target=target)
+        if self.current_epoch % PLOT_PERIOD == 0:
+            for plotter in self.valid_plotters:
+                plotter.update(self, prediction=prediction, target=target)
 
     def on_validation_epoch_end(self):
         """
@@ -498,7 +509,7 @@ class AutoRegressiveLightning(pl.LightningModule):
             elif isinstance(elmnt, torch.Tensor):
                 self.log_dict(
                     {name: elmnt},
-                    prog_bar=True,
+                    prog_bar=False,
                     on_step=False,
                     on_epoch=True,
                     sync_dist=True,
@@ -511,8 +522,9 @@ class AutoRegressiveLightning(pl.LightningModule):
         self.validation_step_losses.clear()
 
         # Notify every plotters
-        for plotter in self.valid_plotters:
-            plotter.on_step_end(self)
+        if self.current_epoch % PLOT_PERIOD == 0:
+            for plotter in self.valid_plotters:
+                plotter.on_step_end(self)
 
     def on_test_start(self):
         """

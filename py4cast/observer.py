@@ -236,13 +236,14 @@ class PredictionEpochPlot(MapPlot):
 
         # Create one figure per variable at this time step
         # This generate a matplotlib warning as more than 20 figures are plotted.
+        leadtime = obj.hparams["hparams"].dataset_info.step_duration * max_step
         var_figs = [
             plot_prediction(
                 pred_t[:, :, var_i],
                 target_t[:, :, var_i],
                 obj.interior_2d[:, :, 0],
                 title=f"{var_name} ({var_unit}), "
-                f"t={max_step} ({obj.hparams['hparams'].dataset_info.step_duration*max_step} h)",
+                f"t={max_step} ({leadtime} h) - epoch {obj.current_epoch}",
                 vrange=var_vrange,
                 domain_info=obj.hparams["hparams"].dataset_info.domain_info,
             )
