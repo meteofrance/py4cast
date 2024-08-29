@@ -1,4 +1,5 @@
 import getpass
+import shutil
 from copy import deepcopy
 from dataclasses import asdict, dataclass
 from functools import cached_property
@@ -12,6 +13,7 @@ import torch
 from lightning.pytorch.utilities import rank_zero_only
 from torch import nn
 from torchinfo import summary
+from transformers import get_cosine_schedule_with_warmup
 
 from py4cast.datasets.base import DatasetInfo, ItemBatch, NamedTensor
 from py4cast.losses import ScaledLoss, WeightedLoss
@@ -39,6 +41,8 @@ class ArLightningHyperParam:
     """
 
     dataset_info: DatasetInfo
+    dataset_name: str
+    dataset_conf: Path
     batch_size: int
 
     model_conf: Union[Path, None] = None
@@ -206,15 +210,26 @@ class AutoRegressiveLightning(pl.LightningModule):
 
         # Metrics
         self.rmse_psd_plot_metric = MetricPSDVar()
-        self.psd_plot_metric = MetricPSDK()
+        save_path = self.hparams["hparams"].save_path
+        self.psd_plot_metric = MetricPSDK(save_path)
 
     @rank_zero_only
     def log_hparams_tb(self):
         if self.logger:
-            dict_log = asdict(self.hparams["hparams"])
+            hparams = self.hparams["hparams"]
+            # Log hparams in tensorboard hparams window
+            dict_log = asdict(hparams)
             dict_log["username"] = getpass.getuser()
             self.logger.log_hyperparams(dict_log, metrics={"val_mean_loss": 0.0})
-            # TODO : save dataset and model configs in folder
+            # Save model & dataset conf as files
+            if hparams.dataset_conf is not None:
+                shutil.copyfile(
+                    hparams.dataset_conf, hparams.save_path / "dataset_conf.json"
+                )
+            if hparams.model_conf is not None:
+                shutil.copyfile(
+                    hparams.model_conf, hparams.save_path / "model_conf.json"
+                )
 
     def on_fit_start(self):
         self.log_hparams_tb()
@@ -229,10 +244,8 @@ class AutoRegressiveLightning(pl.LightningModule):
 
             len_loader = self.hparams["hparams"].len_train_loader // LR_SCHEDULER_PERIOD
             epochs = self.trainer.max_epochs
-            # For configuration of OneCycleLR scheduler, see:
-            # https://github.com/Lightning-AI/pytorch-lightning/issues/1120#issuecomment-598331924
-            lr_scheduler = torch.optim.lr_scheduler.OneCycleLR(
-                opt, max_lr=lr, steps_per_epoch=len_loader, epochs=epochs
+            lr_scheduler = get_cosine_schedule_with_warmup(
+                opt, 1000 // LR_SCHEDULER_PERIOD, len_loader * epochs
             )
             return {
                 "optimizer": opt,
@@ -438,51 +451,34 @@ class AutoRegressiveLightning(pl.LightningModule):
             ),
         ]
 
+    def _shared_val_test_step(self, batch: ItemBatch, batch_idx, label: str):
+        with torch.no_grad():
+            prediction, target = self.common_step(batch)
+
+        time_step_loss = torch.mean(self.loss(prediction, target), dim=0)
+        mean_loss = torch.mean(time_step_loss)
+
+        # Log loss per timestep
+        loss_dict = {
+            f"timestep_losses/{label}_step_{step}": time_step_loss[step]
+            for step in range(time_step_loss.shape[0])
+        }
+        self.log_dict(loss_dict, on_epoch=True, sync_dist=True)
+        self.log(
+            f"{label}_mean_loss",
+            mean_loss,
+            on_epoch=True,
+            sync_dist=True,
+            prog_bar=(label == "val"),
+        )
+        return prediction, target, mean_loss
+
     def validation_step(self, batch: ItemBatch, batch_idx):
         """
         Run validation on single batch
         """
-        with torch.no_grad():
-            prediction, target = self.common_step(batch)
-
-        # Reshape for metrics.update()
-        if self.original_shape is not None:
-            unflatten_dims_name = ["Lon", "Lat"]
-            unflattened_size = self.original_shape[2:4]
-            dim = 2
-            # reshape tensor from (batch_size, num_pred_steps, grid, nb_channels)
-            # to (batch_size, num_pred_steps, lon, lat, nb_channels)
-            prediction.unflatten_(dim, unflattened_size, unflatten_dims_name)
-            target.unflatten_(dim, unflattened_size, unflatten_dims_name)
-
-            # Compute metrics
-            self.psd_plot_metric.update(prediction, target)
-            self.rmse_psd_plot_metric.update(prediction, target)
-
-            # reshape tensor from (batch_size, num_pred_steps, lon, lat, nb_channels)
-            # to (batch_size, num_pred_steps, grid, nb_channels)
-            prediction.flatten_("ngrid", 2, 3)
-            target.flatten_("ngrid", 2, 3)
-
-        else:
-            # Compute metrics
-            self.psd_plot_metric.update(prediction, target)
-            self.rmse_psd_plot_metric.update(prediction, target)
-
-        time_step_loss = torch.mean(
-            self.loss(prediction, target), dim=0
-        )  # (time_steps-1)
-
-        mean_loss = torch.mean(time_step_loss)
-
-        # Log loss per time step forward and mean
-        unroll_dict = {
-            f"timestep_losses/val_step_{step}": time_step_loss[step]
-            for step in range(time_step_loss.shape[0])
-        }
-        self.log_dict(unroll_dict, on_epoch=True, sync_dist=True)
-        self.log(
-            "val_mean_loss", mean_loss, on_epoch=True, sync_dist=True, prog_bar=True
+        prediction, target, mean_loss = self._shared_val_test_step(
+            batch, batch_idx, "val"
         )
         self.validation_step_losses.append(mean_loss)
 
@@ -492,6 +488,8 @@ class AutoRegressiveLightning(pl.LightningModule):
         if self.current_epoch % PLOT_PERIOD == 0:
             for plotter in self.valid_plotters:
                 plotter.update(self, prediction=prediction, target=target)
+            self.psd_plot_metric.update(prediction, target, self.original_shape)
+            self.rmse_psd_plot_metric.update(prediction, target, self.original_shape)
 
     def on_validation_epoch_end(self):
         """
@@ -536,36 +534,30 @@ class AutoRegressiveLightning(pl.LightningModule):
             loss.prepare(self, self.interior_mask, self.hparams["hparams"].dataset_info)
             metrics[alias] = loss
 
+        save_path = self.hparams["hparams"].save_path
         self.test_plotters = [
             StateErrorPlot(metrics),
             SpatialErrorPlot(),
             PredictionTimestepPlot(self.hparams["hparams"].num_samples_to_plot),
-            PredictionEpochPlot(self.hparams["hparams"].num_samples_to_plot),
+            PredictionTimestepPlot(
+                num_samples_to_plot=self.hparams["hparams"].num_samples_to_plot,
+                num_features_to_plot=4,
+                prefix="Test",
+                save_path=save_path,
+            ),
         ]
 
     def test_step(self, batch: ItemBatch, batch_idx):
         """
         Run test on single batch
         """
-        prediction, target = self.common_step(batch)
+        prediction, target, _ = self._shared_val_test_step(batch, batch_idx, "test")
 
-        # Computing basic scores
-        time_step_loss = torch.mean(
-            self.loss(prediction, target), dim=0
-        )  # (time_steps-1)
-        mean_loss = torch.mean(time_step_loss)
-
-        # Log loss per time step forward and mean
-        test_log_dict = {
-            f"timestep_losses/test_step_{step}": time_step_loss[step]
-            for step in range(time_step_loss.shape[0])
-        }
-        test_log_dict["test_mean_loss"] = mean_loss
-        self.log_dict(test_log_dict, on_step=False, on_epoch=True, sync_dist=True)
-
-        # Notify plotters
+        # Notify plotters & metrics
         for plotter in self.test_plotters:
             plotter.update(self, prediction=prediction, target=target)
+            self.psd_plot_metric.update(prediction, target, self.original_shape)
+            self.rmse_psd_plot_metric.update(prediction, target, self.original_shape)
 
     @cached_property
     def interior_2d(self) -> torch.Tensor:
@@ -583,37 +575,9 @@ class AutoRegressiveLightning(pl.LightningModule):
         """
         Compute test metrics and make plots at the end of test epoch.
         """
+        self.psd_plot_metric.compute()
+        self.rmse_psd_plot_metric.compute()
+
         # Notify plotters that the test epoch end
         for plotter in self.test_plotters:
             plotter.on_step_end(self)
-
-    @classmethod
-    def load_from_checkpoint(cls, checkpoint_path, hparams):
-        """
-        Overwrite the load_from_checkpoint method in order to be able to read our parameters.
-
-        hparams : if not None will overwrite ArLightningHyperParam
-        """
-        from io import BytesIO
-
-        checkpoint = torch.load(
-            checkpoint_path, map_location=lambda storage, loc: storage
-        )
-        # remove hyperparameters
-        if hparams is not None:
-            checkpoint["hyper_parameters"] = {}
-        # Do no iniate loss state (as it has been changed from previous version)
-        keys = list(checkpoint["state_dict"].keys())
-        # Relmoving information for loss and statistics
-        for key in keys:
-            if "loss_" in key or "stats" in key:
-                checkpoint["state_dict"].pop(key)
-        buffer = BytesIO()
-        torch.save(checkpoint, buffer)
-        buffer.seek(0)
-        # We don't do strict mode to allow for slight changes in hyperparams
-        # and still be able to load previous trainings
-        if hparams is not None:
-            return super().load_from_checkpoint(buffer, hparams=hparams, strict=False)
-        else:
-            return super().load_from_checkpoint(buffer, strict=False)

@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import numpy as np
 import torch
 from scipy.fftpack import dct
@@ -12,8 +14,10 @@ class MetricPSDK(Metric):
     Compute the PSD as a function of the wave number for each channels/features
     """
 
-    def __init__(self):
+    def __init__(self, save_path: Path, pred_step: int = 0):
         super().__init__()
+        self.save_path = save_path
+        self.pred_step = pred_step  # timestep of pred where we compute psd
 
         # Declaration of state, states are reset when self.reset() is called
         # Sum PSD prediction at each epoch
@@ -33,27 +37,41 @@ class MetricPSDK(Metric):
         # Step counter, needed to compute psd mean at each epoch.
         self.add_state("step_count", default=torch.tensor(0.0), dist_reduce_fx="sum")
 
-    def update(self, preds: NamedTensor, target: NamedTensor):
+    def update(self, preds: NamedTensor, targets: NamedTensor, shape: tuple):
         """
         Add PSD to their respective sum. Should be called at each validation step's end
         """
-        if preds.tensor.shape != target.tensor.shape:
-            raise ValueError("preds and target must have the same shape")
+        if preds.tensor.shape != targets.tensor.shape:
+            raise ValueError("preds and targets must have the same shape")
+
+        if shape is not None:
+            unflatten_dims_name = ["Lon", "Lat"]
+            unflattened_size = shape[2:4]
+            dim = 2
+            # reshape tensor from (batch_size, num_pred_steps, grid, nb_channels)
+            # to (batch_size, num_pred_steps, lon, lat, nb_channels)
+            preds.unflatten_(dim, unflattened_size, unflatten_dims_name)
+            targets.unflatten_(dim, unflattened_size, unflatten_dims_name)
 
         if self.step_count == 0:
             self.feature_names = preds.feature_names
 
-        # Compute PSD on first pred_step only
-        pred_step = 0
-
         # Add PSD to the sums
-        self.sum_psd_pred = self.add_psd(preds.tensor, self.sum_psd_pred, pred_step)
+        self.sum_psd_pred = self.add_psd(
+            preds.tensor, self.sum_psd_pred, self.pred_step
+        )
         self.sum_psd_target = self.add_psd(
-            target.tensor, self.sum_psd_target, pred_step
+            targets.tensor, self.sum_psd_target, self.pred_step
         )
 
         # Increment count_step
         self.step_count += 1
+
+        if shape is not None:
+            # reshape tensor from (batch_size, num_pred_steps, lon, lat, nb_channels)
+            # to (batch_size, num_pred_steps, grid, nb_channels)
+            preds.flatten_("ngrid", 2, 3)
+            targets.flatten_("ngrid", 2, 3)
 
     def compute(self) -> dict:
         """
@@ -79,6 +97,10 @@ class MetricPSDK(Metric):
                 k, mean_psd_pred[c].cpu().numpy(), mean_psd_target[c].cpu().numpy()
             )
             dict_psd_metric[f"mean_psd_k/{features_name[c]}"] = fig
+            dest_file = self.save_path / f"mean_psd_k/{features_name[c]}.png"
+            if self.save_path.exists():
+                dest_file.parent.mkdir(exist_ok=True)
+                fig.savefig(dest_file)
 
         # Reset metric's state
         self.reset()
@@ -118,8 +140,9 @@ class MetricPSDVar(Metric):
     Compute the RMSE between the target and the prediciton PSD for each channels/features.
     """
 
-    def __init__(self):
+    def __init__(self, pred_step: int = 0):
         super().__init__()
+        self.pred_step = pred_step  # timestep of pred where we compute psd
 
         # Declaration of state, states are reset when self.reset() is called
         # Sum RMSE PSD prediction at each epoch
@@ -132,25 +155,32 @@ class MetricPSDVar(Metric):
         # Step counter, needed to compute psd mean at each epoch.
         self.add_state("step_count", default=torch.tensor(0.0), dist_reduce_fx="sum")
 
-    def update(self, preds: NamedTensor, target: NamedTensor):
+    def update(self, preds: NamedTensor, targets: NamedTensor, shape: tuple):
         """
         compute the RSME between target and pred PSD.
         called at each end of step
         """
+        if shape is not None:
+            unflatten_dims_name = ["Lon", "Lat"]
+            unflattened_size = shape[2:4]
+            dim = 2
+            # reshape tensor from (batch_size, num_pred_steps, grid, nb_channels)
+            # to (batch_size, num_pred_steps, lon, lat, nb_channels)
+            preds.unflatten_(dim, unflattened_size, unflatten_dims_name)
+            targets.unflatten_(dim, unflattened_size, unflatten_dims_name)
+
         if self.step_count == 0:
             self.feature_names = preds.feature_names
 
         # tensor should be (Batch, channels, Lon, Lat) or (Batch, channels, ngrids)
         # to be an argument of power_spectral_density
-        preds = preds.tensor.permute(0, -1, *range(2, preds.tensor.dim() - 1), 1)
-        target = target.tensor.permute(0, -1, *range(2, target.tensor.dim() - 1), 1)
+        y_pred = preds.tensor.permute(0, -1, *range(2, preds.tensor.dim() - 1), 1)
+        y_true = targets.tensor.permute(0, -1, *range(2, targets.tensor.dim() - 1), 1)
 
-        # Compute PSD on first pred_step only
-        pred_step = 0
-        if preds.shape != target.shape:
-            raise ValueError("preds and target must have the same shape")
+        if y_pred.shape != y_true.shape:
+            raise ValueError("y_pred and y_true must have the same shape")
 
-        channels = target.shape[1]
+        channels = y_true.shape[1]
         res = np.zeros((channels,))
 
         # Compute the RMSE for each channel of x.
@@ -158,10 +188,10 @@ class MetricPSDVar(Metric):
 
             # Compute PSD
             psd_target = power_spectral_density(
-                target[:, c : c + 1, :, :, pred_step].cpu().numpy()
+                y_true[:, c : c + 1, :, :, self.pred_step].cpu().numpy()
             )
             psd_pred = power_spectral_density(
-                preds[:, c : c + 1, :, :, pred_step].cpu().numpy()
+                y_pred[:, c : c + 1, :, :, self.pred_step].cpu().numpy()
             )
             # Compute RMSE
             res[c] = np.sqrt(np.mean((np.log10(psd_target) - np.log10(psd_pred)) ** 2))
@@ -175,6 +205,12 @@ class MetricPSDVar(Metric):
 
         # Increment step_count
         self.step_count += 1
+
+        if shape is not None:
+            # reshape tensor from (batch_size, num_pred_steps, lon, lat, nb_channels)
+            # to (batch_size, num_pred_steps, grid, nb_channels)
+            preds.flatten_("ngrid", 2, 3)
+            targets.flatten_("ngrid", 2, 3)
 
     def compute(self) -> dict:
         """
