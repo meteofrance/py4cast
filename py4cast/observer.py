@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from collections import defaultdict
 from copy import deepcopy
 from pathlib import Path
 from typing import TYPE_CHECKING, Dict, List, Union
@@ -6,6 +7,7 @@ from typing import TYPE_CHECKING, Dict, List, Union
 import einops
 import matplotlib.pyplot as plt
 import torch
+from PIL import Image
 from pytorch_lightning.strategies import (  # Use for homogeneity in gathering operation for plot.
     ParallelStrategy,
     SingleDeviceStrategy,
@@ -166,6 +168,19 @@ class MapPlot(ErrorObserver):
         pass
 
 
+def make_gif(paths: List[Path], dest: Path):
+    frames = [Image.open(path) for path in paths]
+    frame_one = frames[0]
+    frame_one.save(
+        dest,
+        format="GIF",
+        append_images=frames[1:],
+        save_all=True,
+        duration=250,
+        loop=0,
+    )
+
+
 class PredictionTimestepPlot(MapPlot):
     """
     Observer used to plot prediction and target for each timestep.
@@ -179,9 +194,9 @@ class PredictionTimestepPlot(MapPlot):
         feature_names: List[str],
         var_vranges: List,
     ) -> None:
-
         # Prediction and target: (pred_steps, Nlat, Nlon, features)
         # Iterate over prediction horizon time steps
+        paths_dict = defaultdict(list)
         for t_i, (pred_t, target_t) in enumerate(zip(prediction, target), start=1):
             # Create one figure per variable at this time step
             # This generate a matplotlib warning as more than 20 figures are plotted.
@@ -207,12 +222,19 @@ class PredictionTimestepPlot(MapPlot):
             for var_name, fig in zip(feature_names, var_figs):
                 fig_name = f"timestep_evol_per_param/{var_name}_example_{self.plotted_examples}"
                 tensorboard.add_figure(fig_name, fig, t_i)
-                if self.save_path is not None:
+                if self.save_path is not None and self.save_path.exists():
                     dest_file = self.save_path / f"{fig_name}_{t_i}.png"
+                    paths_dict[var_name].append(dest_file)
                     dest_file.parent.mkdir(exist_ok=True)
                     fig.savefig(dest_file)
 
             plt.close("all")  # Close all figs for this time step, saves memory
+
+        for var_name, paths in paths_dict.items():
+            if len(paths) > 1:
+                make_gif(
+                    paths, self.save_path / f"timestep_evol_per_param/{var_name}.gif"
+                )
 
 
 class PredictionEpochPlot(MapPlot):
@@ -229,7 +251,6 @@ class PredictionEpochPlot(MapPlot):
         feature_names: List[str],
         var_vranges: List,
     ) -> None:
-
         # We keep only the max timestep of the pred and target: shape (Nlat, Nlon, features)
         max_step = prediction.shape[0]
         pred_t, target_t = prediction[max_step - 1], target[max_step - 1]
