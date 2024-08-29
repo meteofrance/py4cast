@@ -95,6 +95,7 @@ def test_torch_training_loop():
         "unet",
         "segformer",
         "identity",
+        "unetrpp",
     ):
         model_kls, model_settings = get_model_kls_and_settings(model_name)
 
@@ -108,6 +109,7 @@ def test_torch_training_loop():
             num_input_features=NUM_INPUTS,
             num_output_features=NUM_OUTPUTS,
             settings=model_settings,
+            input_shape=(GRID_HEIGHT, GRID_WIDTH),
         )
 
         optimizer = torch.optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
@@ -169,4 +171,5 @@ def test_model_registry():
         "identity",
         "hilamparallel",
         "swinunetr",
+        "unetrpp",
     }

@@ -42,7 +42,7 @@ This project started as a fork of neural-lam, a project by Joel Oskarsson, see [
 
 ## Overview
 
-* 6 neural network architectures : Half-Unet, U-Net, SegFormer, SwinUnetR, HiLam, GraphLam
+* 7 neural network architectures : Half-Unet, U-Net, SegFormer, SwinUnetR, HiLam, GraphLam, UnetR++
 * 1 dataset with samples available on Huggingface : Titan
 * 2 training strategies : Scaled Auto-regressive steps, Differential Auto-regressive steps
 * 4 losses: Scaled RMSE, Scaled L1, Weighted MSE, Weighted L1

@@ -170,6 +170,7 @@ class AutoRegressiveLightning(pl.LightningModule):
             num_input_features,
             num_output_features,
             hparams.model_conf,
+            statics.grid_shape,
         )
 
         exp_summary(hparams, self.model)

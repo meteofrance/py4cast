@@ -20,7 +20,7 @@ Currently we support the following neural network architectures:
 | [segformer](../py4cast/models/vision/transformers.py#L216) | [arxiv link](https://arxiv.org/abs/2105.15203)   | (Batch, Height, Width, features) | On par with u-net like on Deepsyg (MF internal), added an upsampling stage. Adapted from [Lucidrains' github](https://github.com/lucidrains/segformer-pytorch) |  Frank Guibert |
 | [swinunetr](../py4cast/models/vision/transformers.py#L335) | [arxiv link](https://arxiv.org/abs/2201.01266)   | (Batch, Height, Width, features) | 2D Swin  Unet transformer (Pangu and archweather uses customised 3D versions of Swin Transformers). Plugged in from [MONAI](https://github.com/Project-MONAI/MONAI/). The decoders have been modified to use Bilinear2D + Conv2d instead of Conv2dTranspose to remove artefacts/checkerboard effects |  Frank Guibert |
 | [hilam](../py4cast/models/nlam/models.py#L754), graphlam | [arxiv link](https://arxiv.org/abs/2309.17370)  | (Batch, graph_node_id, features)   | Imported and adapted from [Joel's github](https://github.com/joeloskarsson/neural-lam) |  Vincent Chabot/Frank Guibert |
-
+| [unetrpp](../py4cast/models/vision/unetrpp.py#L1) | [arxiv link](https://arxiv.org/abs/2212.04497)  | (Batch, features, Height, Width) or  (Batch, features, Height, Width, Depth) | Vision transformer with a reduced GFLOPS footprint adapted from [author's github](https://github.com/Amshaker/unetr_plus_plus). Modified to work both with 2d and 3d inputs | Frank Guibert |
 
 ## Available datasets
 
