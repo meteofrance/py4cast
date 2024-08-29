@@ -8,11 +8,21 @@ from py4cast.models.base import ModelABC
 from .nlam.models import GraphLAM, HiLAM, HiLAMParallel
 from .vision.conv import HalfUnet, Unet
 from .vision.transformers import Segformer, SwinUNETR
+from .vision.unetrpp import UNETRPP
 
 # Models MUST be added to the registry
 # in order to be used by the training script.
 registry = {}
-for kls in (HalfUnet, Unet, GraphLAM, HiLAM, HiLAMParallel, Segformer, SwinUNETR):
+for kls in (
+    HalfUnet,
+    Unet,
+    GraphLAM,
+    HiLAM,
+    HiLAMParallel,
+    Segformer,
+    SwinUNETR,
+    UNETRPP,
+):
     registry[kls.__name__.lower()] = kls
 
 
@@ -64,6 +74,7 @@ def build_model_from_settings(
     num_input_features: int,
     num_output_features: int,
     settings_path: Union[Path, None],
+    input_shape: tuple,
     *args,
     **kwargs,
 ) -> Tuple[ModelABC, Any]:
@@ -73,7 +84,12 @@ def build_model_from_settings(
     model_kls, model_settings = get_model_kls_and_settings(network_name, settings_path)
     return (
         model_kls(
-            num_input_features, num_output_features, model_settings, *args, **kwargs
+            num_input_features,
+            num_output_features,
+            model_settings,
+            input_shape,
+            *args,
+            **kwargs,
         ),
         model_settings,
     )

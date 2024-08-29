@@ -39,6 +39,7 @@ class Identity(ModelABC, nn.Module):
         num_input_features: int,
         num_output_features: int,
         settings: IdentitySettings,
+        input_shape: tuple,
         *args,
         **kwargs,
     ):

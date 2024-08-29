@@ -231,6 +231,7 @@ class Segformer(ModelABC, nn.Module):
         num_input_features: int,
         num_output_features: int,
         settings: SegformerSettings,
+        input_shape: tuple,
         *args,
         **kwargs,
     ):
@@ -381,7 +382,8 @@ class SwinUNETR(MonaiSwinUNETR):
         self,
         num_input_features: int,
         num_output_features: int,
-        settings: SwinUNETRSettings = SwinUNETRSettings(),
+        settings: SwinUNETRSettings,
+        input_shape: tuple,
         *args,
         **kwargs,
     ):
@@ -389,7 +391,7 @@ class SwinUNETR(MonaiSwinUNETR):
             in_channels=num_input_features,
             out_channels=num_output_features,
             spatial_dims=2,
-            img_size=(128, 128),  # TODO: fix this and pass the grid shape
+            img_size=input_shape,
             **settings.to_dict(),
         )
 

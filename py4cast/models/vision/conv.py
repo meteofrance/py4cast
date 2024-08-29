@@ -75,6 +75,7 @@ class HalfUnet(ModelABC, nn.Module):
         num_input_features: int,
         num_output_features: int,
         settings: HalfUnetSettings,
+        input_shape: tuple,
         *args,
         **kwargs,
     ):
@@ -266,9 +267,10 @@ class Unet(ModelABC, nn.Module):
 
     def __init__(
         self,
-        num_input_features: int = 3,
-        num_output_features: int = 1,
-        settings: UnetSettings = UnetSettings(),
+        num_input_features: int,
+        num_output_features: int,
+        settings: UnetSettings,
+        input_shape: tuple,
     ):
         super(Unet, self).__init__()
 

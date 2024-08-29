@@ -175,6 +175,7 @@ class BaseGraphModel(ModelABC, nn.Module):
         num_input_features: int,
         num_output_features: int,
         settings: GraphLamSettings,
+        input_shape: tuple,
         *args,
         **kwargs,
     ):
