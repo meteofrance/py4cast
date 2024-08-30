@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from functools import cached_property
 from io import BytesIO
 from pathlib import Path
-from typing import Dict, Literal, Tuple
+from typing import Dict, Literal, Tuple, Union
 
 import cartopy
 import numpy as np
@@ -258,6 +258,7 @@ class DummyDataset(DatasetABC, Dataset):
         num_input_steps: int,
         num_pred_steps_train: int,
         num_pred_steps_val_tests: int,
+        config_overrides: Union[Dict, None] = None,
     ) -> Tuple["DummyDataset", "DummyDataset", "DummyDataset"]:
         """
         The path is not used for DummyDataset.

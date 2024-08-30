@@ -1,7 +1,7 @@
 import traceback
 import warnings
 from pathlib import Path
-from typing import Tuple, Union
+from typing import Dict, Tuple, Union
 
 from .base import DatasetABC  # noqa: F401
 
@@ -54,6 +54,7 @@ def get_datasets(
     num_pred_steps_train: int,
     num_pred_steps_val_test: int,
     config_file: Union[Path, None] = None,
+    config_override: Union[Dict, None] = None,
 ) -> Tuple[DatasetABC, DatasetABC, DatasetABC]:
     """
     Lookup dataset by name in our registry and uses either
@@ -71,5 +72,9 @@ def get_datasets(
     config_file = default_config if config_file is None else config_file
 
     return dataset_kls.from_json(
-        config_file, num_input_steps, num_pred_steps_train, num_pred_steps_val_test
+        config_file,
+        num_input_steps,
+        num_pred_steps_train,
+        num_pred_steps_val_test,
+        config_override,
     )

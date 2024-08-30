@@ -1,5 +1,6 @@
 from dataclasses import fields
 from pathlib import Path
+from typing import Dict
 
 import pytorch_lightning as pl
 import torch
@@ -39,3 +40,15 @@ class RegisterFieldsMixin:
             field_instance = getattr(self, field.name)
             if isinstance(field_instance, torch.Tensor):
                 lm.register_buffer(field.name, field_instance, persistent=persistent)
+
+
+def merge_dicts(d1: Dict, d2: Dict) -> Dict:
+    """
+    Recursively merge two nested dictionaries.
+    """
+    for key in d2:
+        if key in d1 and isinstance(d1[key], dict) and isinstance(d2[key], dict):
+            merge_dicts(d1[key], d2[key])
+        else:
+            d1[key] = d2[key]
+    return d1
