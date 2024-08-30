@@ -7,7 +7,7 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 from functools import cached_property
 from pathlib import Path
-from typing import Dict, List, Literal, Tuple
+from typing import Dict, List, Literal, Tuple, Union
 
 import cartopy
 import gif
@@ -52,6 +52,7 @@ from py4cast.datasets.titan.settings import (
 )
 from py4cast.plots import DomainInfo
 from py4cast.settings import CACHE_DIR
+from py4cast.utils import merge_dicts
 
 app = typer.Typer()
 
@@ -650,6 +651,7 @@ class TitanDataset(DatasetABC, Dataset):
                 samples = [
                     Sample(date, self.settings, self.params, stats, self.grid)
                     for date in dates
+                    if date in set(self.period.date_list)
                 ]
         else:
             samples = []
@@ -744,9 +746,12 @@ class TitanDataset(DatasetABC, Dataset):
         num_input_steps: int,
         num_pred_steps_train: int,
         num_pred_steps_val_test: int,
+        config_override: Union[Dict, None] = None,
     ) -> Tuple["TitanDataset", "TitanDataset", "TitanDataset"]:
         with open(fname, "r") as fp:
             conf = json.load(fp)
+            if config_override is not None:
+                conf = merge_dicts(conf, config_override)
         return cls.from_dict(
             conf, num_input_steps, num_pred_steps_train, num_pred_steps_val_test
         )

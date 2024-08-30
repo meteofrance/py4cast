@@ -31,6 +31,7 @@ This project started as a fork of neural-lam, a project by Joel Oskarsson, see [
     4. [Dataset configuration & simple training](#dataset-configuration--simple-training)
     5. [Training options](#training-options)
     6. [Experiment tracking](#tracking-experiment)
+    7. [Inference](#inference)
 4. [Contributing new features](#adding-features-and-contributing)
     1. [Adding a neural network architecture](doc/add_features_contribute.md#adding-a-new-neural-network-architecture-to-the-project)
     2. [Adding a dataset](doc/add_features_contribute.md#adding-a-new-dataset)
@@ -298,6 +299,28 @@ Then you can access the tensorboard server at the following address: `http://YOU
 
 
 You can find more details about all the `num_X_steps` options [here](doc/num_steps.md).
+
+### Inference
+
+Inference is done by running the `bin/inference.py` script. This script will load a model and run it on a dataset using the training parameters (dataset name, dataset config, timestep options, ...).
+
+```bash
+usage: py4cast Inference script [-h] [--model_path MODEL_PATH] [--dataset DATASET] [--ds_config_file DS_CONFIG_FILE] [--date DATE]
+
+options:
+  -h, --help            show this help message and exit
+  --model_path MODEL_PATH
+                        Path to the model checkpoint
+  --date DATE   
+
+```
+
+A simple example of inference is shown below:
+
+```bash
+ runai exec_gpu python bin/inference.py --model_path /scratch/shared/py4cast/logs/comparison/titan/swinunetr/bert_swinunetr_0/last.ckpt --date 2023123123
+
+```
 
 ## Adding features and contributing
 

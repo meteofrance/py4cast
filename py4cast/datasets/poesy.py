@@ -7,7 +7,7 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 from functools import cached_property
 from pathlib import Path
-from typing import Dict, List, Literal, Tuple
+from typing import Dict, List, Literal, Tuple, Union
 
 import cartopy
 import numpy as np
@@ -589,6 +589,7 @@ class PoesyDataset(DatasetABC, Dataset):
         num_input_steps: int,
         num_pred_steps_train: int,
         num_pred_steps_val_test: int,
+        config_override: Union[Dict, None] = None,
     ) -> Tuple["PoesyDataset", "PoesyDataset", "PoesyDataset"]:
         with open(fname, "r") as fp:
             conf = json.load(fp)

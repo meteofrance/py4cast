@@ -312,9 +312,11 @@ class AutoRegressiveLightning(pl.LightningModule):
 
         return force_border, scale_y, self.hparams["hparams"].num_inter_steps
 
-    def common_step(self, batch: ItemBatch) -> Tuple[NamedTensor, NamedTensor]:
+    def common_step(
+        self, batch: ItemBatch, inference: bool = False
+    ) -> Tuple[NamedTensor, NamedTensor]:
         """
-        Two Autoregressive strategies are implemented here:
+        Two Autoregressive strategies are implemented here for train, val, test and inference:
         - scaled_ar:
             * Boundary forcing with y_true/true_state
             * Scaled Differential update next_state = prev_state + y * std + mean
@@ -326,6 +328,8 @@ class AutoRegressiveLightning(pl.LightningModule):
             * No Intermediary steps
 
         Derived/Inspired from https://github.com/joeloskarsson/neural-lam/
+
+        In inference mode, we assume batch.outputs is None and we disable output based border forcing.
         """
         force_border, scale_y, num_inter_steps = self._strategy_params()
         # Right now we postpone that we have a single input/output/forcing
@@ -337,7 +341,10 @@ class AutoRegressiveLightning(pl.LightningModule):
             self.original_shape = batch.inputs.tensor.shape
             # Graph model, we flatten the batch spatial dims
             batch.inputs.flatten_("ngrid", 2, 3)
-            batch.outputs.flatten_("ngrid", 2, 3)
+
+            if not inference:
+                batch.outputs.flatten_("ngrid", 2, 3)
+
             batch.forcing.flatten_("ngrid", 2, 3)
 
         prev_states = batch.inputs.tensor
@@ -348,11 +355,15 @@ class AutoRegressiveLightning(pl.LightningModule):
 
         for i in range(batch.num_pred_steps):
 
-            border_state = batch.outputs.tensor[:, i]
+            if not inference:
+                border_state = batch.outputs.tensor[:, i]
 
             if scale_y:
                 step_diff_std, step_diff_mean = self._step_diffs(
-                    batch.outputs.feature_names, prev_states.device
+                    batch.inputs.feature_names
+                    if inference
+                    else batch.outputs.feature_names,
+                    prev_states.device,
                 )
 
             # Intermediary steps for which we have no y_true data
@@ -372,7 +383,7 @@ class AutoRegressiveLightning(pl.LightningModule):
 
                 # Overwrite border with true state
                 # Force it to true state for all intermediary step
-                if force_border:
+                if not inference and force_border:
                     new_state = (
                         self.border_mask * border_state
                         + self.interior_mask * predicted_state
@@ -392,7 +403,9 @@ class AutoRegressiveLightning(pl.LightningModule):
         prediction = torch.stack(
             prediction_list, dim=1
         )  # Stacking is done on time step. (B, pred_steps, N_grid, d_f) or (B, pred_steps, N_lat, N_lon, d_f)
-        pred_out = NamedTensor.new_like(prediction, batch.outputs)
+        pred_out = NamedTensor.new_like(
+            prediction, batch.inputs if inference else batch.outputs
+        )
 
         return pred_out, batch.outputs
 
@@ -422,6 +435,12 @@ class AutoRegressiveLightning(pl.LightningModule):
             plotter.update(self, prediction=self.prediction, target=self.target)
 
         return batch_loss
+
+    def forward(self, x: ItemBatch) -> NamedTensor:
+        """
+        Forward pass of the model
+        """
+        return self.common_step(x, inference=True)[0]
 
     def on_train_epoch_end(self):
         outputs = self.training_step_losses
