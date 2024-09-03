@@ -209,11 +209,6 @@ class AutoRegressiveLightning(pl.LightningModule):
 
         self.loss.prepare(self, statics.interior_mask, hparams.dataset_info)
 
-        # Metrics
-        self.rmse_psd_plot_metric = MetricPSDVar()
-        save_path = self.hparams["hparams"].save_path
-        self.psd_plot_metric = MetricPSDK(save_path)
-
     @rank_zero_only
     def log_hparams_tb(self):
         if self.logger:
@@ -455,6 +450,9 @@ class AutoRegressiveLightning(pl.LightningModule):
         l1_loss.prepare(self, self.interior_mask, self.hparams["hparams"].dataset_info)
         metrics = {"mae": l1_loss}
         save_path = self.hparams["hparams"].save_path
+        max_pred_step = self.hparams["hparams"].num_pred_steps_val_test - 1
+        self.rmse_psd_plot_metric = MetricPSDVar(pred_step=max_pred_step)
+        self.psd_plot_metric = MetricPSDK(save_path, pred_step=max_pred_step)
         self.valid_plotters = [
             StateErrorPlot(metrics, prefix="Validation"),
             PredictionTimestepPlot(
@@ -555,8 +553,11 @@ class AutoRegressiveLightning(pl.LightningModule):
             metrics[alias] = loss
 
         save_path = self.hparams["hparams"].save_path
+        max_pred_step = self.hparams["hparams"].num_pred_steps_val_test - 1
+        self.rmse_psd_plot_metric = MetricPSDVar(pred_step=max_pred_step)
+        self.psd_plot_metric = MetricPSDK(save_path, pred_step=max_pred_step)
         self.test_plotters = [
-            StateErrorPlot(metrics),
+            StateErrorPlot(metrics, save_path=save_path),
             SpatialErrorPlot(),
             PredictionTimestepPlot(self.hparams["hparams"].num_samples_to_plot),
             PredictionTimestepPlot(
@@ -576,8 +577,8 @@ class AutoRegressiveLightning(pl.LightningModule):
         # Notify plotters & metrics
         for plotter in self.test_plotters:
             plotter.update(self, prediction=prediction, target=target)
-            self.psd_plot_metric.update(prediction, target, self.original_shape)
-            self.rmse_psd_plot_metric.update(prediction, target, self.original_shape)
+        self.psd_plot_metric.update(prediction, target, self.original_shape)
+        self.rmse_psd_plot_metric.update(prediction, target, self.original_shape)
 
     @cached_property
     def interior_2d(self) -> torch.Tensor:
@@ -595,6 +596,10 @@ class AutoRegressiveLightning(pl.LightningModule):
         """
         Compute test metrics and make plots at the end of test epoch.
         """
+        # TODO : when running on multiple GPU, the following line throws
+        # "RuntimeError: No backend type associated with device type cpu"
+        # see: https://github.com/Lightning-AI/torchmetrics/issues/2477
+        # and: https://github.com/Lightning-AI/pytorch-lightning/issues/18803
         self.psd_plot_metric.compute()
         self.rmse_psd_plot_metric.compute()
 

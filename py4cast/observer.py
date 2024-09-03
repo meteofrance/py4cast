@@ -218,6 +218,7 @@ class PredictionTimestepPlot(MapPlot):
                     zip(feature_names, units, var_vranges)
                 )
             ]
+            # TODO : don't create all figs at once to avoid matplotlib warning
             tensorboard = obj.logger.experiment
             for var_name, fig in zip(feature_names, var_figs):
                 fig_name = f"timestep_evol_per_param/{var_name}_example_{self.plotted_examples}"
@@ -228,7 +229,7 @@ class PredictionTimestepPlot(MapPlot):
                     dest_file.parent.mkdir(exist_ok=True)
                     fig.savefig(dest_file)
 
-            plt.close("all")  # Close all figs for this time step, saves memory
+                plt.close(fig)
 
         for var_name, paths in paths_dict.items():
             if len(paths) > 1:
@@ -300,13 +301,19 @@ class StateErrorPlot(ErrorObserver):
     with respect to step
     """
 
-    def __init__(self, metrics: Dict[str, Py4CastLoss], prefix: str = "Test"):
+    def __init__(
+        self,
+        metrics: Dict[str, Py4CastLoss],
+        prefix: str = "Test",
+        save_path: Path = None,
+    ):
         self.metrics = metrics
         self.prefix = prefix
         self.losses = {}
         self.shortnames = []
         self.units = []
         self.initialized = False
+        self.save_path = save_path
         for metric in self.metrics:
             self.losses[metric] = []
 
@@ -348,6 +355,11 @@ class StateErrorPlot(ErrorObserver):
                     tensorboard = obj.logger.experiment
                     fig_name = f"score_cards/{self.prefix}_{name}"
                     tensorboard.add_figure(fig_name, fig, obj.current_epoch)
+                    if self.save_path is not None:
+                        dest_file = self.save_path / f"{fig_name}.png"
+                        dest_file.parent.mkdir(exist_ok=True)
+                        fig.savefig(dest_file)
+                    plt.close(fig)
         # Free memory
         [self.losses[name].clear() for name in self.metrics]
 
