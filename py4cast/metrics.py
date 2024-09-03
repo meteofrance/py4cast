@@ -94,10 +94,15 @@ class MetricPSDK(Metric):
         dict_psd_metric = dict()
         for c in range(nb_channel):
             fig = plot_log_psd(
-                k, mean_psd_pred[c].cpu().numpy(), mean_psd_target[c].cpu().numpy()
+                k,
+                mean_psd_pred[c].cpu().numpy(),
+                mean_psd_target[c].cpu().numpy(),
+                f"PSD for {features_name[c]} at +{self.pred_step+1}h",
             )
             dict_psd_metric[f"mean_psd_k/{features_name[c]}"] = fig
-            dest_file = self.save_path / f"mean_psd_k/{features_name[c]}.png"
+            dest_file = (
+                self.save_path / f"mean_psd_k/{features_name[c]}_{self.pred_step+1}.png"
+            )
             if self.save_path.exists():
                 dest_file.parent.mkdir(exist_ok=True)
                 fig.savefig(dest_file)

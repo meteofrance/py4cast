@@ -1,5 +1,5 @@
 """Tests a trained model.
-Takes a path to the checkpoint of a trained model, computes metrics on the test set and
+Takes a path to the checkpoint of a trained model, computes metrics on the valid set and
 saves scores plots and forecast animations in the log folder of the model.
 You can change the number of auto-regressive steps with option `num_pred_steps` to
 make long forecasts.
@@ -32,8 +32,15 @@ parser.add_argument("ckpt_path", type=Path, help="Path to model checkpoint.")
 parser.add_argument(
     "--num_pred_steps",
     type=int,
-    default=3,
+    default=12,
     help="Number of auto-regressive steps/prediction steps.",
+)
+parser.add_argument(
+    "--only_plots",
+    dest="only_plots",
+    default=False,
+    action="store_true",
+    help="Doesn't compute metrics on whole dataset",
 )
 args = parser.parse_args()
 
@@ -51,7 +58,7 @@ logger = TensorBoardLogger(
     save_dir=log_dir, name=folder, version=subfolder, default_hp_metric=False
 )
 
-trainer = pl.Trainer(logger=logger, devices="auto")
+trainer = pl.Trainer(logger=logger, devices="auto", fast_dev_run=args.only_plots)
 
 # Initializing data loader
 dl_settings = TorchDataloaderSettings(batch_size=2, num_workers=5, prefetch_factor=2)
