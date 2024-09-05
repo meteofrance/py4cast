@@ -41,6 +41,15 @@ except ImportError:
     warnings.warn(f"Could not import PoesyDataset. {traceback.format_exc()}")
 
 try:
+    
+    from .poesy import InferPoesyDataset
+    
+    registry['poesy_infer'] = (InferPoesyDataset, default_config_root / "poesy_infer.json")
+except ImportError:
+    warnings.warn(f"Could not import InferPoesyDataset. {traceback.format_exc()}")
+
+
+try:
     from .dummy import DummyDataset
 
     registry["dummy"] = (DummyDataset, "")

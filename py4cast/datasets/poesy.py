@@ -175,7 +175,7 @@ class Param:
     # It is not necessarly the same as the model grid.
     # Function which can return the filenames.
     # It should accept member and date as argument (as well as term).
-    fnamer: Callable[[], [str]] # VSCode doesn't like this, is it ok ?
+    fnamer: Callable[[], [str]]  # VSCode doesn't like this, is it ok ?
     level_type: str = "hPa"  # To be read in nc file ?
     kind: Literal["input", "output", "input_output"] = "input_output"
     unit: str = "FakeUnit"  # To be read in nc FIle  ?
@@ -320,6 +320,7 @@ class Sample:
 class InferSample(Sample):
     def __post_init__(self):
         self.terms = self.input_terms
+
 
 class PoesyDataset(DatasetABC, Dataset):
     def __init__(
@@ -500,7 +501,12 @@ class PoesyDataset(DatasetABC, Dataset):
         return res
 
     def get_param_tensor(
-        self, param: Param, date: dt.datetime, terms: List, member: int = 1
+        self,
+        param: Param,
+        date: dt.datetime,
+        terms: List,
+        member: int = 1,
+        inference_steps: int = 0,
     ) -> torch.tensor:
 
         if self.settings.standardize:
@@ -519,6 +525,10 @@ class PoesyDataset(DatasetABC, Dataset):
 
         # Define which value is considered invalid
         tensor_data = torch.from_numpy(array)
+
+        if inference_steps:
+            empty_data = torch.empty((inference_steps, *array.shape))
+            tensor_data = torch.cat((tensor_data, empty_data), dim=0)
         return tensor_data
 
     def __getitem__(self, index):
@@ -558,7 +568,10 @@ class PoesyDataset(DatasetABC, Dataset):
                 if param.kind == "input_output":
                     # Search data for date sample.date and terms sample.terms
                     tensor = self.get_param_tensor(
-                        param, sample.date, terms=sample.terms
+                        param,
+                        sample.date,
+                        terms=sample.terms,
+                        inference_steps=self.settings.num_inference_pred_steps,
                     )
                     state_kwargs["names"][0] = "timestep"
                     # Save outputs
@@ -817,11 +830,9 @@ class PoesyDataset(DatasetABC, Dataset):
 
 
 class InferPoesyDataset(PoesyDataset):
-    def __init__(
-        self, *args, **kwargs
-        ):
+    def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-    
+
     @cached_property
     def sample_list(self):
         """
@@ -851,14 +862,12 @@ class InferPoesyDataset(PoesyDataset):
                         * self.settings.num_total_steps
                         + self.settings.num_input_steps
                     ]
-                    
+
                     output_terms = [
-                        input_terms[-1]
-                        + self.settings.term["timestep"]
-                        * (step + 1)
+                        input_terms[-1] + self.settings.term["timestep"] * (step + 1)
                         for step in range(self.settings.num_inference_pred_steps)
-                        ]
-                    
+                    ]
+
                     samp = InferSample(
                         settings=self.settings,
                         date=date,
@@ -874,7 +883,7 @@ class InferPoesyDataset(PoesyDataset):
         print("All samples are now defined")
 
         return samples
-    
+
     @classmethod
     def from_json(
         cls,
@@ -883,7 +892,7 @@ class InferPoesyDataset(PoesyDataset):
         num_pred_steps_train: int,
         num_pred_steps_val_tests: int,
         config_override: Union[Dict, None] = None,
-    ) -> Tuple["InferPoesyDataset",None,None]:
+    ) -> Tuple["InferPoesyDataset", None, None]:
         with open(fname, "r") as fp:
             conf = json.load(fp)
 
@@ -924,6 +933,7 @@ class InferPoesyDataset(PoesyDataset):
             ),
         )
         return ds, None, None
+
 
 if __name__ == "__main__":
 
