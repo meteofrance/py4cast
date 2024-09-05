@@ -26,7 +26,7 @@ if __name__ == "__main__":
     hparams = lightning_module.hparams["hparams"]
 
     # Get dataset for inference
-    _, _, test_ds = get_datasets(
+    infer_ds, _, _ = get_datasets(
         hparams.dataset_name,
         hparams.num_input_steps,
         hparams.num_pred_steps_train,
@@ -37,6 +37,6 @@ if __name__ == "__main__":
 
     # Transform in dataloader
     dl_settings = TorchDataloaderSettings(batch_size=2)
-    infer_loader = test_ds.torch_dataloader(dl_settings)
+    infer_loader = infer_ds.torch_dataloader(dl_settings)
     trainer = Trainer(devices="auto")
     preds = trainer.predict(lightning_module, infer_loader)
