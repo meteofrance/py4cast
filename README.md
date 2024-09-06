@@ -1,5 +1,7 @@
 # PY4CAST
 
+![Unit Tests](https://github.com/meteofrance/py4cast/actions/workflows/tests.yml/badge.svg)
+
 This project, built using **PyTorch** and **PyTorch-lightning**, is designed to train a variety of Neural Network architectures (GNNs, CNNs, Vision Transformers, ...) on various weather forecasting datasets. This is a **Work in Progress**, intended to share ideas and design concepts with partners.
 
 Developped at Météo-France by **DSM/AI Lab** and **CNRM/GMAP/PREV**.
