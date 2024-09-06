@@ -28,10 +28,10 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt
-        pip install -r requirements_dev.txt
-    - name: Lint with ruff
+        pip install -r requirements_lint.txt
+    - name: Lint
       run: |
-        ruff check py4cast
+        ./lint.sh .
     - name: Integration Test with pytest
       run: |
         coverage run -p -m pytest tests/
