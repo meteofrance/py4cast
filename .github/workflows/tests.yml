@@ -35,7 +35,7 @@ jobs:
     - name: Integration Test with pytest
       run: |
         coverage run -p -m pytest tests/
-        coverage run -p bin/train.py --model halfunet --model_conf config/models/halfunet32.json --dataset dummy --epochs 1 --batch_size 1 --num_pred_steps_train 1 --limit_train_batches 1
-        coverage run -p bin/train.py --model hilam --dataset dummy --epochs 1 --batch_size 1 --num_pred_steps_train 1 --limit_train_batches 1
+        coverage run -p bin/train.py --model halfunet --model_conf config/models/halfunet32.json --dataset dummy --epochs 1 --batch_size 1 --num_pred_steps_train 1 --limit_train_batches 1 --no-log
+        coverage run -p bin/train.py --model hilam --dataset dummy --epochs 1 --batch_size 1 --num_pred_steps_train 1 --limit_train_batches 1 --no-log
         coverage combine
         coverage report --fail-under=60
