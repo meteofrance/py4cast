@@ -62,7 +62,6 @@ hparams = model.hparams["hparams"]
 hparams.num_pred_steps_val_test = args.num_pred_steps
 
 log_dir, folder, subfolder = get_log_dirs(args.ckpt_path)
-print("subfolder", subfolder, "folder", folder)
 logger = TensorBoardLogger(
     save_dir=log_dir, name=folder, version=subfolder, default_hp_metric=False
 )
@@ -71,7 +70,7 @@ random_run_id = random.randint(0, 9999)
 # Setup profiler
 if args.profiler == "pytorch":
     profiler = PyTorchProfiler(
-        dirpath=subfolder,
+        dirpath=f"{log_dir}/{folder}/{subfolder}",
         filename=f"profile_test_{random_run_id}",
         export_to_chrome=True,
     )
