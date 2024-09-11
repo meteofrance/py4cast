@@ -5,11 +5,13 @@ You can change the number of auto-regressive steps with option `num_pred_steps` 
 make long forecasts.
 """
 
+import random
 from argparse import ArgumentParser
 from pathlib import Path
 
 import pytorch_lightning as pl
 from lightning.pytorch.loggers import TensorBoardLogger
+from lightning.pytorch.profilers import PyTorchProfiler
 
 from py4cast.datasets import get_datasets
 from py4cast.datasets.base import TorchDataloaderSettings
@@ -42,6 +44,12 @@ parser.add_argument(
     action="store_true",
     help="Doesn't compute metrics on whole dataset",
 )
+parser.add_argument(
+    "--profiler",
+    type=str,
+    default="None",
+    help="Profiler required. Possibilities are ['simple', 'pytorch', 'None']",
+)
 args = parser.parse_args()
 
 print(f"Loading model {args.ckpt_path}...")
@@ -57,8 +65,23 @@ log_dir, folder, subfolder = get_log_dirs(args.ckpt_path)
 logger = TensorBoardLogger(
     save_dir=log_dir, name=folder, version=subfolder, default_hp_metric=False
 )
+random_run_id = random.randint(0, 9999)
 
-trainer = pl.Trainer(logger=logger, devices="auto", fast_dev_run=args.only_plots)
+# Setup profiler
+if args.profiler == "pytorch":
+    profiler = PyTorchProfiler(
+        dirpath=ROOTDIR / f"logs/{args.model}/{args.dataset}",
+        filename=f"profile_test_{random_run_id}",
+        export_to_chrome=True,
+    )
+    print("Initiate pytorchProfiler")
+else:
+    profiler = None
+    print(f"No profiler set {args.profiler}")
+
+trainer = pl.Trainer(
+    logger=logger, devices="auto", profiler=profiler, fast_dev_run=args.only_plots
+)
 
 # Initializing data loader
 dl_settings = TorchDataloaderSettings(batch_size=2, num_workers=5, prefetch_factor=2)
