@@ -65,7 +65,7 @@ log_dir, folder, subfolder = get_log_dirs(args.ckpt_path)
 logger = TensorBoardLogger(
     save_dir=log_dir, name=folder, version=subfolder, default_hp_metric=False
 )
-run_id = datetime.now().strftime("%b-%d-%Y")
+run_id = datetime.now().strftime("%b-%d-%Y-%M-%S")
 
 # Setup profiler
 if args.profiler == "pytorch":

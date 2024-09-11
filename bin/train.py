@@ -206,7 +206,7 @@ if args.dev_mode:
     args.epochs = 3
     args.limit_train_batches = 3
 
-run_id = date.strftime("%b-%d-%Y")
+run_id = date.strftime("%b-%d-%Y-%M-%S")
 seed.seed_everything(args.seed)
 
 
