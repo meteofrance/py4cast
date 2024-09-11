@@ -218,11 +218,11 @@ class AutoRegressiveLightning(pl.LightningModule):
             dict_log["username"] = getpass.getuser()
             self.logger.log_hyperparams(dict_log, metrics={"val_mean_loss": 0.0})
             # Save model & dataset conf as files
-            if hparams.dataset_conf is not None:
+            if hparams.dataset_conf is not None and hparams.save_path.exists():
                 shutil.copyfile(
                     hparams.dataset_conf, hparams.save_path / "dataset_conf.json"
                 )
-            if hparams.model_conf is not None:
+            if hparams.model_conf is not None and hparams.save_path.exists():
                 shutil.copyfile(
                     hparams.model_conf, hparams.save_path / "model_conf.json"
                 )
