@@ -59,7 +59,7 @@ class ErrorObserver(ABC):
         pass
 
     @abstractmethod
-    def on_step_end(self, obj: "AutoRegressiveLightning") -> None:
+    def on_step_end(self, obj: "AutoRegressiveLightning", label: str = "") -> None:
         """
         Do an action when "end" is trigger
         """
@@ -161,7 +161,7 @@ class MapPlot(ErrorObserver):
     ) -> None:
         pass
 
-    def on_step_end(self, obj: "AutoRegressiveLightning") -> None:
+    def on_step_end(self, obj: "AutoRegressiveLightning", label: str = "") -> None:
         """
         Do an action when "end" is trigger
         """
@@ -336,14 +336,23 @@ class StateErrorPlot(ErrorObserver):
             ]
             self.initialized = True
 
-    def on_step_end(self, obj: "AutoRegressiveLightning") -> None:
+    def on_step_end(self, obj: "AutoRegressiveLightning", label: str = "") -> None:
         """
         Make the summary figure
         """
+        tensorboard = obj.logger.experiment
         for name in self.metrics:
             loss_tensor = gather(obj, torch.cat(self.losses[name], dim=0))
             if obj.trainer.is_global_zero:
                 loss = torch.mean(loss_tensor, dim=0)
+
+                # Log metrics in tensorboard, with x axis as forecast timestep
+                for t in range(loss.shape[0]):
+                    for k in range(loss.shape[1]):
+                        scalar_name = f"{label}_{name}/timestep_{self.shortnames[k]}"
+                        tensorboard.add_scalar(scalar_name, loss[t][k], t + 1)
+
+                # Plot the score card
                 if not obj.trainer.sanity_checking:
                     fig = plot_error_map(
                         loss,
@@ -352,7 +361,7 @@ class StateErrorPlot(ErrorObserver):
                         step_duration=obj.hparams["hparams"].dataset_info.step_duration,
                     )
 
-                    tensorboard = obj.logger.experiment
+                    # log it in tensorboard
                     fig_name = f"score_cards/{self.prefix}_{name}"
                     tensorboard.add_figure(fig_name, fig, obj.current_epoch)
                     if self.save_path is not None:
@@ -387,7 +396,7 @@ class SpatialErrorPlot(ErrorObserver):
             )
         self.spatial_loss_maps.append(spatial_loss)  # (B, N_log, N_lat, N_lon)
 
-    def on_step_end(self, obj: "AutoRegressiveLightning") -> None:
+    def on_step_end(self, obj: "AutoRegressiveLightning", label: str = "") -> None:
         """
         Make the summary figure
         """
@@ -410,7 +419,9 @@ class SpatialErrorPlot(ErrorObserver):
             ]
             tensorboard = obj.logger.experiment
             for t_i, fig in enumerate(loss_map_figs):
-                tensorboard.add_figure(f"spatial_error/{self.prefix}_loss", fig, t_i)
+                tensorboard.add_figure(
+                    f"spatial_error_{label}/{self.prefix}_loss", fig, t_i
+                )
             plt.close()
 
         self.spatial_loss_maps.clear()
