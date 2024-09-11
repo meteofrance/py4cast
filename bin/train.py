@@ -6,7 +6,6 @@ and then evaluate the model on the test dataset calling .test
 
 import getpass
 import os
-import random
 from argparse import ArgumentParser, BooleanOptionalAction
 from datetime import datetime
 from pathlib import Path
@@ -207,7 +206,7 @@ if args.dev_mode:
     args.epochs = 3
     args.limit_train_batches = 3
 
-random_run_id = random.randint(0, 9999)
+run_id = date.strftime("%b-%d-%Y")
 seed.seed_everything(args.seed)
 
 
@@ -305,7 +304,7 @@ callback_list.append(EarlyStopping(monitor="val_mean_loss", mode="min", patience
 if args.profiler == "pytorch":
     profiler = PyTorchProfiler(
         dirpath=ROOTDIR / f"logs/{args.model}/{args.dataset}",
-        filename=f"profile_{random_run_id}",
+        filename=f"profile_{run_id}",
         export_to_chrome=True,
         profile_memory=True,
     )

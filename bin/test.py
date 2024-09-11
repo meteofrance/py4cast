@@ -5,8 +5,8 @@ You can change the number of auto-regressive steps with option `num_pred_steps` 
 make long forecasts.
 """
 
-import random
 from argparse import ArgumentParser
+from datetime import datetime
 from pathlib import Path
 
 import pytorch_lightning as pl
@@ -65,13 +65,13 @@ log_dir, folder, subfolder = get_log_dirs(args.ckpt_path)
 logger = TensorBoardLogger(
     save_dir=log_dir, name=folder, version=subfolder, default_hp_metric=False
 )
-random_run_id = random.randint(0, 9999)
+run_id = datetime.now().strftime("%b-%d-%Y")
 
 # Setup profiler
 if args.profiler == "pytorch":
     profiler = PyTorchProfiler(
         dirpath=f"{log_dir}/{folder}/{subfolder}",
-        filename=f"profile_test_{random_run_id}",
+        filename=f"profile_test_{run_id}",
         export_to_chrome=True,
         profile_memory=True,
     )
