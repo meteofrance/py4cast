@@ -73,6 +73,7 @@ if args.profiler == "pytorch":
         dirpath=f"{log_dir}/{folder}/{subfolder}",
         filename=f"profile_test_{random_run_id}",
         export_to_chrome=True,
+        profile_memory=True,
     )
     print("Initiate pytorchProfiler")
 else:

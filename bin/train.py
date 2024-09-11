@@ -307,6 +307,7 @@ if args.profiler == "pytorch":
         dirpath=ROOTDIR / f"logs/{args.model}/{args.dataset}",
         filename=f"profile_{random_run_id}",
         export_to_chrome=True,
+        profile_memory=True,
     )
     print("Initiate pytorchProfiler")
 else:
