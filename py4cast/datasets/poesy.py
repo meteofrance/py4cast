@@ -15,7 +15,6 @@ import pandas as pd
 import torch
 import tqdm
 from torch.utils.data import DataLoader, Dataset
-from py4cast.utils import merge_dicts
 
 from py4cast.datasets.base import (
     DatasetABC,
@@ -27,6 +26,7 @@ from py4cast.datasets.base import (
 )
 from py4cast.plots import DomainInfo
 from py4cast.settings import CACHE_DIR
+from py4cast.utils import merge_dicts
 
 SCRATCH_PATH = Path("/scratch/shared/poesy/poesy_crop")
 OROGRAPHY_FNAME = "PEARO_EURW1S40_Orography_crop.npy"
@@ -849,7 +849,7 @@ class InferPoesyDataset(PoesyDataset):
         )
 
         sample_by_date = len(terms) // self.settings.num_total_steps
-        
+
         samples = []
         number = 0
 
