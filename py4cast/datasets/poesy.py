@@ -319,6 +319,10 @@ class Sample:
 
 
 class InferSample(Sample):
+    """
+    Sample dedicated to inference. No outputs terms, only inputs.
+    """
+
     def __post_init__(self):
         self.terms = self.input_terms
 
@@ -831,13 +835,19 @@ class PoesyDataset(DatasetABC, Dataset):
 
 
 class InferPoesyDataset(PoesyDataset):
+    """
+    Inherite from the PoesyDataset class.
+    This class overrides methods sample_list and from_json.
+    """
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
     @cached_property
     def sample_list(self):
         """
-        Create a list of sample from information
+        Create a list of sample from information.
+        Outputs terms are computed from the number of prediction steps wanted by the user.
         """
         print("Start forming samples")
         terms = list(
@@ -894,6 +904,10 @@ class InferPoesyDataset(PoesyDataset):
         num_pred_steps_val_tests: int,
         config_override: Union[Dict, None] = None,
     ) -> Tuple["InferPoesyDataset", None, None]:
+        """
+        Return 1 InferPoesyDataset.
+        Override configuration file if needed.
+        """
         with open(fname, "r") as fp:
             conf = json.load(fp)
             if config_override is not None:
