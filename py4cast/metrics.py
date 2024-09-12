@@ -205,7 +205,7 @@ class MetricPSDVar(Metric):
         # Initialize sum_rmse as a tensor of dim (nb_features)
         if not self.sum_rmse.ndim:  # self.sum_rmse not yet initalized as a tensor
             self.sum_rmse = torch.zeros(channels, device=self.device)
-            
+
         # Add RMSE for this channel
         self.sum_rmse += torch.from_numpy(res).to(device=self.device)
 
