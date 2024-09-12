@@ -455,9 +455,8 @@ class MetricACC(Metric):
         called at each end of step
         """
         
-        if self.device!=preds.tensor.device:
-            self.device = preds.tensor.device
-            self.climate_means = self.climate_means.to(self.device)
+        if self.step_count == 0 and self.climate_means.device != preds.tensor.device:
+            self.climate_means = self.climate_means.to(preds.tensor.device)
         if self.step_count == 0:
             self.feature_names = preds.feature_names
             self.pred_steps = preds.tensor.shape[1]
