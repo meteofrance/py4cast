@@ -327,7 +327,7 @@ class StateErrorPlot(ErrorObserver):
         Compute the metric. Append to a dictionnary
         """
         for name in self.metrics:
-            self.losses[name].append(self.metrics[name](prediction, target))
+            self.losses[name].append(self.metrics[name](prediction, target).cpu())
         if not self.initialized:
             self.shortnames = prediction.feature_names
             self.units = [
@@ -388,7 +388,7 @@ class SpatialErrorPlot(ErrorObserver):
         prediction: NamedTensor,
         target: NamedTensor,
     ) -> None:
-        spatial_loss = obj.loss(prediction, target, reduce_spatial_dim=False)
+        spatial_loss = obj.loss(prediction, target, reduce_spatial_dim=False).cpu()
         # Getting only spatial loss for the required val_step_errors
         if prediction.num_spatial_dims == 1:
             spatial_loss = einops.rearrange(
