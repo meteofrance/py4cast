@@ -421,8 +421,8 @@ class MetricACC(Metric):
     Anomalies are computed with respect to "climate" normals that must be provided beforehand
     """
 
-    def __init__(self, dataset_info: DatasetInfo):
-        super().__init__()
+    def __init__(self, dataset_info: DatasetInfo, device):
+        super().__init__(device=device)
 
         # storing climate normals as a tensor
         warnings.warn(
