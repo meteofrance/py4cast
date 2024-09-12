@@ -436,7 +436,7 @@ class MetricACC(Metric):
             dataset_info.shortnames["input_output"]
             + dataset_info.shortnames["diagnostic"]
         )
-        self.climate_means = dataset_info.stats.to_list("mean", names)
+        self.climate_means = dataset_info.stats.to_list("mean", names).to(self.device)
 
         # adding sum of acc coefficient (to compute mean on each epoch)
         self.add_state(
