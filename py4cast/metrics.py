@@ -421,8 +421,8 @@ class MetricACC(Metric):
     Anomalies are computed with respect to "climate" normals that must be provided beforehand
     """
 
-    def __init__(self, dataset_info: DatasetInfo, device):
-        super().__init__(device=device)
+    def __init__(self, dataset_info: DatasetInfo):
+        super().__init__()
 
         # storing climate normals as a tensor
         warnings.warn(
@@ -454,6 +454,10 @@ class MetricACC(Metric):
         prediction/target: (B, pred_steps, N_grid, d_f) or (B, pred_steps, W, H, d_f)
         called at each end of step
         """
+        
+        if self.device!=preds.tensor.device:
+            self.device = preds.tensor.device
+            self.climate_means = self.climate_means.to(self.device)
         if self.step_count == 0:
             self.feature_names = preds.feature_names
             self.pred_steps = preds.tensor.shape[1]
