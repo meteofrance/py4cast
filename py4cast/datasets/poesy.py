@@ -837,7 +837,7 @@ class PoesyDataset(DatasetABC, Dataset):
 class InferPoesyDataset(PoesyDataset):
     """
     Inherite from the PoesyDataset class.
-    This class overrides methods sample_list and from_json.
+    This class is used for inference, the class overrides methods sample_list and from_json.
     """
 
     def __init__(self, *args, **kwargs):
