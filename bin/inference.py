@@ -27,7 +27,7 @@ if __name__ == "__main__":
 
     # Get dataset for inference
     infer_ds, _, _ = get_datasets(
-        hparams.dataset_name,
+        "poesy_infer",
         hparams.num_input_steps,
         hparams.num_pred_steps_train,
         hparams.num_pred_steps_val_test,
@@ -36,7 +36,7 @@ if __name__ == "__main__":
     )
 
     # Transform in dataloader
-    dl_settings = TorchDataloaderSettings(batch_size=2)
+    dl_settings = TorchDataloaderSettings(batch_size=1)
     infer_loader = infer_ds.torch_dataloader(dl_settings)
     trainer = Trainer(devices="auto")
     preds = trainer.predict(lightning_module, infer_loader)

@@ -15,6 +15,7 @@ import pandas as pd
 import torch
 import tqdm
 from torch.utils.data import DataLoader, Dataset
+from py4cast.utils import merge_dicts
 
 from py4cast.datasets.base import (
     DatasetABC,
@@ -412,7 +413,7 @@ class PoesyDataset(DatasetABC, Dataset):
                         + self.settings.num_output_steps
                     ]
                     samp = Sample(
-                        settings=PoesySettings,
+                        settings=self.settings,
                         date=date,
                         member=member,
                         input_terms=input_terms,
@@ -527,7 +528,7 @@ class PoesyDataset(DatasetABC, Dataset):
         tensor_data = torch.from_numpy(array)
 
         if inference_steps:
-            empty_data = torch.empty((inference_steps, *array.shape))
+            empty_data = torch.empty((inference_steps, *array.shape[1:]))
             tensor_data = torch.cat((tensor_data, empty_data), dim=0)
         return tensor_data
 
@@ -848,7 +849,7 @@ class InferPoesyDataset(PoesyDataset):
         )
 
         sample_by_date = len(terms) // self.settings.num_total_steps
-
+        
         samples = []
         number = 0
 
@@ -895,6 +896,8 @@ class InferPoesyDataset(PoesyDataset):
     ) -> Tuple["InferPoesyDataset", None, None]:
         with open(fname, "r") as fp:
             conf = json.load(fp)
+            if config_override is not None:
+                conf = merge_dicts(conf, config_override)
 
         grid = Grid(**conf["grid"])
         param_list = []
@@ -919,7 +922,7 @@ class InferPoesyDataset(PoesyDataset):
                     **vard,
                 )
                 param_list.append(param)
-        inference_period = Period(**conf["periods"]["train"], name="train")
+        inference_period = Period(**conf["periods"]["test"], name="test")
         ds = InferPoesyDataset(
             grid,
             inference_period,
