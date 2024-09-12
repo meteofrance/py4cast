@@ -17,7 +17,7 @@ from transformers import get_cosine_schedule_with_warmup
 
 from py4cast.datasets.base import DatasetInfo, ItemBatch, NamedTensor
 from py4cast.losses import ScaledLoss, WeightedLoss
-from py4cast.metrics import MetricACC, MetricPSDK, MetricPSDVar, MetricRMSE
+from py4cast.metrics import MetricPSDK, MetricPSDVar
 from py4cast.models import build_model_from_settings, get_model_kls_and_settings
 from py4cast.models.base import expand_to_batch
 from py4cast.observer import (
@@ -453,9 +453,9 @@ class AutoRegressiveLightning(pl.LightningModule):
         l1_loss.prepare(self, self.interior_mask, self.hparams["hparams"].dataset_info)
         metrics = {"mae": l1_loss}
         save_path = self.hparams["hparams"].save_path
-   
-        #self.rmse_metric = MetricRMSE()
-        #self.acc_metric = MetricACC(self.hparams["hparams"].dataset_info)
+
+        # self.rmse_metric = MetricRMSE()
+        # self.acc_metric = MetricACC(self.hparams["hparams"].dataset_info)
         self.valid_plotters = [
             StateErrorPlot(metrics, prefix="Validation"),
             PredictionTimestepPlot(
@@ -511,8 +511,8 @@ class AutoRegressiveLightning(pl.LightningModule):
                 plotter.update(self, prediction=prediction, target=target)
             self.psd_plot_metric.update(prediction, target, self.original_shape)
             self.rmse_psd_plot_metric.update(prediction, target, self.original_shape)
-            #self.rmse_metric.update(prediction, target)
-            #self.acc_metric.update(prediction, target)
+            # self.rmse_metric.update(prediction, target)
+            # self.acc_metric.update(prediction, target)
 
     def on_validation_epoch_end(self):
         """
@@ -523,8 +523,8 @@ class AutoRegressiveLightning(pl.LightningModule):
         dict_metrics = dict()
         dict_metrics.update(self.psd_plot_metric.compute())
         dict_metrics.update(self.rmse_psd_plot_metric.compute())
-        #dict_metrics.update(self.rmse_metric.compute())
-        #dict_metrics.update(self.acc_metric.compute())
+        # dict_metrics.update(self.rmse_metric.compute())
+        # dict_metrics.update(self.acc_metric.compute())
         for name, elmnt in dict_metrics.items():
             if isinstance(elmnt, matplotlib.figure.Figure):
                 self.logger.experiment.add_figure(f"{name}", elmnt, self.current_epoch)
@@ -562,8 +562,8 @@ class AutoRegressiveLightning(pl.LightningModule):
         max_pred_step = self.hparams["hparams"].num_pred_steps_val_test - 1
         self.rmse_psd_plot_metric = MetricPSDVar(pred_step=max_pred_step)
         self.psd_plot_metric = MetricPSDK(save_path, pred_step=max_pred_step)
-        #self.rmse_metric = MetricRMSE()
-        #self.acc_metric = MetricACC(self.hparams["hparams"].dataset_info)
+        # self.rmse_metric = MetricRMSE()
+        # self.acc_metric = MetricACC(self.hparams["hparams"].dataset_info)
         self.test_plotters = [
             StateErrorPlot(metrics, save_path=save_path),
             SpatialErrorPlot(),
@@ -586,9 +586,9 @@ class AutoRegressiveLightning(pl.LightningModule):
             plotter.update(self, prediction=prediction, target=target)
         self.psd_plot_metric.update(prediction, target, self.original_shape)
         self.rmse_psd_plot_metric.update(prediction, target, self.original_shape)
-        #self.rmse_metric.update(prediction, target)
-        #self.acc_metric.update(prediction, target)
-        
+        # self.rmse_metric.update(prediction, target)
+        # self.acc_metric.update(prediction, target)
+
     @cached_property
     def interior_2d(self) -> torch.Tensor:
         """
@@ -611,9 +611,8 @@ class AutoRegressiveLightning(pl.LightningModule):
         # and: https://github.com/Lightning-AI/pytorch-lightning/issues/18803
         self.psd_plot_metric.compute()
         self.rmse_psd_plot_metric.compute()
-        #self.rmse_metric.compute()
-        #self.acc_metric.compute()
-
+        # self.rmse_metric.compute()
+        # self.acc_metric.compute()
         # Notify plotters that the test epoch end
         for plotter in self.test_plotters:
             plotter.on_step_end(self, label="Test")
