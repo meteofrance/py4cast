@@ -17,7 +17,7 @@ from transformers import get_cosine_schedule_with_warmup
 
 from py4cast.datasets.base import DatasetInfo, ItemBatch, NamedTensor
 from py4cast.losses import ScaledLoss, WeightedLoss
-from py4cast.metrics import MetricPSDK, MetricPSDVar, MetricACC
+from py4cast.metrics import MetricACC, MetricPSDK, MetricPSDVar
 from py4cast.models import build_model_from_settings, get_model_kls_and_settings
 from py4cast.models.base import expand_to_batch
 from py4cast.observer import (
@@ -214,7 +214,6 @@ class AutoRegressiveLightning(pl.LightningModule):
         self.rmse_psd_plot_metric = MetricPSDVar(pred_step=max_pred_step)
         self.psd_plot_metric = MetricPSDK(save_path, pred_step=max_pred_step)
         self.acc_metric = MetricACC(self.hparams["hparams"].dataset_info)
-
 
     @rank_zero_only
     def log_hparams_tb(self):

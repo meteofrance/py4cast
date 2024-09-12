@@ -381,7 +381,7 @@ class MetricACC(Metric):
         prediction/target: (B, pred_steps, N_grid, d_f) or (B, pred_steps, W, H, d_f)
         called at each end of step
         """
-        
+
         if self.step_count == 0 and self.climate_means.device != preds.tensor.device:
             self.climate_means = self.climate_means.to(preds.tensor.device)
         if self.step_count == 0:
