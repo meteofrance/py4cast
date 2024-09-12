@@ -242,7 +242,6 @@ class AutoRegressiveLightning(pl.LightningModule):
             opt.load_state_dict(self.opt_state)
 
         if self.hparams["hparams"].use_lr_scheduler:
-
             len_loader = self.hparams["hparams"].len_train_loader // LR_SCHEDULER_PERIOD
             epochs = self.trainer.max_epochs
             lr_scheduler = get_cosine_schedule_with_warmup(
@@ -354,7 +353,6 @@ class AutoRegressiveLightning(pl.LightningModule):
         # for the desired number of ar steps.
 
         for i in range(batch.num_pred_steps):
-
             if not inference:
                 border_state = batch.outputs.tensor[:, i]
 
@@ -548,7 +546,7 @@ class AutoRegressiveLightning(pl.LightningModule):
         # Notify every plotters
         if self.current_epoch % PLOT_PERIOD == 0:
             for plotter in self.valid_plotters:
-                plotter.on_step_end(self)
+                plotter.on_step_end(self, label="Valid")
 
     def on_test_start(self):
         """
@@ -569,7 +567,6 @@ class AutoRegressiveLightning(pl.LightningModule):
         self.test_plotters = [
             StateErrorPlot(metrics, save_path=save_path),
             SpatialErrorPlot(),
-            PredictionTimestepPlot(self.hparams["hparams"].num_samples_to_plot),
             PredictionTimestepPlot(
                 num_samples_to_plot=self.hparams["hparams"].num_samples_to_plot,
                 num_features_to_plot=4,
@@ -618,4 +615,4 @@ class AutoRegressiveLightning(pl.LightningModule):
         # self.acc_metric.compute()
         # Notify plotters that the test epoch end
         for plotter in self.test_plotters:
-            plotter.on_step_end(self)
+            plotter.on_step_end(self, label="Test")
