@@ -212,7 +212,7 @@ class AutoRegressiveLightning(pl.LightningModule):
         save_path = self.hparams["hparams"].save_path
         max_pred_step = self.hparams["hparams"].num_pred_steps_val_test - 1
         self.rmse_psd_plot_metric = MetricPSDVar(pred_step=max_pred_step)
-        self.psd_plot_metric = MetricPSDK(save_path, pred_step=max_pred_step)
+        #self.psd_plot_metric = MetricPSDK(save_path, pred_step=max_pred_step)
 
     @rank_zero_only
     def log_hparams_tb(self):
@@ -509,7 +509,7 @@ class AutoRegressiveLightning(pl.LightningModule):
         if self.current_epoch % PLOT_PERIOD == 0:
             for plotter in self.valid_plotters:
                 plotter.update(self, prediction=prediction, target=target)
-            self.psd_plot_metric.update(prediction, target, self.original_shape)
+            #self.psd_plot_metric.update(prediction, target, self.original_shape)
             self.rmse_psd_plot_metric.update(prediction, target, self.original_shape)
             # self.rmse_metric.update(prediction, target)
             # self.acc_metric.update(prediction, target)
@@ -521,7 +521,7 @@ class AutoRegressiveLightning(pl.LightningModule):
 
         # Get dict of metrics' results
         dict_metrics = dict()
-        dict_metrics.update(self.psd_plot_metric.compute())
+        #dict_metrics.update(self.psd_plot_metric.compute())
         dict_metrics.update(self.rmse_psd_plot_metric.compute())
         # dict_metrics.update(self.rmse_metric.compute())
         # dict_metrics.update(self.acc_metric.compute())
@@ -561,7 +561,7 @@ class AutoRegressiveLightning(pl.LightningModule):
         save_path = self.hparams["hparams"].save_path
         max_pred_step = self.hparams["hparams"].num_pred_steps_val_test - 1
         self.rmse_psd_plot_metric = MetricPSDVar(pred_step=max_pred_step)
-        self.psd_plot_metric = MetricPSDK(save_path, pred_step=max_pred_step)
+        #self.psd_plot_metric = MetricPSDK(save_path, pred_step=max_pred_step)
         # self.rmse_metric = MetricRMSE()
         # self.acc_metric = MetricACC(self.hparams["hparams"].dataset_info)
         self.test_plotters = [
@@ -584,7 +584,7 @@ class AutoRegressiveLightning(pl.LightningModule):
         # Notify plotters & metrics
         for plotter in self.test_plotters:
             plotter.update(self, prediction=prediction, target=target)
-        self.psd_plot_metric.update(prediction, target, self.original_shape)
+        #self.psd_plot_metric.update(prediction, target, self.original_shape)
         self.rmse_psd_plot_metric.update(prediction, target, self.original_shape)
         # self.rmse_metric.update(prediction, target)
         # self.acc_metric.update(prediction, target)
@@ -609,7 +609,7 @@ class AutoRegressiveLightning(pl.LightningModule):
         # "RuntimeError: No backend type associated with device type cpu"
         # see: https://github.com/Lightning-AI/torchmetrics/issues/2477
         # and: https://github.com/Lightning-AI/pytorch-lightning/issues/18803
-        self.psd_plot_metric.compute()
+        #self.psd_plot_metric.compute()
         self.rmse_psd_plot_metric.compute()
         # self.rmse_metric.compute()
         # self.acc_metric.compute()
