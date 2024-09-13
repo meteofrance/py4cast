@@ -17,17 +17,16 @@ if __name__ == "__main__":
 
     # Load checkpoint
     lightning_module = AutoRegressiveLightning.load_from_checkpoint(args.model_path)
+    hparams = lightning_module.hparams["hparams"]
 
     if args.date is not None:
         config_override = {"periods": {"test": {"start": args.date, "end": args.date}}}
     else:
         config_override = None
 
-    hparams = lightning_module.hparams["hparams"]
-
     # Get dataset for inference
-    infer_ds, _, _ = get_datasets(
-        "poesy_infer",
+    _, _, infer_ds = get_datasets(
+        hparams.dataset_name,
         hparams.num_input_steps,
         hparams.num_pred_steps_train,
         hparams.num_pred_steps_val_test,

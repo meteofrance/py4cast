@@ -903,7 +903,7 @@ class InferPoesyDataset(PoesyDataset):
         num_pred_steps_train: int,
         num_pred_steps_val_tests: int,
         config_override: Union[Dict, None] = None,
-    ) -> Tuple["InferPoesyDataset", None, None]:
+    ) -> Tuple[None, None, "InferPoesyDataset"]:
         """
         Return 1 InferPoesyDataset.
         Override configuration file if needed.
@@ -937,6 +937,8 @@ class InferPoesyDataset(PoesyDataset):
                 )
                 param_list.append(param)
         inference_period = Period(**conf["periods"]["test"], name="test")
+        num_inference_pred_steps = conf["num_inference_pred_steps"]
+
         ds = InferPoesyDataset(
             grid,
             inference_period,
@@ -946,10 +948,10 @@ class InferPoesyDataset(PoesyDataset):
                 term=term,
                 num_input_steps=num_input_steps,
                 num_output_steps=0,
-                num_inference_pred_steps=conf["num_inference_pred_steps"],
+                num_inference_pred_steps=num_inference_pred_steps,
             ),
         )
-        return ds, None, None
+        return None, None, ds
 
 
 if __name__ == "__main__":

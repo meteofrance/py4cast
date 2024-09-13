@@ -34,6 +34,16 @@ except (ImportError, FileNotFoundError, ModuleNotFoundError):
     warnings.warn(f"Could not import TitanDataset. {traceback.format_exc()}")
 
 try:
+    from .titan import InferTitanDataset
+
+    registry["titan_infer"] = (
+        InferTitanDataset,
+        default_config_root / "titan_infer.json",
+    )
+except ImportError:
+    warnings.warn(f"Could not import InferTitanDataset. {traceback.format_exc()}")
+
+try:
     from .poesy import PoesyDataset
 
     registry["poesy"] = (PoesyDataset, default_config_root / "poesy.json")
@@ -41,7 +51,6 @@ except ImportError:
     warnings.warn(f"Could not import PoesyDataset. {traceback.format_exc()}")
 
 try:
-
     from .poesy import InferPoesyDataset
 
     registry["poesy_infer"] = (
@@ -50,7 +59,6 @@ try:
     )
 except ImportError:
     warnings.warn(f"Could not import InferPoesyDataset. {traceback.format_exc()}")
-
 
 try:
     from .dummy import DummyDataset
