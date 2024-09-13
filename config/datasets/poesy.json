@@ -61,5 +61,6 @@
                 "WIND.V.PHYS":{"shortname":"v","level": [1]}
                 }
             }
-        }
+        },
+    "num_inference_pred_steps": 3
 }
