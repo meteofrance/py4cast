@@ -11,6 +11,7 @@ from py4cast.plots import DomainInfo
 from tqdm import trange
 import einops
 from pathlib import Path
+import math
 
 
 import matplotlib.pyplot as plt
@@ -56,23 +57,26 @@ def make_forecast(model: AutoRegressiveLightning, item: Item) -> torch.tensor:
 
 
 @gif.frame
-def plot_frame(t:int, idx_feature:int, target: torch.tensor, predictions: List[torch.tensor], domain_info: DomainInfo,
-    title=None, models_names=None)-> None:
-    # Get common scale for values
-    vmin = target[:, :, :, idx_feature].min().cpu().item()
-    vmax = target[:, :, :, idx_feature].max().cpu().item()
+def plot_frame(target: torch.tensor, predictions: List[torch.tensor], domain_info: DomainInfo,
+    title=None, models_names=None, unit:str=None, vmin:float=None, vmax:float=None)-> None:
 
     nb_preds = len(predictions) + 1
+    lines = int(math.sqrt(nb_preds))
+    cols = nb_preds // lines 
+    if nb_preds % lines != 0:
+        cols += 1
     fig, axes = plt.subplots(
-        1, nb_preds, figsize=(15, 7), subplot_kw={"projection": domain_info.projection}
+        lines, cols , figsize=(5 * cols, 5 * lines), subplot_kw={"projection": domain_info.projection}, dpi=300
     )
+    axs = axes.flatten()
 
     for i, data in enumerate([target] + predictions):
-        axes[i].coastlines()
+        axs[i].coastlines()
         array = data.cpu().detach().numpy()
-
-        im = axes[i].imshow(
-            data.cpu().detach().numpy()[t, :, :, idx_feature],
+        if "_tp_" in unit: # precipitations
+            array = np.where(array == 0, np.nan, array)
+        im = axs[i].imshow(
+            array,
             origin="lower",
             extent=domain_info.grid_limits,
             vmin=vmin,
@@ -80,11 +84,12 @@ def plot_frame(t:int, idx_feature:int, target: torch.tensor, predictions: List[t
             cmap="plasma",
         )
         if models_names:
-            axes[i].set_title(models_names[i], size=15)
+            axs[i].set_title(models_names[i], size=15)
+
+    fig.colorbar(im, ax=axes.ravel().tolist(), label=unit)
 
     if title:
         fig.suptitle(title, size=20)
-    plt.tight_layout()
 
 
 if __name__ == "__main__":
@@ -115,15 +120,31 @@ if __name__ == "__main__":
     models_names = ["AROME Analysis"] + models_names
 
     for preds in y_preds:
-        print(preds.shape)
+        print(preds.shape) # (timesteps, H, W, features)
     print("Models: ", models_names)
+    print(hparams.dataset_info.units)
 
     for feature_name in item.inputs.feature_names[:5]:
         print(feature_name)
+
         idx_feature = item.inputs.feature_names_to_idx[feature_name]
+        unit = f"{feature_name} ({hparams.dataset_info.units[feature_name]})"
+        mean = hparams.dataset_info.stats[feature_name]["mean"]
+        std = hparams.dataset_info.stats[feature_name]["std"]
+
+        target_feat = y_true[:,:,:, idx_feature] * std + mean
+        list_preds_feat = [pred[:,:,:,idx_feature] * std + mean for pred in y_preds]
+        vmin, vmax = target_feat.min().cpu().item(), target_feat.max().cpu().item()
+
         frames = []
-        for t in trange(args.num_pred_steps):
+        for t in trange(4): #args.num_pred_steps):
             title = f"{feature_name} - {args.date} +{t+1}h"
-            frame = plot_frame(t, idx_feature, y_true, y_preds, domain_info, title, models_names)
+            target = target_feat[t] 
+            list_predictions = [pred[t] for pred in list_preds_feat]
+            frame = plot_frame(target, list_predictions, domain_info, title, models_names, unit, vmin, vmax)
             frames.append(frame)
         gif.save(frames, f"{args.date}_{feature_name}.gif", duration=250)
+        exit()
+
+# TODO :
+# - update README with script usage + gifs in main README 
