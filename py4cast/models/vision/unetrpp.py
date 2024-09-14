@@ -304,8 +304,7 @@ class UnetrPPEncoder(nn.Module):
         in_channels=4,
         dropout=0.0,
         transformer_dropout_rate=0.1,
-        subsampling_rate: int = 4,
-        **kwargs,
+        downsampling_rate: int = 4,
     ):
         super().__init__()
 
@@ -317,8 +316,8 @@ class UnetrPPEncoder(nn.Module):
                 spatial_dims,
                 in_channels,
                 dims[0],
-                kernel_size=subsampling_rate,
-                stride=subsampling_rate,
+                kernel_size=downsampling_rate,
+                stride=downsampling_rate,
                 dropout=dropout,
                 conv_only=True,
             ),
@@ -581,8 +580,8 @@ class UNETRPP(ModelABC, nn.Module):
                 f"Position embedding layer of type {settings.pos_embed} is not supported."
             )
         # we have first a stem layer with stride=subsampling_rate and k_size=subsampling_rate
-        # followed by successive downsampling layer (k=2, stride=2)
-        dim_divider = 2 * settings.downsampling_rate**2
+        # followed by 3 successive downsampling layer (k=2, stride=2)
+        dim_divider = (2**3) * settings.downsampling_rate
         if settings.spatial_dims == 2:
             self.feat_size = (
                 input_shape[0] // dim_divider,
@@ -597,8 +596,9 @@ class UNETRPP(ModelABC, nn.Module):
 
         self.hidden_size = settings.hidden_size
         self.spatial_dims = settings.spatial_dims
+        # Number of pixels after stem layer
         no_pixels = (input_shape[0] * input_shape[1]) // (
-            settings.downsampling_rate * 2
+            settings.downsampling_rate**2
         )
         encoder_input_size = [
             no_pixels,
@@ -607,14 +607,23 @@ class UNETRPP(ModelABC, nn.Module):
             no_pixels // 64,
         ]
         h_size = settings.hidden_size
+        # Transformer output dim scale factor to make
+        # arch compatible with downsampling parameter
+        dim_sf = 16 // (settings.downsampling_rate**2)
         self.unetr_pp_encoder = UnetrPPEncoder(
             input_size=encoder_input_size,
-            dims=(h_size // 8, h_size // 4, h_size // 2, h_size),
+            dims=(
+                h_size // 8,
+                h_size // 4,
+                h_size // 2,
+                h_size,
+            ),
+            proj_size=[64, 64, 64, 32],
             depths=settings.depths,
             num_heads=settings.num_heads,
             spatial_dims=settings.spatial_dims,
             in_channels=num_input_features,
-            subsampling_rate=settings.downsampling_rate,
+            downsampling_rate=settings.downsampling_rate,
         )
 
         self.encoder1 = UnetResBlock(
@@ -660,9 +669,9 @@ class UNETRPP(ModelABC, nn.Module):
             in_channels=settings.hidden_size // 8,
             out_channels=settings.hidden_size // 16,
             kernel_size=3,
-            upsample_kernel_size=4,
+            upsample_kernel_size=settings.downsampling_rate,
             norm_name=settings.norm_name,
-            out_size=no_pixels * (subsampling_rate * 2),
+            out_size=no_pixels * (settings.downsampling_rate * 2),
             conv_decoder=True,
             linear_upsampling=settings.linear_upsampling,
         )
