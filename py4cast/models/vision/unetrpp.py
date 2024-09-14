@@ -304,6 +304,7 @@ class UnetrPPEncoder(nn.Module):
         in_channels=4,
         dropout=0.0,
         transformer_dropout_rate=0.1,
+        subsampling_rate: int = 4,
         **kwargs,
     ):
         super().__init__()
@@ -316,8 +317,8 @@ class UnetrPPEncoder(nn.Module):
                 spatial_dims,
                 in_channels,
                 dims[0],
-                kernel_size=4,
-                stride=4,
+                kernel_size=subsampling_rate,
+                stride=subsampling_rate,
                 dropout=dropout,
                 conv_only=True,
             ),
@@ -530,6 +531,7 @@ class UNETRPPSettings:
     do_ds = False
     spatial_dims = 2
     linear_upsampling: bool = False
+    downsampling_rate: int = 4
 
 
 class UNETRPP(ModelABC, nn.Module):
@@ -578,19 +580,26 @@ class UNETRPP(ModelABC, nn.Module):
             raise KeyError(
                 f"Position embedding layer of type {settings.pos_embed} is not supported."
             )
-
+        # we have first a stem layer with stride=subsampling_rate and k_size=subsampling_rate
+        # followed by successive downsampling layer (k=2, stride=2)
+        dim_divider = 2 * settings.downsampling_rate**2
         if settings.spatial_dims == 2:
-            self.feat_size = (input_shape[0] // 32, input_shape[1] // 32)
+            self.feat_size = (
+                input_shape[0] // dim_divider,
+                input_shape[1] // dim_divider,
+            )
         else:
             self.feat_size = (
-                input_shape[0] // 32,
-                input_shape[1] // 32,
-                input_shape[2] // 32,
+                input_shape[0] // dim_divider,
+                input_shape[1] // dim_divider,
+                input_shape[2] // dim_divider,
             )
 
         self.hidden_size = settings.hidden_size
         self.spatial_dims = settings.spatial_dims
-        no_pixels = (input_shape[0] * input_shape[1]) // 16
+        no_pixels = (input_shape[0] * input_shape[1]) // (
+            settings.downsampling_rate * 2
+        )
         encoder_input_size = [
             no_pixels,
             no_pixels // 4,
@@ -605,6 +614,7 @@ class UNETRPP(ModelABC, nn.Module):
             num_heads=settings.num_heads,
             spatial_dims=settings.spatial_dims,
             in_channels=num_input_features,
+            subsampling_rate=settings.downsampling_rate,
         )
 
         self.encoder1 = UnetResBlock(
@@ -652,7 +662,7 @@ class UNETRPP(ModelABC, nn.Module):
             kernel_size=3,
             upsample_kernel_size=4,
             norm_name=settings.norm_name,
-            out_size=no_pixels * 16,
+            out_size=no_pixels * (subsampling_rate * 2),
             conv_decoder=True,
             linear_upsampling=settings.linear_upsampling,
         )
