@@ -513,7 +513,7 @@ class SmeagolDataset(DatasetABC, Dataset):
         Return the number of forcings.
         """
         res = 4  # For date
-        res += 1 # For solar forcing
+        res += 1  # For solar forcing
 
         for param in self.params:
             if param.kind == "input":
@@ -633,10 +633,11 @@ class SmeagolDataset(DatasetABC, Dataset):
                     )
                     linputs.append(tmp_state)
 
-
                 elif param.kind == "input":
-                    raise ValueError(f"No forcing variables implemented, {param.name} is not supposed to be an input")
-                
+                    raise ValueError(
+                        f"No forcing variables implemented, {param.name} is not supposed to be an input"
+                    )
+
                 # Read outputs.
                 if param.kind in ["ouput", "input_output"]:
                     tmp_out = ds[param.name].sel(step=sample.output_terms).values
