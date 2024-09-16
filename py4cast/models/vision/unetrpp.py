@@ -607,9 +607,7 @@ class UNETRPP(ModelABC, nn.Module):
             no_pixels // 64,
         ]
         h_size = settings.hidden_size
-        # Transformer output dim scale factor to make
-        # arch compatible with downsampling parameter
-        dim_sf = 16 // (settings.downsampling_rate**2)
+
         self.unetr_pp_encoder = UnetrPPEncoder(
             input_size=encoder_input_size,
             dims=(
