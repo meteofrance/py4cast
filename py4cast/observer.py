@@ -29,9 +29,11 @@ def gather(
     Be careful if you are doing something else than plotting results.
     """
     if isinstance(obj.trainer.strategy, SingleDeviceStrategy):
-        loss_tensor = obj.trainer.strategy.all_gather(tensor_to_gather)
+        loss_tensor = obj.trainer.strategy.all_gather(tensor_to_gather).cpu()
     elif isinstance(obj.trainer.strategy, ParallelStrategy):
-        loss_tensor = obj.trainer.strategy.all_gather(tensor_to_gather).flatten(0, 1)
+        loss_tensor = (
+            obj.trainer.strategy.all_gather(tensor_to_gather).flatten(0, 1).cpu()
+        )
     else:
         raise TypeError(
             f"Unknwon type {obj.trainer.strategy}. Know {SingleDeviceStrategy} and {ParallelStrategy}"
@@ -327,7 +329,7 @@ class StateErrorPlot(ErrorObserver):
         Compute the metric. Append to a dictionnary
         """
         for name in self.metrics:
-            self.losses[name].append(self.metrics[name](prediction, target).cpu())
+            self.losses[name].append(self.metrics[name](prediction, target))
         if not self.initialized:
             self.shortnames = prediction.feature_names
             self.units = [
@@ -388,7 +390,7 @@ class SpatialErrorPlot(ErrorObserver):
         prediction: NamedTensor,
         target: NamedTensor,
     ) -> None:
-        spatial_loss = obj.loss(prediction, target, reduce_spatial_dim=False).cpu()
+        spatial_loss = obj.loss(prediction, target, reduce_spatial_dim=False)
         # Getting only spatial loss for the required val_step_errors
         if prediction.num_spatial_dims == 1:
             spatial_loss = einops.rearrange(
