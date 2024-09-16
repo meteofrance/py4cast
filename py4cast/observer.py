@@ -329,7 +329,9 @@ class StateErrorPlot(ErrorObserver):
         Compute the metric. Append to a dictionnary
         """
         for name in self.metrics:
-            self.losses[name].append(gather(obj,self.metrics[name](prediction, target)))
+            self.losses[name].append(
+                gather(obj, self.metrics[name](prediction, target))
+            )
         if not self.initialized:
             self.shortnames = prediction.feature_names
             self.units = [
@@ -396,7 +398,9 @@ class SpatialErrorPlot(ErrorObserver):
             spatial_loss = einops.rearrange(
                 spatial_loss, "b t (x y) -> b t x y ", x=obj.grid_shape[0]
             )
-        self.spatial_loss_maps.append(gather(obj,spatial_loss))  # (B, N_log, N_lat, N_lon)
+        self.spatial_loss_maps.append(
+            gather(obj, spatial_loss)
+        )  # (B, N_log, N_lat, N_lon)
 
     def on_step_end(self, obj: "AutoRegressiveLightning", label: str = "") -> None:
         """
