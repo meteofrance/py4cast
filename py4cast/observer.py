@@ -329,7 +329,7 @@ class StateErrorPlot(ErrorObserver):
         Compute the metric. Append to a dictionnary
         """
         for name in self.metrics:
-            self.losses[name].append(self.metrics[name](prediction, target))
+            self.losses[name].append(gather(obj,self.metrics[name](prediction, target)))
         if not self.initialized:
             self.shortnames = prediction.feature_names
             self.units = [
@@ -344,7 +344,7 @@ class StateErrorPlot(ErrorObserver):
         """
         tensorboard = obj.logger.experiment
         for name in self.metrics:
-            loss_tensor = gather(obj, torch.cat(self.losses[name], dim=0))
+            loss_tensor = torch.cat(self.losses[name], dim=0)
             if obj.trainer.is_global_zero:
                 loss = torch.mean(loss_tensor, dim=0)
 
@@ -396,15 +396,14 @@ class SpatialErrorPlot(ErrorObserver):
             spatial_loss = einops.rearrange(
                 spatial_loss, "b t (x y) -> b t x y ", x=obj.grid_shape[0]
             )
-        self.spatial_loss_maps.append(spatial_loss)  # (B, N_log, N_lat, N_lon)
+        self.spatial_loss_maps.append(gather(obj,spatial_loss))  # (B, N_log, N_lat, N_lon)
 
     def on_step_end(self, obj: "AutoRegressiveLightning", label: str = "") -> None:
         """
         Make the summary figure
         """
-        spatial_loss_tensor = gather(
-            obj, torch.cat(self.spatial_loss_maps, dim=0)
-        )  # (N_test, N_log, N_lat, N_lon)
+        spatial_loss_tensor = torch.cat(self.spatial_loss_maps, dim=0)
+        # (N_test, N_log, N_lat, N_lon)
 
         if obj.trainer.is_global_zero:
             mean_spatial_loss = torch.mean(
