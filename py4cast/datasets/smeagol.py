@@ -264,6 +264,10 @@ class Sample:
 
     @property
     def day_of_years(self) -> np.array:
+        """
+        Day in the year.
+        For output terms only.
+        """
         days = []
 
         for term in self.output_terms:
@@ -289,7 +293,7 @@ class Sample:
     def seconds_from_start_of_year(self) -> np.array:
         """
         Second from the start of the year.
-        For output terms only
+        For output terms only.
         """
         start_of_year = dt.datetime(self.date.year, 1, 1)
         return np.asarray(
@@ -444,7 +448,7 @@ class SmeagolDataset(DatasetABC, Dataset):
 
     def generate_toa_radiation_forcing(self, sample: Sample):
         """
-        Get the forcing term dependent of the solar irradiation
+        Get the forcing term of the solar irradiation
         """
         # Eq. 1.6.3 in Solar Engineering of Thermal Processes, Photovoltaics and Wind 5th ed.
         # Solar constant
@@ -510,9 +514,6 @@ class SmeagolDataset(DatasetABC, Dataset):
         """
         res = 4  # For date
         res += 1 # For solar forcing
-        # Those following lines have been deleted from smeagol.json
-        # "SOMMFLU.RAY.SOLA":{"shortname":"Rad_Flux", "kind":"input"},
-        # "SOMMRAYT.SOLAIRE":{"shortname":"Rad","kind":"input"}
 
         for param in self.params:
             if param.kind == "input":
@@ -560,8 +561,7 @@ class SmeagolDataset(DatasetABC, Dataset):
         # Datetime Forcing
         datetime_forcing = self.get_year_hour_forcing(sample).type(torch.float32)
 
-        # Solar forcing
-        # Dim [num_pred_steps, Lat, Lon, feature = 1]
+        # Solar forcing, dim : [num_pred_steps, Lat, Lon, feature = 1]
         solar_forcing = self.generate_toa_radiation_forcing(sample).type(torch.float32)
 
         lforcings = [
@@ -633,25 +633,10 @@ class SmeagolDataset(DatasetABC, Dataset):
                     )
                     linputs.append(tmp_state)
 
-                # On lit un forcage. On le prend pour tous les pas de temps de prevision
-                # Un peu etrange de prendre le forcage a l'instant de la prevision et
-                # non pas l'instant initial ... mais bon.
+
                 elif param.kind == "input":
-
-                    pass
-                    # tmp_in = ds[param.name].sel(step=sample.output_terms).values
-                    # if len(tmp_in.shape) != 4:
-                    #     tmp_in = np.expand_dims(tmp_in, axis=1)
-                    # tmp_in = np.transpose(tmp_in, axes=[0, 2, 3, 1])
-                    # if self.settings.standardize:
-                    #     tmp_in = (tmp_in - means) / std
-                    # tmp_state = NamedTensor(
-                    #     tensor=torch.from_numpy(tmp_in),
-                    #     feature_names=param.parameter_short_name,
-                    #     names=["timestep", "lat", "lon", "features"],
-                    # )
-                    # lforcings.append(tmp_state)
-
+                    raise ValueError(f"No forcing variables implemented, {param.name} is not supposed to be an input")
+                
                 # Read outputs.
                 if param.kind in ["ouput", "input_output"]:
                     tmp_out = ds[param.name].sel(step=sample.output_terms).values
