@@ -669,7 +669,7 @@ class UNETRPP(ModelABC, nn.Module):
             kernel_size=3,
             upsample_kernel_size=settings.downsampling_rate,
             norm_name=settings.norm_name,
-            out_size=no_pixels * (settings.downsampling_rate * 2),
+            out_size=no_pixels * (settings.downsampling_rate**2),
             conv_decoder=True,
             linear_upsampling=settings.linear_upsampling,
         )
