@@ -509,7 +509,6 @@ class SmeagolDataset(DatasetABC, Dataset):
         Return the number of forcings.
         """
         res = 4  # For date
-
         res += 1 # For solar forcing
         # Those following lines have been deleted from smeagol.json
         # "SOMMFLU.RAY.SOLA":{"shortname":"Rad_Flux", "kind":"input"},

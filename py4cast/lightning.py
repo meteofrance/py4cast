@@ -214,6 +214,9 @@ class AutoRegressiveLightning(pl.LightningModule):
         # self.rmse_psd_plot_metric = MetricPSDVar(pred_step=max_pred_step)
         # self.psd_plot_metric = MetricPSDK(save_path, pred_step=max_pred_step)
         # self.acc_metric = MetricACC(self.hparams["hparams"].dataset_info)
+        # self.rmse_psd_plot_metric = MetricPSDVar(pred_step=max_pred_step)
+        # self.psd_plot_metric = MetricPSDK(save_path, pred_step=max_pred_step)
+        # self.acc_metric = MetricACC(self.hparams["hparams"].dataset_info)
 
     @rank_zero_only
     def log_hparams_tb(self):
@@ -521,6 +524,9 @@ class AutoRegressiveLightning(pl.LightningModule):
         # dict_metrics.update(self.psd_plot_metric.compute())
         # dict_metrics.update(self.rmse_psd_plot_metric.compute())
         # dict_metrics.update(self.acc_metric.compute())
+        # dict_metrics.update(self.psd_plot_metric.compute())
+        # dict_metrics.update(self.rmse_psd_plot_metric.compute())
+        # dict_metrics.update(self.acc_metric.compute())
         for name, elmnt in dict_metrics.items():
             if isinstance(elmnt, matplotlib.figure.Figure):
                 self.logger.experiment.add_figure(f"{name}", elmnt, self.current_epoch)
@@ -603,6 +609,9 @@ class AutoRegressiveLightning(pl.LightningModule):
         # "RuntimeError: No backend type associated with device type cpu"
         # see: https://github.com/Lightning-AI/torchmetrics/issues/2477
         # and: https://github.com/Lightning-AI/pytorch-lightning/issues/18803
+        # self.psd_plot_metric.compute()
+        # self.rmse_psd_plot_metric.compute()
+        # self.acc_metric.compute()
         # self.psd_plot_metric.compute()
         # self.rmse_psd_plot_metric.compute()
         # self.acc_metric.compute()

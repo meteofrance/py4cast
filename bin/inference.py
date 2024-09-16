@@ -8,6 +8,8 @@ from py4cast.lightning import AutoRegressiveLightning
 
 if __name__ == "__main__":
 
+    # /scratch/shared/py4cast/logs/camp0/smeagol/halfunet/sezn_run_dev_25
+
     # Parse arguments: model_path, dataset name and config file and finally date for inference
     parser = argparse.ArgumentParser("py4cast Inference script")
     parser.add_argument("--model_path", type=str, help="Path to the model checkpoint")
@@ -34,9 +36,9 @@ if __name__ == "__main__":
         hparams.dataset_conf,
         config_override=config_override,
     )
-    
+
     # Transform in dataloader
-    dl_settings = TorchDataloaderSettings(batch_size=2)
+    dl_settings = TorchDataloaderSettings(batch_size=1)
     infer_loader = test_ds.torch_dataloader(dl_settings)
     trainer = Trainer(devices="auto")
     preds = trainer.predict(lightning_module, infer_loader)
