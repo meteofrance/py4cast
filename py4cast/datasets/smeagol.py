@@ -263,6 +263,17 @@ class Sample:
         return f"member : {self.member}, date {self.date}, terms {self.terms}"
 
     @property
+    def day_of_years(self) -> np.array:
+        days = []
+
+        for term in self.output_terms:
+            date_tmp = self.date + dt.timedelta(hours=float(term))
+            starting_year = dt.datetime(date_tmp.year, 1, 1)
+            days.append((date_tmp - starting_year).days)
+
+        return np.asarray(days)
+
+    @property
     def hours_of_day(self) -> np.array:
         """
         Hour of the day.
@@ -431,6 +442,43 @@ class SmeagolDataset(DatasetABC, Dataset):
             raise ValueError("No valid sample in the dataset.")
         return length
 
+    def generate_toa_radiation_forcing(self, sample: Sample):
+        """
+        Get the forcing term dependent of the solar irradiation
+        """
+        # Eq. 1.6.3 in Solar Engineering of Thermal Processes, Photovoltaics and Wind 5th ed.
+        # Solar constant
+        E0 = 1366
+
+        # Eq. 1.6.1a in Solar Engineering of Thermal Processes, Photovoltaics and Wind 5th ed.
+        declination = 23.45 * torch.sin(
+            2 * np.pi * (284 + torch.Tensor(sample.day_of_years)) / 365
+        ).unsqueeze(-1).unsqueeze(-1)
+        dec_rad = np.pi / 180 * declination
+
+        # Latitude
+        phi = torch.Tensor(self.grid.lat)
+        phi_rad = np.pi / 180 * phi
+
+        # Convert UTC hours into local hours
+        hours_lcl = torch.Tensor(sample.hours_of_day).unsqueeze(-1).unsqueeze(-1) + (
+            torch.Tensor(self.grid.lon) / 15
+        )
+
+        # Hour angle (centered)
+        omega = 15 * (hours_lcl - 12)
+        omega_rad = np.pi / 180 * omega
+
+        # Eq. 1.6.2 with beta=0 in Solar Engineering of Thermal Processes, Photovoltaics and Wind 5th ed.
+        cos_sza = torch.sin(phi_rad) * torch.sin(dec_rad) + torch.cos(
+            phi_rad
+        ) * torch.cos(dec_rad) * torch.cos(omega_rad)
+
+        # 0 if the sun is after the sunset.
+        toa_radiation = torch.fmax(torch.tensor(0), E0 * cos_sza).unsqueeze(-1)
+
+        return toa_radiation
+
     def get_year_hour_forcing(self, sample: Sample):
         """
         Get the forcing term dependent of the sample time
@@ -461,6 +509,12 @@ class SmeagolDataset(DatasetABC, Dataset):
         Return the number of forcings.
         """
         res = 4  # For date
+
+        res += 1 # For solar forcing
+        # Those following lines have been deleted from smeagol.json
+        # "SOMMFLU.RAY.SOLA":{"shortname":"Rad_Flux", "kind":"input"},
+        # "SOMMRAYT.SOLAIRE":{"shortname":"Rad","kind":"input"}
+
         for param in self.params:
             if param.kind == "input":
                 res += param.number
@@ -506,6 +560,11 @@ class SmeagolDataset(DatasetABC, Dataset):
 
         # Datetime Forcing
         datetime_forcing = self.get_year_hour_forcing(sample).type(torch.float32)
+
+        # Solar forcing
+        # Dim [num_pred_steps, Lat, Lon, feature = 1]
+        solar_forcing = self.generate_toa_radiation_forcing(sample).type(torch.float32)
+
         lforcings = [
             NamedTensor(
                 feature_names=[
@@ -523,7 +582,15 @@ class SmeagolDataset(DatasetABC, Dataset):
                 tensor=datetime_forcing[:, 2:],
                 names=["timestep", "features"],
             ),
+            NamedTensor(
+                feature_names=[
+                    "toa_radiation",
+                ],
+                tensor=solar_forcing,
+                names=["timestep", "lat", "lon", "features"],
+            ),
         ]
+
         linputs = []
         loutputs = []
 
@@ -571,18 +638,21 @@ class SmeagolDataset(DatasetABC, Dataset):
                 # Un peu etrange de prendre le forcage a l'instant de la prevision et
                 # non pas l'instant initial ... mais bon.
                 elif param.kind == "input":
-                    tmp_in = ds[param.name].sel(step=sample.output_terms).values
-                    if len(tmp_in.shape) != 4:
-                        tmp_in = np.expand_dims(tmp_in, axis=1)
-                    tmp_in = np.transpose(tmp_in, axes=[0, 2, 3, 1])
-                    if self.settings.standardize:
-                        tmp_in = (tmp_in - means) / std
-                    tmp_state = NamedTensor(
-                        tensor=torch.from_numpy(tmp_in),
-                        feature_names=param.parameter_short_name,
-                        names=["timestep", "lat", "lon", "features"],
-                    )
-                    lforcings.append(tmp_state)
+
+                    pass
+                    # tmp_in = ds[param.name].sel(step=sample.output_terms).values
+                    # if len(tmp_in.shape) != 4:
+                    #     tmp_in = np.expand_dims(tmp_in, axis=1)
+                    # tmp_in = np.transpose(tmp_in, axes=[0, 2, 3, 1])
+                    # if self.settings.standardize:
+                    #     tmp_in = (tmp_in - means) / std
+                    # tmp_state = NamedTensor(
+                    #     tensor=torch.from_numpy(tmp_in),
+                    #     feature_names=param.parameter_short_name,
+                    #     names=["timestep", "lat", "lon", "features"],
+                    # )
+                    # lforcings.append(tmp_state)
+
                 # Read outputs.
                 if param.kind in ["ouput", "input_output"]:
                     tmp_out = ds[param.name].sel(step=sample.output_terms).values

@@ -34,7 +34,7 @@ if __name__ == "__main__":
         hparams.dataset_conf,
         config_override=config_override,
     )
-
+    
     # Transform in dataloader
     dl_settings = TorchDataloaderSettings(batch_size=2)
     infer_loader = test_ds.torch_dataloader(dl_settings)

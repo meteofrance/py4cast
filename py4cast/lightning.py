@@ -211,9 +211,9 @@ class AutoRegressiveLightning(pl.LightningModule):
 
         save_path = self.hparams["hparams"].save_path
         max_pred_step = self.hparams["hparams"].num_pred_steps_val_test - 1
-        self.rmse_psd_plot_metric = MetricPSDVar(pred_step=max_pred_step)
-        self.psd_plot_metric = MetricPSDK(save_path, pred_step=max_pred_step)
-        self.acc_metric = MetricACC(self.hparams["hparams"].dataset_info)
+        # self.rmse_psd_plot_metric = MetricPSDVar(pred_step=max_pred_step)
+        # self.psd_plot_metric = MetricPSDK(save_path, pred_step=max_pred_step)
+        # self.acc_metric = MetricACC(self.hparams["hparams"].dataset_info)
 
     @rank_zero_only
     def log_hparams_tb(self):
@@ -454,21 +454,21 @@ class AutoRegressiveLightning(pl.LightningModule):
         l1_loss.prepare(self, self.interior_mask, self.hparams["hparams"].dataset_info)
         metrics = {"mae": l1_loss}
         save_path = self.hparams["hparams"].save_path
-        self.valid_plotters = [
-            StateErrorPlot(metrics, prefix="Validation"),
-            PredictionTimestepPlot(
-                num_samples_to_plot=1,
-                num_features_to_plot=4,
-                prefix="Validation",
-                save_path=save_path,
-            ),
-            PredictionEpochPlot(
-                num_samples_to_plot=1,
-                num_features_to_plot=4,
-                prefix="Validation",
-                save_path=save_path,
-            ),
-        ]
+        # self.valid_plotters = [
+        #     StateErrorPlot(metrics, prefix="Validation"),
+        #     PredictionTimestepPlot(
+        #         num_samples_to_plot=1,
+        #         num_features_to_plot=4,
+        #         prefix="Validation",
+        #         save_path=save_path,
+        #     ),
+        #     PredictionEpochPlot(
+        #         num_samples_to_plot=1,
+        #         num_features_to_plot=4,
+        #         prefix="Validation",
+        #         save_path=save_path,
+        #     ),
+        # ]
 
     def _shared_val_test_step(self, batch: ItemBatch, batch_idx, label: str):
         with torch.no_grad():
@@ -504,12 +504,12 @@ class AutoRegressiveLightning(pl.LightningModule):
         self.val_mean_loss = mean_loss
 
         # Notify every plotters
-        if self.current_epoch % PLOT_PERIOD == 0:
-            for plotter in self.valid_plotters:
-                plotter.update(self, prediction=prediction, target=target)
-            self.psd_plot_metric.update(prediction, target, self.original_shape)
-            self.rmse_psd_plot_metric.update(prediction, target, self.original_shape)
-            self.acc_metric.update(prediction, target)
+        # if self.current_epoch % PLOT_PERIOD == 0:
+            # for plotter in self.valid_plotters:
+            #     plotter.update(self, prediction=prediction, target=target)
+            # self.psd_plot_metric.update(prediction, target, self.original_shape)
+            # self.rmse_psd_plot_metric.update(prediction, target, self.original_shape)
+            # self.acc_metric.update(prediction, target)
 
     def on_validation_epoch_end(self):
         """
@@ -518,9 +518,9 @@ class AutoRegressiveLightning(pl.LightningModule):
 
         # Get dict of metrics' results
         dict_metrics = dict()
-        dict_metrics.update(self.psd_plot_metric.compute())
-        dict_metrics.update(self.rmse_psd_plot_metric.compute())
-        dict_metrics.update(self.acc_metric.compute())
+        # dict_metrics.update(self.psd_plot_metric.compute())
+        # dict_metrics.update(self.rmse_psd_plot_metric.compute())
+        # dict_metrics.update(self.acc_metric.compute())
         for name, elmnt in dict_metrics.items():
             if isinstance(elmnt, matplotlib.figure.Figure):
                 self.logger.experiment.add_figure(f"{name}", elmnt, self.current_epoch)
@@ -540,9 +540,9 @@ class AutoRegressiveLightning(pl.LightningModule):
         self.validation_step_losses.clear()
 
         # Notify every plotters
-        if self.current_epoch % PLOT_PERIOD == 0:
-            for plotter in self.valid_plotters:
-                plotter.on_step_end(self, label="Valid")
+        # if self.current_epoch % PLOT_PERIOD == 0:
+        #     for plotter in self.valid_plotters:
+        #         plotter.on_step_end(self, label="Valid")
 
     def on_test_start(self):
         """
@@ -556,19 +556,19 @@ class AutoRegressiveLightning(pl.LightningModule):
 
         save_path = self.hparams["hparams"].save_path
         max_pred_step = self.hparams["hparams"].num_pred_steps_val_test - 1
-        self.rmse_psd_plot_metric = MetricPSDVar(pred_step=max_pred_step)
-        self.psd_plot_metric = MetricPSDK(save_path, pred_step=max_pred_step)
-        self.acc_metric = MetricACC(self.hparams["hparams"].dataset_info)
-        self.test_plotters = [
-            StateErrorPlot(metrics, save_path=save_path),
-            SpatialErrorPlot(),
-            PredictionTimestepPlot(
-                num_samples_to_plot=self.hparams["hparams"].num_samples_to_plot,
-                num_features_to_plot=4,
-                prefix="Test",
-                save_path=save_path,
-            ),
-        ]
+        # self.rmse_psd_plot_metric = MetricPSDVar(pred_step=max_pred_step)
+        # self.psd_plot_metric = MetricPSDK(save_path, pred_step=max_pred_step)
+        # self.acc_metric = MetricACC(self.hparams["hparams"].dataset_info)
+        # self.test_plotters = [
+        #     StateErrorPlot(metrics, save_path=save_path),
+        #     SpatialErrorPlot(),
+        #     PredictionTimestepPlot(
+        #         num_samples_to_plot=self.hparams["hparams"].num_samples_to_plot,
+        #         num_features_to_plot=4,
+        #         prefix="Test",
+        #         save_path=save_path,
+        #     ),
+        # ]
 
     def test_step(self, batch: ItemBatch, batch_idx):
         """
@@ -577,11 +577,11 @@ class AutoRegressiveLightning(pl.LightningModule):
         prediction, target, _ = self._shared_val_test_step(batch, batch_idx, "test")
 
         # Notify plotters & metrics
-        for plotter in self.test_plotters:
-            plotter.update(self, prediction=prediction, target=target)
-        self.acc_metric.update(prediction, target)
-        self.psd_plot_metric.update(prediction, target, self.original_shape)
-        self.rmse_psd_plot_metric.update(prediction, target, self.original_shape)
+        # for plotter in self.test_plotters:
+        #     plotter.update(self, prediction=prediction, target=target)
+        # self.acc_metric.update(prediction, target)
+        # self.psd_plot_metric.update(prediction, target, self.original_shape)
+        # self.rmse_psd_plot_metric.update(prediction, target, self.original_shape)
 
     @cached_property
     def interior_2d(self) -> torch.Tensor:
@@ -603,9 +603,9 @@ class AutoRegressiveLightning(pl.LightningModule):
         # "RuntimeError: No backend type associated with device type cpu"
         # see: https://github.com/Lightning-AI/torchmetrics/issues/2477
         # and: https://github.com/Lightning-AI/pytorch-lightning/issues/18803
-        self.psd_plot_metric.compute()
-        self.rmse_psd_plot_metric.compute()
-        self.acc_metric.compute()
+        # self.psd_plot_metric.compute()
+        # self.rmse_psd_plot_metric.compute()
+        # self.acc_metric.compute()
         # Notify plotters that the test epoch end
-        for plotter in self.test_plotters:
-            plotter.on_step_end(self, label="Test")
+        # for plotter in self.test_plotters:
+        #     plotter.on_step_end(self, label="Test")
