@@ -40,6 +40,7 @@ def gather(
         )
     return loss_tensor
 
+
 def reduce(
     obj: "AutoRegressiveLightning", tensor_to_reduce: torch.Tensor
 ) -> torch.Tensor:
@@ -48,16 +49,21 @@ def reduce(
     Be careful if you are doing something else than plotting results.
     """
     if isinstance(obj.trainer.strategy, SingleDeviceStrategy):
-        loss_tensor = obj.trainer.strategy.reduce(tensor_to_reduce,reduce_op='mean').cpu()
+        loss_tensor = obj.trainer.strategy.reduce(
+            tensor_to_reduce, reduce_op="mean"
+        ).cpu()
     elif isinstance(obj.trainer.strategy, ParallelStrategy):
         loss_tensor = (
-            obj.trainer.strategy.reduce(tensor_to_reduce,reduce_op='mean').flatten(0, 1).cpu()
+            obj.trainer.strategy.reduce(tensor_to_reduce, reduce_op="mean")
+            .flatten(0, 1)
+            .cpu()
         )
     else:
         raise TypeError(
             f"Unknwon type {obj.trainer.strategy}. Know {SingleDeviceStrategy} and {ParallelStrategy}"
         )
     return loss_tensor
+
 
 class ErrorObserver(ABC):
     """
