@@ -26,6 +26,7 @@ from py4cast.datasets.base import (
 )
 from py4cast.plots import DomainInfo
 from py4cast.settings import CACHE_DIR
+from py4cast.utils import merge_dicts
 
 SCRATCH_PATH = Path("/scratch/shared/poesy/poesy_crop")
 OROGRAPHY_FNAME = "PEARO_EURW1S40_Orography_crop.npy"
@@ -318,6 +319,10 @@ class Sample:
 
 
 class InferSample(Sample):
+    """
+    Sample dedicated to inference. No outputs terms, only inputs.
+    """
+
     def __post_init__(self):
         self.terms = self.input_terms
 
@@ -412,7 +417,7 @@ class PoesyDataset(DatasetABC, Dataset):
                         + self.settings.num_output_steps
                     ]
                     samp = Sample(
-                        settings=PoesySettings,
+                        settings=self.settings,
                         date=date,
                         member=member,
                         input_terms=input_terms,
@@ -527,7 +532,7 @@ class PoesyDataset(DatasetABC, Dataset):
         tensor_data = torch.from_numpy(array)
 
         if inference_steps:
-            empty_data = torch.empty((inference_steps, *array.shape))
+            empty_data = torch.empty((inference_steps, *array.shape[1:]))
             tensor_data = torch.cat((tensor_data, empty_data), dim=0)
         return tensor_data
 
@@ -830,13 +835,19 @@ class PoesyDataset(DatasetABC, Dataset):
 
 
 class InferPoesyDataset(PoesyDataset):
+    """
+    Inherite from the PoesyDataset class.
+    This class is used for inference, the class overrides methods sample_list and from_json.
+    """
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
     @cached_property
     def sample_list(self):
         """
-        Create a list of sample from information
+        Create a list of sample from information.
+        Outputs terms are computed from the number of prediction steps wanted by the user.
         """
         print("Start forming samples")
         terms = list(
@@ -892,9 +903,15 @@ class InferPoesyDataset(PoesyDataset):
         num_pred_steps_train: int,
         num_pred_steps_val_tests: int,
         config_override: Union[Dict, None] = None,
-    ) -> Tuple["InferPoesyDataset", None, None]:
+    ) -> Tuple[None, None, "InferPoesyDataset"]:
+        """
+        Return 1 InferPoesyDataset.
+        Override configuration file if needed.
+        """
         with open(fname, "r") as fp:
             conf = json.load(fp)
+            if config_override is not None:
+                conf = merge_dicts(conf, config_override)
 
         grid = Grid(**conf["grid"])
         param_list = []
@@ -936,7 +953,7 @@ class InferPoesyDataset(PoesyDataset):
                 num_inference_pred_steps=config_override["num_inference_pred_steps"],
             ),
         )
-        return ds, None, None
+        return None, None, ds
 
 
 if __name__ == "__main__":

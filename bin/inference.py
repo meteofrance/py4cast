@@ -13,13 +13,17 @@ if __name__ == "__main__":
     parser.add_argument("--model_path", type=str, help="Path to the model checkpoint")
     parser.add_argument("--date", type=str, help="Date for inference", default=None)
     parser.add_argument(
-        "--infer_steps", type=str, help="Date for inference", default=None
+        "--dataset", type=str, help="Dataset used in inference", default="poesy_infer"
+    )
+    parser.add_argument(
+        "--infer_steps", type=int, help="Number of inference steps", default=1
     )
 
     args = parser.parse_args()
 
     # Load checkpoint
     lightning_module = AutoRegressiveLightning.load_from_checkpoint(args.model_path)
+    hparams = lightning_module.hparams["hparams"]
 
     if args.date is not None:
         config_override = {
@@ -29,11 +33,9 @@ if __name__ == "__main__":
     else:
         config_override = {"num_inference_pred_steps": args.infer_steps}
 
-    hparams = lightning_module.hparams["hparams"]
-
     # Get dataset for inference
-    infer_ds, _, _ = get_datasets(
-        hparams.dataset_name,
+    _, _, infer_ds = get_datasets(
+        args.dataset,
         hparams.num_input_steps,
         hparams.num_pred_steps_train,
         hparams.num_pred_steps_val_test,
@@ -42,7 +44,8 @@ if __name__ == "__main__":
     )
 
     # Transform in dataloader
-    dl_settings = TorchDataloaderSettings(batch_size=2)
+
+    dl_settings = TorchDataloaderSettings(batch_size=1)
     infer_loader = infer_ds.torch_dataloader(dl_settings)
     trainer = Trainer(devices="auto")
     preds = trainer.predict(lightning_module, infer_loader)
