@@ -304,23 +304,28 @@ You can find more details about all the `num_X_steps` options [here](doc/num_ste
 
 ### Inference
 
-Inference is done by running the `bin/inference.py` script. This script will load a model and run it on a dataset using the training parameters (dataset name, dataset config, timestep options, ...).
+Inference is done by running the `bin/inference.py` script. This script will load a model and run it on a dataset using the training parameters (dataset config, timestep options, ...).
 
 ```bash
-usage: py4cast Inference script [-h] [--model_path MODEL_PATH] [--dataset DATASET] [--ds_config_file DS_CONFIG_FILE] [--date DATE]
+usage: py4cast Inference script [-h] [--model_path MODEL_PATH] [--dataset DATASET] [--infer_steps INFER_STEPS] [--date DATE]
 
 options:
   -h, --help            show this help message and exit
   --model_path MODEL_PATH
                         Path to the model checkpoint
   --date DATE   
+                        Date of the sample to infer on YYYYMMDDHH
+  --dataset DATASET
+                        Name of the dataset config file to use
+  --infer_steps INFER_STEPS 
+                        Number of steps to do in inference
 
 ```
 
 A simple example of inference is shown below:
 
 ```bash
- runai exec_gpu python bin/inference.py --model_path /scratch/shared/py4cast/logs/comparison/titan/swinunetr/bert_swinunetr_0/last.ckpt --date 2023123123
+ runai exec_gpu python bin/inference.py --model_path /scratch/shared/py4cast/logs/camp0/poesy/halfunet/sezn_run_dev_9/last.ckpt --date 2021061621 --dataset poesy_infer --infer_steps 2
 
 ```
 
