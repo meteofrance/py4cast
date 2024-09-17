@@ -17,7 +17,7 @@ from transformers import get_cosine_schedule_with_warmup
 
 from py4cast.datasets.base import DatasetInfo, ItemBatch, NamedTensor
 from py4cast.losses import ScaledLoss, WeightedLoss
-from py4cast.metrics import MetricACC, MetricPSDK, MetricPSDVar, MetricRMSE
+from py4cast.metrics import MetricACC, MetricPSDK, MetricPSDVar
 from py4cast.models import build_model_from_settings, get_model_kls_and_settings
 from py4cast.models.base import expand_to_batch
 from py4cast.observer import (
@@ -209,6 +209,12 @@ class AutoRegressiveLightning(pl.LightningModule):
 
         self.loss.prepare(self, statics.interior_mask, hparams.dataset_info)
 
+        save_path = self.hparams["hparams"].save_path
+        max_pred_step = self.hparams["hparams"].num_pred_steps_val_test - 1
+        self.rmse_psd_plot_metric = MetricPSDVar(pred_step=max_pred_step)
+        self.psd_plot_metric = MetricPSDK(save_path, pred_step=max_pred_step)
+        self.acc_metric = MetricACC(self.hparams["hparams"].dataset_info)
+
     @rank_zero_only
     def log_hparams_tb(self):
         if self.logger:
@@ -237,7 +243,6 @@ class AutoRegressiveLightning(pl.LightningModule):
             opt.load_state_dict(self.opt_state)
 
         if self.hparams["hparams"].use_lr_scheduler:
-
             len_loader = self.hparams["hparams"].len_train_loader // LR_SCHEDULER_PERIOD
             epochs = self.trainer.max_epochs
             lr_scheduler = get_cosine_schedule_with_warmup(
@@ -349,7 +354,6 @@ class AutoRegressiveLightning(pl.LightningModule):
         # for the desired number of ar steps.
 
         for i in range(batch.num_pred_steps):
-
             if not inference:
                 border_state = batch.outputs.tensor[:, i]
 
@@ -450,11 +454,6 @@ class AutoRegressiveLightning(pl.LightningModule):
         l1_loss.prepare(self, self.interior_mask, self.hparams["hparams"].dataset_info)
         metrics = {"mae": l1_loss}
         save_path = self.hparams["hparams"].save_path
-        max_pred_step = self.hparams["hparams"].num_pred_steps_val_test - 1
-        self.rmse_psd_plot_metric = MetricPSDVar(pred_step=max_pred_step)
-        self.psd_plot_metric = MetricPSDK(save_path, pred_step=max_pred_step)
-        self.rmse_metric = MetricRMSE()
-        self.acc_metric = MetricACC(self.hparams["hparams"].dataset_info)
         self.valid_plotters = [
             StateErrorPlot(metrics, prefix="Validation"),
             PredictionTimestepPlot(
@@ -510,7 +509,6 @@ class AutoRegressiveLightning(pl.LightningModule):
                 plotter.update(self, prediction=prediction, target=target)
             self.psd_plot_metric.update(prediction, target, self.original_shape)
             self.rmse_psd_plot_metric.update(prediction, target, self.original_shape)
-            self.rmse_metric.update(prediction, target)
             self.acc_metric.update(prediction, target)
 
     def on_validation_epoch_end(self):
@@ -522,7 +520,6 @@ class AutoRegressiveLightning(pl.LightningModule):
         dict_metrics = dict()
         dict_metrics.update(self.psd_plot_metric.compute())
         dict_metrics.update(self.rmse_psd_plot_metric.compute())
-        dict_metrics.update(self.rmse_metric.compute())
         dict_metrics.update(self.acc_metric.compute())
         for name, elmnt in dict_metrics.items():
             if isinstance(elmnt, matplotlib.figure.Figure):
@@ -545,7 +542,7 @@ class AutoRegressiveLightning(pl.LightningModule):
         # Notify every plotters
         if self.current_epoch % PLOT_PERIOD == 0:
             for plotter in self.valid_plotters:
-                plotter.on_step_end(self)
+                plotter.on_step_end(self, label="Valid")
 
     def on_test_start(self):
         """
@@ -561,12 +558,10 @@ class AutoRegressiveLightning(pl.LightningModule):
         max_pred_step = self.hparams["hparams"].num_pred_steps_val_test - 1
         self.rmse_psd_plot_metric = MetricPSDVar(pred_step=max_pred_step)
         self.psd_plot_metric = MetricPSDK(save_path, pred_step=max_pred_step)
-        self.rmse_metric = MetricRMSE()
         self.acc_metric = MetricACC(self.hparams["hparams"].dataset_info)
         self.test_plotters = [
             StateErrorPlot(metrics, save_path=save_path),
             SpatialErrorPlot(),
-            PredictionTimestepPlot(self.hparams["hparams"].num_samples_to_plot),
             PredictionTimestepPlot(
                 num_samples_to_plot=self.hparams["hparams"].num_samples_to_plot,
                 num_features_to_plot=4,
@@ -584,10 +579,9 @@ class AutoRegressiveLightning(pl.LightningModule):
         # Notify plotters & metrics
         for plotter in self.test_plotters:
             plotter.update(self, prediction=prediction, target=target)
+        self.acc_metric.update(prediction, target)
         self.psd_plot_metric.update(prediction, target, self.original_shape)
         self.rmse_psd_plot_metric.update(prediction, target, self.original_shape)
-        self.rmse_metric.update(prediction, target)
-        self.acc_metric.update(prediction, target)
 
     @cached_property
     def interior_2d(self) -> torch.Tensor:
@@ -611,8 +605,7 @@ class AutoRegressiveLightning(pl.LightningModule):
         # and: https://github.com/Lightning-AI/pytorch-lightning/issues/18803
         self.psd_plot_metric.compute()
         self.rmse_psd_plot_metric.compute()
-        self.rmse_metric.compute()
         self.acc_metric.compute()
         # Notify plotters that the test epoch end
         for plotter in self.test_plotters:
-            plotter.on_step_end(self)
+            plotter.on_step_end(self, label="Test")

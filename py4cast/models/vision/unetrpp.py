@@ -304,7 +304,7 @@ class UnetrPPEncoder(nn.Module):
         in_channels=4,
         dropout=0.0,
         transformer_dropout_rate=0.1,
-        **kwargs,
+        downsampling_rate: int = 4,
     ):
         super().__init__()
 
@@ -316,8 +316,8 @@ class UnetrPPEncoder(nn.Module):
                 spatial_dims,
                 in_channels,
                 dims[0],
-                kernel_size=4,
-                stride=4,
+                kernel_size=downsampling_rate,
+                stride=downsampling_rate,
                 dropout=dropout,
                 conv_only=True,
             ),
@@ -409,6 +409,7 @@ class UnetrUpBlock(nn.Module):
         out_size: int = 0,
         depth: int = 3,
         conv_decoder: bool = False,
+        linear_upsampling: bool = False,
     ) -> None:
         """
         Args:
@@ -427,29 +428,45 @@ class UnetrUpBlock(nn.Module):
         super().__init__()
         padding = get_padding(upsample_kernel_size, upsample_kernel_size)
         if spatial_dims == 2:
-            self.transp_conv = nn.ConvTranspose2d(
-                in_channels,
-                out_channels,
-                kernel_size=upsample_kernel_size,
-                stride=upsample_kernel_size,
-                padding=padding,
-                output_padding=get_output_padding(
-                    upsample_kernel_size, upsample_kernel_size, padding
-                ),
-                dilation=1,
-            )
+            if linear_upsampling:
+                self.transp_conv = nn.Sequential(
+                    nn.UpsamplingBilinear2d(scale_factor=upsample_kernel_size),
+                    nn.Conv2d(
+                        in_channels, out_channels, kernel_size=kernel_size, padding=1
+                    ),
+                )
+            else:
+                self.transp_conv = nn.ConvTranspose2d(
+                    in_channels,
+                    out_channels,
+                    kernel_size=upsample_kernel_size,
+                    stride=upsample_kernel_size,
+                    padding=padding,
+                    output_padding=get_output_padding(
+                        upsample_kernel_size, upsample_kernel_size, padding
+                    ),
+                    dilation=1,
+                )
         else:
-            self.transp_conv = nn.ConvTranspose3d(
-                in_channels,
-                out_channels,
-                kernel_size=upsample_kernel_size,
-                stride=upsample_kernel_size,
-                padding=padding,
-                output_padding=get_output_padding(
-                    upsample_kernel_size, upsample_kernel_size, padding
-                ),
-                dilation=1,
-            )
+            if linear_upsampling:
+                self.transp_conv = nn.Sequential(
+                    nn.Upsample(scale_factor=upsample_kernel_size, mode="trilinear"),
+                    nn.Conv3d(
+                        in_channels, out_channels, kernel_size=kernel_size, padding=1
+                    ),
+                )
+            else:
+                self.transp_conv = nn.ConvTranspose3d(
+                    in_channels,
+                    out_channels,
+                    kernel_size=upsample_kernel_size,
+                    stride=upsample_kernel_size,
+                    padding=padding,
+                    output_padding=get_output_padding(
+                        upsample_kernel_size, upsample_kernel_size, padding
+                    ),
+                    dilation=1,
+                )
 
         # 4 feature resolution stages, each consisting of multiple residual blocks
         self.decoder_block = nn.ModuleList()
@@ -512,6 +529,8 @@ class UNETRPPSettings:
     conv_op: str = "Conv2d"
     do_ds = False
     spatial_dims = 2
+    linear_upsampling: bool = False
+    downsampling_rate: int = 4
 
 
 class UNETRPP(ModelABC, nn.Module):
@@ -560,19 +579,27 @@ class UNETRPP(ModelABC, nn.Module):
             raise KeyError(
                 f"Position embedding layer of type {settings.pos_embed} is not supported."
             )
-
+        # we have first a stem layer with stride=subsampling_rate and k_size=subsampling_rate
+        # followed by 3 successive downsampling layer (k=2, stride=2)
+        dim_divider = (2**3) * settings.downsampling_rate
         if settings.spatial_dims == 2:
-            self.feat_size = (input_shape[0] // 32, input_shape[1] // 32)
+            self.feat_size = (
+                input_shape[0] // dim_divider,
+                input_shape[1] // dim_divider,
+            )
         else:
             self.feat_size = (
-                input_shape[0] // 32,
-                input_shape[1] // 32,
-                input_shape[2] // 32,
+                input_shape[0] // dim_divider,
+                input_shape[1] // dim_divider,
+                input_shape[2] // dim_divider,
             )
 
         self.hidden_size = settings.hidden_size
         self.spatial_dims = settings.spatial_dims
-        no_pixels = (input_shape[0] * input_shape[1]) // 16
+        # Number of pixels after stem layer
+        no_pixels = (input_shape[0] * input_shape[1]) // (
+            settings.downsampling_rate**2
+        )
         encoder_input_size = [
             no_pixels,
             no_pixels // 4,
@@ -580,13 +607,21 @@ class UNETRPP(ModelABC, nn.Module):
             no_pixels // 64,
         ]
         h_size = settings.hidden_size
+
         self.unetr_pp_encoder = UnetrPPEncoder(
             input_size=encoder_input_size,
-            dims=(h_size // 8, h_size // 4, h_size // 2, h_size),
+            dims=(
+                h_size // 8,
+                h_size // 4,
+                h_size // 2,
+                h_size,
+            ),
+            proj_size=[64, 64, 64, 32],
             depths=settings.depths,
             num_heads=settings.num_heads,
             spatial_dims=settings.spatial_dims,
             in_channels=num_input_features,
+            downsampling_rate=settings.downsampling_rate,
         )
 
         self.encoder1 = UnetResBlock(
@@ -605,6 +640,7 @@ class UNETRPP(ModelABC, nn.Module):
             upsample_kernel_size=2,
             norm_name=settings.norm_name,
             out_size=no_pixels // 16,
+            linear_upsampling=settings.linear_upsampling,
         )
         self.decoder4 = UnetrUpBlock(
             spatial_dims=settings.spatial_dims,
@@ -614,6 +650,7 @@ class UNETRPP(ModelABC, nn.Module):
             upsample_kernel_size=2,
             norm_name=settings.norm_name,
             out_size=no_pixels // 4,
+            linear_upsampling=settings.linear_upsampling,
         )
         self.decoder3 = UnetrUpBlock(
             spatial_dims=settings.spatial_dims,
@@ -623,16 +660,18 @@ class UNETRPP(ModelABC, nn.Module):
             upsample_kernel_size=2,
             norm_name=settings.norm_name,
             out_size=no_pixels,
+            linear_upsampling=settings.linear_upsampling,
         )
         self.decoder2 = UnetrUpBlock(
             spatial_dims=settings.spatial_dims,
             in_channels=settings.hidden_size // 8,
             out_channels=settings.hidden_size // 16,
             kernel_size=3,
-            upsample_kernel_size=4,
+            upsample_kernel_size=settings.downsampling_rate,
             norm_name=settings.norm_name,
-            out_size=no_pixels * 16,
+            out_size=no_pixels * (settings.downsampling_rate**2),
             conv_decoder=True,
+            linear_upsampling=settings.linear_upsampling,
         )
         self.out1 = UnetOutBlock(
             spatial_dims=settings.spatial_dims,
