@@ -12,6 +12,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser("py4cast Inference script")
     parser.add_argument("--model_path", type=str, help="Path to the model checkpoint")
     parser.add_argument("--date", type=str, help="Date for inference", default=None)
+    parser.add_argument("--infer_steps", type=str, help="Date for inference", default=None)
 
     args = parser.parse_args()
 
@@ -19,9 +20,10 @@ if __name__ == "__main__":
     lightning_module = AutoRegressiveLightning.load_from_checkpoint(args.model_path)
 
     if args.date is not None:
-        config_override = {"periods": {"test": {"start": args.date, "end": args.date}}}
+        config_override = {"periods": {"test": {"start": args.date, "end": args.date}},
+         "num_inference_pred_steps" : args.infer_steps}
     else:
-        config_override = None
+        config_override = {"num_inference_pred_steps" : args.infer_steps}
 
     hparams = lightning_module.hparams["hparams"]
 
