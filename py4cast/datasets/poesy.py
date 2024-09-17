@@ -326,6 +326,7 @@ class InferSample(Sample):
     def __post_init__(self):
         self.terms = self.input_terms
 
+
 class PoesyDataset(DatasetABC, Dataset):
     def __init__(
         self, grid: Grid, period: Period, params: List[Param], settings: PoesySettings
@@ -838,7 +839,7 @@ class InferPoesyDataset(PoesyDataset):
     Inherite from the PoesyDataset class.
     This class is used for inference, the class overrides methods sample_list and from_json.
     """
-    
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -902,7 +903,6 @@ class InferPoesyDataset(PoesyDataset):
         num_pred_steps_train: int,
         num_pred_steps_val_tests: int,
         config_override: Union[Dict, None] = None,
-
     ) -> Tuple[None, None, "InferPoesyDataset"]:
         """
         Return 1 InferPoesyDataset.
@@ -954,7 +954,6 @@ class InferPoesyDataset(PoesyDataset):
             ),
         )
         return None, None, ds
-
 
 
 if __name__ == "__main__":

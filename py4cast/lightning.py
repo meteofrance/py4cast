@@ -561,7 +561,7 @@ class AutoRegressiveLightning(pl.LightningModule):
         self.rmse_psd_plot_metric = MetricPSDVar(pred_step=max_pred_step)
         self.psd_plot_metric = MetricPSDK(save_path, pred_step=max_pred_step)
         self.acc_metric = MetricACC(self.hparams["hparams"].dataset_info)
-        
+
         self.test_plotters = [
             StateErrorPlot(metrics, save_path=save_path),
             SpatialErrorPlot(),
@@ -587,7 +587,6 @@ class AutoRegressiveLightning(pl.LightningModule):
         self.rmse_psd_plot_metric.update(prediction, target, self.original_shape)
         self.acc_metric.update(prediction, target)
 
-
     @cached_property
     def interior_2d(self) -> torch.Tensor:
         """
@@ -611,7 +610,7 @@ class AutoRegressiveLightning(pl.LightningModule):
         self.psd_plot_metric.compute()
         self.rmse_psd_plot_metric.compute()
         self.acc_metric.compute()
-        
+
         # Notify plotters that the test epoch end
         for plotter in self.test_plotters:
             plotter.on_step_end(self, label="Test")
