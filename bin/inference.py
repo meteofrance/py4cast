@@ -12,9 +12,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser("py4cast Inference script")
     parser.add_argument("--model_path", type=str, help="Path to the model checkpoint")
     parser.add_argument("--date", type=str, help="Date for inference", default=None)
-    parser.add_argument(
-        "--dataset", type=str, help="Dataset used in inference", default="poesy_infer"
-    )
+    parser.add_argument("--dataset", type=str, help="Dataset used in inference", default="poesy_infer"
+    parser.add_argument("--infer_steps", type=int, help="Number of inference steps", default=1)
+
 
     args = parser.parse_args()
 
@@ -23,9 +23,12 @@ if __name__ == "__main__":
     hparams = lightning_module.hparams["hparams"]
 
     if args.date is not None:
-        config_override = {"periods": {"test": {"start": args.date, "end": args.date}}}
+        config_override = {
+            "periods": {"test": {"start": args.date, "end": args.date}},
+            "num_inference_pred_steps": args.infer_steps,
+        }
     else:
-        config_override = None
+        config_override = {"num_inference_pred_steps": args.infer_steps}
 
     # Get dataset for inference
     _, _, infer_ds = get_datasets(
