@@ -314,11 +314,11 @@ options:
   --model_path MODEL_PATH
                         Path to the model checkpoint
   --date DATE   
-                        Date of the sample to infer on YYYYMMDDHH
+                        Date of the sample to infer on. Format:YYYYMMDDHH
   --dataset DATASET
                         Name of the dataset config file to use
   --infer_steps INFER_STEPS 
-                        Number of steps to do in inference
+                        Number of auto-regressive steps/prediction steps during the inference
 
 ```
 
