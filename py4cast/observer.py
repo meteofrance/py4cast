@@ -29,9 +29,11 @@ def gather(
     Be careful if you are doing something else than plotting results.
     """
     if isinstance(obj.trainer.strategy, SingleDeviceStrategy):
-        loss_tensor = obj.trainer.strategy.all_gather(tensor_to_gather)
+        loss_tensor = obj.trainer.strategy.all_gather(tensor_to_gather).cpu()
     elif isinstance(obj.trainer.strategy, ParallelStrategy):
-        loss_tensor = obj.trainer.strategy.all_gather(tensor_to_gather).flatten(0, 1)
+        loss_tensor = (
+            obj.trainer.strategy.all_gather(tensor_to_gather).flatten(0, 1).cpu()
+        )
     else:
         raise TypeError(
             f"Unknwon type {obj.trainer.strategy}. Know {SingleDeviceStrategy} and {ParallelStrategy}"
