@@ -26,9 +26,6 @@ from py4cast.plots import DomainInfo
 
 # torch.set_num_threads(8)
 SCRATCH_PATH = Path(os.environ.get("PY4CAST_SMEAGOL_PATH", "/scratch/shared/smeagol"))
-# Assuming no leap years in dataset (2024 is next)
-SECONDS_IN_YEAR = 365 * 24 * 60 * 60
-
 
 # Copy from smeagol
 def constant_fname(domain, model, geometry):
@@ -262,48 +259,48 @@ class Sample:
     def __repr__(self):
         return f"member : {self.member}, date {self.date}, terms {self.terms}"
 
-    @property
-    def day_of_years(self) -> np.array:
-        """
-        Day in the year.
-        For output terms only.
-        """
-        days = []
+    # @property
+    # def day_of_years(self) -> np.array:
+    #     """
+    #     Day in the year.
+    #     For output terms only.
+    #     """
+    #     days = []
 
-        for term in self.output_terms:
-            date_tmp = self.date + dt.timedelta(hours=float(term))
-            starting_year = dt.datetime(date_tmp.year, 1, 1)
-            days.append((date_tmp - starting_year).days)
+    #     for term in self.output_terms:
+    #         date_tmp = self.date + dt.timedelta(hours=float(term))
+    #         starting_year = dt.datetime(date_tmp.year, 1, 1)
+    #         days.append((date_tmp - starting_year).days)
 
-        return np.asarray(days)
+    #     return np.asarray(days)
 
-    @property
-    def hours_of_day(self) -> np.array:
-        """
-        Hour of the day.
-        For output terms only. This is a float.
-        """
-        hours = []
-        for term in self.output_terms:
-            date_tmp = self.date + dt.timedelta(hours=float(term))
-            hours.append(date_tmp.hour + date_tmp.minute / 60)
-        return np.asarray(hours)
+    # @property
+    # def hours_of_day(self) -> np.array:
+    #     """
+    #     Hour of the day.
+    #     For output terms only. This is a float.
+    #     """
+    #     hours = []
+    #     for term in self.output_terms:
+    #         date_tmp = self.date + dt.timedelta(hours=float(term))
+    #         hours.append(date_tmp.hour + date_tmp.minute / 60)
+    #     return np.asarray(hours)
 
-    @property
-    def seconds_from_start_of_year(self) -> np.array:
-        """
-        Second from the start of the year.
-        For output terms only.
-        """
-        start_of_year = dt.datetime(self.date.year, 1, 1)
-        return np.asarray(
-            [
-                (
-                    self.date + dt.timedelta(hours=float(term)) - start_of_year
-                ).total_seconds()
-                for term in self.output_terms
-            ]
-        )
+    # @property
+    # def seconds_from_start_of_year(self) -> np.array:
+    #     """
+    #     Second from the start of the year.
+    #     For output terms only.
+    #     """
+    #     start_of_year = dt.datetime(self.date.year, 1, 1)
+    #     return np.asarray(
+    #         [
+    #             (
+    #                 self.date + dt.timedelta(hours=float(term)) - start_of_year
+    #             ).total_seconds()
+    #             for term in self.output_terms
+    #         ]
+    #     )
 
     def is_valid(self, param_list: List) -> bool:
         """
@@ -446,29 +443,6 @@ class SmeagolDataset(DatasetABC, Dataset):
             raise ValueError("No valid sample in the dataset.")
         return length
 
-    def get_year_hour_forcing(self, sample: Sample):
-        """
-        Get the forcing term dependent of the sample time
-        """
-        hour_angle = (
-            torch.Tensor(sample.hours_of_day) / 12
-        ) * torch.pi  # (sample_len,)
-        year_angle = (
-            (torch.Tensor(sample.seconds_from_start_of_year) / SECONDS_IN_YEAR)
-            * 2
-            * torch.pi
-        )  # (sample_len,)
-        datetime_forcing = torch.stack(
-            (
-                torch.sin(hour_angle),
-                torch.cos(hour_angle),
-                torch.sin(year_angle),
-                torch.cos(year_angle),
-            ),
-            dim=1,
-        )  # (N_t, 4)
-        datetime_forcing = (datetime_forcing + 1) / 2  # Rescale to [0,1]
-        return datetime_forcing
 
     @cached_property
     def forcing_dim(self) -> int:
@@ -518,11 +492,10 @@ class SmeagolDataset(DatasetABC, Dataset):
     def __getitem__(self, index):
 
         # TODO : here we should directly build a single NamedTensor per inputs, outputs and forcing attribute
-
         sample = self.sample_list[index]
 
         # Datetime Forcing
-        datetime_forcing = self.get_year_hour_forcing(sample).type(torch.float32)
+        datetime_forcing = self.get_year_hour_forcing(sample.hours_of_day, sample.seconds_from_start_of_year).type(torch.float32)
 
         # Solar forcing, dim : [num_pred_steps, Lat, Lon, feature = 1]
         solar_forcing = self.generate_toa_radiation_forcing(self.grid, sample.day_of_years, sample.hours_of_day).type(torch.float32)

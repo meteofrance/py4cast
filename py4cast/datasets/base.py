@@ -10,6 +10,7 @@ from functools import cached_property
 from itertools import chain
 from pathlib import Path
 from typing import Dict, List, Literal, Tuple, Union
+import datetime as dt
 
 import einops
 import numpy as np
@@ -22,6 +23,8 @@ from tqdm import tqdm
 from py4cast.plots import DomainInfo
 from py4cast.utils import RegisterFieldsMixin, torch_save
 
+# Assuming no leap years in dataset (2024 is next)
+SECONDS_IN_YEAR = 365 * 24 * 60 * 60
 
 @dataclass(slots=True)
 class TensorWrapper:
@@ -714,10 +717,80 @@ class DatasetABC(ABC):
         """
         return []
 
-    def generate_toa_radiation_forcing(self, grid, day_of_years, hours_of_day):
+    def day_of_years(self, date, terms) -> np.array:
+        """
+        Day in the year.
+        For output terms only.
+        """
+        days = []
+
+        for term in terms:
+            date_tmp = date + dt.timedelta(hours=float(term))
+            starting_year = dt.datetime(date_tmp.year, 1, 1)
+            days.append((date_tmp - starting_year).days)
+
+        return np.asarray(days)
+    
+    def hours_of_day(self, date, terms) -> np.array:
+        """
+        Hour of the day.
+        This is a float.
+        """
+        hours = []
+        for term in terms:
+            date_tmp = date + dt.timedelta(hours=float(term))
+            hours.append(date_tmp.hour + date_tmp.minute / 60)
+        return np.asarray(hours)
+
+    def seconds_from_start_of_year(self, date, terms)-> np.array:
+        """
+        Second from the start of the year.
+        """
+        start_of_year = dt.datetime(date.year, 1, 1)
+        return np.asarray(
+            [
+                (
+                    date + dt.timedelta(hours=float(term)) - start_of_year
+                ).total_seconds()
+                for term in terms
+            ]
+        )
+
+    def get_year_hour_forcing(self, date, terms):
+        """
+        Get the forcing term dependent of the sample time
+        """
+        hours_of_day                = self.hours_of_day(date, terms)
+        seconds_from_start_of_year  = self.seconds_from_start_of_year(date, terms)
+
+        hour_angle = (
+            torch.Tensor(hours_of_day) / 12
+        ) * torch.pi  # (sample_len,)
+        year_angle = (
+            (torch.Tensor(seconds_from_start_of_year) / SECONDS_IN_YEAR)
+            * 2
+            * torch.pi
+        )  # (sample_len,)
+        datetime_forcing = torch.stack(
+            (
+                torch.sin(hour_angle),
+                torch.cos(hour_angle),
+                torch.sin(year_angle),
+                torch.cos(year_angle),
+            ),
+            dim=1,
+        )  # (N_t, 4)
+        datetime_forcing = (datetime_forcing + 1) / 2  # Rescale to [0,1]
+        return datetime_forcing
+    
+    def generate_toa_radiation_forcing(self, grid, date, terms):
         """
         Get the forcing term of the solar irradiation
         """
+
+        day_of_years = self.day_of_years(date, terms)
+        hours_of_day = self.hours_of_day(date, terms)
+
         # Eq. 1.6.3 in Solar Engineering of Thermal Processes, Photovoltaics and Wind 5th ed.
         # Solar constant
         E0 = 1366
