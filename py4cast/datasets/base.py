@@ -714,6 +714,43 @@ class DatasetABC(ABC):
         """
         return []
 
+    def generate_toa_radiation_forcing(self, grid, day_of_years, hours_of_day):
+        """
+        Get the forcing term of the solar irradiation
+        """
+        # Eq. 1.6.3 in Solar Engineering of Thermal Processes, Photovoltaics and Wind 5th ed.
+        # Solar constant
+        E0 = 1366
+
+        # Eq. 1.6.1a in Solar Engineering of Thermal Processes, Photovoltaics and Wind 5th ed.
+        declination = 23.45 * torch.sin(
+            2 * np.pi * (284 + torch.Tensor(day_of_years)) / 365
+        ).unsqueeze(-1).unsqueeze(-1)
+        dec_rad = np.pi / 180 * declination
+
+        # Latitude
+        phi = torch.Tensor(grid.lat)
+        phi_rad = np.pi / 180 * phi
+
+        # Convert UTC hours into local hours
+        hours_lcl = torch.Tensor(hours_of_day).unsqueeze(-1).unsqueeze(-1) + (
+            torch.Tensor(grid.lon) / 15
+        )
+
+        # Hour angle (centered)
+        omega = 15 * (hours_lcl - 12)
+        omega_rad = np.pi / 180 * omega
+
+        # Eq. 1.6.2 with beta=0 in Solar Engineering of Thermal Processes, Photovoltaics and Wind 5th ed.
+        cos_sza = torch.sin(phi_rad) * torch.sin(dec_rad) + torch.cos(
+            phi_rad
+        ) * torch.cos(dec_rad) * torch.cos(omega_rad)
+
+        # 0 if the sun is after the sunset.
+        toa_radiation = torch.fmax(torch.tensor(0), E0 * cos_sza).unsqueeze(-1)
+
+        return toa_radiation
+    
     @cached_property
     def grid_static_features(self):
         """

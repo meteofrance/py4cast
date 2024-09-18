@@ -446,43 +446,6 @@ class SmeagolDataset(DatasetABC, Dataset):
             raise ValueError("No valid sample in the dataset.")
         return length
 
-    def generate_toa_radiation_forcing(self, sample: Sample):
-        """
-        Get the forcing term of the solar irradiation
-        """
-        # Eq. 1.6.3 in Solar Engineering of Thermal Processes, Photovoltaics and Wind 5th ed.
-        # Solar constant
-        E0 = 1366
-
-        # Eq. 1.6.1a in Solar Engineering of Thermal Processes, Photovoltaics and Wind 5th ed.
-        declination = 23.45 * torch.sin(
-            2 * np.pi * (284 + torch.Tensor(sample.day_of_years)) / 365
-        ).unsqueeze(-1).unsqueeze(-1)
-        dec_rad = np.pi / 180 * declination
-
-        # Latitude
-        phi = torch.Tensor(self.grid.lat)
-        phi_rad = np.pi / 180 * phi
-
-        # Convert UTC hours into local hours
-        hours_lcl = torch.Tensor(sample.hours_of_day).unsqueeze(-1).unsqueeze(-1) + (
-            torch.Tensor(self.grid.lon) / 15
-        )
-
-        # Hour angle (centered)
-        omega = 15 * (hours_lcl - 12)
-        omega_rad = np.pi / 180 * omega
-
-        # Eq. 1.6.2 with beta=0 in Solar Engineering of Thermal Processes, Photovoltaics and Wind 5th ed.
-        cos_sza = torch.sin(phi_rad) * torch.sin(dec_rad) + torch.cos(
-            phi_rad
-        ) * torch.cos(dec_rad) * torch.cos(omega_rad)
-
-        # 0 if the sun is after the sunset.
-        toa_radiation = torch.fmax(torch.tensor(0), E0 * cos_sza).unsqueeze(-1)
-
-        return toa_radiation
-
     def get_year_hour_forcing(self, sample: Sample):
         """
         Get the forcing term dependent of the sample time
@@ -562,7 +525,7 @@ class SmeagolDataset(DatasetABC, Dataset):
         datetime_forcing = self.get_year_hour_forcing(sample).type(torch.float32)
 
         # Solar forcing, dim : [num_pred_steps, Lat, Lon, feature = 1]
-        solar_forcing = self.generate_toa_radiation_forcing(sample).type(torch.float32)
+        solar_forcing = self.generate_toa_radiation_forcing(self.grid, sample.day_of_years, sample.hours_of_day).type(torch.float32)
 
         lforcings = [
             NamedTensor(
