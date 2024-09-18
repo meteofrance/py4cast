@@ -1,0 +1,1 @@
+# write metadata from gribs in a given directory
