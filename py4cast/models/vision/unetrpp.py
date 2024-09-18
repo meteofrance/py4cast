@@ -21,6 +21,7 @@ from monai.networks.blocks.dynunet_block import (
 )
 from monai.networks.layers.utils import get_norm_layer
 from monai.utils import optional_import
+from torch.nn.functional import scaled_dot_product_attention
 
 from py4cast.models.base import ModelABC
 from py4cast.models.vision.utils import features_last_to_second, features_second_to_last
@@ -125,7 +126,6 @@ class TransformerBlock(nn.Module):
         self,
         input_size: int,
         hidden_size: int,
-        proj_size: int,
         num_heads: int,
         dropout_rate: float = 0.0,
         pos_embed=False,
@@ -135,7 +135,6 @@ class TransformerBlock(nn.Module):
         Args:
             input_size: the size of the input for each stage.
             hidden_size: dimension of hidden layer.
-            proj_size: projection size for keys and values in the spatial attention module.
             num_heads: number of attention heads.
             dropout_rate: faction of the input units to drop.
             pos_embed: bool argument to determine if positional embedding is used.
@@ -157,7 +156,6 @@ class TransformerBlock(nn.Module):
         self.epa_block = EPA(
             input_size=input_size,
             hidden_size=hidden_size,
-            proj_size=proj_size,
             num_heads=num_heads,
             channel_attn_drop=dropout_rate,
             spatial_attn_drop=dropout_rate,
@@ -225,7 +223,6 @@ class EPA(nn.Module):
         self,
         input_size,
         hidden_size,
-        proj_size,
         num_heads=4,
         qkv_bias=False,
         channel_attn_drop=0.1,
@@ -233,6 +230,7 @@ class EPA(nn.Module):
     ):
         super().__init__()
         self.num_heads = num_heads
+
         self.temperature = nn.Parameter(torch.ones(num_heads, 1, 1))
         self.temperature2 = nn.Parameter(torch.ones(num_heads, 1, 1))
 
@@ -241,7 +239,7 @@ class EPA(nn.Module):
 
         # E and F are projection matrices with shared weights used in spatial attention module to project
         # keys and values from HWD-dimension to P-dimension
-        self.EF = nn.Parameter(init_(torch.zeros(input_size, proj_size)))
+        self.EF = nn.Parameter(init_(torch.zeros(input_size, input_size)))
 
         self.attn_drop = nn.Dropout(channel_attn_drop)
         self.attn_drop_2 = nn.Dropout(spatial_attn_drop)
@@ -258,29 +256,27 @@ class EPA(nn.Module):
         v_CA = v_CA.transpose(-2, -1)
         v_SA = v_SA.transpose(-2, -1)
 
-        k_shared_projected, v_SA_projected = map(
+        q_shared_projected, k_shared_projected, v_SA_projected = map(
             lambda args: torch.einsum("bhdn,nk->bhdk", *args),
-            zip((k_shared, v_SA), (self.EF, self.EF)),
+            zip((q_shared, k_shared, v_SA), (self.EF, self.EF, self.EF)),
         )
 
         q_shared = torch.nn.functional.normalize(q_shared, dim=-1)
         k_shared = torch.nn.functional.normalize(k_shared, dim=-1)
 
-        attn_CA = (q_shared @ k_shared.transpose(-2, -1)) * self.temperature
-        attn_CA = attn_CA.softmax(dim=-1)
-        attn_CA = self.attn_drop(attn_CA)
-        x_CA = (attn_CA @ v_CA).permute(0, 3, 1, 2).reshape(B, N, C)
-
-        attn_SA = (
-            q_shared.permute(0, 1, 3, 2) @ k_shared_projected
-        ) * self.temperature2
-        attn_SA = attn_SA.softmax(dim=-1)
-        attn_SA = self.attn_drop_2(attn_SA)
-        x_SA = (
-            (attn_SA @ v_SA_projected.transpose(-2, -1))
-            .permute(0, 3, 1, 2)
-            .reshape(B, N, C)
+        x_CA = scaled_dot_product_attention(
+            q_shared, k_shared, v_CA, dropout_p=self.attn_drop.p
         )
+
+        x_CA = x_CA.permute(0, 3, 1, 2).reshape(B, N, C)
+
+        x_SA = scaled_dot_product_attention(
+            q_shared_projected,
+            k_shared_projected,
+            v_SA_projected,
+            dropout_p=self.attn_drop_2.p,
+        )
+        x_SA = x_SA.permute(0, 3, 1, 2).reshape(B, N, C)
 
         return x_CA + x_SA
 
@@ -297,7 +293,6 @@ class UnetrPPEncoder(nn.Module):
         self,
         input_size=[32 * 32 * 32, 16 * 16 * 16, 8 * 8 * 8, 4 * 4 * 4],
         dims=[32, 64, 128, 256],
-        proj_size=[64, 64, 64, 32],
         depths=[3, 3, 3, 3],
         num_heads=4,
         spatial_dims=2,
@@ -351,7 +346,6 @@ class UnetrPPEncoder(nn.Module):
                     TransformerBlock(
                         input_size=input_size[i],
                         hidden_size=dims[i],
-                        proj_size=proj_size[i],
                         num_heads=num_heads,
                         dropout_rate=transformer_dropout_rate,
                         pos_embed=True,
@@ -404,7 +398,6 @@ class UnetrUpBlock(nn.Module):
         kernel_size: Union[Sequence[int], int],
         upsample_kernel_size: Union[Sequence[int], int],
         norm_name: Union[Tuple, str],
-        proj_size: int = 64,
         num_heads: int = 4,
         out_size: int = 0,
         depth: int = 3,
@@ -419,7 +412,6 @@ class UnetrUpBlock(nn.Module):
             kernel_size: convolution kernel size.
             upsample_kernel_size: convolution kernel size for transposed convolution layers.
             norm_name: feature normalization type and arguments.
-            proj_size: projection size for keys and values in the spatial attention module.
             num_heads: number of heads inside each EPA module.
             out_size: spatial size for each decoder.
             depth: number of blocks for the current decoder stage.
@@ -491,7 +483,6 @@ class UnetrUpBlock(nn.Module):
                     TransformerBlock(
                         input_size=out_size,
                         hidden_size=out_channels,
-                        proj_size=proj_size,
                         num_heads=num_heads,
                         dropout_rate=0.1,
                         pos_embed=True,
@@ -616,7 +607,6 @@ class UNETRPP(ModelABC, nn.Module):
                 h_size // 2,
                 h_size,
             ),
-            proj_size=[64, 64, 64, 32],
             depths=settings.depths,
             num_heads=settings.num_heads,
             spatial_dims=settings.spatial_dims,
