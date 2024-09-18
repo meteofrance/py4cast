@@ -81,10 +81,6 @@ This should be done by
 export PY4CAST_ROOTDIR="/my/dir/"
 ```
 
-If you plan to use micromamba or conda you should also add `py4cast` to your **PYTHONPATH** by expanding it (Export or change your `PYTHONPATH`). 
-
-
-
 ### At Météo-France
 
 When working at Météo-France, you can use either runai + Docker or Conda/Micromamba to setup a working environment. On the AI Lab cluster we recommend using runai, Conda on our HPC.
@@ -93,9 +89,19 @@ See the [runai repository](https://git.meteo.fr/dsm-labia/monorepo4ai) for insta
 
 ### Install with conda
 
-You can install a conda environment using
+You can install a conda environment, including `py4cast` in editable mode, using
 ```sh
 conda env create --file env_conda.yaml
+```
+
+From an exixting conda environment, you can now install manually `py4cast` in development mode using
+```sh
+conda install conda-build -n py4cast
+conda develop .
+```
+or
+```sh
+pip install --editable .
 ```
 
 
@@ -104,6 +110,11 @@ conda env create --file env_conda.yaml
 Please install the environment using :
 ```sh
 micromamba create -f env.yaml
+```
+
+From an exixting micromamba environment, you can now install manually `py4cast` in editable mode using
+```sh
+pip install --editable .
 ```
 
 
@@ -304,23 +315,28 @@ You can find more details about all the `num_X_steps` options [here](doc/num_ste
 
 ### Inference
 
-Inference is done by running the `bin/inference.py` script. This script will load a model and run it on a dataset using the training parameters (dataset name, dataset config, timestep options, ...).
+Inference is done by running the `bin/inference.py` script. This script will load a model and run it on a dataset using the training parameters (dataset config, timestep options, ...).
 
 ```bash
-usage: py4cast Inference script [-h] [--model_path MODEL_PATH] [--dataset DATASET] [--ds_config_file DS_CONFIG_FILE] [--date DATE]
+usage: py4cast Inference script [-h] [--model_path MODEL_PATH] [--dataset DATASET] [--infer_steps INFER_STEPS] [--date DATE]
 
 options:
   -h, --help            show this help message and exit
   --model_path MODEL_PATH
                         Path to the model checkpoint
   --date DATE   
+                        Date of the sample to infer on. Format:YYYYMMDDHH
+  --dataset DATASET
+                        Name of the dataset config file to use
+  --infer_steps INFER_STEPS 
+                        Number of auto-regressive steps/prediction steps during the inference
 
 ```
 
 A simple example of inference is shown below:
 
 ```bash
- runai exec_gpu python bin/inference.py --model_path /scratch/shared/py4cast/logs/comparison/titan/swinunetr/bert_swinunetr_0/last.ckpt --date 2023123123
+ runai exec_gpu python bin/inference.py --model_path /scratch/shared/py4cast/logs/camp0/poesy/halfunet/sezn_run_dev_9/last.ckpt --date 2021061621 --dataset poesy_infer --infer_steps 2
 
 ```
 

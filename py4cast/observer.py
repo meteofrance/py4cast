@@ -38,7 +38,30 @@ def gather(
         raise TypeError(
             f"Unknwon type {obj.trainer.strategy}. Know {SingleDeviceStrategy} and {ParallelStrategy}"
         )
+    return loss_tensor
 
+
+def reduce(
+    obj: "AutoRegressiveLightning", tensor_to_reduce: torch.Tensor
+) -> torch.Tensor:
+    """
+    Send a tensor with the same dimension whether we are in Paralll or SingleDevice strategy.
+    Be careful if you are doing something else than plotting results.
+    """
+    if isinstance(obj.trainer.strategy, SingleDeviceStrategy):
+        loss_tensor = obj.trainer.strategy.reduce(
+            tensor_to_reduce, reduce_op="mean"
+        ).cpu()
+    elif isinstance(obj.trainer.strategy, ParallelStrategy):
+        loss_tensor = (
+            obj.trainer.strategy.reduce(tensor_to_reduce, reduce_op="mean")
+            .flatten(0, 1)
+            .cpu()
+        )
+    else:
+        raise TypeError(
+            f"Unknwon type {obj.trainer.strategy}. Know {SingleDeviceStrategy} and {ParallelStrategy}"
+        )
     return loss_tensor
 
 
@@ -329,7 +352,9 @@ class StateErrorPlot(ErrorObserver):
         Compute the metric. Append to a dictionnary
         """
         for name in self.metrics:
-            self.losses[name].append(self.metrics[name](prediction, target))
+            self.losses[name].append(
+                reduce(obj, self.metrics[name](prediction, target).unsqueeze(0))
+            )
         if not self.initialized:
             self.shortnames = prediction.feature_names
             self.units = [
@@ -343,9 +368,9 @@ class StateErrorPlot(ErrorObserver):
         Make the summary figure
         """
         tensorboard = obj.logger.experiment
-        for name in self.metrics:
-            loss_tensor = gather(obj, torch.cat(self.losses[name], dim=0))
-            if obj.trainer.is_global_zero:
+        if obj.trainer.is_global_zero:
+            for name in self.metrics:
+                loss_tensor = torch.cat(self.losses[name], dim=0)
                 loss = torch.mean(loss_tensor, dim=0)
 
                 # Log metrics in tensorboard, with x axis as forecast timestep
@@ -371,8 +396,8 @@ class StateErrorPlot(ErrorObserver):
                         dest_file.parent.mkdir(exist_ok=True)
                         fig.savefig(dest_file)
                     plt.close(fig)
-        # Free memory
-        [self.losses[name].clear() for name in self.metrics]
+            # Free memory
+            [self.losses[name].clear() for name in self.metrics]
 
 
 class SpatialErrorPlot(ErrorObserver):
@@ -396,17 +421,17 @@ class SpatialErrorPlot(ErrorObserver):
             spatial_loss = einops.rearrange(
                 spatial_loss, "b t (x y) -> b t x y ", x=obj.grid_shape[0]
             )
-        self.spatial_loss_maps.append(spatial_loss)  # (B, N_log, N_lat, N_lon)
+        self.spatial_loss_maps.append(
+            reduce(obj, spatial_loss).unsqueeze(0)
+        )  # (B, N_log, N_lat, N_lon)
 
     def on_step_end(self, obj: "AutoRegressiveLightning", label: str = "") -> None:
         """
         Make the summary figure
         """
-        spatial_loss_tensor = gather(
-            obj, torch.cat(self.spatial_loss_maps, dim=0)
-        )  # (N_test, N_log, N_lat, N_lon)
-
+        # (N_test, N_log, N_lat, N_lon)
         if obj.trainer.is_global_zero:
+            spatial_loss_tensor = torch.cat(self.spatial_loss_maps, dim=0)
             mean_spatial_loss = torch.mean(
                 spatial_loss_tensor, dim=0
             )  # (N_log, N_lat, N_lon)
