@@ -14,7 +14,7 @@ with open("requirements.txt") as requirements:
 setup(
     name="py4cast",
     # version="0.1.0", # Should py4cast have a version number ?
-    author="PN-IA Météo France",
+    author="Météo-France and contributors",
     description=(
         "Library to train a variety of Neural Network architectures "
         "on various weather forecasting datasets."
