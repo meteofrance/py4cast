@@ -390,18 +390,18 @@ class Sample:
     def __repr__(self):
         return f"Date T0 {self.date}, terms {self.terms}"
 
-    @property
-    def hours_of_day(self) -> np.array:
-        """Hour of the day for each step. This is a float."""
-        hours = [date.hour + date.minute / 60 for date in self.dates]
-        return np.asarray(hours)
+    # @property
+    # def hours_of_day(self) -> np.array:
+    #     """Hour of the day for each step. This is a float."""
+    #     hours = [date.hour + date.minute / 60 for date in self.dates]
+    #     return np.asarray(hours)
 
-    @property
-    def seconds_from_start_of_year(self) -> np.array:
-        """Second from the start of the year for each step."""
-        start_of_year = dt.datetime(self.date_t0.year, 1, 1)
-        seconds = [(date - start_of_year).total_seconds() for date in self.dates]
-        return np.asarray(seconds)
+    # @property
+    # def seconds_from_start_of_year(self) -> np.array:
+    #     """Second from the start of the year for each step."""
+    #     start_of_year = dt.datetime(self.date_t0.year, 1, 1)
+    #     seconds = [(date - start_of_year).total_seconds() for date in self.dates]
+    #     return np.asarray(seconds)
 
     def is_valid(self) -> bool:
         """Check that all the files necessary for this sample exist.
@@ -417,29 +417,29 @@ class Sample:
                     return False
         return True
 
-    def get_year_hour_forcing(self):
-        """Get the forcing term dependent of the sample time"""
-        hour_angle = (torch.Tensor(self.hours_of_day) / 12) * torch.pi  # (sample_len)
-        seconds_from_start_year = torch.Tensor(self.seconds_from_start_of_year)
-        # Keep only pred steps for forcing
-        hour_angle = hour_angle[-self.settings.num_pred_steps :]
-        seconds_from_start_year = seconds_from_start_year[
-            -self.settings.num_pred_steps :
-        ]
-        days_in_year = 366 if self.date_t0.year % 4 == 0 else 365
-        seconds_in_year = days_in_year * 24 * 60 * 60
-        year_angle = (seconds_from_start_year / seconds_in_year) * 2 * torch.pi
-        datetime_forcing = torch.stack(
-            (
-                torch.sin(hour_angle),
-                torch.cos(hour_angle),
-                torch.sin(year_angle),
-                torch.cos(year_angle),
-            ),
-            dim=1,
-        )  # (sample_len, 4)
-        datetime_forcing = (datetime_forcing + 1) / 2  # Rescale to [0,1]
-        return datetime_forcing
+    # def get_year_hour_forcing(self):
+    #     """Get the forcing term dependent of the sample time"""
+    #     hour_angle = (torch.Tensor(self.hours_of_day) / 12) * torch.pi  # (sample_len)
+    #     seconds_from_start_year = torch.Tensor(self.seconds_from_start_of_year)
+    #     # Keep only pred steps for forcing
+    #     hour_angle = hour_angle[-self.settings.num_pred_steps :]
+    #     seconds_from_start_year = seconds_from_start_year[
+    #         -self.settings.num_pred_steps :
+    #     ]
+    #     days_in_year = 366 if self.date_t0.year % 4 == 0 else 365
+    #     seconds_in_year = days_in_year * 24 * 60 * 60
+    #     year_angle = (seconds_from_start_year / seconds_in_year) * 2 * torch.pi
+    #     datetime_forcing = torch.stack(
+    #         (
+    #             torch.sin(hour_angle),
+    #             torch.cos(hour_angle),
+    #             torch.sin(year_angle),
+    #             torch.cos(year_angle),
+    #         ),
+    #         dim=1,
+    #     )  # (sample_len, 4)
+    #     datetime_forcing = (datetime_forcing + 1) / 2  # Rescale to [0,1]
+    #     return datetime_forcing
 
     def get_param_tensor(
         self, param: Param, dates: List[dt.datetime], no_standardize: bool = False
@@ -458,8 +458,8 @@ class Sample:
             arr = (arr - means) / std
         return torch.from_numpy(arr)
 
-    def load(self, no_standardize: bool = False) -> Item:
-        linputs, loutputs, lforcings = [], [], []
+    def load(self, lforcings, no_standardize: bool = False) -> Item:
+        linputs, loutputs = [], []
 
         # Reading parameters from files
         for param in self.params:
@@ -496,13 +496,7 @@ class Sample:
                     **deepcopy(state_kwargs),
                 )
                 linputs.append(tmp_state)
-
-        time_forcing = NamedTensor(  # doy : day_of_year
-            feature_names=["cos_hour", "sin_hour", "cos_doy", "sin_doy"],
-            tensor=self.get_year_hour_forcing().type(torch.float32),
-            names=["timestep", "features"],
-        )
-        lforcings.append(time_forcing)
+        
         for forcing in lforcings:
             forcing.unsqueeze_and_expand_from_(linputs[0])
         return Item(
@@ -682,6 +676,7 @@ class TitanDataset(DatasetABC, Dataset):
     def forcing_dim(self) -> int:
         """Return the number of forcings."""
         res = 4  # For date (hour and year)
+        res += 1  # For solar forcing
         for param in self.params:
             if param.kind == "input":
                 res += param.number
@@ -700,7 +695,23 @@ class TitanDataset(DatasetABC, Dataset):
 
         # TODO: build a single NamedTensor with all the inputs and outputs in one shot.
         sample = self.sample_list[index]
-        item = sample.load()
+        
+        lforcings = []
+
+        time_forcing = NamedTensor(  # doy : day_of_year
+            feature_names=["cos_hour", "sin_hour", "cos_doy", "sin_doy"],
+            tensor=self.get_year_hour_forcing(sample.date_t0, sample.terms).type(torch.float32),
+            names=["timestep", "features"],
+        )
+        solar_forcing = NamedTensor(
+            feature_names=["toa_radiation"],
+            tensor=self.generate_toa_radiation_forcing(self.grid, sample.date_t0, sample.terms).type(torch.float32),
+            names=["timestep", "lat", "lon", "features"],
+        )
+        lforcings.append(time_forcing)
+        lforcings.append(solar_forcing)
+        
+        item = sample.load(lforcings)
         return item
 
     @classmethod

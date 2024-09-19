@@ -495,10 +495,10 @@ class SmeagolDataset(DatasetABC, Dataset):
         sample = self.sample_list[index]
 
         # Datetime Forcing
-        datetime_forcing = self.get_year_hour_forcing(sample.hours_of_day, sample.seconds_from_start_of_year).type(torch.float32)
+        datetime_forcing = self.get_year_hour_forcing(sample.date, sample.output_terms).type(torch.float32)
 
         # Solar forcing, dim : [num_pred_steps, Lat, Lon, feature = 1]
-        solar_forcing = self.generate_toa_radiation_forcing(self.grid, sample.day_of_years, sample.hours_of_day).type(torch.float32)
+        solar_forcing = self.generate_toa_radiation_forcing(self.grid, sample.date, sample.output_terms).type(torch.float32)
 
         lforcings = [
             NamedTensor(
