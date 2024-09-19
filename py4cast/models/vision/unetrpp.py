@@ -274,7 +274,6 @@ class EPA(nn.Module):
         v_CA = v_CA.transpose(-2, -1)
         v_SA = v_SA.transpose(-2, -1)
 
-        # Batch, Head, Features, Dimensions Projected
         k_shared_projected, v_SA_projected = map(
             lambda args: torch.einsum("bhdn,nk->bhdk", *args),
             zip((k_shared, v_SA), (self.EF, self.EF)),
@@ -301,12 +300,12 @@ class EPA(nn.Module):
                 q_shared_projected.permute(0, 1, 3, 2),
                 k_shared_projected.permute(0, 1, 3, 2),
                 v_SA_projected.permute(0, 1, 3, 2),
+                dropout=self.attn_drop_2.p
             )
             x_SA = torch.einsum("bhdn,nk->bhdk", x_SA.permute(0, 1, 3, 2), self.FE)
 
         else:
             attn_SA = (
-                # Batch, Head, Features, Dimensions @ Batch, Head, Features, Dimension projected
                 q_shared.permute(0, 1, 3, 2)
                 @ k_shared_projected
             ) * self.temperature2
