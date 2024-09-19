@@ -16,26 +16,25 @@ example: python bin/gif_comparison.py --ckpt AROME --ckpt /.../logs/my_run/epoch
 """
 
 import argparse
+import datetime as dt
+import math
+from pathlib import Path
+from typing import List, Tuple
 
+import einops
+import gif
+import matplotlib.pyplot as plt
+import numpy as np
+import torch
+import xarray as xr
+from skimage.transform import resize
+from tqdm import trange
 
 from py4cast.datasets import get_datasets
-from py4cast.datasets.base import collate_fn, Item
-from py4cast.lightning import AutoRegressiveLightning, ArLightningHyperParam
-from typing import List, Tuple
-import torch
+from py4cast.datasets.base import Item, collate_fn
+from py4cast.datasets.titan.settings import AROME_PATH, METADATA
+from py4cast.lightning import ArLightningHyperParam, AutoRegressiveLightning
 from py4cast.plots import DomainInfo
-from tqdm import trange
-import einops
-from pathlib import Path
-import math
-import numpy as np
-import matplotlib.pyplot as plt
-import gif
-import datetime as dt
-from skimage.transform import resize
-import xarray as xr
-
-from py4cast.datasets.titan.settings import METADATA, AROME_PATH
 
 COLORMAPS = {
     "t2m": {"cmap": "Spectral_r", "vmin": 240, "vmax": 320},
