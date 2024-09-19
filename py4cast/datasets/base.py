@@ -717,10 +717,9 @@ class DatasetABC(ABC):
         """
         return []
 
-    def day_of_years(self, date, terms) -> np.array:
+    def day_of_years(self, date: dt.datetime, terms: List[float]) -> np.array:
         """
-        Day in the year.
-        For output terms only.
+        Compute the day of the year for the specified terms from the date. 
         """
         days = []
 
@@ -733,8 +732,7 @@ class DatasetABC(ABC):
     
     def hours_of_day(self, date, terms) -> np.array:
         """
-        Hour of the day.
-        This is a float.
+        Compute the hour of the day for the specified terms from the date.
         """
         hours = []
         for term in terms:
@@ -744,7 +742,7 @@ class DatasetABC(ABC):
 
     def seconds_from_start_of_year(self, date, terms)-> np.array:
         """
-        Second from the start of the year.
+        Compute how many seconds have elapsed since the beginning of the year for the specified terms.
         """
         start_of_year = dt.datetime(date.year, 1, 1)
         return np.asarray(
@@ -758,7 +756,7 @@ class DatasetABC(ABC):
 
     def get_year_hour_forcing(self, date, terms):
         """
-        Get the forcing term dependent of the sample time
+        Get the forcing term dependent of the date and terms.
         """
         hours_of_day                = self.hours_of_day(date, terms)
         seconds_from_start_of_year  = self.seconds_from_start_of_year(date, terms)
@@ -796,11 +794,10 @@ class DatasetABC(ABC):
         E0 = 1366
 
         # Eq. 1.6.1a in Solar Engineering of Thermal Processes, Photovoltaics and Wind 5th ed.
-        declination = 23.45 * torch.sin(
+        dec_rad = 23.45 * torch.sin(
             2 * np.pi * (284 + torch.Tensor(day_of_years)) / 365
         ).unsqueeze(-1).unsqueeze(-1)
-        dec_rad = np.pi / 180 * declination
-
+        
         # Latitude
         phi = torch.Tensor(grid.lat)
         phi_rad = np.pi / 180 * phi

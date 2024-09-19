@@ -541,9 +541,9 @@ class AutoRegressiveLightning(pl.LightningModule):
         self.validation_step_losses.clear()
 
         # Notify every plotters
-        # if self.current_epoch % PLOT_PERIOD == 0:
-        #     for plotter in self.valid_plotters:
-        #         plotter.on_step_end(self, label="Valid")
+        if self.current_epoch % PLOT_PERIOD == 0:
+            for plotter in self.valid_plotters:
+                plotter.on_step_end(self, label="Valid")
 
     def on_test_start(self):
         """
@@ -578,11 +578,11 @@ class AutoRegressiveLightning(pl.LightningModule):
         prediction, target, _ = self._shared_val_test_step(batch, batch_idx, "test")
 
         # Notify plotters & metrics
-        # for plotter in self.test_plotters:
-        #     plotter.update(self, prediction=prediction, target=target)
-        # self.acc_metric.update(prediction, target)
-        # self.psd_plot_metric.update(prediction, target, self.original_shape)
-        # self.rmse_psd_plot_metric.update(prediction, target, self.original_shape)
+        for plotter in self.test_plotters:
+            plotter.update(self, prediction=prediction, target=target)
+        self.acc_metric.update(prediction, target)
+        self.psd_plot_metric.update(prediction, target, self.original_shape)
+        self.rmse_psd_plot_metric.update(prediction, target, self.original_shape)
 
     @cached_property
     def interior_2d(self) -> torch.Tensor:
@@ -604,10 +604,10 @@ class AutoRegressiveLightning(pl.LightningModule):
         # "RuntimeError: No backend type associated with device type cpu"
         # see: https://github.com/Lightning-AI/torchmetrics/issues/2477
         # and: https://github.com/Lightning-AI/pytorch-lightning/issues/18803
-        # self.psd_plot_metric.compute()
-        # self.rmse_psd_plot_metric.compute()
-        # self.acc_metric.compute()
+        self.psd_plot_metric.compute()
+        self.rmse_psd_plot_metric.compute()
+        self.acc_metric.compute()
 
         # Notify plotters that the test epoch end
-        # for plotter in self.test_plotters:
-        #     plotter.on_step_end(self, label="Test")
+        for plotter in self.test_plotters:
+            plotter.on_step_end(self, label="Test")

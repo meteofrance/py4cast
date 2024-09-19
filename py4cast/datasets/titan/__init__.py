@@ -697,7 +697,6 @@ class TitanDataset(DatasetABC, Dataset):
         sample = self.sample_list[index]
         
         lforcings = []
-
         time_forcing = NamedTensor(  # doy : day_of_year
             feature_names=["cos_hour", "sin_hour", "cos_doy", "sin_doy"],
             tensor=self.get_year_hour_forcing(sample.date_t0, sample.terms).type(torch.float32),
