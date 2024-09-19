@@ -2,6 +2,7 @@
 Base classes defining our software components
 and their interfaces
 """
+import datetime as dt
 import warnings
 from abc import ABC, abstractclassmethod, abstractmethod, abstractproperty
 from copy import deepcopy
@@ -10,7 +11,6 @@ from functools import cached_property
 from itertools import chain
 from pathlib import Path
 from typing import Dict, List, Literal, Tuple, Union
-import datetime as dt
 
 import einops
 import numpy as np
@@ -25,6 +25,7 @@ from py4cast.utils import RegisterFieldsMixin, torch_save
 
 # Assuming no leap years in dataset (2024 is next)
 SECONDS_IN_YEAR = 365 * 24 * 60 * 60
+
 
 @dataclass(slots=True)
 class TensorWrapper:
@@ -719,7 +720,7 @@ class DatasetABC(ABC):
 
     def day_of_years(self, date: dt.datetime, terms: List[float]) -> np.array:
         """
-        Compute the day of the year for the specified terms from the date. 
+        Compute the day of the year for the specified terms from the date.
         """
         days = []
 
@@ -729,7 +730,7 @@ class DatasetABC(ABC):
             days.append((date_tmp - starting_year).days)
 
         return np.asarray(days)
-    
+
     def hours_of_day(self, date, terms) -> np.array:
         """
         Compute the hour of the day for the specified terms from the date.
@@ -740,16 +741,14 @@ class DatasetABC(ABC):
             hours.append(date_tmp.hour + date_tmp.minute / 60)
         return np.asarray(hours)
 
-    def seconds_from_start_of_year(self, date, terms)-> np.array:
+    def seconds_from_start_of_year(self, date, terms) -> np.array:
         """
         Compute how many seconds have elapsed since the beginning of the year for the specified terms.
         """
         start_of_year = dt.datetime(date.year, 1, 1)
         return np.asarray(
             [
-                (
-                    date + dt.timedelta(hours=float(term)) - start_of_year
-                ).total_seconds()
+                (date + dt.timedelta(hours=float(term)) - start_of_year).total_seconds()
                 for term in terms
             ]
         )
@@ -758,16 +757,12 @@ class DatasetABC(ABC):
         """
         Get the forcing term dependent of the date and terms.
         """
-        hours_of_day                = self.hours_of_day(date, terms)
-        seconds_from_start_of_year  = self.seconds_from_start_of_year(date, terms)
+        hours_of_day = self.hours_of_day(date, terms)
+        seconds_from_start_of_year = self.seconds_from_start_of_year(date, terms)
 
-        hour_angle = (
-            torch.Tensor(hours_of_day) / 12
-        ) * torch.pi  # (sample_len,)
+        hour_angle = (torch.Tensor(hours_of_day) / 12) * torch.pi  # (sample_len,)
         year_angle = (
-            (torch.Tensor(seconds_from_start_of_year) / SECONDS_IN_YEAR)
-            * 2
-            * torch.pi
+            (torch.Tensor(seconds_from_start_of_year) / SECONDS_IN_YEAR) * 2 * torch.pi
         )  # (sample_len,)
         datetime_forcing = torch.stack(
             (
@@ -780,7 +775,7 @@ class DatasetABC(ABC):
         )  # (N_t, 4)
         datetime_forcing = (datetime_forcing + 1) / 2  # Rescale to [0,1]
         return datetime_forcing
-    
+
     def generate_toa_radiation_forcing(self, grid, date, terms):
         """
         Get the forcing term of the solar irradiation
@@ -797,7 +792,7 @@ class DatasetABC(ABC):
         dec_rad = 23.45 * torch.sin(
             2 * np.pi * (284 + torch.Tensor(day_of_years)) / 365
         ).unsqueeze(-1).unsqueeze(-1)
-        
+
         # Latitude
         phi = torch.Tensor(grid.lat)
         phi_rad = np.pi / 180 * phi
@@ -820,7 +815,7 @@ class DatasetABC(ABC):
         toa_radiation = torch.fmax(torch.tensor(0), E0 * cos_sza).unsqueeze(-1)
 
         return toa_radiation
-    
+
     @cached_property
     def grid_static_features(self):
         """

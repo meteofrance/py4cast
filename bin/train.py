@@ -224,7 +224,6 @@ dl_settings = TorchDataloaderSettings(
     prefetch_factor=args.prefetch_factor,
 )
 train_ds, val_ds, test_ds = datasets
-train_ds[0]
 train_loader = train_ds.torch_dataloader(dl_settings)
 val_loader = val_ds.torch_dataloader(dl_settings)
 test_loader = test_ds.torch_dataloader(dl_settings)

@@ -415,7 +415,7 @@ class PoesyDataset(DatasetABC, Dataset):
         """
         res = 4  # For date
         res += 1  # For solar forcing
-        
+
         for param in self.params:
             if param.kind == "input":
                 res += param.number
@@ -470,10 +470,14 @@ class PoesyDataset(DatasetABC, Dataset):
         sample = self.sample_list[index]
 
         # Datetime Forcing
-        datetime_forcing = self.get_year_hour_forcing(sample.date, sample.output_terms).type(torch.float32)
+        datetime_forcing = self.get_year_hour_forcing(
+            sample.date, sample.output_terms
+        ).type(torch.float32)
 
         # Solar forcing, dim : [num_pred_steps, Lat, Lon, feature = 1]
-        solar_forcing = self.generate_toa_radiation_forcing(self.grid, sample.date, sample.output_terms).type(torch.float32)
+        solar_forcing = self.generate_toa_radiation_forcing(
+            self.grid, sample.date, sample.output_terms
+        ).type(torch.float32)
 
         lforcings = [
             NamedTensor(

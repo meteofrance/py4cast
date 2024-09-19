@@ -443,7 +443,6 @@ class SmeagolDataset(DatasetABC, Dataset):
             raise ValueError("No valid sample in the dataset.")
         return length
 
-
     @cached_property
     def forcing_dim(self) -> int:
         """
@@ -495,10 +494,14 @@ class SmeagolDataset(DatasetABC, Dataset):
         sample = self.sample_list[index]
 
         # Datetime Forcing
-        datetime_forcing = self.get_year_hour_forcing(sample.date, sample.output_terms).type(torch.float32)
+        datetime_forcing = self.get_year_hour_forcing(
+            sample.date, sample.output_terms
+        ).type(torch.float32)
 
         # Solar forcing, dim : [num_pred_steps, Lat, Lon, feature = 1]
-        solar_forcing = self.generate_toa_radiation_forcing(self.grid, sample.date, sample.output_terms).type(torch.float32)
+        solar_forcing = self.generate_toa_radiation_forcing(
+            self.grid, sample.date, sample.output_terms
+        ).type(torch.float32)
 
         lforcings = [
             NamedTensor(

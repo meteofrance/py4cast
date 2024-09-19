@@ -1,14 +1,15 @@
 """
 Unit tests for datasets and NamedTensor.
 """
+import datetime
+import json
+
 import pytest
 import torch
 
-import datetime 
-from py4cast.datasets.base import Item, NamedTensor, collate_fn, DatasetABC
-
-import json
+from py4cast.datasets.base import DatasetABC, Item, NamedTensor, collate_fn
 from py4cast.datasets.poesy import Grid as PoesyGrib
+
 
 def test_named_tensor():
     """
@@ -221,10 +222,9 @@ def test_item():
 
 
 class FakeDataset(DatasetABC):
-
     def __init__(self):
         pass
-     
+
     def torch_dataloader(self):
         pass
 
@@ -247,16 +247,17 @@ class FakeDataset(DatasetABC):
         grid = PoesyGrib(**conf["grid"])
         return grid
 
+
 def test_date_forcing():
 
     fk_ds = FakeDataset()
-    date  = datetime.datetime(year = 2023, month = 12, day = 31, hour=23)
+    date = datetime.datetime(year=2023, month=12, day=31, hour=23)
 
     relativ_terms = [1, 2, 3]
 
     nb_terms = len(relativ_terms)
     nb_forcing = 4
-    
+
     forcing = fk_ds.get_year_hour_forcing(date, relativ_terms)
 
     assert forcing.shape == torch.Size((nb_terms, nb_forcing))
@@ -264,23 +265,21 @@ def test_date_forcing():
 
     return
 
+
 def test_solar_forcing():
 
     fk_ds = FakeDataset()
 
-    date  = datetime.datetime(year = 2023, month = 6, day = 21, hour=0)
-    relativ_terms = range(24*5)
+    date = datetime.datetime(year=2023, month=6, day=21, hour=0)
+    relativ_terms = range(24 * 5)
     path_to_json = "/home/mrmn/seznecc/repository/py4cast/config/datasets/poesy.json"
-    grid  = fk_ds.from_json(path_to_json)
+    grid = fk_ds.from_json(path_to_json)
 
     # forcing = fk_ds.generate_toa_radiation_forcing(grid, date, relativ_terms).sum((1,2,3))
-
 
     # import matplotlib.pyplot as plt
     # x_values = range(len(forcing))
     # plt.plot(x_values, forcing, marker='o')
     # plt.savefig("test.png")
-    
+
     return
-
-
