@@ -300,14 +300,13 @@ class EPA(nn.Module):
                 q_shared_projected.permute(0, 1, 3, 2),
                 k_shared_projected.permute(0, 1, 3, 2),
                 v_SA_projected.permute(0, 1, 3, 2),
-                dropout=self.attn_drop_2.p
+                dropout=self.attn_drop_2.p,
             )
             x_SA = torch.einsum("bhdn,nk->bhdk", x_SA.permute(0, 1, 3, 2), self.FE)
 
         else:
             attn_SA = (
-                q_shared.permute(0, 1, 3, 2)
-                @ k_shared_projected
+                q_shared.permute(0, 1, 3, 2) @ k_shared_projected
             ) * self.temperature2
 
             attn_SA = attn_SA.softmax(dim=-1)
