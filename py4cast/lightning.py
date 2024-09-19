@@ -454,7 +454,7 @@ class AutoRegressiveLightning(pl.LightningModule):
         l1_loss.prepare(self, self.interior_mask, self.hparams["hparams"].dataset_info)
         metrics = {"mae": l1_loss}
         save_path = self.hparams["hparams"].save_path
-        self.acc_metric = MetricACC(self.hparams["hparams"].dataset_info)
+        #self.acc_metric = MetricACC(self.hparams["hparams"].dataset_info)
 
         self.valid_plotters = [
             StateErrorPlot(metrics, prefix="Validation"),
@@ -584,7 +584,7 @@ class AutoRegressiveLightning(pl.LightningModule):
         #self.acc_metric.update(prediction, target)
         self.psd_plot_metric.update(prediction, target, self.original_shape)
         self.rmse_psd_plot_metric.update(prediction, target, self.original_shape)
-        self.acc_metric.update(prediction, target)
+        #self.acc_metric.update(prediction, target)
 
     @cached_property
     def interior_2d(self) -> torch.Tensor:
