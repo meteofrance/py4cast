@@ -10,6 +10,9 @@ Contributions are welcome (Issues, Pull Requests, ...).
 
 This project is licensed under the [APACHE 2.0 license.](LICENSE-2.0.txt)
 
+![Forecast humidity](figs/2023061812_aro_r2_2m_crop.gif)
+![Forecast precip](figs/2023061812_aro_tp_0m.gif)
+
 # Acknowledgements
 
 This project started as a fork of neural-lam, a project by Joel Oskarsson, see [here](https://github.com/mllam/neural-lam). Many thanks to Joel for his work!
