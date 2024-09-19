@@ -1,6 +1,6 @@
 """Plots animations comparing forecasts of multiple models with ground truth.
-/!\ - For now this script only works with models trained with Titan dataset.
-    - If you want to use AROME as a model, you have to manually download the forecast before.
+Warnings - For now this script only works with models trained with Titan dataset.
+         - If you want to use AROME as a model, you have to manually download the forecast before.
 
 usage: gif_comparison.py [-h] --ckpt CKPT --date DATE [--num_pred_steps NUM_PRED_STEPS]
 
@@ -11,7 +11,9 @@ options:
   --num_pred_steps NUM_PRED_STEPS
                         Number of auto-regressive steps/prediction steps.
 
-example: python bin/gif_comparison.py --ckpt AROME --ckpt /.../logs/my_run/epoch=247.ckpt --date 2023061812 --num_pred_steps 10"""
+example: python bin/gif_comparison.py --ckpt AROME --ckpt /.../logs/my_run/epoch=247.ckpt 
+                                      --date 2023061812 --num_pred_steps 10
+"""
 
 import argparse
 
