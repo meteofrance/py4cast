@@ -11,7 +11,7 @@ options:
   --num_pred_steps NUM_PRED_STEPS
                         Number of auto-regressive steps/prediction steps.
 
-example: python bin/gif_comparison.py --ckpt AROME --ckpt /.../logs/my_run/epoch=247.ckpt 
+example: python bin/gif_comparison.py --ckpt AROME --ckpt /.../logs/my_run/epoch=247.ckpt
                                       --date 2023061812 --num_pred_steps 10
 """
 
