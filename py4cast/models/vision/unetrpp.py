@@ -219,6 +219,10 @@ class EPA(nn.Module):
     """
     Efficient Paired Attention Block, based on: "Shaker et al.,
     UNETR++: Delving into Efficient and Accurate 3D Medical Image Segmentation"
+    Modifications :
+    - adds compatibility with 2d inputs
+    - adds an option to use torch's scaled dot product instead of the original implementation
+    This should enable the use of flash attention in the future.
     """
 
     def __init__(
@@ -236,9 +240,6 @@ class EPA(nn.Module):
         self.num_heads = num_heads
         self.use_scaled_dot_product = use_scaled_dot_product
 
-        self.temperature = nn.Parameter(torch.ones(num_heads, 1, 1))
-        self.temperature2 = nn.Parameter(torch.ones(num_heads, 1, 1))
-
         # qkvv are 4 linear layers (query_shared, key_shared, value_spatial, value_channel)
         self.qkvv = nn.Linear(hidden_size, hidden_size * 4, bias=qkv_bias)
 
@@ -249,6 +250,10 @@ class EPA(nn.Module):
         if self.use_scaled_dot_product:
             # we need an extra set of weights for the scaled dot product
             self.FE = nn.Parameter(init_(torch.zeros(proj_size, input_size)))
+        else:
+            # the original unetr++ uses two parameters for scaling the dot products
+            self.temperature = nn.Parameter(torch.ones(num_heads, 1, 1))
+            self.temperature2 = nn.Parameter(torch.ones(num_heads, 1, 1))
 
         self.attn_drop = nn.Dropout(channel_attn_drop)
         self.attn_drop_2 = nn.Dropout(spatial_attn_drop)
@@ -293,9 +298,11 @@ class EPA(nn.Module):
         if self.use_scaled_dot_product:
             q_shared_projected = torch.einsum("bhdn,nk->bhdk", q_shared, self.EF)
             x_SA = scaled_dot_product_attention(
-                q_shared_projected, k_shared_projected, v_SA_projected
+                q_shared_projected.permute(0, 1, 3, 2),
+                k_shared_projected.permute(0, 1, 3, 2),
+                v_SA_projected.permute(0, 1, 3, 2),
             )
-            x_SA = torch.einsum("bhdn,nk->bhdk", x_SA, self.FE)
+            x_SA = torch.einsum("bhdn,nk->bhdk", x_SA.permute(0, 1, 3, 2), self.FE)
 
         else:
             attn_SA = (
