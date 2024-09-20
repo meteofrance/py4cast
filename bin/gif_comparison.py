@@ -37,14 +37,40 @@ from py4cast.lightning import ArLightningHyperParam, AutoRegressiveLightning
 from py4cast.plots import DomainInfo
 
 PARAMS_INFO = {
-    "t2m": {"grib_name": "AROME_1S100_ECH0_2M.grib","cmap": "Spectral_r", "vmin": 240, "vmax": 320},
-    "r2": {"grib_name": "AROME_1S100_ECH0_2M.grib","cmap": "Spectral", "vmin": 0, "vmax": 100},
-    "tp": {"grib_name": "AROME_1S100_ECH1_SOL.grib","cmap": "Spectral_r", "vmin": 0.5, "vmax": 100},
-    "u10": {"grib_name": "AROME_1S100_ECH0_10M.grib","cmap": "RdBu", "vmin": -20, "vmax": 20},
-    "v10": {"grib_name": "AROME_1S100_ECH0_10M.grib","cmap": "RdBu", "vmin": -20, "vmax": 20},
+    "t2m": {
+        "grib_name": "AROME_1S100_ECH0_2M.grib",
+        "cmap": "Spectral_r",
+        "vmin": 240,
+        "vmax": 320,
+    },
+    "r2": {
+        "grib_name": "AROME_1S100_ECH0_2M.grib",
+        "cmap": "Spectral",
+        "vmin": 0,
+        "vmax": 100,
+    },
+    "tp": {
+        "grib_name": "AROME_1S100_ECH1_SOL.grib",
+        "cmap": "Spectral_r",
+        "vmin": 0.5,
+        "vmax": 100,
+    },
+    "u10": {
+        "grib_name": "AROME_1S100_ECH0_10M.grib",
+        "cmap": "RdBu",
+        "vmin": -20,
+        "vmax": 20,
+    },
+    "v10": {
+        "grib_name": "AROME_1S100_ECH0_10M.grib",
+        "cmap": "RdBu",
+        "vmin": -20,
+        "vmax": 20,
+    },
 }
 
-def titan_to_arome_names(titan_name:str) -> str:
+
+def titan_to_arome_names(titan_name: str) -> str:
     """Converts Titan feature name to Arome feature name."""
     return titan_name.split("_")[1]
 
@@ -61,31 +87,35 @@ def downscale(
     return array
 
 
-def get_param(path: Path, param: str, num_steps:int) -> np.ndarray:
+def get_param(path: Path, param: str, num_steps: int) -> np.ndarray:
     """Extracts a weather param from an AROME forecast in grib."""
     ds = xr.open_dataset(path, engine="cfgrib")
     array = ds[param].values
     if array.shape[0] < num_steps:
-        raise ValueError(f"The requested leadtimes ({num_steps}h) are not available in the AROME forecast {path}.")
+        raise ValueError(
+            f"The requested leadtimes ({num_steps}h) are not available in the AROME forecast {path}."
+        )
     arr_list = [downscale(array[t]) for t in range(num_steps)]
     array = np.stack(arr_list)[:, ::-1]
     return array
 
 
-def post_process_tp_arome(array: np.ndarray, num_steps:int) -> np.ndarray:
+def post_process_tp_arome(array: np.ndarray, num_steps: int) -> np.ndarray:
     """Converts AROME precip forecast in mm/h.
     By default, AROME accumulates mm starting from t0."""
     diff_arrs = [array[t + 1] - array[t] for t in range(num_steps)]
     return np.stack(diff_arrs)
 
 
-def read_arome(date: str, params:List[str], num_steps:int) -> np.ndarray:
+def read_arome(date: str, params: List[str], num_steps: int) -> np.ndarray:
     """Extracts several parameters of an AROME forecast."""
     list_arrays = []
     for param in params:
         # For precipitation, we need to extract one more leadtime
         extract_steps = num_steps + 1 if param == "tp" else num_steps
-        array = get_param(AROME_PATH / date / PARAMS_INFO[param]["grib_name"], param, extract_steps)
+        array = get_param(
+            AROME_PATH / date / PARAMS_INFO[param]["grib_name"], param, extract_steps
+        )
         if param == "tp":
             array = post_process_tp_arome(array, num_steps)
         list_arrays.append(array)
@@ -176,11 +206,11 @@ def plot_frame(
         cmap = "plasma"
 
     if (lines, cols) == (1, 3):
-        figsize=(12, 5)
+        figsize = (12, 5)
     elif (lines, cols) == (2, 2):
-        figsize=(4 * cols, 4 * lines)
+        figsize = (4 * cols, 4 * lines)
     else:
-        figsize=(4 * cols, 5 * lines)
+        figsize = (4 * cols, 5 * lines)
 
     fig = plt.figure(constrained_layout=True, figsize=figsize, dpi=200)
     subfig = fig.subfigures(nrows=1, ncols=1)
