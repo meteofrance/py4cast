@@ -39,30 +39,35 @@ from py4cast.plots import DomainInfo
 PARAMS_INFO = {
     "t2m": {
         "grib_name": "AROME_1S100_ECH0_2M.grib",
+        "titan_name": "aro_t2m_2m",
         "cmap": "Spectral_r",
         "vmin": 240,
         "vmax": 320,
     },
     "r2": {
         "grib_name": "AROME_1S100_ECH0_2M.grib",
+        "titan_name": "aro_r2_2m",
         "cmap": "Spectral",
         "vmin": 0,
         "vmax": 100,
     },
     "tp": {
         "grib_name": "AROME_1S100_ECH1_SOL.grib",
+        "titan_name": "aro_tp_0m",
         "cmap": "Spectral_r",
         "vmin": 0.5,
         "vmax": 100,
     },
     "u10": {
         "grib_name": "AROME_1S100_ECH0_10M.grib",
+        "titan_name": "aro_u10_10m",
         "cmap": "RdBu",
         "vmin": -20,
         "vmax": 20,
     },
     "v10": {
         "grib_name": "AROME_1S100_ECH0_10M.grib",
+        "titan_name": "aro_v10_10m",
         "cmap": "RdBu",
         "vmin": -20,
         "vmax": 20,
@@ -299,13 +304,7 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    feature_names = [
-        "aro_t2m_2m",
-        "aro_r2_2m",
-        "aro_tp_0m",
-        "aro_u10_10m",
-        "aro_v10_10m",
-    ]
+    feature_names = [param["titan_name"] for param in PARAMS_INFO.values()]
 
     y_preds = []
     models_names = []
