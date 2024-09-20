@@ -555,7 +555,7 @@ class AutoRegressiveLightning(pl.LightningModule):
             metrics[alias] = loss
 
         save_path = self.hparams["hparams"].save_path
-        
+
         self.test_plotters = [
             StateErrorPlot(metrics, save_path=save_path),
             SpatialErrorPlot(),
