@@ -85,10 +85,6 @@ This should be done by
 export PY4CAST_ROOTDIR="/my/dir/"
 ```
 
-If you plan to use micromamba or conda you should also add `py4cast` to your **PYTHONPATH** by expanding it (Export or change your `PYTHONPATH`).
-
-
-
 ### At Météo-France
 
 When working at Météo-France, you can use either runai + Docker or Conda/Micromamba to setup a working environment. On the AI Lab cluster we recommend using runai, Conda on our HPC.
@@ -97,9 +93,19 @@ See the [runai repository](https://git.meteo.fr/dsm-labia/monorepo4ai) for insta
 
 ### Install with conda
 
-You can install a conda environment using
+You can install a conda environment, including `py4cast` in editable mode, using
 ```sh
 conda env create --file env_conda.yaml
+```
+
+From an exixting conda environment, you can now install manually `py4cast` in development mode using
+```sh
+conda install conda-build -n py4cast
+conda develop .
+```
+or
+```sh
+pip install --editable .
 ```
 
 
@@ -108,6 +114,11 @@ conda env create --file env_conda.yaml
 Please install the environment using :
 ```sh
 micromamba create -f env.yaml
+```
+
+From an exixting micromamba environment, you can now install manually `py4cast` in editable mode using
+```sh
+pip install --editable .
 ```
 
 
