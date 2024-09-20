@@ -1,3 +1,34 @@
+[build-system]
+requires = ["setuptools", "setuptools-scm"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "py4cast"
+version = "1.0.0"
+authors = [
+  {name="Météo-France and contributors"},
+]
+description = "Library to train a variety of Neural Network architectures on various weather forecasting datasets."
+readme = "README.md"
+requires-python = ">=3.10"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: Apache 2",
+    "Operating System :: OS Independent",
+]
+dynamic = ["dependencies"]
+license = {file = "LICENSE-2.0.txt"}
+keywords = ["PyTorch", "Deep Learning", "Artificial Intelligence", "Meteo-France"]
+
+[tool.setuptools.packages.find]
+namespaces = false
+
+[tool.setuptools.dynamic]
+dependencies = {file = ["requirements.txt"]}
+
+[project.urls]
+Homepage = "https://github.com/meteofrance/py4cast"
+
 [tool.sourcery-analytics]
 
 [tool.sourcery-analytics.thresholds]
