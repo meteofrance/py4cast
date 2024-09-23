@@ -728,7 +728,7 @@ class DatasetABC(ABC):
         for term in terms:
             date_tmp = date + dt.timedelta(hours=float(term))
             starting_year = dt.datetime(date_tmp.year, 1, 1)
-            days.append((date_tmp - starting_year).days +1)
+            days.append((date_tmp - starting_year).days + 1)
 
         return np.asarray(days)
 
@@ -781,16 +781,16 @@ class DatasetABC(ABC):
         """
         Get the forcing term of the solar irradiation
         """
-        # UTC date, close to solar date, no need to convert
-        day_of_years = self.day_of_years(date_utc, terms)
-        
-        # Convert UTC hours into solar hours
-        hours_of_day = self.hours_of_day(date_utc, terms)
-        hours_lcl = torch.Tensor(hours_of_day).unsqueeze(-1).unsqueeze(-1)  + grid.lon / 15
 
-        # Hour angle (centered)
+        day_of_years = self.day_of_years(date_utc, terms)
+        hours_of_day = self.hours_of_day(date_utc, terms)
+
+        # Hour angle, convert UTC hours into solar hours
+        hours_lcl = (
+            torch.Tensor(hours_of_day).unsqueeze(-1).unsqueeze(-1) + grid.lon / 15
+        )
         omega = 15 * (hours_lcl - 12)
-        omega_rad =  np.radians(omega)
+        omega_rad = np.radians(omega)
 
         # Eq. 1.6.3 in Solar Engineering of Thermal Processes, Photovoltaics and Wind 5th ed.
         # Solar constant
@@ -798,7 +798,7 @@ class DatasetABC(ABC):
 
         # Eq. 1.6.1a in Solar Engineering of Thermal Processes, Photovoltaics and Wind 5th ed.
         # unit(23.45) = degree
-        dec =  23.45 * torch.sin(
+        dec = 23.45 * torch.sin(
             2 * np.pi * (284 + torch.Tensor(day_of_years)) / 365
         ).unsqueeze(-1).unsqueeze(-1)
 
@@ -807,7 +807,7 @@ class DatasetABC(ABC):
         # Latitude
         phi = torch.Tensor(grid.lat)
         phi_rad = np.radians(phi)
-        
+
         # Eq. 1.6.2 with beta=0 in Solar Engineering of Thermal Processes, Photovoltaics and Wind 5th ed.
         cos_sza = torch.sin(phi_rad) * torch.sin(dec_rad) + torch.cos(
             phi_rad
