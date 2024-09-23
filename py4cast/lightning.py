@@ -17,7 +17,7 @@ from transformers import get_cosine_schedule_with_warmup
 
 from py4cast.datasets.base import DatasetInfo, ItemBatch, NamedTensor
 from py4cast.losses import ScaledLoss, WeightedLoss
-from py4cast.metrics import MetricPSDK, MetricPSDVar
+from py4cast.metrics import MetricACC, MetricPSDK, MetricPSDVar
 from py4cast.models import build_model_from_settings, get_model_kls_and_settings
 from py4cast.models.base import expand_to_batch
 from py4cast.observer import (
@@ -576,9 +576,10 @@ class AutoRegressiveLightning(pl.LightningModule):
         # Notify plotters & metrics
         for plotter in self.test_plotters:
             plotter.update(self, prediction=prediction, target=target)
-        self.acc_metric.update(prediction, target)
+
         self.psd_plot_metric.update(prediction, target, self.original_shape)
         self.rmse_psd_plot_metric.update(prediction, target, self.original_shape)
+        self.acc_metric.update(prediction, target)
 
     @cached_property
     def interior_2d(self) -> torch.Tensor:
