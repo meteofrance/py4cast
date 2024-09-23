@@ -234,11 +234,13 @@ class EPA(nn.Module):
         channel_attn_drop=0.1,
         spatial_attn_drop=0.1,
         proj_size: int = 64,
-        use_scaled_dot_product=True,
+        use_scaled_dot_product_CA=True,
+        use_scaled_dot_product_SA=True,
     ):
         super().__init__()
         self.num_heads = num_heads
-        self.use_scaled_dot_product = use_scaled_dot_product
+        self.use_scaled_dot_product_CA = use_scaled_dot_product_CA
+        self.use_scaled_dot_product_SA = use_scaled_dot_product_SA
 
         # qkvv are 4 linear layers (query_shared, key_shared, value_spatial, value_channel)
         self.qkvv = nn.Linear(hidden_size, hidden_size * 4, bias=qkv_bias)
@@ -247,13 +249,15 @@ class EPA(nn.Module):
         # keys and values from HWD-dimension to P-dimension
         self.EF = nn.Parameter(init_(torch.zeros(input_size, proj_size)))
 
-        if self.use_scaled_dot_product:
+        if self.use_scaled_dot_product_SA:
             # we need an extra set of weights for the scaled dot product
             self.FE = nn.Parameter(init_(torch.zeros(proj_size, input_size)))
         else:
             # the original unetr++ uses two parameters for scaling the dot products
-            self.temperature = nn.Parameter(torch.ones(num_heads, 1, 1))
             self.temperature2 = nn.Parameter(torch.ones(num_heads, 1, 1))
+
+        if not self.use_scaled_dot_product_CA:
+            self.temperature = nn.Parameter(torch.ones(num_heads, 1, 1))
 
         self.attn_drop = nn.Dropout(channel_attn_drop)
         self.attn_drop_2 = nn.Dropout(spatial_attn_drop)
@@ -269,6 +273,7 @@ class EPA(nn.Module):
         # Batch, Head, Dimensions, Features
         q_shared, k_shared, v_CA, v_SA = qkvv[0], qkvv[1], qkvv[2], qkvv[3]
 
+        # Batch, Head, Features, Dimensions
         q_shared = q_shared.transpose(-2, -1)
         k_shared = k_shared.transpose(-2, -1)
         v_CA = v_CA.transpose(-2, -1)
@@ -282,7 +287,7 @@ class EPA(nn.Module):
         q_shared = torch.nn.functional.normalize(q_shared, dim=-1)
         k_shared = torch.nn.functional.normalize(k_shared, dim=-1)
 
-        if self.use_scaled_dot_product:
+        if self.use_scaled_dot_product_CA:
             x_CA = scaled_dot_product_attention(
                 q_shared, k_shared, v_CA, dropout_p=self.attn_drop.p
             )
@@ -294,7 +299,7 @@ class EPA(nn.Module):
 
         x_CA = x_CA.permute(0, 3, 1, 2).reshape(B, N, C)
 
-        if self.use_scaled_dot_product:
+        if self.use_scaled_dot_product_SA:
             q_shared_projected = torch.einsum("bhdn,nk->bhdk", q_shared, self.EF)
             x_SA = scaled_dot_product_attention(
                 q_shared_projected.permute(0, 1, 3, 2),
