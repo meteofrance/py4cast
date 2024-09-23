@@ -8,10 +8,6 @@ import einops
 import matplotlib.pyplot as plt
 import torch
 from PIL import Image
-from pytorch_lightning.strategies import (  # Use for homogeneity in gathering operation for plot.
-    ParallelStrategy,
-    SingleDeviceStrategy,
-)
 
 if TYPE_CHECKING:
     from py4cast.lightning import AutoRegressiveLightning
@@ -19,50 +15,6 @@ if TYPE_CHECKING:
 from py4cast.datasets.base import NamedTensor
 from py4cast.losses import Py4CastLoss
 from py4cast.plots import plot_error_map, plot_prediction, plot_spatial_error
-
-
-def gather(
-    obj: "AutoRegressiveLightning", tensor_to_gather: torch.Tensor
-) -> torch.Tensor:
-    """
-    Send a tensor with the same dimension whether we are in Paralll or SingleDevice strategy.
-    Be careful if you are doing something else than plotting results.
-    """
-    if isinstance(obj.trainer.strategy, SingleDeviceStrategy):
-        loss_tensor = obj.trainer.strategy.all_gather(tensor_to_gather).cpu()
-    elif isinstance(obj.trainer.strategy, ParallelStrategy):
-        loss_tensor = (
-            obj.trainer.strategy.all_gather(tensor_to_gather).flatten(0, 1).cpu()
-        )
-    else:
-        raise TypeError(
-            f"Unknwon type {obj.trainer.strategy}. Know {SingleDeviceStrategy} and {ParallelStrategy}"
-        )
-    return loss_tensor
-
-
-def reduce(
-    obj: "AutoRegressiveLightning", tensor_to_reduce: torch.Tensor
-) -> torch.Tensor:
-    """
-    Send a tensor with the same dimension whether we are in Paralll or SingleDevice strategy.
-    Be careful if you are doing something else than plotting results.
-    """
-    if isinstance(obj.trainer.strategy, SingleDeviceStrategy):
-        loss_tensor = obj.trainer.strategy.reduce(
-            tensor_to_reduce, reduce_op="mean"
-        ).cpu()
-    elif isinstance(obj.trainer.strategy, ParallelStrategy):
-        loss_tensor = (
-            obj.trainer.strategy.reduce(tensor_to_reduce, reduce_op="mean")
-            .flatten(0, 1)
-            .cpu()
-        )
-    else:
-        raise TypeError(
-            f"Unknwon type {obj.trainer.strategy}. Know {SingleDeviceStrategy} and {ParallelStrategy}"
-        )
-    return loss_tensor
 
 
 class ErrorObserver(ABC):
@@ -353,7 +305,9 @@ class StateErrorPlot(ErrorObserver):
         """
         for name in self.metrics:
             self.losses[name].append(
-                reduce(obj, self.metrics[name](prediction, target).unsqueeze(0))
+                obj.trainer.strategy.reduce(
+                    self.metrics[name](prediction, target), reduce_op="mean"
+                )
             )
         if not self.initialized:
             self.shortnames = prediction.feature_names
@@ -422,7 +376,7 @@ class SpatialErrorPlot(ErrorObserver):
                 spatial_loss, "b t (x y) -> b t x y ", x=obj.grid_shape[0]
             )
         self.spatial_loss_maps.append(
-            reduce(obj, spatial_loss).unsqueeze(0)
+            obj.trainer.strategy.reduce(spatial_loss, reduce_op="mean")
         )  # (B, N_log, N_lat, N_lon)
 
     def on_step_end(self, obj: "AutoRegressiveLightning", label: str = "") -> None:
@@ -435,6 +389,7 @@ class SpatialErrorPlot(ErrorObserver):
             mean_spatial_loss = torch.mean(
                 spatial_loss_tensor, dim=0
             )  # (N_log, N_lat, N_lon)
+
             loss_map_figs = [
                 plot_spatial_error(
                     loss_map,
