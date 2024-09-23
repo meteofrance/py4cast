@@ -604,6 +604,7 @@ class AutoRegressiveLightning(pl.LightningModule):
         self.psd_plot_metric.compute()
         self.rmse_psd_plot_metric.compute()
         self.acc_metric.compute()
+        
         # Notify plotters that the test epoch end
         for plotter in self.test_plotters:
             plotter.on_step_end(self, label="Test")
