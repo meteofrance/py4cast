@@ -454,8 +454,6 @@ class AutoRegressiveLightning(pl.LightningModule):
         l1_loss.prepare(self, self.interior_mask, self.hparams["hparams"].dataset_info)
         metrics = {"mae": l1_loss}
         save_path = self.hparams["hparams"].save_path
-        # self.acc_metric = MetricACC(self.hparams["hparams"].dataset_info)
-
         self.valid_plotters = [
             StateErrorPlot(metrics, prefix="Validation"),
             PredictionTimestepPlot(
@@ -557,10 +555,7 @@ class AutoRegressiveLightning(pl.LightningModule):
             metrics[alias] = loss
 
         save_path = self.hparams["hparams"].save_path
-        max_pred_step = self.hparams["hparams"].num_pred_steps_val_test - 1
-        self.rmse_psd_plot_metric = MetricPSDVar(pred_step=max_pred_step)
-        self.psd_plot_metric = MetricPSDK(save_path, pred_step=max_pred_step)
-        # self.acc_metric = MetricACC(self.hparams["hparams"].dataset_info)
+
         self.test_plotters = [
             StateErrorPlot(metrics, save_path=save_path),
             SpatialErrorPlot(),
