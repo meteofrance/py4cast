@@ -721,13 +721,14 @@ class DatasetABC(ABC):
     def day_of_years(self, date: dt.datetime, terms: List[float]) -> np.array:
         """
         Compute the day of the year for the specified terms from the date.
+        First january is 1, not 0.
         """
         days = []
 
         for term in terms:
             date_tmp = date + dt.timedelta(hours=float(term))
             starting_year = dt.datetime(date_tmp.year, 1, 1)
-            days.append((date_tmp - starting_year).days)
+            days.append((date_tmp - starting_year).days +1)
 
         return np.asarray(days)
 
@@ -776,36 +777,37 @@ class DatasetABC(ABC):
         datetime_forcing = (datetime_forcing + 1) / 2  # Rescale to [0,1]
         return datetime_forcing
 
-    def generate_toa_radiation_forcing(self, grid, date, terms):
+    def generate_toa_radiation_forcing(self, grid, date_utc, terms):
         """
         Get the forcing term of the solar irradiation
         """
+        # UTC date, close to solar date, no need to convert
+        day_of_years = self.day_of_years(date_utc, terms)
+        
+        # Convert UTC hours into solar hours
+        hours_of_day = self.hours_of_day(date_utc, terms)
+        hours_lcl = torch.Tensor(hours_of_day).unsqueeze(-1).unsqueeze(-1)  + grid.lon / 15
 
-        day_of_years = self.day_of_years(date, terms)
-        hours_of_day = self.hours_of_day(date, terms)
+        # Hour angle (centered)
+        omega = 15 * (hours_lcl - 12)
+        omega_rad =  np.radians(omega)
 
         # Eq. 1.6.3 in Solar Engineering of Thermal Processes, Photovoltaics and Wind 5th ed.
         # Solar constant
         E0 = 1366
 
         # Eq. 1.6.1a in Solar Engineering of Thermal Processes, Photovoltaics and Wind 5th ed.
-        dec_rad = 23.45 * torch.sin(
+        # unit(23.45) = degree
+        dec =  23.45 * torch.sin(
             2 * np.pi * (284 + torch.Tensor(day_of_years)) / 365
         ).unsqueeze(-1).unsqueeze(-1)
 
+        dec_rad = np.radians(dec)
+
         # Latitude
         phi = torch.Tensor(grid.lat)
-        phi_rad = np.pi / 180 * phi
-
-        # Convert UTC hours into local hours
-        hours_lcl = torch.Tensor(hours_of_day).unsqueeze(-1).unsqueeze(-1) + (
-            torch.Tensor(grid.lon) / 15
-        )
-
-        # Hour angle (centered)
-        omega = 15 * (hours_lcl - 12)
-        omega_rad = np.pi / 180 * omega
-
+        phi_rad = np.radians(phi)
+        
         # Eq. 1.6.2 with beta=0 in Solar Engineering of Thermal Processes, Photovoltaics and Wind 5th ed.
         cos_sza = torch.sin(phi_rad) * torch.sin(dec_rad) + torch.cos(
             phi_rad

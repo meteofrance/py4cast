@@ -259,49 +259,6 @@ class Sample:
     def __repr__(self):
         return f"member : {self.member}, date {self.date}, terms {self.terms}"
 
-    # @property
-    # def day_of_years(self) -> np.array:
-    #     """
-    #     Day in the year.
-    #     For output terms only.
-    #     """
-    #     days = []
-
-    #     for term in self.output_terms:
-    #         date_tmp = self.date + dt.timedelta(hours=float(term))
-    #         starting_year = dt.datetime(date_tmp.year, 1, 1)
-    #         days.append((date_tmp - starting_year).days)
-
-    #     return np.asarray(days)
-
-    # @property
-    # def hours_of_day(self) -> np.array:
-    #     """
-    #     Hour of the day.
-    #     For output terms only. This is a float.
-    #     """
-    #     hours = []
-    #     for term in self.output_terms:
-    #         date_tmp = self.date + dt.timedelta(hours=float(term))
-    #         hours.append(date_tmp.hour + date_tmp.minute / 60)
-    #     return np.asarray(hours)
-
-    # @property
-    # def seconds_from_start_of_year(self) -> np.array:
-    #     """
-    #     Second from the start of the year.
-    #     For output terms only.
-    #     """
-    #     start_of_year = dt.datetime(self.date.year, 1, 1)
-    #     return np.asarray(
-    #         [
-    #             (
-    #                 self.date + dt.timedelta(hours=float(term)) - start_of_year
-    #             ).total_seconds()
-    #             for term in self.output_terms
-    #         ]
-    #     )
-
     def is_valid(self, param_list: List) -> bool:
         """
         Check that all the files necessary for this samples exists.

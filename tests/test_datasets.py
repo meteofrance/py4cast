@@ -6,6 +6,7 @@ import json
 
 import pytest
 import torch
+import numpy as np
 
 from py4cast.datasets.base import DatasetABC, Item, NamedTensor, collate_fn
 from py4cast.datasets.poesy import Grid as PoesyGrib
@@ -222,6 +223,9 @@ def test_item():
 
 
 class FakeDataset(DatasetABC):
+    """
+    Instanciate a fake dataset
+    """
     def __init__(self):
         pass
 
@@ -240,19 +244,23 @@ class FakeDataset(DatasetABC):
     def cache_dir(self):
         pass
 
-    def from_json(self, path_to_json):
-        with open(path_to_json, "r") as fp:
-            conf = json.load(fp)
+    def from_json(self):
+        pass
 
-        grid = PoesyGrib(**conf["grid"])
-        return grid
-
+class FakeGrid():
+    """
+    Instanciate a fake grid
+    """
+    def __init__(self, lat, lon):
+        self.lat = lat
+        self.lon = lon
 
 def test_date_forcing():
-
+    """
+    Testing the date forcing.
+    """
     fk_ds = FakeDataset()
     date = datetime.datetime(year=2023, month=12, day=31, hour=23)
-
     relativ_terms = [1, 2, 3]
 
     nb_terms = len(relativ_terms)
@@ -260,26 +268,50 @@ def test_date_forcing():
 
     forcing = fk_ds.get_year_hour_forcing(date, relativ_terms)
 
+    # Check the dimension of the output
     assert forcing.shape == torch.Size((nb_terms, nb_forcing))
+    # Check the result of the specific value : midnight of the new year 2024
     assert torch.allclose(forcing[0], torch.tensor([0.5, 1, 0.5, 1]))
-
-    return
 
 
 def test_solar_forcing():
+    """
+    Testing the solar forcing.
+    """
+    # Testing the specific value of the exercice 1.6.2.b of Solar Engineering of Thermal Processes, Photovoltaics and Wind 5th ed.
+    
+    # Input data of the exercice
+    lat = torch.tensor(43)
+    lon = torch.tensor(-89)
+    relativ_terms = [0]
+    # solar_date = datetime.datetime(year=2023, month=2, day=13, hour=9, minute = 30)
+    utc_date = datetime.datetime(year=2023, month=2, day=13, hour=15, minute = 26)
+    E0          = 1366
+
+    # Tolerance to imprecision
+    error_margin = 0.01
 
     fk_ds = FakeDataset()
+    grid = FakeGrid(lat, lon)
 
-    date = datetime.datetime(year=2023, month=6, day=21, hour=0)
-    relativ_terms = range(24 * 5)
-    path_to_json = "/home/mrmn/seznecc/repository/py4cast/config/datasets/poesy.json"
-    grid = fk_ds.from_json(path_to_json)
+    # Solution 
+    cos_solution = np.cos(np.radians(66.5))
+    solution    = E0*cos_solution
 
-    # forcing = fk_ds.generate_toa_radiation_forcing(grid, date, relativ_terms).sum((1,2,3))
+    forcing     = fk_ds.generate_toa_radiation_forcing(grid, utc_date, relativ_terms)
 
-    # import matplotlib.pyplot as plt
-    # x_values = range(len(forcing))
-    # plt.plot(x_values, forcing, marker='o')
-    # plt.savefig("test.png")
+    # Testing if result is far from solution
+    assert np.abs(forcing - solution) < error_margin
 
-    return
+    # Testing the output shape
+    lat             = torch.rand(16, 16)
+    lon             = torch.rand(16, 16)
+    grid            = FakeGrid(lat, lon)
+    utc_date        = datetime.datetime(year=2023, month=5, day=20, hour=13)
+    relativ_terms   = [1,2,3]
+
+    forcing = fk_ds.generate_toa_radiation_forcing(grid, utc_date, relativ_terms)
+
+    # Test the shape
+    assert forcing.shape == torch.Size((3, 16, 16, 1))
+
