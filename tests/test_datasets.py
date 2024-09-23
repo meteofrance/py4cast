@@ -282,7 +282,7 @@ def test_solar_forcing():
     """
     Testing the solar forcing.
     """
-    # Testing the specific value of the exercice 1.6.2.b of Solar Engineering of Thermal Processes, Photovoltaics and Wind 5th ed.
+    # Testing the specific value of the exercice 1.6.2.a of Solar Engineering of Thermal Processes, Photovoltaics and Wind 5th ed.
 
     # Input data of the exercice
     lat = torch.tensor(43)

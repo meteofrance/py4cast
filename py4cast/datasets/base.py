@@ -732,7 +732,7 @@ class DatasetABC(ABC):
 
         return np.asarray(days)
 
-    def hours_of_day(self, date, terms) -> np.array:
+    def hours_of_day(self, date: dt.datetime, terms: List[float]) -> np.array:
         """
         Compute the hour of the day for the specified terms from the date.
         """
@@ -742,7 +742,9 @@ class DatasetABC(ABC):
             hours.append(date_tmp.hour + date_tmp.minute / 60)
         return np.asarray(hours)
 
-    def seconds_from_start_of_year(self, date, terms) -> np.array:
+    def seconds_from_start_of_year(
+        self, date: dt.datetime, terms: List[float]
+    ) -> np.array:
         """
         Compute how many seconds have elapsed since the beginning of the year for the specified terms.
         """
@@ -754,7 +756,9 @@ class DatasetABC(ABC):
             ]
         )
 
-    def get_year_hour_forcing(self, date, terms):
+    def get_year_hour_forcing(
+        self, date: dt.datetime, terms: List[float]
+    ) -> torch.Tensor:
         """
         Get the forcing term dependent of the date and terms.
         """
@@ -777,7 +781,9 @@ class DatasetABC(ABC):
         datetime_forcing = (datetime_forcing + 1) / 2  # Rescale to [0,1]
         return datetime_forcing
 
-    def generate_toa_radiation_forcing(self, grid, date_utc, terms):
+    def generate_toa_radiation_forcing(
+        self, grid, date_utc: dt.datetime, terms: List[float]
+    ) -> torch.Tensor:
         """
         Get the forcing term of the solar irradiation
         """
