@@ -307,7 +307,7 @@ class StateErrorPlot(ErrorObserver):
             self.losses[name].append(
                 obj.trainer.strategy.reduce(
                     self.metrics[name](prediction, target), reduce_op="mean"
-                )
+                ).cpu()
             )
         if not self.initialized:
             self.shortnames = prediction.feature_names
@@ -376,7 +376,7 @@ class SpatialErrorPlot(ErrorObserver):
                 spatial_loss, "b t (x y) -> b t x y ", x=obj.grid_shape[0]
             )
         self.spatial_loss_maps.append(
-            obj.trainer.strategy.reduce(spatial_loss, reduce_op="mean")
+            obj.trainer.strategy.reduce(spatial_loss, reduce_op="mean").cpu()
         )  # (B, N_log, N_lat, N_lon)
 
     def on_step_end(self, obj: "AutoRegressiveLightning", label: str = "") -> None:
