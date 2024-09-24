@@ -419,7 +419,7 @@ class AutoRegressiveLightning(pl.LightningModule):
         tb = self.logger.experiment
         tb.add_scalar(f"mean_loss_epoch/{label}", avg_loss, self.current_epoch)
 
-    def training_step(self, batch: ItemBatch, batch_idx: int) -> torch.Tensor:
+    def training_step(self, batch: ItemBatch) -> torch.Tensor:
         """
         Train on single batch
         """

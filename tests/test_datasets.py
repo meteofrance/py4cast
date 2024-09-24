@@ -10,6 +10,10 @@ import torch
 
 from py4cast.datasets.base import DatasetABC, Item, NamedTensor, collate_fn
 from py4cast.datasets.poesy import Grid as PoesyGrib
+from py4cast.forcingutils.utils import (
+    generate_toa_radiation_forcing,
+    get_year_hour_forcing,
+)
 
 
 def test_named_tensor():
@@ -222,55 +226,17 @@ def test_item():
         item = Item(inputs=inputs, outputs=outputs, forcing=forcing)
 
 
-class FakeDataset(DatasetABC):
-    """
-    Instanciate a fake dataset
-    """
-
-    def __init__(self):
-        pass
-
-    def torch_dataloader(self):
-        pass
-
-    def dataset_info(self):
-        pass
-
-    def meshgrid(self):
-        pass
-
-    def geopotential_info(self):
-        pass
-
-    def cache_dir(self):
-        pass
-
-    def from_json(self):
-        pass
-
-
-class FakeGrid:
-    """
-    Instanciate a fake grid
-    """
-
-    def __init__(self, lat, lon):
-        self.lat = lat
-        self.lon = lon
-
-
 def test_date_forcing():
     """
     Testing the date forcing.
     """
-    fk_ds = FakeDataset()
     date = datetime.datetime(year=2023, month=12, day=31, hour=23)
     relativ_terms = [1, 2, 3]
 
     nb_terms = len(relativ_terms)
     nb_forcing = 4
 
-    forcing = fk_ds.get_year_hour_forcing(date, relativ_terms)
+    forcing = get_year_hour_forcing(date, relativ_terms)
 
     # Check the dimension of the output
     assert forcing.shape == torch.Size((nb_terms, nb_forcing))
@@ -295,13 +261,11 @@ def test_solar_forcing():
     # Tolerance to imprecision
     error_margin = 0.01
 
-    fk_ds = FakeDataset()
-
     # Solution
     cos_solution = np.cos(np.radians(66.5))
     solution = E0 * cos_solution
 
-    forcing = fk_ds.generate_toa_radiation_forcing(lat, lon, utc_date, relativ_terms)
+    forcing = generate_toa_radiation_forcing(lat, lon, utc_date, relativ_terms)
 
     # Testing if result is far from solution
     assert np.abs(forcing - solution) < error_margin
@@ -312,7 +276,7 @@ def test_solar_forcing():
     utc_date = datetime.datetime(year=2023, month=5, day=20, hour=13)
     relativ_terms = [1, 2, 3]
 
-    forcing = fk_ds.generate_toa_radiation_forcing(lat, lon, utc_date, relativ_terms)
+    forcing = generate_toa_radiation_forcing(lat, lon, utc_date, relativ_terms)
 
     # Test the shape
     assert forcing.shape == torch.Size((3, 16, 16, 1))
