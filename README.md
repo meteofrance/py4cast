@@ -85,6 +85,11 @@ This should be done by
 export PY4CAST_ROOTDIR="/my/dir/"
 ```
 
+On **ECMWF ATOS** you **MUST** export **PY4CAST_ROOTDIR** to make py4cast work:
+```bash
+export PY4CAST_ROOTDIR=$SCRATCH/py4cast
+```
+
 ### At Météo-France
 
 When working at Météo-France, you can use either runai + Docker or Conda/Micromamba to setup a working environment. On the AI Lab cluster we recommend using runai, Conda on our HPC.
@@ -171,11 +176,6 @@ Once your micromamba environment is setup, you should :
 A very simple training can be launch (on your current node)
 ```sh
 python bin/train.py  --dataset dummy --model halfunet --epochs 2
-```
-
-On **ECMWF ATOS** you **MUST** export the following env var to make py4cast experiment logging work:
-```bash
-export PY4CAST_ROOTDIR=$SCRATCH
 ```
 
 #### Example of script  to launch on gpu
