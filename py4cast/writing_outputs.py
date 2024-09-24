@@ -2,29 +2,35 @@ from py4cast.datasets.base import NamedTensor
 from cfgrib import xarray_to_grib as xtg
 import xarray as xr
 from copy import deepcopy
+import datetime as dt
+from typing import List, Tuple, Dict
 import numpy as np
-from pathlib import Path
-from typing import List, Tuple, Union, Dict
-
 
 def saveNamedTensorToGrib(
-    pred: NamedTensor, params: list, leadtimes: list, saving_settings: dict
+    pred: NamedTensor, params: list, leadtimes: list, date: dt.datetime, saving_settings: dict
 ) -> None:
     """
-    Write a named (pred) to grib files, using a prefilled grib file as template.
+    Write a named tensor (pred) to grib files, using a prefilled grib file as template.
     The pred data should already be on cpu.
 
     Args:
         pred (NamedTensor): the output tensor (pred)
         params (list): list of Param objects used to reference parameters description for writing grib
         leadtimes (list) : list of lead times, as a multiple of prediction steps by the size of a time step (in hours)
-        saving_settings (dict) : settings for the writing process
+        date (dt.datetime) : the date of the initial state
+        saving_settings (dict) : settings for the writing process, containing :
+            - a template grib path
+            - the saving directory
+            - the name format of the grib to be written (as fillable f-string with empty placeholders)
+            - the keywords to insert in the given name format. 
+            There should be N-2 keywords, where N is the number of placeholders in the name format.
+            The last placeholders are reserved for timestamp.
     """
     grib_keys, levels, names = get_grib_keys(pred, params)
 
     predicted_time_steps = len(leadtimes)
 
-    model_grib = xr.open_dataset(
+    model_ds = xr.open_dataset(
         saving_settings["template_grib"],
         backend_kwargs={
             "indexpath": "",
@@ -40,6 +46,9 @@ def saveNamedTensorToGrib(
     )
 
     for t_idx in range(predicted_time_steps):
+        ds_temp = model_ds.copy()
+        ds_temp["time"] = date
+        ds_temp["step"] = np.timedelta64(leadtimes[t_idx], "h")
         for feature_name in grib_keys.keys():
             name, level = (
                 grib_keys[feature_name]["name"],
@@ -60,15 +69,17 @@ def saveNamedTensorToGrib(
                 )
             )
             # TODO : filter loc key depending on the nature of the output
-            dims = model_grib[name].loc[{"isobaricInhpa": level}].dims
-            model_grib[name].loc[{"isobaricInhpa": level}] = (dims, data)
-
+            dims = ds_temp[name].loc[{"isobaricInhpa": level}].dims
+            ds_temp[name].loc[{"isobaricInhpa": level}] = (dims, data)
+            ds_temp[name] = ds_temp[name].assign_attrs(model_ds[name].attrs)
+            
         xtg.to_grib(
-            model_grib,
+            ds_temp,
             saving_settings["directory"]
             / saving_settings["output_fmt"].format(
-                *saving_settings["output_kwargs"], leadtimes[t_idx]
+                *saving_settings["output_kwargs"], date, leadtimes[t_idx]
             ),
+            'wb'
         )
 
 

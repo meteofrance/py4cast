@@ -1,5 +1,7 @@
 import argparse
 import json
+from pathlib import Path
+import os
 
 from pytorch_lightning import Trainer
 
@@ -7,6 +9,8 @@ from py4cast.datasets import get_datasets
 from py4cast.datasets.base import TorchDataloaderSettings
 from py4cast.lightning import AutoRegressiveLightning
 from py4cast.writing_outputs import saveNamedTensorToGrib
+
+CONFIG_DIR = Path(os.environ.get("PY4CAST_ROOTDIR","/scratch/shared/py4cast")) / "config/IO"
 
 if __name__ == "__main__":
 
@@ -24,8 +28,8 @@ if __name__ == "__main__":
     parser.add_argument(
         "--saving_config",
         type=str,
-        help="config path for file writing settings ",
-        default=1,
+        help="name of the config file for write settings (json)",
+        default='poesy_grib_settings.json',
     )
 
     args = parser.parse_args()
@@ -52,19 +56,16 @@ if __name__ == "__main__":
         config_override=config_override,
     )
 
-    # Transform in dataloader
+    # Transform into dataloader
 
     dl_settings = TorchDataloaderSettings(batch_size=1)
     infer_loader = infer_ds.torch_dataloader(dl_settings)
     trainer = Trainer(devices="auto")
     preds = trainer.predict(lightning_module, infer_loader)
-
-    params = infer_ds.params
-    leadtimes = infer_ds
-    output_fmt = "grid.ai_{}_{}_forecast_{}_ech{}.grib"
-    output_kwargs = [lightning_module.hparams["name"], args.dataset, args.date]
     
     # TODO : add json schema validation
-    with open(args.saving_config, 'r') as f:
+    with open(CONFIG_DIR / args.saving_config, 'r') as f:
         save_settings = json.load(f)
-    saveNamedTensorToGrib(preds, params, leadtimes, save_settings)
+    leadtimes = infer_ds.sample_list[0].hours_of_day
+    date = args.date if args.date is not None else infer_ds.sample_list[0].date
+    saveNamedTensorToGrib(preds, infer_ds.params, leadtimes, date, save_settings)
