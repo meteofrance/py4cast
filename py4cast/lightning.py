@@ -423,7 +423,7 @@ class AutoRegressiveLightning(pl.LightningModule):
         """
         Train on single batch
         """
-        
+
         prediction, target = self.common_step(batch)
         # Compute loss: mean over unrolled times and batch
         batch_loss = torch.mean(self.loss(prediction, target))

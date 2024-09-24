@@ -1,5 +1,6 @@
 import datetime as dt
 from typing import Dict, List, Literal, Tuple, Union
+
 import numpy as np
 import torch
 
@@ -18,6 +19,7 @@ def compute_day_of_years(date: dt.datetime, terms: List[float]) -> np.array:
 
     return np.asarray(days)
 
+
 def compute_hours_of_day(date: dt.datetime, terms: List[float]) -> np.array:
     """
     Compute the hour of the day for the specified terms from the date.
@@ -27,6 +29,7 @@ def compute_hours_of_day(date: dt.datetime, terms: List[float]) -> np.array:
         date_tmp = date + dt.timedelta(hours=float(term))
         hours.append(date_tmp.hour + date_tmp.minute / 60)
     return np.asarray(hours)
+
 
 def compute_seconds_from_start_of_year(
     date: dt.datetime, terms: List[float]
@@ -42,33 +45,33 @@ def compute_seconds_from_start_of_year(
         ]
     )
 
-def get_year_hour_forcing(
-        date: dt.datetime, terms: List[float]
-    ) -> torch.Tensor:
-        """
-        Get the forcing term dependent of the date and terms.
-        """
-        hours_of_day = compute_hours_of_day(date, terms)
-        seconds_from_start_of_year = compute_seconds_from_start_of_year(date, terms)
 
-        days_in_year = 366 if date.year % 4 == 0 else 365
-        seconds_in_year = days_in_year * 24 * 60 * 60
+def get_year_hour_forcing(date: dt.datetime, terms: List[float]) -> torch.Tensor:
+    """
+    Get the forcing term dependent of the date and terms.
+    """
+    hours_of_day = compute_hours_of_day(date, terms)
+    seconds_from_start_of_year = compute_seconds_from_start_of_year(date, terms)
 
-        hour_angle = (torch.Tensor(hours_of_day) / 12) * torch.pi  # (sample_len,)
-        year_angle = (
-            (torch.Tensor(seconds_from_start_of_year) / seconds_in_year) * 2 * torch.pi
-        )  # (sample_len,)
-        datetime_forcing = torch.stack(
-            (
-                torch.sin(hour_angle),
-                torch.cos(hour_angle),
-                torch.sin(year_angle),
-                torch.cos(year_angle),
-            ),
-            dim=1,
-        )  # (N_t, 4)
-        datetime_forcing = (datetime_forcing + 1) / 2  # Rescale to [0,1]
-        return datetime_forcing
+    days_in_year = 366 if date.year % 4 == 0 else 365
+    seconds_in_year = days_in_year * 24 * 60 * 60
+
+    hour_angle = (torch.Tensor(hours_of_day) / 12) * torch.pi  # (sample_len,)
+    year_angle = (
+        (torch.Tensor(seconds_from_start_of_year) / seconds_in_year) * 2 * torch.pi
+    )  # (sample_len,)
+    datetime_forcing = torch.stack(
+        (
+            torch.sin(hour_angle),
+            torch.cos(hour_angle),
+            torch.sin(year_angle),
+            torch.cos(year_angle),
+        ),
+        dim=1,
+    )  # (N_t, 4)
+    datetime_forcing = (datetime_forcing + 1) / 2  # Rescale to [0,1]
+    return datetime_forcing
+
 
 def generate_toa_radiation_forcing(
     lat: torch.Tensor, lon: torch.Tensor, date_utc: dt.datetime, terms: List[float]
@@ -81,9 +84,7 @@ def generate_toa_radiation_forcing(
     hours_of_day = compute_hours_of_day(date_utc, terms)
 
     # Hour angle, convert UTC hours into solar hours
-    hours_lcl = (
-        torch.Tensor(hours_of_day).unsqueeze(-1).unsqueeze(-1) + lon / 15
-    )
+    hours_lcl = torch.Tensor(hours_of_day).unsqueeze(-1).unsqueeze(-1) + lon / 15
     omega = 15 * (hours_lcl - 12)
     omega_rad = np.radians(omega)
 
@@ -104,9 +105,9 @@ def generate_toa_radiation_forcing(
     phi_rad = np.radians(phi)
 
     # Eq. 1.6.2 with beta=0 in Solar Engineering of Thermal Processes, Photovoltaics and Wind 5th ed.
-    cos_sza = torch.sin(phi_rad) * torch.sin(dec_rad) + torch.cos(
-        phi_rad
-    ) * torch.cos(dec_rad) * torch.cos(omega_rad)
+    cos_sza = torch.sin(phi_rad) * torch.sin(dec_rad) + torch.cos(phi_rad) * torch.cos(
+        dec_rad
+    ) * torch.cos(omega_rad)
 
     # 0 if the sun is after the sunset.
     toa_radiation = torch.fmax(torch.tensor(0), E0 * cos_sza).unsqueeze(-1)

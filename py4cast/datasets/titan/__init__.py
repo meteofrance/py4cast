@@ -35,8 +35,6 @@ except ImportError:
 
 from torch.utils.data import DataLoader, Dataset
 
-from py4cast.forcingutils.utils import get_year_hour_forcing, generate_toa_radiation_forcing 
-
 from py4cast.datasets.base import (
     DatasetABC,
     DatasetInfo,
@@ -51,6 +49,10 @@ from py4cast.datasets.titan.settings import (
     FORMATSTR,
     METADATA,
     SCRATCH_PATH,
+)
+from py4cast.forcingutils.utils import (
+    generate_toa_radiation_forcing,
+    get_year_hour_forcing,
 )
 from py4cast.plots import DomainInfo
 from py4cast.settings import CACHE_DIR
@@ -464,9 +466,7 @@ class Sample:
 
         time_forcing = NamedTensor(  # doy : day_of_year
             feature_names=["cos_hour", "sin_hour", "cos_doy", "sin_doy"],
-            tensor=get_year_hour_forcing(self.date_t0, self.terms).type(
-                torch.float32
-            ),
+            tensor=get_year_hour_forcing(self.date_t0, self.terms).type(torch.float32),
             names=["timestep", "features"],
         )
         solar_forcing = NamedTensor(

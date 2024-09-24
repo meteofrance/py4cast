@@ -24,9 +24,10 @@ from py4cast.datasets.base import (
     TorchDataloaderSettings,
     collate_fn,
 )
-
-from py4cast.forcingutils.utils import get_year_hour_forcing, generate_toa_radiation_forcing 
-
+from py4cast.forcingutils.utils import (
+    generate_toa_radiation_forcing,
+    get_year_hour_forcing,
+)
 from py4cast.plots import DomainInfo
 from py4cast.settings import CACHE_DIR
 
@@ -473,9 +474,9 @@ class PoesyDataset(DatasetABC, Dataset):
         sample = self.sample_list[index]
 
         # Datetime Forcing
-        datetime_forcing = get_year_hour_forcing(
-            sample.date, sample.output_terms
-        ).type(torch.float32)
+        datetime_forcing = get_year_hour_forcing(sample.date, sample.output_terms).type(
+            torch.float32
+        )
 
         # Solar forcing, dim : [num_pred_steps, Lat, Lon, feature = 1]
         solar_forcing = generate_toa_radiation_forcing(
