@@ -173,6 +173,10 @@ A very simple training can be launch (on your current node)
 python bin/train.py  --dataset dummy --model halfunet --epochs 2
 ```
 
+On **ECMWF ATOS** you **MUST** export the following env var to make py4cast experiment logging work:
+```bash
+export PY4CAST_ROOTDIR=$SCRATCH
+```
 
 #### Example of script  to launch on gpu
 
