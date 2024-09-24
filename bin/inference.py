@@ -8,9 +8,10 @@ from pytorch_lightning import Trainer
 from py4cast.datasets import get_datasets
 from py4cast.datasets.base import TorchDataloaderSettings
 from py4cast.lightning import AutoRegressiveLightning
+from py4cast.settings import ROOTDIR
 from py4cast.writing_outputs import saveNamedTensorToGrib
 
-CONFIG_DIR = Path(os.environ.get("PY4CAST_ROOTDIR","/scratch/shared/py4cast")) / "config/IO"
+default_config_root = Path(__file__).parents[1] / "config/IO/"
 
 if __name__ == "__main__":
 
@@ -40,7 +41,7 @@ if __name__ == "__main__":
 
     if args.date is not None:
         config_override = {
-            "periods": {"test": {"start": args.date, "end": args.date}},
+            "periods": {"test": {"start": args.date, "end": args.date, "step" : 2}},
             "num_inference_pred_steps": args.infer_steps,
         }
     else:
@@ -62,10 +63,11 @@ if __name__ == "__main__":
     infer_loader = infer_ds.torch_dataloader(dl_settings)
     trainer = Trainer(devices="auto")
     preds = trainer.predict(lightning_module, infer_loader)
-    
-    # TODO : add json schema validation
-    with open(CONFIG_DIR / args.saving_config, 'r') as f:
-        save_settings = json.load(f)
-    leadtimes = infer_ds.sample_list[0].hours_of_day
-    date = args.date if args.date is not None else infer_ds.sample_list[0].date
-    saveNamedTensorToGrib(preds, infer_ds.params, leadtimes, date, save_settings)
+
+    for sample, pred in zip(infer_loader, preds):
+        # TODO : add json schema validation
+        with open(default_config_root / args.saving_config, 'r') as f:
+            save_settings = json.load(f)
+        leadtimes = infer_ds.sample_list[0].hours_of_day
+        date = args.date if args.date is not None else sample.date
+        saveNamedTensorToGrib(pred, infer_ds.params, leadtimes, date, save_settings)

@@ -5,6 +5,7 @@ from copy import deepcopy
 import datetime as dt
 from typing import List, Tuple, Dict
 import numpy as np
+from py4cast.settings import ROOTDIR
 
 def saveNamedTensorToGrib(
     pred: NamedTensor, params: list, leadtimes: list, date: dt.datetime, saving_settings: dict
@@ -31,7 +32,7 @@ def saveNamedTensorToGrib(
     predicted_time_steps = len(leadtimes)
 
     model_ds = xr.open_dataset(
-        saving_settings["template_grib"],
+        ROOTDIR / saving_settings["template_grib"],
         backend_kwargs={
             "indexpath": "",
             "read_keys": [
@@ -44,7 +45,9 @@ def saveNamedTensorToGrib(
             "filter_by_keys": {"level": levels, "cfVarName": names},
         },
     )
-
+    
+    print(model_ds)
+    
     for t_idx in range(predicted_time_steps):
         ds_temp = model_ds.copy()
         ds_temp["time"] = date
@@ -85,7 +88,7 @@ def saveNamedTensorToGrib(
 
 def get_grib_keys(
     pred: NamedTensor, params: list
-) -> Tuple[Dict[str : Dict[str:str]], List[float], List[str]]:
+) -> Tuple[Dict, List, List]:
 
     """Match feature names of the pred named tensor to grid-readable levels and parameter names.
     Will throw warnings if feature names are found that do not match any parameter : these features will then not be saved.
@@ -106,15 +109,18 @@ def get_grib_keys(
     names = []
     unmatched_feature_names = set(pred.feature_names)
     for param in params:
-        trial_names = param.parameter_short_names
-        for ftname in trial_names:
+        print(param)
+        trial_names = param.parameter_short_name
+        for ft_idx, ftname in enumerate(trial_names):
+            print(ftname)
             if ftname in pred_feature_names:
-                grib_keys[ftname] = {"level": param.level, "name": param.grib_name}
-                unmatched_feature_names.pop(ftname)
-                if param.level not in levels:
-                    levels.append(param.level)
-                if param.grib_name not in names:
-                    names.append(param.grib_name)
+                level, name = param.levels[ft_idx], param.name
+                grib_keys[ftname] = {"level": level, "name": name}
+                unmatched_feature_names.remove(ftname)
+                if level not in levels:
+                    levels.append(level)
+                if name not in names:
+                    names.append(name)
     if len(unmatched_feature_names) != 0:
         raise UserWarning(
             f"There where unmatched features in pred tensor : {unmatched_feature_names}"
