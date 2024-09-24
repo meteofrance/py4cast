@@ -296,13 +296,12 @@ def test_solar_forcing():
     error_margin = 0.01
 
     fk_ds = FakeDataset()
-    grid = FakeGrid(lat, lon)
 
     # Solution
     cos_solution = np.cos(np.radians(66.5))
     solution = E0 * cos_solution
 
-    forcing = fk_ds.generate_toa_radiation_forcing(grid, utc_date, relativ_terms)
+    forcing = fk_ds.generate_toa_radiation_forcing(lat, lon, utc_date, relativ_terms)
 
     # Testing if result is far from solution
     assert np.abs(forcing - solution) < error_margin
@@ -310,11 +309,10 @@ def test_solar_forcing():
     # Testing the output shape
     lat = torch.rand(16, 16)
     lon = torch.rand(16, 16)
-    grid = FakeGrid(lat, lon)
     utc_date = datetime.datetime(year=2023, month=5, day=20, hour=13)
     relativ_terms = [1, 2, 3]
 
-    forcing = fk_ds.generate_toa_radiation_forcing(grid, utc_date, relativ_terms)
+    forcing = fk_ds.generate_toa_radiation_forcing(lat, lon, utc_date, relativ_terms)
 
     # Test the shape
     assert forcing.shape == torch.Size((3, 16, 16, 1))

@@ -35,6 +35,8 @@ except ImportError:
 
 from torch.utils.data import DataLoader, Dataset
 
+from py4cast.forcingutils.utils import get_year_hour_forcing, generate_toa_radiation_forcing 
+
 from py4cast.datasets.base import (
     DatasetABC,
     DatasetInfo,
@@ -421,8 +423,8 @@ class Sample:
             arr = (arr - means) / std
         return torch.from_numpy(arr)
 
-    def load(self, lforcings, no_standardize: bool = False) -> Item:
-        linputs, loutputs = [], []
+    def load(self, no_standardize: bool = False) -> Item:
+        linputs, loutputs, lforcings = [], [], []
 
         # Reading parameters from files
         for param in self.params:
@@ -459,6 +461,23 @@ class Sample:
                     **deepcopy(state_kwargs),
                 )
                 linputs.append(tmp_state)
+
+        time_forcing = NamedTensor(  # doy : day_of_year
+            feature_names=["cos_hour", "sin_hour", "cos_doy", "sin_doy"],
+            tensor=get_year_hour_forcing(self.date_t0, self.terms).type(
+                torch.float32
+            ),
+            names=["timestep", "features"],
+        )
+        solar_forcing = NamedTensor(
+            feature_names=["toa_radiation"],
+            tensor=generate_toa_radiation_forcing(
+                self.grid.lat, self.grid.lon, self.date_t0, self.terms
+            ).type(torch.float32),
+            names=["timestep", "lat", "lon", "features"],
+        )
+        lforcings.append(time_forcing)
+        lforcings.append(solar_forcing)
 
         for forcing in lforcings:
             forcing.unsqueeze_and_expand_from_(linputs[0])
@@ -658,26 +677,7 @@ class TitanDataset(DatasetABC, Dataset):
 
         # TODO: build a single NamedTensor with all the inputs and outputs in one shot.
         sample = self.sample_list[index]
-
-        lforcings = []
-        time_forcing = NamedTensor(  # doy : day_of_year
-            feature_names=["cos_hour", "sin_hour", "cos_doy", "sin_doy"],
-            tensor=self.get_year_hour_forcing(sample.date_t0, sample.terms).type(
-                torch.float32
-            ),
-            names=["timestep", "features"],
-        )
-        solar_forcing = NamedTensor(
-            feature_names=["toa_radiation"],
-            tensor=self.generate_toa_radiation_forcing(
-                self.grid, sample.date_t0, sample.terms
-            ).type(torch.float32),
-            names=["timestep", "lat", "lon", "features"],
-        )
-        lforcings.append(time_forcing)
-        lforcings.append(solar_forcing)
-
-        item = sample.load(lforcings)
+        item = sample.load()
         return item
 
     @classmethod

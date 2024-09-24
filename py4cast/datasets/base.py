@@ -23,9 +23,6 @@ from tqdm import tqdm
 from py4cast.plots import DomainInfo
 from py4cast.utils import RegisterFieldsMixin, torch_save
 
-# Assuming no leap years in dataset (2024 is next)
-SECONDS_IN_YEAR = 365 * 24 * 60 * 60
-
 
 @dataclass(slots=True)
 class TensorWrapper:
@@ -717,112 +714,6 @@ class DatasetABC(ABC):
         more static data.
         """
         return []
-
-    def day_of_years(self, date: dt.datetime, terms: List[float]) -> np.array:
-        """
-        Compute the day of the year for the specified terms from the date.
-        First january is 1, not 0.
-        """
-        days = []
-
-        for term in terms:
-            date_tmp = date + dt.timedelta(hours=float(term))
-            starting_year = dt.datetime(date_tmp.year, 1, 1)
-            days.append((date_tmp - starting_year).days + 1)
-
-        return np.asarray(days)
-
-    def hours_of_day(self, date: dt.datetime, terms: List[float]) -> np.array:
-        """
-        Compute the hour of the day for the specified terms from the date.
-        """
-        hours = []
-        for term in terms:
-            date_tmp = date + dt.timedelta(hours=float(term))
-            hours.append(date_tmp.hour + date_tmp.minute / 60)
-        return np.asarray(hours)
-
-    def seconds_from_start_of_year(
-        self, date: dt.datetime, terms: List[float]
-    ) -> np.array:
-        """
-        Compute how many seconds have elapsed since the beginning of the year for the specified terms.
-        """
-        start_of_year = dt.datetime(date.year, 1, 1)
-        return np.asarray(
-            [
-                (date + dt.timedelta(hours=float(term)) - start_of_year).total_seconds()
-                for term in terms
-            ]
-        )
-
-    def get_year_hour_forcing(
-        self, date: dt.datetime, terms: List[float]
-    ) -> torch.Tensor:
-        """
-        Get the forcing term dependent of the date and terms.
-        """
-        hours_of_day = self.hours_of_day(date, terms)
-        seconds_from_start_of_year = self.seconds_from_start_of_year(date, terms)
-
-        hour_angle = (torch.Tensor(hours_of_day) / 12) * torch.pi  # (sample_len,)
-        year_angle = (
-            (torch.Tensor(seconds_from_start_of_year) / SECONDS_IN_YEAR) * 2 * torch.pi
-        )  # (sample_len,)
-        datetime_forcing = torch.stack(
-            (
-                torch.sin(hour_angle),
-                torch.cos(hour_angle),
-                torch.sin(year_angle),
-                torch.cos(year_angle),
-            ),
-            dim=1,
-        )  # (N_t, 4)
-        datetime_forcing = (datetime_forcing + 1) / 2  # Rescale to [0,1]
-        return datetime_forcing
-
-    def generate_toa_radiation_forcing(
-        self, grid, date_utc: dt.datetime, terms: List[float]
-    ) -> torch.Tensor:
-        """
-        Get the forcing term of the solar irradiation
-        """
-
-        day_of_years = self.day_of_years(date_utc, terms)
-        hours_of_day = self.hours_of_day(date_utc, terms)
-
-        # Hour angle, convert UTC hours into solar hours
-        hours_lcl = (
-            torch.Tensor(hours_of_day).unsqueeze(-1).unsqueeze(-1) + grid.lon / 15
-        )
-        omega = 15 * (hours_lcl - 12)
-        omega_rad = np.radians(omega)
-
-        # Eq. 1.6.3 in Solar Engineering of Thermal Processes, Photovoltaics and Wind 5th ed.
-        # Solar constant
-        E0 = 1366
-
-        # Eq. 1.6.1a in Solar Engineering of Thermal Processes, Photovoltaics and Wind 5th ed.
-        # unit(23.45) = degree
-        dec = 23.45 * torch.sin(
-            2 * np.pi * (284 + torch.Tensor(day_of_years)) / 365
-        ).unsqueeze(-1).unsqueeze(-1)
-
-        dec_rad = np.radians(dec)
-
-        # Latitude
-        phi = torch.Tensor(grid.lat)
-        phi_rad = np.radians(phi)
-
-        # Eq. 1.6.2 with beta=0 in Solar Engineering of Thermal Processes, Photovoltaics and Wind 5th ed.
-        cos_sza = torch.sin(phi_rad) * torch.sin(dec_rad) + torch.cos(
-            phi_rad
-        ) * torch.cos(dec_rad) * torch.cos(omega_rad)
-
-        # 0 if the sun is after the sunset.
-        toa_radiation = torch.fmax(torch.tensor(0), E0 * cos_sza).unsqueeze(-1)
-
-        return toa_radiation
 
     @cached_property
     def grid_static_features(self):

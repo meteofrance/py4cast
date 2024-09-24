@@ -419,10 +419,11 @@ class AutoRegressiveLightning(pl.LightningModule):
         tb = self.logger.experiment
         tb.add_scalar(f"mean_loss_epoch/{label}", avg_loss, self.current_epoch)
 
-    def training_step(self, batch: ItemBatch) -> torch.Tensor:
+    def training_step(self, batch: ItemBatch, batch_idx: int) -> torch.Tensor:
         """
         Train on single batch
         """
+        
         prediction, target = self.common_step(batch)
         # Compute loss: mean over unrolled times and batch
         batch_loss = torch.mean(self.loss(prediction, target))
@@ -521,7 +522,6 @@ class AutoRegressiveLightning(pl.LightningModule):
         dict_metrics.update(self.psd_plot_metric.compute())
         dict_metrics.update(self.rmse_psd_plot_metric.compute())
         dict_metrics.update(self.acc_metric.compute())
-
         for name, elmnt in dict_metrics.items():
             if isinstance(elmnt, matplotlib.figure.Figure):
                 self.logger.experiment.add_figure(f"{name}", elmnt, self.current_epoch)
@@ -556,10 +556,7 @@ class AutoRegressiveLightning(pl.LightningModule):
             metrics[alias] = loss
 
         save_path = self.hparams["hparams"].save_path
-        max_pred_step = self.hparams["hparams"].num_pred_steps_val_test - 1
-        self.rmse_psd_plot_metric = MetricPSDVar(pred_step=max_pred_step)
-        self.psd_plot_metric = MetricPSDK(save_path, pred_step=max_pred_step)
-        self.acc_metric = MetricACC(self.hparams["hparams"].dataset_info)
+
         self.test_plotters = [
             StateErrorPlot(metrics, save_path=save_path),
             SpatialErrorPlot(),
@@ -580,9 +577,10 @@ class AutoRegressiveLightning(pl.LightningModule):
         # Notify plotters & metrics
         for plotter in self.test_plotters:
             plotter.update(self, prediction=prediction, target=target)
-        self.acc_metric.update(prediction, target)
+
         self.psd_plot_metric.update(prediction, target, self.original_shape)
         self.rmse_psd_plot_metric.update(prediction, target, self.original_shape)
+        self.acc_metric.update(prediction, target)
 
     @cached_property
     def interior_2d(self) -> torch.Tensor:

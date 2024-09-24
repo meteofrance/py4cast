@@ -22,6 +22,9 @@ from py4cast.datasets.base import (
     TorchDataloaderSettings,
     collate_fn,
 )
+
+from py4cast.forcingutils.utils import get_year_hour_forcing, generate_toa_radiation_forcing 
+
 from py4cast.plots import DomainInfo
 
 # torch.set_num_threads(8)
@@ -451,13 +454,13 @@ class SmeagolDataset(DatasetABC, Dataset):
         sample = self.sample_list[index]
 
         # Datetime Forcing
-        datetime_forcing = self.get_year_hour_forcing(
+        datetime_forcing = get_year_hour_forcing(
             sample.date, sample.output_terms
         ).type(torch.float32)
 
         # Solar forcing, dim : [num_pred_steps, Lat, Lon, feature = 1]
-        solar_forcing = self.generate_toa_radiation_forcing(
-            self.grid, sample.date, sample.output_terms
+        solar_forcing = generate_toa_radiation_forcing(
+            self.grid.lat, self.grid.lon, sample.date, sample.output_terms
         ).type(torch.float32)
 
         lforcings = [
