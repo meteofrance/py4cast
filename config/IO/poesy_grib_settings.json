@@ -1,5 +1,6 @@
 {
     "template_grib": "",
     "output_fmt" : "grid.emul_aro_ai_dataset{}_date{}_ech{}.grib",
-    "output_kwargs" : ["poesy"]
+    "output_kwargs" : ["poesy"],
+    "directory" : "/scratch/shared/py4cast_inference_test/"
 }
