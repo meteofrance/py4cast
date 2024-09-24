@@ -141,6 +141,11 @@ class TransformerBlock(nn.Module):
             num_heads: number of attention heads.
             dropout_rate: faction of the input units to drop.
             pos_embed: bool argument to determine if positional embedding is used.
+            proj_size: size of the projection space for Spatial Attention.
+            use_scaled_dot_product_CA : bool argument to determine if torch's scaled_dot_product_attenton
+            is used for Channel Attention.
+            use_scaled_dot_product_SA : bool argument to determine if torch's scaled_dot_product_attenton
+            is used for Spatial Attention.
 
         """
 
