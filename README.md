@@ -85,6 +85,13 @@ This should be done by
 export PY4CAST_ROOTDIR="/my/dir/"
 ```
 
+You **MUST** export **PY4CAST_ROOTDIR** to make py4cast work, you can use for instance the existing **SCRATCH** env var:
+```bash
+export PY4CAST_ROOTDIR=$SCRATCH/py4cast
+```
+
+If **PY4CAST_ROOTDIR** is not exported py4cast will default to use **/scratch/shared/py4cast** as its root directory, leading to Exceptions if this directory does not exist or if it is not writable.
+
 ### At Météo-France
 
 When working at Météo-France, you can use either runai + Docker or Conda/Micromamba to setup a working environment. On the AI Lab cluster we recommend using runai, Conda on our HPC.
@@ -172,7 +179,6 @@ A very simple training can be launch (on your current node)
 ```sh
 python bin/train.py  --dataset dummy --model halfunet --epochs 2
 ```
-
 
 #### Example of script  to launch on gpu
 
