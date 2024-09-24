@@ -85,7 +85,7 @@ This should be done by
 export PY4CAST_ROOTDIR="/my/dir/"
 ```
 
-On **ECMWF ATOS** you **MUST** export **PY4CAST_ROOTDIR** to make py4cast work, you can use for instance the existing **SCRATCH** env var:
+You **MUST** export **PY4CAST_ROOTDIR** to make py4cast work, you can use for instance the existing **SCRATCH** env var:
 ```bash
 export PY4CAST_ROOTDIR=$SCRATCH/py4cast
 ```
