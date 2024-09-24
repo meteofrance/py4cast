@@ -1,7 +1,4 @@
-from py4cast.datasets import get_datasets
-from py4cast.datasets.base import TorchDataloaderSettings, NamedTensor
-from py4cast.lightning import AutoRegressiveLightning
-import cfgrib as cf
+from py4cast.datasets.base import NamedTensor
 from cfgrib import xarray_to_grib as xtg
 import xarray as xr
 from copy import deepcopy
@@ -11,11 +8,7 @@ from typing import List, Tuple, Union, Dict
 
 
 def saveNamedTensorToGrib(
-    pred: NamedTensor,
-    params: list,
-    directory: Path,
-    template_grib: Path,
-    output_fmt: str,
+    pred: NamedTensor, params: list, leadtimes: list, saving_settings: dict
 ) -> None:
     """
     Write a named (pred) to grib files, using a prefilled grib file as template.
@@ -23,17 +16,16 @@ def saveNamedTensorToGrib(
 
     Args:
         pred (NamedTensor): the output tensor (pred)
-        params : list of Param objects used to reference parameters description for writing grib
-        directory (Path): the directory where outputs should be savec
-        template_grib (Path): the path to the template grib file
-        output_fmt (str): the name format to save the newly formed grib
+        params (list): list of Param objects used to reference parameters description for writing grib
+        leadtimes (list) : list of lead times, as a multiple of prediction steps by the size of a time step (in hours)
+        saving_settings (dict) : settings for the writing process
     """
     grib_keys, levels, names = get_grib_keys(pred, params)
 
-    predicted_time_steps = pred.tensor.shape[1]
+    predicted_time_steps = len(leadtimes)
 
     model_grib = xr.open_dataset(
-        template_grib,
+        saving_settings["template_grib"],
         backend_kwargs={
             "indexpath": "",
             "read_keys": [
@@ -46,6 +38,38 @@ def saveNamedTensorToGrib(
             "filter_by_keys": {"level": levels, "cfVarName": names},
         },
     )
+
+    for t_idx in range(predicted_time_steps):
+        for feature_name in grib_keys.keys():
+            name, level = (
+                grib_keys[feature_name]["name"],
+                grib_keys[feature_name]["level"],
+            )
+
+            data = (
+                (
+                    pred.tensor[t_idx, :, :, pred.feature_names_to_idx[feature_name]]
+                    .cpu()
+                    .numpy()
+                )
+                if pred.num_spatial_dims == 2
+                else (
+                    pred.tensor[t_idx, :, pred.feature_names_to_idx[feature_name]]
+                    .cpu()
+                    .numpy()
+                )
+            )
+            # TODO : filter loc key depending on the nature of the output
+            dims = model_grib[name].loc[{"isobaricInhpa": level}].dims
+            model_grib[name].loc[{"isobaricInhpa": level}] = (dims, data)
+
+        xtg.to_grib(
+            model_grib,
+            saving_settings["directory"]
+            / saving_settings["output_fmt"].format(
+                *saving_settings["output_kwargs"], leadtimes[t_idx]
+            ),
+        )
 
 
 def get_grib_keys(

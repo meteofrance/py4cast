@@ -1,10 +1,12 @@
 import argparse
+import json
 
 from pytorch_lightning import Trainer
 
 from py4cast.datasets import get_datasets
 from py4cast.datasets.base import TorchDataloaderSettings
 from py4cast.lightning import AutoRegressiveLightning
+from py4cast.writing_outputs import saveNamedTensorToGrib
 
 if __name__ == "__main__":
 
@@ -17,6 +19,13 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--infer_steps", type=int, help="Number of inference steps", default=1
+    )
+
+    parser.add_argument(
+        "--saving_config",
+        type=str,
+        help="config path for file writing settings ",
+        default=1,
     )
 
     args = parser.parse_args()
@@ -49,3 +58,13 @@ if __name__ == "__main__":
     infer_loader = infer_ds.torch_dataloader(dl_settings)
     trainer = Trainer(devices="auto")
     preds = trainer.predict(lightning_module, infer_loader)
+
+    params = infer_ds.params
+    leadtimes = infer_ds
+    output_fmt = "grid.ai_{}_{}_forecast_{}_ech{}.grib"
+    output_kwargs = [lightning_module.hparams["name"], args.dataset, args.date]
+    
+    # TODO : add json schema validation
+    with open(args.saving_config, 'r') as f:
+        save_settings = json.load(f)
+    saveNamedTensorToGrib(preds, params, leadtimes, save_settings)
