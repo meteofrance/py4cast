@@ -9,12 +9,10 @@ import pytest
 import torch
 
 from py4cast.datasets.base import DatasetABC, Item, NamedTensor, collate_fn
-from py4cast.datasets.poesy import Grid as PoesyGrib
-from py4cast.forcingutils.utils import (
+from py4cast.forcingutils import (
     generate_toa_radiation_forcing,
     get_year_hour_forcing,
 )
-
 
 def test_named_tensor():
     """

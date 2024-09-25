@@ -24,7 +24,7 @@ from py4cast.datasets.base import (
     TorchDataloaderSettings,
     collate_fn,
 )
-from py4cast.forcingutils.utils import (
+from py4cast.forcingutils import (
     generate_toa_radiation_forcing,
     get_year_hour_forcing,
 )

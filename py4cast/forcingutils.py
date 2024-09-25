@@ -1,9 +1,20 @@
 import datetime as dt
-from typing import Dict, List, Literal, Tuple, Union
+from typing import List
 
 import numpy as np
 import torch
 
+
+"""
+This module provides a colllection of utility functions to compute forcing
+Forcing functions:
+- get_year_hour_forcing()
+- generate_toa_radiation_forcing()
+Useful functions:
+ - compute_day_of_years()
+ - compute_hours_of_day()
+ - compute_seconds_from_start_of_year()
+"""
 
 def compute_day_of_years(date: dt.datetime, terms: List[float]) -> np.array:
     """
@@ -48,7 +59,7 @@ def compute_seconds_from_start_of_year(
 
 def get_year_hour_forcing(date: dt.datetime, terms: List[float]) -> torch.Tensor:
     """
-    Get the forcing term dependent of the date and terms.
+    Get the forcing term dependent of the date for each terms.
     """
     hours_of_day = compute_hours_of_day(date, terms)
     seconds_from_start_of_year = compute_seconds_from_start_of_year(date, terms)
@@ -77,7 +88,7 @@ def generate_toa_radiation_forcing(
     lat: torch.Tensor, lon: torch.Tensor, date_utc: dt.datetime, terms: List[float]
 ) -> torch.Tensor:
     """
-    Get the forcing term of the solar irradiation
+    Get the forcing term of the solar irradiation for each terms.
     """
 
     day_of_years = compute_day_of_years(date_utc, terms)

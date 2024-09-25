@@ -50,7 +50,7 @@ from py4cast.datasets.titan.settings import (
     METADATA,
     SCRATCH_PATH,
 )
-from py4cast.forcingutils.utils import (
+from py4cast.forcingutils import (
     generate_toa_radiation_forcing,
     get_year_hour_forcing,
 )

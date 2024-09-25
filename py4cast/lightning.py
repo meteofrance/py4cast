@@ -423,7 +423,6 @@ class AutoRegressiveLightning(pl.LightningModule):
         """
         Train on single batch
         """
-
         prediction, target = self.common_step(batch)
         # Compute loss: mean over unrolled times and batch
         batch_loss = torch.mean(self.loss(prediction, target))
@@ -557,6 +556,10 @@ class AutoRegressiveLightning(pl.LightningModule):
 
         save_path = self.hparams["hparams"].save_path
 
+        max_pred_step = self.hparams["hparams"].num_pred_steps_val_test - 1
+        self.rmse_psd_plot_metric = MetricPSDVar(pred_step=max_pred_step)
+        self.psd_plot_metric = MetricPSDK(save_path, pred_step=max_pred_step)
+        self.acc_metric = MetricACC(self.hparams["hparams"].dataset_info)
         self.test_plotters = [
             StateErrorPlot(metrics, save_path=save_path),
             SpatialErrorPlot(),
