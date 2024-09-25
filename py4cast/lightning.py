@@ -556,7 +556,6 @@ class AutoRegressiveLightning(pl.LightningModule):
 
         save_path = self.hparams["hparams"].save_path
 
-
         max_pred_step = self.hparams["hparams"].num_pred_steps_val_test - 1
         self.rmse_psd_plot_metric = MetricPSDVar(pred_step=max_pred_step)
         self.psd_plot_metric = MetricPSDK(save_path, pred_step=max_pred_step)
@@ -583,11 +582,9 @@ class AutoRegressiveLightning(pl.LightningModule):
         for plotter in self.test_plotters:
             plotter.update(self, prediction=prediction, target=target)
 
-
         self.acc_metric.update(prediction, target)
         self.psd_plot_metric.update(prediction, target, self.original_shape)
         self.rmse_psd_plot_metric.update(prediction, target, self.original_shape)
-
 
     @cached_property
     def interior_2d(self) -> torch.Tensor:
