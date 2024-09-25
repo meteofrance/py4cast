@@ -281,7 +281,7 @@ class Param:
             arr = self.fit_to_grid(arr)
             subdomain = self.grid.subdomain
             arr = arr[subdomain[0] : subdomain[1], subdomain[2] : subdomain[3]]
-            return arr[::-1]  # invert latitude  # TODO : WTF ? plots tensorboard ?
+            return arr[::-1]  # invert latitude
         else:
             return np.load(self.get_filepath(date, file_format))
 
@@ -485,7 +485,7 @@ class Sample:
             for j, param in enumerate(dict_params[level]):
                 pname = param.parameter_short_names[0]
                 tensor = ntensor[pname][index_tensor, :, :, 0]
-                arr = tensor.numpy()[::-1]  # invert latitude # TODO WTF tensorboard ?
+                arr = tensor.numpy()[::-1]  # invert latitude
                 vmin, vmax = self.stats[pname]["min"], self.stats[pname]["max"]
                 img = axs[i, j].imshow(
                     arr, vmin=vmin, vmax=vmax, extent=self.grid.grid_limits
@@ -811,10 +811,6 @@ class TitanDataset(DatasetABC, Dataset):
             conf, num_input_steps, num_pred_steps_train, num_pred_steps_val_test
         )
         train_ds.compute_time_step_stats()
-
-
-# TODO :
-# - readme commandes typer
 
 
 @app.command()
