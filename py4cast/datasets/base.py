@@ -306,7 +306,7 @@ class Item:
 
     inputs: NamedTensor
     forcing: NamedTensor
-    outputs: Union[None, NamedTensor] = None
+    outputs: NamedTensor
 
     def __post_init__(self):
         """

@@ -118,7 +118,6 @@ class MetricPSDK(Metric):
         Add the PSD of x to the variable sum_psd
         """
         # x should be (Batch, channels, Lon, Lat) to be an argument of power_spectral_density
-
         x = x.permute(0, -1, *range(2, x.dim() - 1), 1)
         channels = x.shape[1]
 
