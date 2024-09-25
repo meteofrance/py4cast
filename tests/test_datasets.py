@@ -2,13 +2,12 @@
 Unit tests for datasets and NamedTensor.
 """
 import datetime
-import json
 
 import numpy as np
 import pytest
 import torch
 
-from py4cast.datasets.base import DatasetABC, Item, NamedTensor, collate_fn
+from py4cast.datasets.base import Item, NamedTensor, collate_fn
 from py4cast.forcingutils import generate_toa_radiation_forcing, get_year_hour_forcing
 
 

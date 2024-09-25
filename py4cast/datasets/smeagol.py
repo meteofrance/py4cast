@@ -260,6 +260,34 @@ class Sample:
     def __repr__(self):
         return f"member : {self.member}, date {self.date}, terms {self.terms}"
 
+    @property
+    def hours_of_day(self) -> np.array:
+        """
+        Hour of the day.
+        For output terms only. This is a float.
+        """
+        hours = []
+        for term in self.output_terms:
+            date_tmp = self.date + dt.timedelta(hours=float(term))
+            hours.append(date_tmp.hour + date_tmp.minute / 60)
+        return np.asarray(hours)
+
+    @property
+    def seconds_from_start_of_year(self) -> np.array:
+        """
+        Second from the start of the year.
+        For output terms only
+        """
+        start_of_year = dt.datetime(self.date.year, 1, 1)
+        return np.asarray(
+            [
+                (
+                    self.date + dt.timedelta(hours=float(term)) - start_of_year
+                ).total_seconds()
+                for term in self.output_terms
+            ]
+        )
+
     def is_valid(self, param_list: List) -> bool:
         """
         Check that all the files necessary for this samples exists.
@@ -401,14 +429,36 @@ class SmeagolDataset(DatasetABC, Dataset):
             raise ValueError("No valid sample in the dataset.")
         return length
 
+    def get_year_hour_forcing(self, sample: Sample):
+        """
+        Get the forcing term dependent of the sample time
+        """
+        hour_angle = (
+            torch.Tensor(sample.hours_of_day) / 12
+        ) * torch.pi  # (sample_len,)
+        year_angle = (
+            (torch.Tensor(sample.seconds_from_start_of_year) / SECONDS_IN_YEAR)
+            * 2
+            * torch.pi
+        )  # (sample_len,)
+        datetime_forcing = torch.stack(
+            (
+                torch.sin(hour_angle),
+                torch.cos(hour_angle),
+                torch.sin(year_angle),
+                torch.cos(year_angle),
+            ),
+            dim=1,
+        )  # (N_t, 4)
+        datetime_forcing = (datetime_forcing + 1) / 2  # Rescale to [0,1]
+        return datetime_forcing
+
     @cached_property
     def forcing_dim(self) -> int:
         """
         Return the number of forcings.
         """
         res = 4  # For date
-        res += 1  # For solar forcing
-
         for param in self.params:
             if param.kind == "input":
                 res += param.number
@@ -449,18 +499,11 @@ class SmeagolDataset(DatasetABC, Dataset):
     def __getitem__(self, index):
 
         # TODO : here we should directly build a single NamedTensor per inputs, outputs and forcing attribute
+
         sample = self.sample_list[index]
 
         # Datetime Forcing
-        datetime_forcing = get_year_hour_forcing(sample.date, sample.output_terms).type(
-            torch.float32
-        )
-
-        # Solar forcing, dim : [num_pred_steps, Lat, Lon, feature = 1]
-        solar_forcing = generate_toa_radiation_forcing(
-            self.grid.lat, self.grid.lon, sample.date, sample.output_terms
-        ).type(torch.float32)
-
+        datetime_forcing = self.get_year_hour_forcing(sample).type(torch.float32)
         lforcings = [
             NamedTensor(
                 feature_names=[
@@ -478,15 +521,7 @@ class SmeagolDataset(DatasetABC, Dataset):
                 tensor=datetime_forcing[:, 2:],
                 names=["timestep", "features"],
             ),
-            NamedTensor(
-                feature_names=[
-                    "toa_radiation",
-                ],
-                tensor=solar_forcing,
-                names=["timestep", "lat", "lon", "features"],
-            ),
         ]
-
         linputs = []
         loutputs = []
 
@@ -530,11 +565,22 @@ class SmeagolDataset(DatasetABC, Dataset):
                     )
                     linputs.append(tmp_state)
 
+                # On lit un forcage. On le prend pour tous les pas de temps de prevision
+                # Un peu etrange de prendre le forcage a l'instant de la prevision et
+                # non pas l'instant initial ... mais bon.
                 elif param.kind == "input":
-                    raise ValueError(
-                        f"No forcing variables implemented, {param.name} is not supposed to be an input"
+                    tmp_in = ds[param.name].sel(step=sample.output_terms).values
+                    if len(tmp_in.shape) != 4:
+                        tmp_in = np.expand_dims(tmp_in, axis=1)
+                    tmp_in = np.transpose(tmp_in, axes=[0, 2, 3, 1])
+                    if self.settings.standardize:
+                        tmp_in = (tmp_in - means) / std
+                    tmp_state = NamedTensor(
+                        tensor=torch.from_numpy(tmp_in),
+                        feature_names=param.parameter_short_name,
+                        names=["timestep", "lat", "lon", "features"],
                     )
-
+                    lforcings.append(tmp_state)
                 # Read outputs.
                 if param.kind in ["ouput", "input_output"]:
                     tmp_out = ds[param.name].sel(step=sample.output_terms).values
