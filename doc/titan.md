@@ -8,7 +8,7 @@ Titan is a dataset made to train an AI NWP emulator on France.
 
 * 3 data sources: Analyses from AROME, ANTILOPE (rain data calibrated with rain gauges) and analyses and forecasts from ARPEGE (coupling model)
 * 1 hour timestep
-* Depth: 2 years
+* Depth: 3.5 years
 * Format GRIB2 (conversion to npy possible)
 
 3 days of data stored on [HuggingFace](https://huggingface.co/datasets/meteofrance/titan)
@@ -64,7 +64,7 @@ The parameters in each grib are described here:
 
 The Titan default configuration uses only a very small subdomain on britany and only one parameter 2m temperature, on the 3 day sample dataset (2023-01-01 to 2023-01-03). It should work for training out of the box. The `titan_full` configuration uses 2 years of data, more parameters and a bigger domain.
 
-1. Presave the dataset and save time during training : `python py4cast/datasets/titan/__init__.py rescale --path-config config/datasets/titan_full.json`
+1. Rescale and pre-save the dataset as NPY (saves time during training!) : `python py4cast/datasets/titan/__init__.py conv-npy-and-rescale --path-config config/datasets/titan_full.json`
 
 2. Prepare the dataset and precompute stats : `python py4cast/datasets/titan/__init__.py prepare --path-config config/datasets/titan_full.json`
 

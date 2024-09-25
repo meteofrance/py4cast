@@ -840,8 +840,9 @@ def process_sample_dataset(date_folder: str, params: List[Param]):
             try:
                 arr = param.load_data(date, "grib")
                 np.save(dest_file, arr)
-            except FileNotFoundError:
-                print(f"WARNING: Could not load data {param.name} {date}. Skipping.")
+            except Exception as e:
+                print(e)
+                print(f"WARNING: Could not load data {param.name} {param.level} {date}. Skipping.")
 
 
 @app.command()
