@@ -18,7 +18,6 @@ import typer
 import xarray as xr
 from joblib import Parallel, delayed
 from skimage.transform import resize
-
 from torch.utils.data import DataLoader, Dataset
 
 from py4cast.datasets.base import (
@@ -48,7 +47,6 @@ def get_weight_per_lvl(level: int, kind: Literal["hPa", "m"]):
         return 1 + (level) / (1000)
     else:
         return 2
-
 
 
 #############################################################
@@ -174,13 +172,13 @@ class Grid:
         return SCRATCH_PATH / f"dataset_{self.name}_{str_subdomain}"
 
 
-
 #############################################################
 #                            PARAM                          #
 #############################################################
 
+
 @lru_cache(maxsize=50)
-def read_grib(path_grib:Path) -> xr.Dataset:
+def read_grib(path_grib: Path) -> xr.Dataset:
     return xr.load_dataset(path_grib, engine="cfgrib", backend_kwargs={"indexpath": ""})
 
 
@@ -267,7 +265,7 @@ class Param:
         path_grib = self.get_filepath(date, "grib")
         ds = read_grib(path_grib)
         level_type = ds[self.grib_param].attrs["GRIB_typeOfLevel"]
-        if level_type != "isobaricInhPa":   # Only one level
+        if level_type != "isobaricInhPa":  # Only one level
             arr = ds[self.grib_param].values
         else:
             arr = ds[self.grib_param].sel(isobaricInhPa=self.level).values
@@ -285,9 +283,7 @@ class Param:
         else:
             return np.load(self.get_filepath(date, file_format))
 
-    def exist(
-        self, date: dt.datetime, file_format: Literal["npy", "grib"] = "grib"
-    ):
+    def exist(self, date: dt.datetime, file_format: Literal["npy", "grib"] = "grib"):
         filepath = self.get_filepath(date, file_format)
         return filepath.exists()
 
@@ -838,7 +834,9 @@ def process_sample_dataset(date_folder: str, params: List[Param]):
                 np.save(dest_file, arr)
             except Exception as e:
                 print(e)
-                print(f"WARNING: Could not load data {param.name} {param.level} {date}. Skipping.")
+                print(
+                    f"WARNING: Could not load data {param.name} {param.level} {date}. Skipping."
+                )
 
 
 @app.command()
