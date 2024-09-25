@@ -19,12 +19,12 @@
     "grid":{
         "name": "PAAROME_1S40",
         "border_size": 0,
-        "subdomain": [64, 640, 192, 960]
+        "subdomain": [100, 612, 240, 880]
     },
     "settings":{
         "step_duration": 1,
         "standardize": true,
-        "file_format": "grib"
+        "file_format": "dataset"
     },
     "params": {
         "aro_t2m": {

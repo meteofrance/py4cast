@@ -228,7 +228,6 @@ train_loader = train_ds.torch_dataloader(dl_settings)
 val_loader = val_ds.torch_dataloader(dl_settings)
 test_loader = test_ds.torch_dataloader(dl_settings)
 
-
 # Setup GPU usage + get len of loader for LR scheduler
 if torch.cuda.is_available():
     device_name = "cuda"

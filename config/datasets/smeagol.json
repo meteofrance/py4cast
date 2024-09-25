@@ -131,9 +131,7 @@
                 "CLSU.RAF60M.XFU":{"shortname":"u_raf"},
                 "CLSV.RAF60M.XFU":{"shortname":"v_raf"},
                 "SURFPRESSION":{"shortname":"psurf"},
-                "SURFACCPLUIE":{"shortname":"rain"},
-                "SOMMFLU.RAY.SOLA":{"shortname":"Rad_Flux", "kind":"input"},
-                "SOMMRAYT.SOLAIRE":{"shortname":"Rad","kind":"input"}
+                "SURFACCPLUIE":{"shortname":"rain"}
                 }
             }
         }

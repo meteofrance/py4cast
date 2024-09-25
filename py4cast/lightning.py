@@ -577,9 +577,9 @@ class AutoRegressiveLightning(pl.LightningModule):
         for plotter in self.test_plotters:
             plotter.update(self, prediction=prediction, target=target)
 
+        self.acc_metric.update(prediction, target)
         self.psd_plot_metric.update(prediction, target, self.original_shape)
         self.rmse_psd_plot_metric.update(prediction, target, self.original_shape)
-        self.acc_metric.update(prediction, target)
 
     @cached_property
     def interior_2d(self) -> torch.Tensor:
