@@ -2,7 +2,6 @@
 Base classes defining our software components
 and their interfaces
 """
-import datetime as dt
 import warnings
 from abc import ABC, abstractclassmethod, abstractmethod, abstractproperty
 from copy import deepcopy
