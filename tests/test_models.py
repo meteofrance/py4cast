@@ -13,7 +13,6 @@ import onnx
 import onnxruntime
 import torch
 
-
 from py4cast.models import get_model_kls_and_settings
 
 
@@ -174,4 +173,3 @@ def test_model_registry():
         "swinunetr",
         "unetrpp",
     }
-
