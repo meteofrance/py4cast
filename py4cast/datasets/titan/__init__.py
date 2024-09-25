@@ -50,10 +50,7 @@ from py4cast.datasets.titan.settings import (
     METADATA,
     SCRATCH_PATH,
 )
-from py4cast.forcingutils import (
-    generate_toa_radiation_forcing,
-    get_year_hour_forcing,
-)
+from py4cast.forcingutils import generate_toa_radiation_forcing, get_year_hour_forcing
 from py4cast.plots import DomainInfo
 from py4cast.settings import CACHE_DIR
 from py4cast.utils import merge_dicts

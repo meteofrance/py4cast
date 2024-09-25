@@ -4,7 +4,6 @@ from typing import List
 import numpy as np
 import torch
 
-
 """
 This module provides a colllection of utility functions to compute forcing
 Forcing functions:
@@ -15,6 +14,7 @@ Useful functions:
  - compute_hours_of_day()
  - compute_seconds_from_start_of_year()
 """
+
 
 def compute_day_of_years(date: dt.datetime, terms: List[float]) -> np.array:
     """
