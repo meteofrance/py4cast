@@ -1,11 +1,9 @@
 import datetime as dt
 import json
 import time
-import traceback
-import warnings
 from copy import deepcopy
 from dataclasses import dataclass, field
-from functools import cached_property
+from functools import cached_property, lru_cache
 from pathlib import Path
 from typing import Dict, List, Literal, Tuple, Union
 
@@ -20,19 +18,6 @@ import typer
 import xarray as xr
 from joblib import Parallel, delayed
 from skimage.transform import resize
-
-# Cyeccodes is a Cython module from Météo-France to read grib faster than xarray+cfgrib
-try:
-    from cyeccodes import nested_dd_iterator
-    from cyeccodes.eccodes import get_multi_messages_from_file
-
-    use_cyeccodes = True
-except ImportError:
-    warnings.warn(
-        f"Could not import Cyeccodes, switching to xarray+cfgrib. {traceback.format_exc()}"
-    )
-    use_cyeccodes = False
-
 from torch.utils.data import DataLoader, Dataset
 
 from py4cast.datasets.base import (
@@ -63,48 +48,6 @@ def get_weight_per_lvl(level: int, kind: Literal["hPa", "m"]):
         return 1 + (level) / (1000)
     else:
         return 2
-
-
-def read_grib_with_cyeccodes(
-    path_grib: Path, name=None, level=None
-) -> Dict[str, Dict[int, np.ndarray]]:
-    if name or level:
-        include_filters = {
-            k: v for k, v in [("cfVarName", name), ("level", [level])] if v is not None
-        }
-    else:
-        include_filters = None
-    _, results = get_multi_messages_from_file(
-        path_grib,
-        storage_keys=("cfVarName", "level"),
-        include_filters=include_filters,
-        metadata_keys=("missingValue", "Ni", "Nj"),
-        include_latlon=False,
-    )
-
-    grib_dict = {}
-    for metakey, result in nested_dd_iterator(results):
-        arr = result["values"]
-        grid = (result["metadata"]["Nj"], result["metadata"]["Ni"])
-        mv = result["metadata"]["missingValue"]
-        arr = np.reshape(arr, grid)
-        arr = np.where(arr == mv, np.nan, arr)
-        name, level = metakey.split("-")
-        level = int(level)
-        grib_dict[name] = {}
-        grib_dict[name][level] = arr
-    return grib_dict
-
-
-def read_grib_with_xarray(path_grib: Path) -> Dict[str, Dict[int, np.ndarray]]:
-    ds = xr.load_dataset(path_grib, engine="cfgrib", backend_kwargs={"indexpath": ""})
-    grib_dict = {}
-    for name in ds.data_vars:
-        level_name = ds[name].attrs["GRIB_typeOfLevel"]
-        level = int(ds[level_name].values)
-        grib_dict[name] = {}
-        grib_dict[name][level] = ds[name].values
-    return grib_dict
 
 
 #############################################################
@@ -224,10 +167,20 @@ class Grid:
     def projection(self):
         return cartopy.crs.PlateCarree()
 
+    @property
+    def data_path(self):
+        str_subdomain = "-".join([str(i) for i in self.subdomain])
+        return SCRATCH_PATH / f"dataset_{self.name}_{str_subdomain}"
+
 
 #############################################################
 #                            PARAM                          #
 #############################################################
+
+
+@lru_cache(maxsize=50)
+def read_grib(path_grib: Path) -> xr.Dataset:
+    return xr.load_dataset(path_grib, engine="cfgrib", backend_kwargs={"indexpath": ""})
 
 
 @dataclass(slots=True)
@@ -288,23 +241,19 @@ class Param:
         return [self.unit]
 
     def get_filepath(
-        self, date: dt.datetime, file_format: Literal["npy", "grib", "dataset"]
+        self, date: dt.datetime, file_format: Literal["npy", "grib"]
     ) -> Path:
         """
         Returns the path of the file containing the parameter data.
-        - in npy format, data is grouped per weather param.
         - in grib format, data is grouped by level type.
-        - in "dataset" format, data is saved as npy and each 2D array is saved as one
-        file to optimize IO during training."""
-        folder = SCRATCH_PATH / file_format / date.strftime(FORMATSTR)
-        filename = f"{self.name}_{self.level}{self.level_type.lower()}.npy"
-        if file_format == "npy":
-            return folder / filename
-        elif file_format == "grib":
+        - in npy format, data is saved as npy, rescaled to the wanted grid, and each
+        2D array is saved as one file to optimize IO during training."""
+        if file_format == "grib":
+            folder = SCRATCH_PATH / "grib" / date.strftime(FORMATSTR)
             return folder / self.grib_name
         else:
-            str_subdomain = "-".join([str(i) for i in self.grid.subdomain])
-            dataset_path = SCRATCH_PATH / f"dataset_{self.grid.name}_{str_subdomain}"
+            dataset_path = self.grid.data_path
+            filename = f"{self.name}_{self.level}{self.level_type.lower()}.npy"
             return dataset_path / date.strftime(FORMATSTR) / filename
 
     def fit_to_grid(self, arr: np.ndarray) -> np.ndarray:
@@ -313,40 +262,29 @@ class Param:
         anti_aliasing = self.grid.name == "PAAROME_1S40"  # True if downsampling
         return resize(arr, self.grid.full_size, anti_aliasing=anti_aliasing)
 
-    def load_data_npy(self, date: dt.datetime) -> np.ndarray:
-        arr = np.load(self.get_filepath(date, "npy"))
-        return arr
-
     def load_data_grib(self, date: dt.datetime) -> np.ndarray:
         path_grib = self.get_filepath(date, "grib")
-        if use_cyeccodes:
-            param_dict = read_grib_with_cyeccodes(
-                path_grib, name=self.grib_param, level=self.level
-            )[self.grib_param]
+        ds = read_grib(path_grib)
+        level_type = ds[self.grib_param].attrs["GRIB_typeOfLevel"]
+        if level_type != "isobaricInhPa":  # Only one level
+            arr = ds[self.grib_param].values
         else:
-            param_dict = read_grib_with_xarray(path_grib)[self.grib_param]
-        arr = param_dict[self.level]
+            arr = ds[self.grib_param].sel(isobaricInhPa=self.level).values
         return arr
 
     def load_data(
-        self, date: dt.datetime, file_format: Literal["npy", "grib", "dataset"] = "grib"
+        self, date: dt.datetime, file_format: Literal["npy", "grib"] = "grib"
     ):
-        if file_format in ["npy", "grib"]:
-            if file_format == "npy":
-                arr = self.load_data_npy(date)
-            else:
-                arr = self.load_data_grib(date)
+        if file_format == "grib":
+            arr = self.load_data_grib(date)
             arr = self.fit_to_grid(arr)
             subdomain = self.grid.subdomain
             arr = arr[subdomain[0] : subdomain[1], subdomain[2] : subdomain[3]]
-
-            return arr[::-1]  # invert latitude  # TODO : WTF ? plots tensorboard ?
+            return arr[::-1]  # invert latitude
         else:
             return np.load(self.get_filepath(date, file_format))
 
-    def exist(
-        self, date: dt.datetime, file_format: Literal["npy", "grib", "dataset"] = "grib"
-    ):
+    def exist(self, date: dt.datetime, file_format: Literal["npy", "grib"] = "grib"):
         filepath = self.get_filepath(date, file_format)
         return filepath.exists()
 
@@ -362,7 +300,7 @@ class TitanSettings:
     num_pred_steps: int  # Number of output timesteps
     step_duration: float  # duration in hour
     standardize: bool = True
-    file_format: Literal["npy", "grib", "dataset"] = "grib"
+    file_format: Literal["npy", "grib"] = "grib"
 
 
 #############################################################
@@ -516,7 +454,7 @@ class Sample:
             for j, param in enumerate(dict_params[level]):
                 pname = param.parameter_short_names[0]
                 tensor = ntensor[pname][index_tensor, :, :, 0]
-                arr = tensor.numpy()[::-1]  # invert latitude # TODO WTF tensorboard ?
+                arr = tensor.numpy()[::-1]  # invert latitude
                 vmin, vmax = self.stats[pname]["min"], self.stats[pname]["max"]
                 img = axs[i, j].imshow(
                     arr, vmin=vmin, vmax=vmax, extent=self.grid.grid_limits
@@ -671,8 +609,6 @@ class TitanDataset(DatasetABC, Dataset):
         return res
 
     def __getitem__(self, index: int) -> Item:
-
-        # TODO: build a single NamedTensor with all the inputs and outputs in one shot.
         sample = self.sample_list[index]
         item = sample.load()
         return item
@@ -847,11 +783,6 @@ class TitanDataset(DatasetABC, Dataset):
         train_ds.compute_time_step_stats()
 
 
-# TODO :
-# - adapt everywhere that 1 param = 1 lvl
-# - readme commandes typer
-
-
 @app.command()
 def prepare(
     path_config: Path = DEFAULT_CONFIG,
@@ -865,38 +796,35 @@ def prepare(
     )
 
 
-def save_sample_dataset(
-    date_folder: str, dest: Path, params: List[Param], fformat: str
-):
+def process_sample_dataset(date_folder: str, params: List[Param]):
     """Saves each 2D parameter data of the given date as one NPY file."""
     date = dt.datetime.strptime(date_folder, "%Y-%m-%d_%Hh%M")
-    (dest / date_folder).mkdir(exist_ok=True)
     for param in params:
-        filename = param.get_filepath(date, "npy").name
-        dest_file = dest / date_folder / filename
+        dest_file = param.get_filepath(date, "npy")
+        dest_file.parent.mkdir(exist_ok=True)
         if not dest_file.exists():
             try:
-                arr = param.load_data(date, fformat)
+                arr = param.load_data(date, "grib")
                 np.save(dest_file, arr)
-            except FileNotFoundError:
-                print(f"WARNING: Could not load data {param.name} {date}. Skipping.")
+            except Exception as e:
+                print(e)
+                print(
+                    f"WARNING: Could not load data {param.name} {param.level} {date}. Skipping."
+                )
 
 
 @app.command()
-def rescale(
-    path_config: Path = DEFAULT_CONFIG, num_workers: int = 30, src_format: str = "npy"
-):
-    """Prepares Titan files by rescaling and cropping fields in advance."""
+def conv_npy_and_rescale(path_config: Path = DEFAULT_CONFIG, num_workers: int = 1):
+    """Prepares Titan files by rescaling, cropping fields and saving as npy."""
     with open(path_config, "r") as fp:
         conf = json.load(fp)
-    str_subdomain = "-".join([str(i) for i in conf["grid"]["subdomain"]])
-    dest_path = SCRATCH_PATH / f"dataset_{conf['grid']['name']}_{str_subdomain}"
-    dest_path.mkdir(exist_ok=True)
-    src_path = SCRATCH_PATH / src_format
-    print(f"Preparing {dest_path.name}...")
-    print(f"Source data: {src_path}")
 
     grid = Grid(**conf["grid"])
+    grid.data_path.mkdir(exist_ok=True)
+    src_path = SCRATCH_PATH / "grib"
+    print(f"Preparing {grid.data_path.name}...")
+    print(f"Source data: {src_path}")
+
     param_list = TitanDataset.get_param_list(conf, grid)
 
     date_folders = [path.name for path in sorted(list(src_path.glob("*")))]
@@ -904,10 +832,10 @@ def rescale(
     # see https://stackoverflow.com/questions/56884020/
     # spacy-with-joblib-library-generates-pickle-picklingerror-could-not-pickle-the
     Parallel(n_jobs=num_workers, prefer="threads")(
-        delayed(save_sample_dataset)(fld, dest_path, param_list, src_format)
+        delayed(process_sample_dataset)(fld, param_list)
         for fld in tqdm.tqdm(date_folders)
     )
-    print(f"Dataset saved in {dest_path}")
+    print(f"Dataset saved in {grid.data_path.name}")
 
 
 @app.command()
@@ -917,8 +845,7 @@ def describe(path_config: Path = DEFAULT_CONFIG):
     train_ds.dataset_info.summary()
     print("Len dataset : ", len(train_ds))
     print("First Item description :")
-    data_iter = iter(train_ds.torch_dataloader())
-    print(next(data_iter))
+    print(train_ds[0])
 
 
 @app.command()
@@ -941,12 +868,12 @@ def speedtest(path_config: Path = DEFAULT_CONFIG, n_iter: int = 5):
     print("Dataset file_format: ", train_ds.settings.file_format)
     print("Speed test:")
     start_time = time.time()
-    for i in tqdm.trange(n_iter, desc="Loading samples"):
-        _ = next(data_iter)
+    for _ in tqdm.trange(n_iter, desc="Loading samples"):
+        next(data_iter)
     delta = time.time() - start_time
     print("Elapsed time : ", delta)
     speed = n_iter / delta
-    print(f"Loading speed: {round(speed, 3)} sample(s)/sec")
+    print(f"Loading speed: {round(speed, 3)} batch(s)/sec")
 
 
 if __name__ == "__main__":

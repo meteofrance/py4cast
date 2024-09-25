@@ -24,7 +24,7 @@
     "settings":{
         "step_duration": 1,
         "standardize": true,
-        "file_format": "dataset"
+        "file_format": "npy"
     },
     "params": {
         "aro_t2m": {
