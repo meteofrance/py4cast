@@ -44,7 +44,6 @@ if __name__ == "__main__":
     )
 
     # Transform in dataloader
-
     dl_settings = TorchDataloaderSettings(batch_size=1)
     infer_loader = infer_ds.torch_dataloader(dl_settings)
     trainer = Trainer(devices="auto")

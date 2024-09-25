@@ -18,7 +18,7 @@ from transformers import get_cosine_schedule_with_warmup
 from py4cast.datasets.base import DatasetInfo, ItemBatch, NamedTensor
 from py4cast.losses import ScaledLoss, WeightedLoss
 from py4cast.metrics import MetricACC, MetricPSDK, MetricPSDVar
-from py4cast.models import build_model_from_settings, get_model_kls_and_settings
+from py4cast.models import build_model_from_settings, get_model_kls_and_settings, check_features
 from py4cast.models.base import expand_to_batch
 from py4cast.observer import (
     PredictionEpochPlot,
@@ -44,6 +44,10 @@ class ArLightningHyperParam:
     dataset_name: str
     dataset_conf: Path
     batch_size: int
+
+    input_feature_names: List[str]
+    forcing_feature_names: List[str]
+    output_feature_names: List[str]
 
     model_conf: Union[Path, None] = None
     model_name: str = "halfunet"
@@ -423,6 +427,7 @@ class AutoRegressiveLightning(pl.LightningModule):
         """
         Train on single batch
         """
+
         prediction, target = self.common_step(batch)
         # Compute loss: mean over unrolled times and batch
         batch_loss = torch.mean(self.loss(prediction, target))
@@ -434,6 +439,20 @@ class AutoRegressiveLightning(pl.LightningModule):
             plotter.update(self, prediction=self.prediction, target=self.target)
 
         return batch_loss
+    
+    
+    
+    def predict_step(self, x: ItemBatch, batch_idx: int) -> NamedTensor:
+        """
+        This method adds some pre-processing logic and calls forward on a Itembatch.
+        """
+        # Compare data's features and model's features at the beginning of the inference
+        if batch_idx == 0:
+            check_features(self.hparams.inputs_feature_names, x.inputs.feature_names, "inputs")
+            check_features(self.hparams.forcing_feature_names, x.forcing.feature_names, "forcing")
+            check_features(self.hparams.outputs_feature_names, x.outputs.feature_names, "outputs")
+
+        return self.forward(x)
 
     def forward(self, x: ItemBatch) -> NamedTensor:
         """

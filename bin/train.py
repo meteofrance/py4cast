@@ -252,7 +252,6 @@ version = 0 if list_subdirs == [] else list_versions[-1] + 1
 subfolder = f"{run_name}_{version}"
 save_path = log_dir / folder / subfolder
 
-
 hp = ArLightningHyperParam(
     dataset_info=datasets[0].dataset_info,
     dataset_name=args.dataset,
@@ -264,6 +263,9 @@ hp = ArLightningHyperParam(
     num_pred_steps_train=args.num_pred_steps_train,
     num_pred_steps_val_test=args.num_pred_steps_val_test,
     num_inter_steps=args.num_inter_steps,
+    input_feature_names=train_ds[0].inputs.feature_names,
+    forcing_feature_names=train_ds[0].forcing.feature_names,
+    output_feature_names=train_ds[0].outputs.feature_names,
     lr=args.lr,
     loss=args.loss,
     training_strategy=args.strategy,
@@ -337,7 +339,6 @@ if args.load_model_ckpt:
     )
 else:
     lightning_module = AutoRegressiveLightning(hp)
-
 
 # Train model
 print("Starting training !")

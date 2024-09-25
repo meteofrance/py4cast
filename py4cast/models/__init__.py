@@ -1,7 +1,7 @@
 import importlib
 import pkgutil
 from pathlib import Path
-from typing import Any, Tuple, Union
+from typing import Any, Tuple, Union, List
 
 from py4cast.models.base import ModelABC
 
@@ -93,3 +93,16 @@ def build_model_from_settings(
         ),
         model_settings,
     )
+
+def check_features(model_features: List[str], data_features: List[str], kind: str):
+    """
+    Check if both list of features are the same.
+    Raise an error if not the same.
+    """
+    same_features = model_features == data_features
+    if not same_features:
+        raise ValueError(
+            f"Mismatch in {kind} feature: \
+                model expectation = {model_features} and batch = {data_features}"
+        )
+
