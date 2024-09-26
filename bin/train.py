@@ -202,7 +202,6 @@ parser.add_argument(
 )
 
 args, other = parser.parse_known_args()
-print(args.pin_memory)
 username = getpass.getuser()
 date = datetime.now()
 
