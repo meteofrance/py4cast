@@ -9,11 +9,6 @@ import warnings
 from dataclasses import dataclass
 from typing import Sequence, Tuple, Union
 
-# Set the environment variable PY4CAST_FORCE_FLASH_ATTN to True to use Tri dao's flash attention
-# Useful to check if we have tensors in bf16 or fp16 because it raises an error otherwise
-force_flash_attn = os.environ.get("PY4CAST_FORCE_FLASH_ATTN", False)
-if force_flash_attn:
-    from flash_attn import flash_attn_func
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -31,6 +26,12 @@ from torch.nn.functional import scaled_dot_product_attention
 
 from py4cast.models.base import ModelABC
 from py4cast.models.vision.utils import features_last_to_second, features_second_to_last
+
+# Set the environment variable PY4CAST_FORCE_FLASH_ATTN to True to use Tri dao's flash attention
+# Useful to check if we have tensors in bf16 or fp16 because it raises an error otherwise
+force_flash_attn = os.environ.get("PY4CAST_FORCE_FLASH_ATTN", False)
+if force_flash_attn:
+    from flash_attn import flash_attn_func
 
 
 def _trunc_normal_(tensor, mean, std, a, b):
