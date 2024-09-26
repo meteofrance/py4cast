@@ -193,8 +193,16 @@ parser.add_argument(
     default="run",
     help="Name of the run.",
 )
+parser.add_argument(
+    "--pin_memory",
+    "-pm",
+    action=BooleanOptionalAction,
+    default=False,
+    help="Use pin_memory in dataloader",
+)
 
 args, other = parser.parse_known_args()
+print(args.pin_memory)
 username = getpass.getuser()
 date = datetime.now()
 
@@ -222,6 +230,7 @@ dl_settings = TorchDataloaderSettings(
     batch_size=args.batch_size,
     num_workers=args.num_workers,
     prefetch_factor=args.prefetch_factor,
+    pin_memory=args.pin_memory,
 )
 train_ds, val_ds, test_ds = datasets
 train_loader = train_ds.torch_dataloader(dl_settings)

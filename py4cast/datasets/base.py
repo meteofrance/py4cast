@@ -293,6 +293,12 @@ class NamedTensor(TensorWrapper):
     def device(self) -> torch.device:
         return self.tensor.device
 
+    def pin_memory_(self):
+        """
+        'In place' operation to pin the underlying tensor to memory.
+        """
+        self.tensor = self.tensor.pin_memory()
+
 
 @dataclass(slots=True)
 class Item:
@@ -306,6 +312,16 @@ class Item:
     inputs: NamedTensor
     forcing: NamedTensor
     outputs: NamedTensor
+
+    def pin_memory(self):
+        """
+        Custom Item must implement this method to pin the underlying tensors to memory.
+        See https://pytorch.org/docs/stable/data.html#memory-pinning
+        """
+        self.inputs.pin_memory_()
+        self.forcing.pin_memory_()
+        self.outputs.pin_memory_()
+        return self
 
     def __post_init__(self):
         """
