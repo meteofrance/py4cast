@@ -10,6 +10,9 @@ Contributions are welcome (Issues, Pull Requests, ...).
 
 This project is licensed under the [APACHE 2.0 license.](LICENSE-2.0.txt)
 
+![Forecast humidity](doc/figs/2023061812_aro_r2_2m_crop.gif)
+![Forecast precip](doc/figs/2023061812_aro_tp_0m_crop.gif)
+
 # Acknowledgements
 
 This project started as a fork of neural-lam, a project by Joel Oskarsson, see [here](https://github.com/mllam/neural-lam). Many thanks to Joel for his work!
@@ -34,6 +37,7 @@ This project started as a fork of neural-lam, a project by Joel Oskarsson, see [
     5. [Training options](#training-options)
     6. [Experiment tracking](#tracking-experiment)
     7. [Inference](#inference)
+    8. [Making animated plots comparing multiple models](#making-animated-plots-comparing-multiple-models)
 4. [Contributing new features](#adding-features-and-contributing)
     1. [Adding a neural network architecture](doc/add_features_contribute.md#adding-a-new-neural-network-architecture-to-the-project)
     2. [Adding a dataset](doc/add_features_contribute.md#adding-a-new-dataset)
@@ -76,10 +80,17 @@ You may add them in your `.bashrc` or modify them just before launching an exper
 - `PY4CAST_SMEAGOL_PATH`: Specify where the smeagol dataset is stored. Only needed if you want to use the smeagol dataset.
 - `PY4CAST_TITAN_PATH`: Specify where the titan dataset is stored. Only needed if you want to use the titan dataset.
 
-This should be done by 
+This should be done by
 ```sh
 export PY4CAST_ROOTDIR="/my/dir/"
 ```
+
+You **MUST** export **PY4CAST_ROOTDIR** to make py4cast work, you can use for instance the existing **SCRATCH** env var:
+```bash
+export PY4CAST_ROOTDIR=$SCRATCH/py4cast
+```
+
+If **PY4CAST_ROOTDIR** is not exported py4cast will default to use **/scratch/shared/py4cast** as its root directory, leading to Exceptions if this directory does not exist or if it is not writable.
 
 ### At Météo-France
 
@@ -160,17 +171,16 @@ For the rest of the documentation, you must preprend each python command with `r
 
 ### Conda or Micromamba
 
-Once your micromamba environment is setup, you should : 
+Once your micromamba environment is setup, you should :
  - activate your environment `conda activate py4cast` or `micromamba activate nlam`
- - launch a training  
+ - launch a training
 
 A very simple training can be launch (on your current node)
 ```sh
 python bin/train.py  --dataset dummy --model halfunet --epochs 2
 ```
 
-
-#### Example of script  to launch on gpu 
+#### Example of script  to launch on gpu
 
 To do so, you will need to create a small `sh` script.
 
@@ -187,7 +197,7 @@ To do so, you will need to create a small `sh` script.
 
 source ~/.bashrc  # Be sure that all your environment variables are set
 conda activate py4cast # Activate your environment (installed by micromamba or conda)
-cd $PY4CAST_PATH # Go to Py4CAST (you can either add an environment variable or hard code it here). 
+cd $PY4CAST_PATH # Go to Py4CAST (you can either add an environment variable or hard code it here).
 # Launch your favorite command.
 srun python bin/train.py --model halfunet --dataset dummy --epochs 2
 ```
@@ -199,10 +209,10 @@ Then just launch this script using
 sbatch my_tiny_script.sh
 ```
 **NB** Note that you may have some trouble with SSL certificates (for cartopy). You may need to explicitely export the certificate as :
-```sh  
+```sh
  export SSL_CERT_FILE="/opt/softs/certificats/proxy1.pem"
 ```
-with the proxy path depending on your machine. 
+with the proxy path depending on your machine.
 
 ### Dataset configuration & simple training
 
@@ -324,11 +334,11 @@ options:
   -h, --help            show this help message and exit
   --model_path MODEL_PATH
                         Path to the model checkpoint
-  --date DATE   
+  --date DATE
                         Date of the sample to infer on. Format:YYYYMMDDHH
   --dataset DATASET
                         Name of the dataset config file to use
-  --infer_steps INFER_STEPS 
+  --infer_steps INFER_STEPS
                         Number of auto-regressive steps/prediction steps during the inference
 
 ```
@@ -338,6 +348,28 @@ A simple example of inference is shown below:
 ```bash
  runai exec_gpu python bin/inference.py --model_path /scratch/shared/py4cast/logs/camp0/poesy/halfunet/sezn_run_dev_9/last.ckpt --date 2021061621 --dataset poesy_infer --infer_steps 2
 
+```
+
+### Making animated plots comparing multiple models
+
+You can compare multiple trained models on specific case studies and visualize the forecasts on animated plots with the `bin/gif_comparison.py`. See example of GIF at the beginning of the README.
+
+Warnings:
+ - For now this script only works with models trained with Titan dataset.
+- If you want to use AROME as a model, you have to manually download the forecast before.
+
+```bash
+Usage: gif_comparison.py [-h] --ckpt CKPT --date DATE [--num_pred_steps NUM_PRED_STEPS]
+
+options:
+  -h, --help            show this help message and exit
+  --ckpt CKPT           Paths to the model checkpoint or AROME
+  --date DATE           Date for inference. Format YYYYMMDDHH.
+  --num_pred_steps NUM_PRED_STEPS
+                        Number of auto-regressive steps/prediction steps.
+
+example: python bin/gif_comparison.py --ckpt AROME --ckpt /.../logs/my_run/epoch=247.ckpt
+                                      --date 2023061812 --num_pred_steps 10
 ```
 
 ## Adding features and contributing
@@ -353,13 +385,13 @@ The figure below illustrates the principal components of the Py4cast architectur
 
 ![py4cast](doc/figs/py4cast_diag.jpg)
 
-- We define **interface contracts** between the components of the system using [Python ABCs](https://docs.python.org/3/library/abc.html). As long as the Python classes respect the interface contract, they can be used interchangeably in the system and the underlying implementation can be very different. For instance datasets with any underlying storage (grib2, netcdf, mmap+numpy, ...) and real-time or ahead of time concat and pre-processing could be used with the same neural network architectures and training strategies. 
+- We define **interface contracts** between the components of the system using [Python ABCs](https://docs.python.org/3/library/abc.html). As long as the Python classes respect the interface contract, they can be used interchangeably in the system and the underlying implementation can be very different. For instance datasets with any underlying storage (grib2, netcdf, mmap+numpy, ...) and real-time or ahead of time concat and pre-processing could be used with the same neural network architectures and training strategies.
 
 - **Adding a model, a dataset, a loss, a plot, a training strategy, ... should be as simple as creating a new Python class that complies with the interface contract**.
 
-- Dataset produce **Item**, collated into **ItemBatch**, both having **NamedTensor** attributes. 
+- Dataset produce **Item**, collated into **ItemBatch**, both having **NamedTensor** attributes.
 
-- Dataset produce tensors with the following dimensions: (batch, timestep, lat, lon, features). Models can flatten or reshape spatial dimension in the **prepare_batch** but the rest of the system expects **features** to be **always the last dimension of the tensors**.  
+- Dataset produce tensors with the following dimensions: (batch, timestep, lat, lon, features). Models can flatten or reshape spatial dimension in the **prepare_batch** but the rest of the system expects **features** to be **always the last dimension of the tensors**.
 
 - Neural network architectures are Python classes that inherit from both **ModelABC** and PyTorch's **nn.Module**. The later means it is quick to insert a third-party pure PyTorch model in the system (see for instance the code for Lucidrains' Segformer or a U-Net).
 

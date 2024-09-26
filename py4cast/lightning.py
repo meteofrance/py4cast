@@ -359,7 +359,7 @@ class AutoRegressiveLightning(pl.LightningModule):
 
             if scale_y:
                 step_diff_std, step_diff_mean = self._step_diffs(
-                    batch.inputs.feature_names
+                    self.output_feature_names
                     if inference
                     else batch.outputs.feature_names,
                     prev_states.device,
@@ -402,10 +402,15 @@ class AutoRegressiveLightning(pl.LightningModule):
         prediction = torch.stack(
             prediction_list, dim=1
         )  # Stacking is done on time step. (B, pred_steps, N_grid, d_f) or (B, pred_steps, N_lat, N_lon, d_f)
-        pred_out = NamedTensor.new_like(
-            prediction, batch.inputs if inference else batch.outputs
-        )
 
+        # In inference mode we use a "trained" module which MUST have the output feature names
+        # and the output dim names attributes set.
+        if inference:
+            pred_out = NamedTensor(
+                prediction, self.output_dim_names, self.output_feature_names
+            )
+        else:
+            pred_out = NamedTensor.new_like(prediction, batch.outputs)
         return pred_out, batch.outputs
 
     def on_train_start(self):
@@ -419,10 +424,19 @@ class AutoRegressiveLightning(pl.LightningModule):
         tb = self.logger.experiment
         tb.add_scalar(f"mean_loss_epoch/{label}", avg_loss, self.current_epoch)
 
-    def training_step(self, batch: ItemBatch) -> torch.Tensor:
+    def training_step(self, batch: ItemBatch, batch_idx: int) -> torch.Tensor:
         """
         Train on single batch
         """
+
+        # we save the feature names at the first batch
+        # to check at inference time if the feature names are the same
+        # also useful to build NamedTensor outputs with same feature and dim names
+        if batch_idx == 0:
+            self.input_feature_names = batch.inputs.feature_names
+            self.output_feature_names = batch.outputs.feature_names
+            self.output_dim_names = batch.outputs.names
+
         prediction, target = self.common_step(batch)
         # Compute loss: mean over unrolled times and batch
         batch_loss = torch.mean(self.loss(prediction, target))
@@ -434,6 +448,35 @@ class AutoRegressiveLightning(pl.LightningModule):
             plotter.update(self, prediction=self.prediction, target=self.target)
 
         return batch_loss
+
+    def on_save_checkpoint(self, checkpoint):
+        """
+        We store our feature and dim names in the checkpoint
+        """
+        checkpoint["input_feature_names"] = self.input_feature_names
+        checkpoint["output_feature_names"] = self.output_feature_names
+        checkpoint["output_dim_names"] = self.output_dim_names
+
+    def on_load_checkpoint(self, checkpoint):
+        """
+        We load our feature and dim names from the checkpoint
+        """
+        self.input_feature_names = checkpoint["input_feature_names"]
+        self.output_feature_names = checkpoint["output_feature_names"]
+        self.output_dim_names = checkpoint["output_dim_names"]
+
+    def predict_step(self, batch: ItemBatch, batch_idx: int) -> torch.Tensor:
+        """
+        Check if the feature names are the same as the one used during training
+        and make a prediction.
+        """
+        if batch_idx == 0:
+            if self.input_feature_names != batch.inputs.feature_names:
+                raise ValueError(
+                    f"Input Feature names mismatch between training and inference. "
+                    f"Training: {self.input_feature_names}, Inference: {batch.inputs.feature_names}"
+                )
+        return self.forward(batch)
 
     def forward(self, x: ItemBatch) -> NamedTensor:
         """
@@ -454,8 +497,6 @@ class AutoRegressiveLightning(pl.LightningModule):
         l1_loss.prepare(self, self.interior_mask, self.hparams["hparams"].dataset_info)
         metrics = {"mae": l1_loss}
         save_path = self.hparams["hparams"].save_path
-        self.acc_metric = MetricACC(self.hparams["hparams"].dataset_info)
-
         self.valid_plotters = [
             StateErrorPlot(metrics, prefix="Validation"),
             PredictionTimestepPlot(
@@ -557,10 +598,6 @@ class AutoRegressiveLightning(pl.LightningModule):
             metrics[alias] = loss
 
         save_path = self.hparams["hparams"].save_path
-        max_pred_step = self.hparams["hparams"].num_pred_steps_val_test - 1
-        self.rmse_psd_plot_metric = MetricPSDVar(pred_step=max_pred_step)
-        self.psd_plot_metric = MetricPSDK(save_path, pred_step=max_pred_step)
-        self.acc_metric = MetricACC(self.hparams["hparams"].dataset_info)
 
         self.test_plotters = [
             StateErrorPlot(metrics, save_path=save_path),
@@ -583,9 +620,9 @@ class AutoRegressiveLightning(pl.LightningModule):
         for plotter in self.test_plotters:
             plotter.update(self, prediction=prediction, target=target)
 
+        self.acc_metric.update(prediction, target)
         self.psd_plot_metric.update(prediction, target, self.original_shape)
         self.rmse_psd_plot_metric.update(prediction, target, self.original_shape)
-        self.acc_metric.update(prediction, target)
 
     @cached_property
     def interior_2d(self) -> torch.Tensor:

@@ -36,6 +36,12 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # Load checkpoint
+    if Path(args.model_path).is_dir():
+        # Find the first checkpoint in the directory and load it
+        for file in Path(args.model_path).iterdir():
+            if file.suffix == ".ckpt":
+                args.model_path = file
+                break
     lightning_module = AutoRegressiveLightning.load_from_checkpoint(args.model_path)
     hparams = lightning_module.hparams["hparams"]
 
@@ -57,13 +63,10 @@ if __name__ == "__main__":
         config_override=config_override,
     )
 
-    # Transform into dataloader
-    print(infer_ds.sample_list)
-
-    print(infer_ds.params)
+    # Transform in dataloader
     dl_settings = TorchDataloaderSettings(batch_size=1)
     infer_loader = infer_ds.torch_dataloader(dl_settings)
-    print(len(infer_loader))
+
     trainer = Trainer(devices="auto")
     preds = trainer.predict(lightning_module, infer_loader)
 
