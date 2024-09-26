@@ -4,10 +4,16 @@ Adapted from https://github.com/Amshaker/unetr_plus_plus
 """
 
 import math
+import os
 import warnings
 from dataclasses import dataclass
 from typing import Sequence, Tuple, Union
 
+# Set the environment variable PY4CAST_FORCE_FLASH_ATTN to True to use Tri dao's flash attention
+# Useful to check if we have tensors in bf16 or fp16 because it raises an error otherwise
+force_flash_attn = os.environ.get("PY4CAST_FORCE_FLASH_ATTN", False)
+if force_flash_attn:
+    from flash_attn import flash_attn_func
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -281,13 +287,17 @@ class EPA(nn.Module):
             zip((k_shared, v_SA), (self.EF, self.EF)),
         )
 
-        q_shared = torch.nn.functional.normalize(q_shared, dim=-1)
-        k_shared = torch.nn.functional.normalize(k_shared, dim=-1)
-
+        q_shared = torch.nn.functional.normalize(q_shared, dim=-1).type_as(q_shared)
+        k_shared = torch.nn.functional.normalize(k_shared, dim=-1).type_as(k_shared)
         if self.use_scaled_dot_product_CA:
-            x_CA = scaled_dot_product_attention(
-                q_shared, k_shared, v_CA, dropout_p=self.attn_drop.p
-            )
+            if force_flash_attn:
+                x_CA = flash_attn_func(
+                    q_shared, k_shared, v_CA, dropout_p=self.attn_drop.p
+                )
+            else:
+                x_CA = scaled_dot_product_attention(
+                    q_shared, k_shared, v_CA, dropout_p=self.attn_drop.p
+                )
         else:
             attn_CA = (q_shared @ k_shared.transpose(-2, -1)) * self.temperature
             attn_CA = attn_CA.softmax(dim=-1)

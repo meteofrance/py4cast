@@ -449,7 +449,10 @@ class Stats:
         return self.stats[shortname]
 
     def to_list(
-        self, aggregate: Literal["mean", "std", "min", "max"], shortnames: List[str]
+        self,
+        aggregate: Literal["mean", "std", "min", "max"],
+        shortnames: List[str],
+        dtype: torch.dtype = torch.float32,
     ) -> list:
         """
         Get a tensor with the stats inside.
@@ -465,7 +468,7 @@ class Stats:
         if len(shortnames) > 0:
             return torch.stack(
                 [self[name][aggregate] for name in shortnames], dim=0
-            ).type(torch.float32)
+            ).type(dtype)
         else:
             return []
 

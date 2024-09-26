@@ -63,6 +63,7 @@ class ArLightningHyperParam:
     len_train_loader: int = 1
     save_path: Path = None
     use_lr_scheduler: bool = False
+    precision: str = "bf16"
 
     def __post_init__(self):
         """
@@ -116,6 +117,15 @@ class AutoRegressiveLightning(pl.LightningModule):
     """
     Auto-regressive lightning module for predicting meteorological fields.
     """
+
+    str_to_dtype = {
+        "float32": torch.float32,
+        "32": torch.float32,
+        "float64": torch.float64,
+        "float16": torch.float16,
+        "16": torch.float16,
+        "bf16": torch.bfloat16,
+    }
 
     def __init__(self, hparams: ArLightningHyperParam, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -214,6 +224,39 @@ class AutoRegressiveLightning(pl.LightningModule):
         self.rmse_psd_plot_metric = MetricPSDVar(pred_step=max_pred_step)
         self.psd_plot_metric = MetricPSDK(save_path, pred_step=max_pred_step)
         self.acc_metric = MetricACC(self.hparams["hparams"].dataset_info)
+        self.cast_to(hparams.precision)
+
+    @property
+    def dtype(self):
+        """
+        Return the appropriate torch dtype for the desired precision in hparams.
+        """
+        return self.str_to_dtype[self.hparams["hparams"].precision]
+
+    def cast_to(self, dtype: Union[torch.dtype, str]):
+        """
+        Cast the model and the buffers to the desired dtype.
+        """
+
+        if isinstance(dtype, str):
+            dtype = self.str_to_dtype[dtype]
+
+        self.model.to(dtype)
+        for name, buffer in self.named_buffers():
+            setattr(self, name, buffer.to(dtype))
+
+    @rank_zero_only
+    def inspect_tensors(self):
+        """
+        Prints all tensor parameters and buffers
+        of the model with name, shape and dtype.
+        """
+        # trainable parameters
+        for name, param in self.named_parameters():
+            print(name, param.shape, param.dtype)
+        # buffers
+        for name, buffer in self.named_buffers():
+            print(name, buffer.shape, buffer.dtype)
 
     @rank_zero_only
     def log_hparams_tb(self):
@@ -282,12 +325,15 @@ class AutoRegressiveLightning(pl.LightningModule):
         """
         Get the mean and std of the differences between two consecutive states on the desired device.
         """
-        step_diff_std = self.diff_stats.to_list("std", feature_names).to(
-            device, non_blocking=True
+        step_diff_std = self.diff_stats.to_list(
+            "std", feature_names, dtype=self.dtype
+        ).to(
+            device,
+            non_blocking=True,
         )
-        step_diff_mean = self.diff_stats.to_list("mean", feature_names).to(
-            device, non_blocking=True
-        )
+        step_diff_mean = self.diff_stats.to_list(
+            "mean", feature_names, dtype=self.dtype
+        ).to(device, non_blocking=True)
         return step_diff_std, step_diff_mean
 
     def _strategy_params(self) -> Tuple[bool, bool, int]:
@@ -331,6 +377,9 @@ class AutoRegressiveLightning(pl.LightningModule):
 
         In inference mode, we assume batch.outputs is None and we disable output based border forcing.
         """
+        batch.inputs.type_(self.dtype)
+        batch.forcing.type_(self.dtype)
+
         force_border, scale_y, num_inter_steps = self._strategy_params()
         # Right now we postpone that we have a single input/output/forcing
 
@@ -402,6 +451,7 @@ class AutoRegressiveLightning(pl.LightningModule):
         prediction = torch.stack(
             prediction_list, dim=1
         )  # Stacking is done on time step. (B, pred_steps, N_grid, d_f) or (B, pred_steps, N_lat, N_lon, d_f)
+        prediction = prediction.type_as(batch.outputs.tensor)
         pred_out = NamedTensor.new_like(
             prediction, batch.inputs if inference else batch.outputs
         )
