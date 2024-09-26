@@ -64,7 +64,7 @@ class GhostModule(nn.Module):
         return self.relu(x)
 
 
-class HalfUnet(ModelABC, nn.Module):
+class _HalfUnet(ModelABC, nn.Module):
     settings_kls = HalfUnetSettings
     onnx_supported = True
     input_dims: Tuple[str, ...] = ("batch", "height", "width", "features")
@@ -155,7 +155,6 @@ class HalfUnet(ModelABC, nn.Module):
         self.activation = getattr(nn, settings.last_activation)()
 
     def forward(self, x):
-        x = features_last_to_second(x)
         enc1 = self.encoder1(x)
         enc2 = self.encoder2(self.pool1(enc1))
         enc3 = self.encoder3(self.pool2(enc2))
@@ -169,7 +168,7 @@ class HalfUnet(ModelABC, nn.Module):
         )
         dec = self.decoder(summed)
 
-        return features_second_to_last(self.activation(self.outconv(dec)))
+        return self.activation(self.outconv(dec))
 
     @staticmethod
     def _block(
@@ -244,6 +243,16 @@ class HalfUnet(ModelABC, nn.Module):
                     ]
                 )
             )
+
+
+class HalfUnet(_HalfUnet):
+    def __init__(sel, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def forward(self, x):
+        x = features_last_to_second(x)
+        y = super().forward(x)
+        return features_second_to_last(y)
 
 
 @dataclass_json
