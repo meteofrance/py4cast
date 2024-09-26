@@ -1,4 +1,5 @@
 import argparse
+from pathlib import Path
 
 from pytorch_lightning import Trainer
 
@@ -22,6 +23,12 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # Load checkpoint
+    if Path(args.model_path).is_dir():
+        # Find the first checkpoint in the directory and load it
+        for file in Path(args.model_path).iterdir():
+            if file.suffix == ".ckpt":
+                args.model_path = file
+                break
     lightning_module = AutoRegressiveLightning.load_from_checkpoint(args.model_path)
     hparams = lightning_module.hparams["hparams"]
 
