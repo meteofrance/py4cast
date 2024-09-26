@@ -312,15 +312,13 @@ class AutoRegressiveLightning(pl.LightningModule):
         """
         Get the mean and std of the differences between two consecutive states on the desired device.
         """
-        step_diff_std = self.diff_stats.to_list(
-            "std", feature_names, dtype=self.dtype
-        ).to(
+        step_diff_std = self.diff_stats.to_list("std", feature_names).to(
             device,
             non_blocking=True,
         )
-        step_diff_mean = self.diff_stats.to_list(
-            "mean", feature_names, dtype=self.dtype
-        ).to(device, non_blocking=True)
+        step_diff_mean = self.diff_stats.to_list("mean", feature_names).to(
+            device, non_blocking=True
+        )
         return step_diff_std, step_diff_mean
 
     def _strategy_params(self) -> Tuple[bool, bool, int]:
