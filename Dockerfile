@@ -1,4 +1,4 @@
-FROM pytorch/pytorch:2.1.2-cuda12.1-cudnn8-runtime
+FROM pytorch/pytorch:2.1.2-cuda12.1-cudnn8-devel
 
 ARG INJECT_MF_CERT
 
@@ -6,6 +6,8 @@ COPY mf.crt /usr/local/share/ca-certificates/mf.crt
 
 # The following two lines are necessary to deal with the MITM sniffing proxy we have internally.
 RUN ( test $INJECT_MF_CERT -eq 1 && update-ca-certificates ) || echo "MF certificate not injected"
+# set apt to non interactive
+ENV DEBIAN_FRONTEND=noninteractive
 ENV MY_APT='apt -o "Acquire::https::Verify-Peer=false" -o "Acquire::AllowInsecureRepositories=true" -o "Acquire::AllowDowngradeToInsecureRepositories=true" -o "Acquire::https::Verify-Host=false"'
 
 RUN $MY_APT update && $MY_APT install -y software-properties-common && add-apt-repository ppa:ubuntugis/ppa
@@ -24,6 +26,7 @@ RUN curl -O https://confluence.ecmwf.int/download/attachments/45757960/eccodes-$
 RUN pip install --upgrade pip
 COPY requirements.txt /root/requirements.txt
 RUN set -eux && pip install --default-timeout=100 -r /root/requirements.txt
+RUN pip install flash-attn --no-build-isolation
 
 ARG USERNAME
 ARG GROUPNAME
