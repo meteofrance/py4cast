@@ -40,7 +40,7 @@ jobs:
         coverage run -p bin/train.py --precision 32 --model halfunet --model_conf config/models/halfunet32.json --dataset dummy --epochs 1 --batch_size 1 --num_pred_steps_train 1 --limit_train_batches 1 --num_workers 1
         coverage run -p bin/train.py --precision 32 --model halfunet --model_conf config/models/halfunet32.json --dataset dummy --epochs 1 --batch_size 1 --num_pred_steps_train 1 --limit_train_batches 1 --num_workers 1 --strategy scaled_ar
         coverage run -p bin/inference.py --dataset dummy --model_path /home/runner/work/py4cast/py4cast/logs/camp0/dummy/halfunet/runn_run_0/
-        coverage run -p bin/train.py --precision 32 --model hilam --dataset dummy --epochs 1 --batch_size 1 --num_pred_steps_train 1 --limit_train_batches 1 --num_workers 1
+        coverage run -p bin/train.py --precision 32 --model hilam --dataset dummy --epochs 1 --batch_size 1 --num_pred_steps_train 1 --limit_train_batches 1 --num_workers 1 --pin_memory
         coverage run -p bin/train.py --precision 32 --model unetrpp --dataset dummy --epochs 1 --batch_size 1 --num_pred_steps_train 1 --limit_train_batches 1 --num_workers 1
         coverage combine
         coverage report  --ignore-errors --fail-under=60

@@ -683,6 +683,7 @@ class SmeagolDataset(DatasetABC, Dataset):
             shuffle=self.shuffle,
             prefetch_factor=tl_settings.prefetch_factor,
             collate_fn=collate_fn,
+            pin_memory=tl_settings.pin_memory,
         )
 
     @property
