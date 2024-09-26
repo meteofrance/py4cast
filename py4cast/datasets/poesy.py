@@ -185,7 +185,7 @@ class Param:
     @property
     def number(self) -> int:
         """
-        Get the number of parameters.
+        Get the number of levels for the given parameters.
         """
         return len(self.levels)
 
@@ -213,7 +213,6 @@ class Param:
         """
         Return the filename.
         """
-
         return SCRATCH_PATH / self.fnamer(date=date, shortname=self.shortname)
 
     def load_data(self, date: dt.datetime, term: List, member: int) -> np.array:
@@ -309,7 +308,6 @@ class Sample:
         Returns:
             Boolean:  Whether the sample exist or not
         """
-
         for param in param_list:
 
             if not param.exist(self.date):
@@ -398,11 +396,10 @@ class PoesyDataset(DatasetABC, Dataset):
 
         samples = []
         number = 0
-
+    
         for date in self.period.date_list:
             for member in self.settings.members:
                 for sample in range(0, sample_by_date):
-
                     input_terms = terms[
                         sample
                         * self.settings.num_total_steps : sample
@@ -428,6 +425,7 @@ class PoesyDataset(DatasetABC, Dataset):
 
                         samples.append(samp)
                         number += 1
+                        
         print("All samples are now defined")
 
         return samples

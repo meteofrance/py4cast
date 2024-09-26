@@ -58,9 +58,12 @@ if __name__ == "__main__":
     )
 
     # Transform into dataloader
+    print(infer_ds.sample_list)
 
+    print(infer_ds.params)
     dl_settings = TorchDataloaderSettings(batch_size=1)
     infer_loader = infer_ds.torch_dataloader(dl_settings)
+    print(len(infer_loader))
     trainer = Trainer(devices="auto")
     preds = trainer.predict(lightning_module, infer_loader)
 
