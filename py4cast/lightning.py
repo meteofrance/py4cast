@@ -349,6 +349,22 @@ class AutoRegressiveLightning(pl.LightningModule):
         self, batch: ItemBatch, inference: bool = False
     ) -> Tuple[NamedTensor, NamedTensor]:
         """
+        Handling autocast subtelty for mixed precision on GPU and CPU (only bf16 for the later).
+        """
+        if torch.cuda.is_available():
+            with torch.cuda.amp.autocast(dtype=self.dtype):
+                return self._common_step(batch, inference)
+        else:
+            if "bf16" in self.trainer.precision:
+                with torch.cpu.amp.autocast(dtype=self.dtype):
+                    return self._common_step(batch, inference)
+            else:
+                return self._common_step(batch, inference)
+
+    def _common_step(
+        self, batch: ItemBatch, inference: bool = False
+    ) -> Tuple[NamedTensor, NamedTensor]:
+        """
         Two Autoregressive strategies are implemented here for train, val, test and inference:
         - scaled_ar:
             * Boundary forcing with y_true/true_state
@@ -364,93 +380,91 @@ class AutoRegressiveLightning(pl.LightningModule):
 
         In inference mode, we assume batch.outputs is None and we disable output based border forcing.
         """
-        with torch.autocast(device_type="cuda", dtype=self.dtype):
+        force_border, scale_y, num_inter_steps = self._strategy_params()
+        # Right now we postpone that we have a single input/output/forcing
 
-            force_border, scale_y, num_inter_steps = self._strategy_params()
-            # Right now we postpone that we have a single input/output/forcing
+        self.original_shape = None
 
-            self.original_shape = None
+        if len(self.model.input_dims) == 3:
+            # Stack original shape to reshape later
+            self.original_shape = batch.inputs.tensor.shape
+            # Graph model, we flatten the batch spatial dims
+            batch.inputs.flatten_("ngrid", 2, 3)
 
-            if len(self.model.input_dims) == 3:
-                # Stack original shape to reshape later
-                self.original_shape = batch.inputs.tensor.shape
-                # Graph model, we flatten the batch spatial dims
-                batch.inputs.flatten_("ngrid", 2, 3)
+            if not inference:
+                batch.outputs.flatten_("ngrid", 2, 3)
 
-                if not inference:
-                    batch.outputs.flatten_("ngrid", 2, 3)
+            batch.forcing.flatten_("ngrid", 2, 3)
 
-                batch.forcing.flatten_("ngrid", 2, 3)
+        prev_states = batch.inputs.tensor
+        prediction_list = []
 
-            prev_states = batch.inputs.tensor
-            prediction_list = []
+        # Here we do the autoregressive prediction looping
+        # for the desired number of ar steps.
 
-            # Here we do the autoregressive prediction looping
-            # for the desired number of ar steps.
+        for i in range(batch.num_pred_steps):
+            if not inference:
+                border_state = batch.outputs.tensor[:, i]
 
-            for i in range(batch.num_pred_steps):
-                if not inference:
-                    border_state = batch.outputs.tensor[:, i]
+            if scale_y:
+                step_diff_std, step_diff_mean = self._step_diffs(
+                    self.output_feature_names
+                    if inference
+                    else batch.outputs.feature_names,
+                    prev_states.device,
+                )
 
+            # Intermediary steps for which we have no y_true data
+            # Should be greater or equal to 1 (otherwise nothing is done).
+            for k in range(num_inter_steps):
+                x = self._next_x(batch, prev_states, i)
+                # Graph (B, N_grid, d_f) or Conv (B, N_lat,N_lon d_f)
+                y = self.model(x)
+
+                # We update the latest of our prev_states with the network output
                 if scale_y:
-                    step_diff_std, step_diff_mean = self._step_diffs(
-                        self.output_feature_names
-                        if inference
-                        else batch.outputs.feature_names,
-                        prev_states.device,
+                    predicted_state = (
+                        prev_states[:, -1] + y * step_diff_std + step_diff_mean
                     )
+                else:
+                    predicted_state = prev_states[:, -1] + y
 
-                # Intermediary steps for which we have no y_true data
-                # Should be greater or equal to 1 (otherwise nothing is done).
-                for k in range(num_inter_steps):
-                    x = self._next_x(batch, prev_states, i)
-                    # Graph (B, N_grid, d_f) or Conv (B, N_lat,N_lon d_f)
-                    y = self.model(x)
+                # Overwrite border with true state
+                # Force it to true state for all intermediary step
+                if not inference and force_border:
+                    new_state = (
+                        self.border_mask * border_state
+                        + self.interior_mask * predicted_state
+                    )
+                else:
+                    new_state = predicted_state
 
-                    # We update the latest of our prev_states with the network output
-                    if scale_y:
-                        predicted_state = (
-                            prev_states[:, -1] + y * step_diff_std + step_diff_mean
-                        )
-                    else:
-                        predicted_state = prev_states[:, -1] + y
+                # Only update the prev_states if we are not at the last step
+                if i < batch.num_pred_steps - 1 or k < num_inter_steps - 1:
+                    # Update input states for next iteration: drop oldest, append new_state
+                    prev_states = torch.cat(
+                        [prev_states[:, 1:], new_state.unsqueeze(1)], dim=1
+                    )
+            # Append prediction to prediction list only "normal steps"
+            prediction_list.append(new_state)
 
-                    # Overwrite border with true state
-                    # Force it to true state for all intermediary step
-                    if not inference and force_border:
-                        new_state = (
-                            self.border_mask * border_state
-                            + self.interior_mask * predicted_state
-                        )
-                    else:
-                        new_state = predicted_state
+        prediction = torch.stack(
+            prediction_list, dim=1
+        )  # Stacking is done on time step. (B, pred_steps, N_grid, d_f) or (B, pred_steps, N_lat, N_lon, d_f)
 
-                    # Only update the prev_states if we are not at the last step
-                    if i < batch.num_pred_steps - 1 or k < num_inter_steps - 1:
-                        # Update input states for next iteration: drop oldest, append new_state
-                        prev_states = torch.cat(
-                            [prev_states[:, 1:], new_state.unsqueeze(1)], dim=1
-                        )
-                # Append prediction to prediction list only "normal steps"
-                prediction_list.append(new_state)
-
-            prediction = torch.stack(
-                prediction_list, dim=1
-            )  # Stacking is done on time step. (B, pred_steps, N_grid, d_f) or (B, pred_steps, N_lat, N_lon, d_f)
-
-            # In inference mode we use a "trained" module which MUST have the output feature names
-            # and the output dim names attributes set.
-            if inference:
-                pred_out = NamedTensor(
-                    prediction.type(self.output_dtype),
-                    self.output_dim_names,
-                    self.output_feature_names,
-                )
-            else:
-                pred_out = NamedTensor.new_like(
-                    prediction.type_as(batch.outputs.tensor), batch.outputs
-                )
-            return pred_out, batch.outputs
+        # In inference mode we use a "trained" module which MUST have the output feature names
+        # and the output dim names attributes set.
+        if inference:
+            pred_out = NamedTensor(
+                prediction.type(self.output_dtype),
+                self.output_dim_names,
+                self.output_feature_names,
+            )
+        else:
+            pred_out = NamedTensor.new_like(
+                prediction.type_as(batch.outputs.tensor), batch.outputs
+            )
+        return pred_out, batch.outputs
 
     def on_train_start(self):
         self.train_plotters = []
