@@ -451,7 +451,11 @@ class AutoRegressiveLightning(pl.LightningModule):
         prediction = torch.stack(
             prediction_list, dim=1
         )  # Stacking is done on time step. (B, pred_steps, N_grid, d_f) or (B, pred_steps, N_lat, N_lon, d_f)
-        prediction = prediction.type_as(batch.outputs.tensor)
+        if inference:
+            # for inference we assume for now that float32 is used
+            prediction = prediction.type(torch.float32)
+        else:
+            prediction = prediction.type_as(batch.outputs.tensor)
         pred_out = NamedTensor.new_like(
             prediction, batch.inputs if inference else batch.outputs
         )
