@@ -262,7 +262,6 @@ class Sample:
     # Describe a sample
     # TODO consider members
     member: int
-    settings: PoesySettings
     date: dt.datetime
     input_terms: Tuple[float]
     output_terms: Tuple[float]
@@ -290,7 +289,6 @@ class Sample:
 
         return True
 
-
 class InferSample(Sample):
     """
     Sample dedicated to inference. No outputs terms, only inputs.
@@ -298,7 +296,6 @@ class InferSample(Sample):
 
     def __post_init__(self):
         self.terms = self.input_terms
-
 
 class PoesyDataset(DatasetABC, Dataset):
     def __init__(
@@ -390,7 +387,6 @@ class PoesyDataset(DatasetABC, Dataset):
                         + self.settings.num_output_steps
                     ]
                     samp = Sample(
-                        settings=self.settings,
                         date=date,
                         member=member,
                         input_terms=input_terms,
@@ -848,7 +844,6 @@ class InferPoesyDataset(PoesyDataset):
                     ]
 
                     samp = InferSample(
-                        settings=self.settings,
                         date=date,
                         member=member,
                         input_terms=input_terms,
@@ -904,11 +899,7 @@ class InferPoesyDataset(PoesyDataset):
                     **vard,
                 )
                 param_list.append(param)
-        inference_period = (
-            Period(**conf["periods"]["test"], name="infer")
-            if not config_override
-            else Period(**config_override["periods"]["test"], name="infer")
-        )
+        inference_period = (Period(**conf["periods"]["test"], name="infer"))
         ds = InferPoesyDataset(
             grid,
             inference_period,

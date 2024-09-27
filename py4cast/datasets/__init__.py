@@ -24,6 +24,13 @@ try:
     registry["smeagol"] = (SmeagolDataset, default_config_root / "smeagol.json")
 except ImportError:
     warnings.warn(f"Could not import SmeagolDataset. {traceback.format_exc()}")
+    
+try:
+    from .smeagol import InferSmeagolDataset
+
+    registry["smeagol_infer"] = (InferSmeagolDataset, default_config_root / "smeagol.json")
+except ImportError:
+    warnings.warn(f"Could not import SmeagolDataset. {traceback.format_exc()}")
 
 
 try:
