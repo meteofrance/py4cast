@@ -767,6 +767,18 @@ class PoesyDataset(DatasetABC, Dataset):
         return DomainInfo(
             grid_limits=self.grid.grid_limits, projection=self.grid.projection
         )
+    
+    @cached_property
+    def grib_keys_converter(self) -> Tuple[dict,list,list]:
+        """Information on the domain considered.
+        Usefull information for plotting.
+        """
+        return {
+            "t2m_1" : {"levels" : [2], "name" : "t"},
+            "u_1" :  {"levels" : [10], "name": "u10"},
+            "v_1" : {"levels" : [10], "name" : "v10"},
+            "rrdecum_1" : {"levels" : [0], "name" : "tp"}
+        },[0,2,10],['t','u10','v10','tp']
 
     @classmethod
     def prepare(cls, path_config: Path):
@@ -941,7 +953,7 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    # PoesyDataset.prepare(args.path_config)
+    PoesyDataset.prepare(args.path_config)
 
     print("Dataset info : ")
     train_ds, _, _ = PoesyDataset.from_json(args.path_config, 2, 3, 3)

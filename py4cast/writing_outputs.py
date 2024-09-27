@@ -6,14 +6,16 @@ import datetime as dt
 from typing import List, Tuple, Dict
 import numpy as np
 from py4cast.settings import ROOTDIR
+from py4cast.datasets.base import DatasetABC
+from py4cast.forcingutils import compute_hours_of_day
 
 def saveNamedTensorToGrib(
-    pred: NamedTensor, params: list, leadtimes: list, date: dt.datetime, saving_settings: dict
+    pred: NamedTensor, ds : DatasetABC, date: dt.datetime, saving_settings: dict
 ) -> None:
     """
     Write a named tensor (pred) to grib files, using a prefilled grib file as template.
     The pred data should already be on cpu.
-
+    The template grib should contain all keys necessary to write new data as values.
     Args:
         pred (NamedTensor): the output tensor (pred)
         params (list): list of Param objects used to reference parameters description for writing grib
@@ -27,8 +29,14 @@ def saveNamedTensorToGrib(
             There should be N-2 keywords, where N is the number of placeholders in the name format.
             The last placeholders are reserved for timestamp.
     """
-    grib_keys, levels, names = get_grib_keys(pred, params)
+    params = ds.params
+    if hasattr(ds,'grib_keys_converter'):
+        grib_keys, levels, names = ds.grib_keys_converter(pred, params)
+    else:
+        grib_keys, levels, names = get_grib_keys(pred, params)
 
+
+    leadtimes = compute_hours_of_day(date, ds.terms)
     predicted_time_steps = len(leadtimes)
 
     model_ds = xr.open_dataset(
@@ -51,6 +59,8 @@ def saveNamedTensorToGrib(
     for t_idx in range(predicted_time_steps):
         ds_temp = model_ds.copy()
         ds_temp["time"] = date
+        print(date)
+        print(leadtimes[t_idx])
         ds_temp["step"] = np.timedelta64(leadtimes[t_idx], "h")
         for feature_name in grib_keys.keys():
             name, level = (
@@ -71,9 +81,17 @@ def saveNamedTensorToGrib(
                     .numpy()
                 )
             )
-            # TODO : filter loc key depending on the nature of the output
-            dims = ds_temp[name].loc[{"isobaricInhpa": level}].dims
-            ds_temp[name].loc[{"isobaricInhpa": level}] = (dims, data)
+            #filter location key depending on the nature of the output
+            match level :
+                case 0 :
+                    location = "surface"
+                case 2 | 10 :
+                    location = "heightAboveGround"
+                case _ :
+                    location = 'isobaricInhpa'
+
+            dims = ds_temp[name].loc[{location: level}].dims
+            ds_temp[name].loc[{location: level}] = (dims, data)
             ds_temp[name] = ds_temp[name].assign_attrs(model_ds[name].attrs)
             
         xtg.to_grib(

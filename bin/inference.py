@@ -74,6 +74,11 @@ if __name__ == "__main__":
         # TODO : add json schema validation
         with open(default_config_root / args.saving_config, 'r') as f:
             save_settings = json.load(f)
-        leadtimes = infer_ds.sample_list[0].hours_of_day
+        leadtimes = sample.hours_of_day
         date = args.date if args.date is not None else sample.date
-        saveNamedTensorToGrib(pred, infer_ds.params, leadtimes, date, save_settings)
+        saveNamedTensorToGrib(
+            pred, 
+            infer_ds,
+            date, 
+            save_settings
+            )
