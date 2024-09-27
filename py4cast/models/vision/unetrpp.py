@@ -27,12 +27,6 @@ from torch.nn.functional import scaled_dot_product_attention
 from py4cast.models.base import ModelABC
 from py4cast.models.vision.utils import features_last_to_second, features_second_to_last
 
-# Set the environment variable PY4CAST_FORCE_FLASH_ATTN to True to use Tri dao's flash attention
-# Useful to check if we have tensors in bf16 or fp16 because it raises an error otherwise
-force_flash_attn = os.environ.get("PY4CAST_FORCE_FLASH_ATTN", False)
-if force_flash_attn:
-    from flash_attn import flash_attn_func
-
 
 def _trunc_normal_(tensor, mean, std, a, b):
     # Cut & paste from PyTorch official master until it's in a few official releases - RW
@@ -138,7 +132,7 @@ class TransformerBlock(nn.Module):
         pos_embed=False,
         spatial_dims=2,
         proj_size: int = 64,
-        use_scaled_dot_product_CA: bool = True,
+        attention_code: str = "torch",
     ) -> None:
         """
         Args:
@@ -171,7 +165,7 @@ class TransformerBlock(nn.Module):
             channel_attn_drop=dropout_rate,
             spatial_attn_drop=dropout_rate,
             proj_size=proj_size,
-            use_scaled_dot_product_CA=use_scaled_dot_product_CA,
+            attention_code=attention_code,
         )
         self.conv51 = UnetResBlock(
             spatial_dims,
@@ -245,11 +239,25 @@ class EPA(nn.Module):
         channel_attn_drop=0.1,
         spatial_attn_drop=0.1,
         proj_size: int = 64,
-        use_scaled_dot_product_CA=True,
+        attention_code: str = "torch",
     ):
         super().__init__()
         self.num_heads = num_heads
-        self.use_scaled_dot_product_CA = use_scaled_dot_product_CA
+
+        if attention_code not in ["torch", "flash", "manual"]:
+            raise NotImplementedError(
+                "Attention code should be one of 'torch', 'flash' or 'manual'"
+            )
+        if attention_code == "flash":
+            from flash_attn import flash_attn_func
+
+            self.attn_func = flash_attn_func
+            self.use_scaled_dot_product_CA = True
+        elif attention_code == "torch":
+            self.attn_func = scaled_dot_product_attention
+            self.use_scaled_dot_product_CA = True
+        else:
+            self.use_scaled_dot_product_CA = False
 
         # qkvv are 4 linear layers (query_shared, key_shared, value_spatial, value_channel)
         self.qkvv = nn.Linear(hidden_size, hidden_size * 4, bias=qkv_bias)
@@ -291,14 +299,7 @@ class EPA(nn.Module):
         q_shared = torch.nn.functional.normalize(q_shared, dim=-1).type_as(q_shared)
         k_shared = torch.nn.functional.normalize(k_shared, dim=-1).type_as(k_shared)
         if self.use_scaled_dot_product_CA:
-            if force_flash_attn:
-                x_CA = flash_attn_func(
-                    q_shared, k_shared, v_CA, dropout_p=self.attn_drop.p
-                )
-            else:
-                x_CA = scaled_dot_product_attention(
-                    q_shared, k_shared, v_CA, dropout_p=self.attn_drop.p
-                )
+            x_CA = self.attn_func(q_shared, k_shared, v_CA, dropout_p=self.attn_drop.p)
         else:
             attn_CA = (q_shared @ k_shared.transpose(-2, -1)) * self.temperature
             attn_CA = attn_CA.softmax(dim=-1)
@@ -339,7 +340,7 @@ class UnetrPPEncoder(nn.Module):
         transformer_dropout_rate=0.1,
         downsampling_rate: int = 4,
         proj_size: int = 64,
-        use_scaled_dot_product_CA: bool = True,
+        attention_code: str = "torch",
     ):
         super().__init__()
 
@@ -390,7 +391,7 @@ class UnetrPPEncoder(nn.Module):
                         dropout_rate=transformer_dropout_rate,
                         pos_embed=True,
                         proj_size=proj_size,
-                        use_scaled_dot_product_CA=use_scaled_dot_product_CA,
+                        attention_code=attention_code,
                     )
                 )
             self.stages.append(nn.Sequential(*stage_blocks))
@@ -531,7 +532,7 @@ class UnetrUpBlock(nn.Module):
                         dropout_rate=0.1,
                         pos_embed=True,
                         proj_size=proj_size,
-                        use_scaled_dot_product_CA=use_scaled_dot_product_CA,
+                        attention_code=use_scaled_dot_product_CA,
                     )
                 )
             self.decoder_block.append(nn.Sequential(*stage_blocks))
@@ -570,9 +571,11 @@ class UNETRPPSettings:
     downsampling_rate: int = 4
     proj_size: int = 64
 
-    # booleans to enable torch's scaled_dot_product_attention
-    # for Channel attention (CA)
-    use_scaled_dot_product_CA: bool = True
+    # Specify the attention implementation to use
+    # Options: "torch" : scaled_dot_product_attention from torch.nn.functional
+    #          "flash" : flash_attention from flash_attn (loose dependency imported only if needed)
+    #          "manual" : manual implementation from the original paper
+    attention_code: str = "torch"
 
 
 class UNETRPP(ModelABC, nn.Module):
@@ -664,7 +667,7 @@ class UNETRPP(ModelABC, nn.Module):
             in_channels=num_input_features,
             downsampling_rate=settings.downsampling_rate,
             proj_size=settings.proj_size,
-            use_scaled_dot_product_CA=settings.use_scaled_dot_product_CA,
+            attention_code=settings.attention_code,
         )
 
         self.encoder1 = UnetResBlock(
@@ -685,7 +688,7 @@ class UNETRPP(ModelABC, nn.Module):
             out_size=no_pixels // 16,
             linear_upsampling=settings.linear_upsampling,
             proj_size=settings.proj_size,
-            use_scaled_dot_product_CA=settings.use_scaled_dot_product_CA,
+            use_scaled_dot_product_CA=settings.attention_code,
         )
         self.decoder4 = UnetrUpBlock(
             spatial_dims=settings.spatial_dims,
@@ -697,7 +700,7 @@ class UNETRPP(ModelABC, nn.Module):
             out_size=no_pixels // 4,
             linear_upsampling=settings.linear_upsampling,
             proj_size=settings.proj_size,
-            use_scaled_dot_product_CA=settings.use_scaled_dot_product_CA,
+            use_scaled_dot_product_CA=settings.attention_code,
         )
         self.decoder3 = UnetrUpBlock(
             spatial_dims=settings.spatial_dims,
@@ -709,7 +712,7 @@ class UNETRPP(ModelABC, nn.Module):
             out_size=no_pixels,
             linear_upsampling=settings.linear_upsampling,
             proj_size=settings.proj_size,
-            use_scaled_dot_product_CA=settings.use_scaled_dot_product_CA,
+            use_scaled_dot_product_CA=settings.attention_code,
         )
         self.decoder2 = UnetrUpBlock(
             spatial_dims=settings.spatial_dims,
@@ -722,7 +725,7 @@ class UNETRPP(ModelABC, nn.Module):
             conv_decoder=True,
             linear_upsampling=settings.linear_upsampling,
             proj_size=settings.proj_size,
-            use_scaled_dot_product_CA=settings.use_scaled_dot_product_CA,
+            use_scaled_dot_product_CA=settings.attention_code,
         )
         self.out1 = UnetOutBlock(
             spatial_dims=settings.spatial_dims,
