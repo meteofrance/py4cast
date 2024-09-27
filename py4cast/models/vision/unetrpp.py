@@ -4,7 +4,6 @@ Adapted from https://github.com/Amshaker/unetr_plus_plus
 """
 
 import math
-import os
 import warnings
 from dataclasses import dataclass
 from typing import Sequence, Tuple, Union
