@@ -26,6 +26,7 @@ from py4cast.observer import (
     SpatialErrorPlot,
     StateErrorPlot,
 )
+from py4cast.utils import str_to_dtype
 
 # learning rate scheduling period in steps (update every nth step)
 LR_SCHEDULER_PERIOD: int = 10
@@ -117,15 +118,6 @@ class AutoRegressiveLightning(pl.LightningModule):
     """
     Auto-regressive lightning module for predicting meteorological fields.
     """
-
-    str_to_dtype = {
-        "float32": torch.float32,
-        "32": torch.float32,
-        "float64": torch.float64,
-        "float16": torch.float16,
-        "16": torch.float16,
-        "bf16": torch.bfloat16,
-    }
 
     def __init__(self, hparams: ArLightningHyperParam, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -230,7 +222,7 @@ class AutoRegressiveLightning(pl.LightningModule):
         """
         Return the appropriate torch dtype for the desired precision in hparams.
         """
-        return self.str_to_dtype[self.hparams["hparams"].precision]
+        return str_to_dtype[self.hparams["hparams"].precision]
 
     @rank_zero_only
     def inspect_tensors(self):
