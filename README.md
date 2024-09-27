@@ -340,7 +340,8 @@ options:
                         Name of the dataset config file to use
   --infer_steps INFER_STEPS
                         Number of auto-regressive steps/prediction steps during the inference
-
+   --precision PRECISION
+                        floating point precision for the inference (default: 32) 
 ```
 
 A simple example of inference is shown below:
