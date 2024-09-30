@@ -1,7 +1,7 @@
 import datetime as dt
 from copy import deepcopy
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any, Tuple
 
 import numpy as np
 import xarray as xr
@@ -9,7 +9,6 @@ from cfgrib import xarray_to_grib as xtg
 
 from py4cast.datasets.base import DatasetABC, NamedTensor
 from py4cast.forcingutils import compute_hours_of_day
-from py4cast.settings import ROOTDIR
 
 
 def saveNamedTensorToGrib(
@@ -44,10 +43,8 @@ def saveNamedTensorToGrib(
         )
         params = ds.params
         grib_keys, levels, names, typesOflevel = get_grib_keys(pred, params)
-    print(pred.feature_names_to_idx)
-    print(pred.tensor.shape)
+
     grib_groups = get_grib_groups(grib_keys, typesOflevel)
-    print(grib_groups)
     leadtimes = compute_hours_of_day(date, sample.output_terms)
     predicted_time_steps = len(leadtimes)
 
@@ -108,10 +105,7 @@ def saveNamedTensorToGrib(
                     == round(ds.grid.lon.max(), 5)
                 )[0].item(),
             )
-            print(round(ds.grid.lon.min(), 5))
-            print(np.round(target_ds.longitude.values))
-            print(longmin, longmax)
-            print(latmin, latmax)
+
         else:
             nanmask = np.empty()
 
@@ -129,7 +123,6 @@ def saveNamedTensorToGrib(
                 grib_keys[feature_name]["level"],
                 grib_keys[feature_name]["typeOfLevel"],
             )
-            print(name, level, tol)
             data = (
                 (
                     pred.tensor[0, t_idx, :, :, pred.feature_names_to_idx[feature_name]]
@@ -157,7 +150,6 @@ def saveNamedTensorToGrib(
 
             dims = model_ds[name].dims
             target_ds[name] = (dims, data2grib)
-            print(model_ds[name].attrs)
             target_ds[name] = target_ds[name].assign_attrs(**model_ds[name].attrs)
         xtg.to_grib(
             target_ds,
@@ -172,7 +164,7 @@ def saveNamedTensorToGrib(
 def get_grib_keys(pred: NamedTensor, params: list) -> Tuple[dict, list, list, dict]:
 
     """Match feature names of the pred named tensor to grid-readable levels and parameter names.
-    Will throw warnings if feature names are found that do not match any parameter : these features will then not be saved.
+    Throw warnings if feature names are found that do not match any parameter (these features will not be saved).
     Args:
         pred (NamedTensor): input named tensor
         params (list): list of parameters, implementing typical Param instances used to describe datasets.

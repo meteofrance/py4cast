@@ -1,7 +1,5 @@
 import argparse
 import json
-import os
-from datetime import datetime
 from pathlib import Path
 
 from pytorch_lightning import Trainer
@@ -9,7 +7,6 @@ from pytorch_lightning import Trainer
 from py4cast.datasets import get_datasets
 from py4cast.datasets.base import TorchDataloaderSettings
 from py4cast.lightning import AutoRegressiveLightning
-from py4cast.settings import ROOTDIR
 from py4cast.writing_outputs import saveNamedTensorToGrib
 
 default_config_root = Path(__file__).parents[1] / "config/IO/"

@@ -972,7 +972,6 @@ class InferPoesyDataset(PoesyDataset):
             # else Period(**config_override["periods"]["test"], name="infer")
         )
 
-
         ds = InferPoesyDataset(
             grid,
             inference_period,
