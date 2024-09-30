@@ -52,3 +52,11 @@ def merge_dicts(d1: Dict, d2: Dict) -> Dict:
         else:
             d1[key] = d2[key]
     return d1
+
+
+str_to_dtype = {
+    "bf16": torch.bfloat16,
+    "16": torch.float16,
+    "32": torch.float32,
+    "64": torch.float64,
+}

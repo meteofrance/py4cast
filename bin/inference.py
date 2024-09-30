@@ -25,6 +25,12 @@ if __name__ == "__main__":
     parser.add_argument(
         "--infer_steps", type=int, help="Number of inference steps", default=1
     )
+    parser.add_argument(
+        "--precision",
+        type=str,
+        help="floating point precision for the inference",
+        default="32",
+    )
 
     parser.add_argument(
         "--saving_config",
@@ -44,6 +50,7 @@ if __name__ == "__main__":
                 break
     lightning_module = AutoRegressiveLightning.load_from_checkpoint(args.model_path)
     hparams = lightning_module.hparams["hparams"]
+    lightning_module.hparams["precision"] = args.precision
 
     if args.date is not None:
         config_override = {
@@ -66,7 +73,6 @@ if __name__ == "__main__":
     # Transform in dataloader
     dl_settings = TorchDataloaderSettings(batch_size=1)
     infer_loader = infer_ds.torch_dataloader(dl_settings)
-
     trainer = Trainer(devices="auto")
     preds = trainer.predict(lightning_module, infer_loader)
     with open(default_config_root / args.saving_config, 'r') as f:
