@@ -2,7 +2,7 @@ import argparse
 import json
 from pathlib import Path
 import os
-
+from datetime import datetime
 from pytorch_lightning import Trainer
 
 from py4cast.datasets import get_datasets
@@ -69,16 +69,16 @@ if __name__ == "__main__":
 
     trainer = Trainer(devices="auto")
     preds = trainer.predict(lightning_module, infer_loader)
-
-    for sample, pred in zip(infer_loader, preds):
+    with open(default_config_root / args.saving_config, 'r') as f:
+        save_settings = json.load(f)
+    for sample, pred in zip(infer_ds.sample_list[:1], preds[:1]):
         # TODO : add json schema validation
-        with open(default_config_root / args.saving_config, 'r') as f:
-            save_settings = json.load(f)
-        leadtimes = sample.hours_of_day
-        date = args.date if args.date is not None else sample.date
+        
+        date = sample.date
         saveNamedTensorToGrib(
             pred, 
             infer_ds,
+            sample,
             date, 
             save_settings
             )

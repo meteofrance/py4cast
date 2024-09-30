@@ -151,7 +151,7 @@ class NamedTensor(TensorWrapper):
             for nt in nts:
                 if feature_names & set(nt.feature_names):
                     raise ValueError(
-                        f"Feature names must be distinct between the named tensors to concat"
+                        f"Feature names must be distinct between the named tensors to concat\n"
                         f"Found duplicates: {feature_names & set(nt.feature_names)}"
                     )
                 feature_names |= set(nt.feature_names)
