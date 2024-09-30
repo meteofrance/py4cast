@@ -1,21 +1,48 @@
-import cfgrib as cf
-from cfgrib import xarray_to_grib as xtg
-import xarray as xr
 from copy import deepcopy
-import numpy as np
+from time import perf_counter
 
-file = "/scratch/shared/Titan/AROME/2023061812/AROME_1S100_ECH0_10M.grib"
+import cfgrib as cf
+import numpy as np
+import xarray as xr
+from cfgrib import xarray_to_grib as xtg
+
+# grid.arome-forecast.eurw1s100+0001:00.grib
+# grid.emul_aro_ai_dataset_poesy_eurw1s40_date2021-06-14 21:00:00_ech23.0.grib"
+file = "/scratch/shared/py4cast/gribs_writing/grid.arome-forecast.eurw1s40+0001:00.grib"
 
 print(cf.__version__)
 
-isobaric_levels = xr.open_dataset(
-    file,
-    backend_kwargs={
-        "indexpath": "",
+
+for i in range(1):
+    t0 = perf_counter()
+
+    isobaric_levels = xr.open_dataset(
+        file,
+        backend_kwargs={
+            "indexpath": "",
+            "read_keys": [
+                "level",
+                "cfVarname",
+                "shortname",
+                "centre",
+                "typeOfGeneratingProcess",
+                "generatingProcessIdentifier",
+                "typeOfLevel",
+                "discipline",
+                "parameterCategory",
+                "unit",
+            ],
+            "filter_by_keys": {"typeOfLevel": "heightAboveGround", "level": [2]},
         },
-)
-print(isobaric_levels)
-#print(isobaric_levels.surface.values)
+    )
+
+    print(isobaric_levels)
+
+    t1 = perf_counter() - t0
+    print(t1)
+
+
+# print(isobaric_levels.surface.values)
 """raw_data = isobaric_levels["tirf"].to_numpy()
 dims = isobaric_levels["tirf"].dims
 print(dims)

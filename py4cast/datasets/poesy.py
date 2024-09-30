@@ -369,7 +369,7 @@ class PoesyDataset(DatasetABC, Dataset):
 
         samples = []
         number = 0
-    
+
         for date in self.period.date_list:
             for member in self.settings.members:
                 for sample in range(0, sample_by_date):
@@ -398,7 +398,7 @@ class PoesyDataset(DatasetABC, Dataset):
 
                         samples.append(samp)
                         number += 1
-                        
+
         print("All samples are now defined")
 
         return samples
@@ -768,10 +768,10 @@ class PoesyDataset(DatasetABC, Dataset):
         return DomainInfo(
             grid_limits=self.grid.grid_limits, projection=self.grid.projection
         )
-    
+
     @cached_property
-    def grib_keys_converter(self) -> Tuple[dict,list,list,dict]:
-        #TODO : correct the informations in the POESY dataset and remove this func
+    def grib_keys_converter(self) -> Tuple[dict, list, list, dict]:
+        # TODO : correct the informations in the POESY dataset and remove this func
         """Information on the domain considered.
         Usefull information for plotting.
         """
@@ -785,35 +785,55 @@ class PoesyDataset(DatasetABC, Dataset):
             print(psn)
             match psn:
                 case ["t2m_1"]:
-                    grib_keys["t2m_1"] = {"level" : 2, "name" : "t2m", "typeOfLevel" : 'heightAboveGround'}
+                    grib_keys["t2m_1"] = {
+                        "level": 2,
+                        "name": "t2m",
+                        "typeOfLevel": "heightAboveGround",
+                    }
                     names.append("t2m")
                     levels.append(2)
                 case ["u_1"]:
-                    grib_keys["u_1"] = {"level" : 10, "name": "u10", "typeOfLevel" : 'heightAboveGround'}
+                    grib_keys["u_1"] = {
+                        "level": 10,
+                        "name": "u10",
+                        "typeOfLevel": "heightAboveGround",
+                    }
                     names.append("u10")
                     if 10 not in levels:
-                        levels.append(10) 
+                        levels.append(10)
                 case ["v_1"]:
-                    grib_keys["v_1"] = {"level" : 10, "name": "v10", "typeOfLevel" : 'heightAboveGround'}
+                    grib_keys["v_1"] = {
+                        "level": 10,
+                        "name": "v10",
+                        "typeOfLevel": "heightAboveGround",
+                    }
                     names.append("v10")
                     if 10 not in levels:
                         levels.append(10)
                 case ["rrdecum_1"]:
-                    grib_keys["rrdecum_1"] = {"level" : 0, "name": "tirf", "typeOfLevel" : 'surface'}
+                    grib_keys["rrdecum_1"] = {
+                        "level": 0,
+                        "name": "tirf",
+                        "typeOfLevel": "surface",
+                    }
                     names.append("tirf")
                     levels.append(0)
 
         for k in grib_keys.keys():
             if grib_keys[k]["typeOfLevel"] not in typesOflevel.keys():
                 typesOflevel[grib_keys[k]["typeOfLevel"]] = {
-                    "levels" : [grib_keys[k]["level"]],
-                    "names" : [grib_keys[k]["name"]]
-                    }
-            else :
-                typesOflevel[grib_keys[k]["typeOfLevel"]]["levels"].append(grib_keys[k]["level"])
-                typesOflevel[grib_keys[k]["typeOfLevel"]]["names"].append(grib_keys[k]["name"])
+                    "levels": [grib_keys[k]["level"]],
+                    "names": [grib_keys[k]["name"]],
+                }
+            else:
+                typesOflevel[grib_keys[k]["typeOfLevel"]]["levels"].append(
+                    grib_keys[k]["level"]
+                )
+                typesOflevel[grib_keys[k]["typeOfLevel"]]["names"].append(
+                    grib_keys[k]["name"]
+                )
         print(typesOflevel)
-        return grib_keys,levels,names,typesOflevel
+        return grib_keys, levels, names, typesOflevel
 
     @classmethod
     def prepare(cls, path_config: Path):
@@ -951,8 +971,8 @@ class InferPoesyDataset(PoesyDataset):
                 param_list.append(param)
         inference_period = (
             Period(**conf["periods"]["test"], name="infer")
-            #if not config_override
-            #else Period(**config_override["periods"]["test"], name="infer")
+            # if not config_override
+            # else Period(**config_override["periods"]["test"], name="infer")
         )
         ds = InferPoesyDataset(
             grid,

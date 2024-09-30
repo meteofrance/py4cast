@@ -1,8 +1,9 @@
 import argparse
 import json
-from pathlib import Path
 import os
 from datetime import datetime
+from pathlib import Path
+
 from pytorch_lightning import Trainer
 
 from py4cast.datasets import get_datasets
@@ -30,7 +31,7 @@ if __name__ == "__main__":
         "--saving_config",
         type=str,
         help="name of the config file for write settings (json)",
-        default='poesy_grib_settings.json',
+        default="poesy_grib_settings.json",
     )
 
     args = parser.parse_args()
@@ -47,7 +48,7 @@ if __name__ == "__main__":
 
     if args.date is not None:
         config_override = {
-            "periods": {"test": {"start": args.date, "end": args.date, "step" : 2}},
+            "periods": {"test": {"start": args.date, "end": args.date, "step": 2}},
             "num_inference_pred_steps": args.infer_steps,
         }
     else:
@@ -69,16 +70,10 @@ if __name__ == "__main__":
 
     trainer = Trainer(devices="auto")
     preds = trainer.predict(lightning_module, infer_loader)
-    with open(default_config_root / args.saving_config, 'r') as f:
+    with open(default_config_root / args.saving_config, "r") as f:
         save_settings = json.load(f)
     for sample, pred in zip(infer_ds.sample_list[:1], preds[:1]):
         # TODO : add json schema validation
-        
+
         date = sample.date
-        saveNamedTensorToGrib(
-            pred, 
-            infer_ds,
-            sample,
-            date, 
-            save_settings
-            )
+        saveNamedTensorToGrib(pred, infer_ds, sample, date, save_settings)
