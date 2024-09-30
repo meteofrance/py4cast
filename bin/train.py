@@ -241,7 +241,7 @@ if torch.cuda.is_available():
     device_name = "cuda"
     torch.backends.cuda.matmul.allow_tf32 = True
     torch.backends.cudnn.allow_tf32 = True
-    # torch.set_float32_matmul_precision("high") # Allows using Tensor Cores on A100s
+    torch.set_float32_matmul_precision("high")  # Allows using Tensor Cores on A100s
     len_loader = len(train_loader) // (torch.cuda.device_count() * nb_nodes)
 else:
     device_name = "cpu"
@@ -277,6 +277,7 @@ hp = ArLightningHyperParam(
     len_train_loader=len_loader,
     save_path=save_path,
     use_lr_scheduler=args.use_lr_scheduler,
+    precision=args.precision,
 )
 
 # Logger & checkpoint callback
