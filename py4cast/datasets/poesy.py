@@ -469,6 +469,7 @@ class PoesyDataset(DatasetABC, Dataset):
             std = np.asarray([self.stats[name]["std"] for name in names])
 
         array = param.load_data(date, terms, member)
+
         # Extend dimension to match 3D (level dimension)
         if len(array.shape) != 4:
             array = np.expand_dims(array, axis=-1)
@@ -534,7 +535,6 @@ class PoesyDataset(DatasetABC, Dataset):
                 "names": ["timestep", "lat", "lon", "features"],
             }
             try:
-
                 if param.kind == "input_output":
                     # Search data for date sample.date and terms sample.terms
                     tensor = self.get_param_tensor(
@@ -825,10 +825,8 @@ class InferPoesyDataset(PoesyDataset):
         )
 
         sample_by_date = len(terms) // self.settings.num_total_steps
-
         samples = []
         number = 0
-
         for date in self.period.date_list:
             for member in self.settings.members:
                 for sample in range(0, sample_by_date):
@@ -853,7 +851,6 @@ class InferPoesyDataset(PoesyDataset):
                     )
 
                     if samp.is_valid(self.params):
-
                         samples.append(samp)
                         number += 1
         print("All samples are now defined")
@@ -901,13 +898,8 @@ class InferPoesyDataset(PoesyDataset):
                     **vard,
                 )
                 param_list.append(param)
-
-            inference_period = (
-                Period(**conf["periods"]["test"], name="infer")
-                if not config_override
-                else Period(**config_override["periods"]["test"], name="infer")
-            )
-
+            
+            inference_period = Period(**conf["periods"]["test"], name="infer")
             ds = InferPoesyDataset(
                 grid,
                 inference_period,
@@ -920,6 +912,7 @@ class InferPoesyDataset(PoesyDataset):
                     num_inference_pred_steps=conf["num_inference_pred_steps"],
                 ),
             )
+
         return None, None, ds
 
 

@@ -26,6 +26,7 @@ from py4cast.observer import (
     SpatialErrorPlot,
     StateErrorPlot,
 )
+from py4cast.utils import str_to_dtype
 
 # learning rate scheduling period in steps (update every nth step)
 LR_SCHEDULER_PERIOD: int = 10
@@ -63,6 +64,7 @@ class ArLightningHyperParam:
     len_train_loader: int = 1
     save_path: Path = None
     use_lr_scheduler: bool = False
+    precision: str = "bf16"
 
     def __post_init__(self):
         """
@@ -215,6 +217,26 @@ class AutoRegressiveLightning(pl.LightningModule):
         self.psd_plot_metric = MetricPSDK(save_path, pred_step=max_pred_step)
         self.acc_metric = MetricACC(self.hparams["hparams"].dataset_info)
 
+    @property
+    def dtype(self):
+        """
+        Return the appropriate torch dtype for the desired precision in hparams.
+        """
+        return str_to_dtype[self.hparams["hparams"].precision]
+
+    @rank_zero_only
+    def inspect_tensors(self):
+        """
+        Prints all tensor parameters and buffers
+        of the model with name, shape and dtype.
+        """
+        # trainable parameters
+        for name, param in self.named_parameters():
+            print(name, param.shape, param.dtype)
+        # buffers
+        for name, buffer in self.named_buffers():
+            print(name, buffer.shape, buffer.dtype)
+
     @rank_zero_only
     def log_hparams_tb(self):
         if self.logger:
@@ -283,7 +305,8 @@ class AutoRegressiveLightning(pl.LightningModule):
         Get the mean and std of the differences between two consecutive states on the desired device.
         """
         step_diff_std = self.diff_stats.to_list("std", feature_names).to(
-            device, non_blocking=True
+            device,
+            non_blocking=True,
         )
         step_diff_mean = self.diff_stats.to_list("mean", feature_names).to(
             device, non_blocking=True
@@ -313,6 +336,22 @@ class AutoRegressiveLightning(pl.LightningModule):
         return force_border, scale_y, self.hparams["hparams"].num_inter_steps
 
     def common_step(
+        self, batch: ItemBatch, inference: bool = False
+    ) -> Tuple[NamedTensor, NamedTensor]:
+        """
+        Handling autocast subtelty for mixed precision on GPU and CPU (only bf16 for the later).
+        """
+        if torch.cuda.is_available():
+            with torch.cuda.amp.autocast(dtype=self.dtype):
+                return self._common_step(batch, inference)
+        else:
+            if "bf16" in self.trainer.precision:
+                with torch.cpu.amp.autocast(dtype=self.dtype):
+                    return self._common_step(batch, inference)
+            else:
+                return self._common_step(batch, inference)
+
+    def _common_step(
         self, batch: ItemBatch, inference: bool = False
     ) -> Tuple[NamedTensor, NamedTensor]:
         """
@@ -406,10 +445,14 @@ class AutoRegressiveLightning(pl.LightningModule):
         # and the output dim names attributes set.
         if inference:
             pred_out = NamedTensor(
-                prediction, self.output_dim_names, self.output_feature_names
+                prediction.type(self.output_dtype),
+                self.output_dim_names,
+                self.output_feature_names,
             )
         else:
-            pred_out = NamedTensor.new_like(prediction, batch.outputs)
+            pred_out = NamedTensor.new_like(
+                prediction.type_as(batch.outputs.tensor), batch.outputs
+            )
         return pred_out, batch.outputs
 
     def on_train_start(self):
@@ -435,6 +478,7 @@ class AutoRegressiveLightning(pl.LightningModule):
             self.input_feature_names = batch.inputs.feature_names
             self.output_feature_names = batch.outputs.feature_names
             self.output_dim_names = batch.outputs.names
+            self.output_dtype = batch.outputs.tensor.dtype
 
         prediction, target = self.common_step(batch)
         # Compute loss: mean over unrolled times and batch
@@ -455,6 +499,7 @@ class AutoRegressiveLightning(pl.LightningModule):
         checkpoint["input_feature_names"] = self.input_feature_names
         checkpoint["output_feature_names"] = self.output_feature_names
         checkpoint["output_dim_names"] = self.output_dim_names
+        checkpoint["output_dtype"] = self.output_dtype
 
     def on_load_checkpoint(self, checkpoint):
         """
@@ -463,6 +508,7 @@ class AutoRegressiveLightning(pl.LightningModule):
         self.input_feature_names = checkpoint["input_feature_names"]
         self.output_feature_names = checkpoint["output_feature_names"]
         self.output_dim_names = checkpoint["output_dim_names"]
+        self.output_dtype = checkpoint["output_dtype"]
 
     def predict_step(self, batch: ItemBatch, batch_idx: int) -> torch.Tensor:
         """

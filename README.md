@@ -340,14 +340,14 @@ options:
                         Name of the dataset config file to use
   --infer_steps INFER_STEPS
                         Number of auto-regressive steps/prediction steps during the inference
-
+   --precision PRECISION
+                        floating point precision for the inference (default: 32) 
 ```
 
 A simple example of inference is shown below:
 
 ```bash
- runai exec_gpu python bin/inference.py --model_path /scratch/shared/py4cast/logs/camp0/poesy/halfunet/sezn_run_dev_9/last.ckpt --date 2021061621 --dataset poesy_infer --infer_steps 2
-
+ runai exec_gpu python bin/inference.py --model_path /scratch/shared/py4cast/logs/camp0/poesy/halfunet/sezn_run_dev_30 --date 2021061621 --dataset poesy_infer --infer_steps 2
 ```
 
 ### Making animated plots comparing multiple models
