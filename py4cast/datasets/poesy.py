@@ -901,7 +901,12 @@ class InferPoesyDataset(PoesyDataset):
                     **vard,
                 )
                 param_list.append(param)
-        inference_period = Period(**conf["periods"]["test"], name="infer")
+            inference_period = (
+            Period(**conf["periods"]["test"], name="infer")
+            if not config_override
+            else Period(**config_override["periods"]["test"], name="infer")
+        )
+        
         ds = InferPoesyDataset(
             grid,
             inference_period,
