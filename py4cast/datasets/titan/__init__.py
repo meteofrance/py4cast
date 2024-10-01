@@ -296,8 +296,9 @@ def process_sample_dataset(date: dt.datetime, params: List[Param]):
             except Exception as e:
                 print(e)
                 print(
-                    f"WARNING: Could not load grib data {param.name} {param.level} {date}. Skipping."
+                    f"WARNING: Could not load grib data {param.name} {param.level} {date}. Skipping sample."
                 )
+                break
 
 
 #############################################################
@@ -579,16 +580,18 @@ class TitanDataset(DatasetABC, Dataset):
         print("Start creating samples...")
         stats = self.stats if self.settings.standardize else None
         if self.valid_samples_file.exists():
+            print(f"Retrieving valid samples from file {self.valid_samples_file}")
             with open(self.valid_samples_file, "r") as f:
                 dates_str = [line[:-1] for line in f.readlines()]
                 dateformat = "%Y-%m-%d_%Hh%M"
                 dates = [dt.datetime.strptime(ds, dateformat) for ds in dates_str]
+                dates = list(set(dates).intersection(set(self.period.date_list)) )
                 samples = [
                     Sample(date, self.settings, self.params, stats, self.grid)
                     for date in dates
-                    if date in set(self.period.date_list)
                 ]
         else:
+            print(f"Valid samples file {self.valid_samples_file} does not exist. Computing samples list...")
             samples = []
             for date in tqdm.tqdm(self.period.date_list):
                 sample = Sample(date, self.settings, self.params, stats, self.grid)
@@ -778,9 +781,17 @@ def prepare(
     path_config: Path = DEFAULT_CONFIG,
     num_input_steps: int = 1,
     num_pred_steps_train: int = 1,
-    num_pred_steps_val_test: int = 3,
+    num_pred_steps_val_test: int = 1,
+    convert_grib2npy: bool = False,
+    compute_stats: bool = True,
+    write_valid_samples_list: bool = True
 ):
-    """Prepares Titan by computing statistics on all weather parameters."""
+    """Prepares Titan dataset for training.
+    This command will:
+        - create all needed folders
+        - convert gribs to npy and rescale data to the wanted grid
+        - establish a list of valid samples for each set
+        - computes statistics on all weather parameters."""
     print("--> Preparing Titan Dataset...")
 
     print("Load dataset configuration...")
@@ -796,36 +807,35 @@ def prepare(
     data_dir.mkdir(exist_ok=True)
     print(f"Dataset will be saved in {train_ds.cache_dir}")
 
-    print("Converting gribs to npy...")
-    src_path = SCRATCH_PATH / "grib"
-    param_list = get_param_list(conf, train_ds.grid, train_ds.cache_dir)
-    sum_dates = list(train_ds.period.date_list) + list(valid_ds.period.date_list) + list(test_ds.period.date_list)
-    dates = list(set(sum_dates))
-    print(f"{len(dates)} samples to convert")
-    for date in tqdm.tqdm(dates):
-        process_sample_dataset(date, param_list)
-    print("Done!")
+    if convert_grib2npy:
+        print("Converting gribs to npy...")
+        src_path = SCRATCH_PATH / "grib"
+        param_list = get_param_list(conf, train_ds.grid, train_ds.cache_dir)
+        sum_dates = list(train_ds.period.date_list) + list(valid_ds.period.date_list) + list(test_ds.period.date_list)
+        dates = sorted(list(set(sum_dates)))
+        for date in tqdm.tqdm(dates):
+            process_sample_dataset(date, param_list)
+        print("Done!")
 
-    print("Computing stats on each parameter...")
     conf["settings"]["standardize"] = False
     train_ds, valid_ds, test_ds = TitanDataset.from_dict(
         path_config.stem, conf, num_input_steps, num_pred_steps_train, num_pred_steps_val_test
     )
-    print("len(train_ds) : ",len(train_ds))
-    train_ds.compute_parameters_stats()
-    print("Done!")
-    train_ds.write_list_valid_samples()
-    valid_ds.write_list_valid_samples()
-    test_ds.write_list_valid_samples()
+    if compute_stats:
+        print("Computing stats on each parameter...")
+        train_ds.compute_parameters_stats()
+    if write_valid_samples_list:
+        train_ds.write_list_valid_samples()
+        valid_ds.write_list_valid_samples()
+        test_ds.write_list_valid_samples()
 
-    print("Computing time stats on each parameters, between 2 timesteps...")
-    conf["settings"]["standardize"] = True
-    train_ds, valid_ds, test_ds = TitanDataset.from_dict(
-        path_config.stem, conf, num_input_steps, num_pred_steps_train, num_pred_steps_val_test
-    )
-    train_ds.compute_time_step_stats()
-
-
+    if compute_stats:
+        print("Computing time stats on each parameters, between 2 timesteps...")
+        conf["settings"]["standardize"] = True
+        train_ds, valid_ds, test_ds = TitanDataset.from_dict(
+            path_config.stem, conf, num_input_steps, num_pred_steps_train, num_pred_steps_val_test
+        )
+        train_ds.compute_time_step_stats()
 
 
 @app.command()
