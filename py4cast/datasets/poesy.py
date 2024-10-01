@@ -813,7 +813,7 @@ class InferPoesyDataset(PoesyDataset):
     def sample_list(self):
         """
         Create a list of sample from information.
-        Outputs terms are computed from the number of prediction steps wanted by the user.
+        Outputs terms are computed from the number of prediction steps in argument.
         """
         print("Start forming samples")
         terms = list(
@@ -911,7 +911,7 @@ class InferPoesyDataset(PoesyDataset):
                 term=term,
                 num_input_steps=num_input_steps,
                 num_output_steps=0,
-                num_inference_pred_steps=config_override["num_inference_pred_steps"],
+                num_inference_pred_steps=conf["num_inference_pred_steps"],
             ),
         )
         return None, None, ds
