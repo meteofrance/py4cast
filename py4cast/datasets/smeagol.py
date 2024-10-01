@@ -245,10 +245,11 @@ class Param:
         # TODO: change it in order to be more generic
         return files[0].exists()
 
+
 @dataclass(slots=True)
 class SmeagolSettings:
     term: dict  # Terms used in this configuration. Should be present in nc files.
-    num_input_steps: int # = 2  # Number of input timesteps
+    num_input_steps: int  # = 2  # Number of input timesteps
     num_output_steps: int  # = 1  # Number of output timesteps (= 0 for inference)
     num_inference_pred_steps: int = 0  # 0 in training config ; else used to provide future information about forcings
     standardize: bool = True  # Do we need to standardize our data ?
@@ -264,7 +265,8 @@ class SmeagolSettings:
         """
         # Nb of step in on sample
         return self.num_input_steps + self.num_output_steps
-    
+
+
 @dataclass(slots=True)
 class Sample:
     # Describe a sample
@@ -296,6 +298,7 @@ class Sample:
             else:
                 return True
 
+
 class InferSample(Sample):
     """
     Sample dedicated to inference. No outputs terms, only inputs.
@@ -303,6 +306,7 @@ class InferSample(Sample):
 
     def __post_init__(self):
         self.terms = self.input_terms
+
 
 class SmeagolDataset(DatasetABC, Dataset):
     def __init__(
@@ -374,7 +378,7 @@ class SmeagolDataset(DatasetABC, Dataset):
                         + self.settings.num_input_steps : sample
                         * self.settings.num_total_steps
                         + self.settings.num_input_steps
-                        + self.settings.num_pred_steps
+                        + self.settings.num_output_steps
                     ]
                     samp = Sample(
                         member=member,
@@ -537,20 +541,52 @@ class SmeagolDataset(DatasetABC, Dataset):
                     )
                     linputs.append(tmp_state)
 
+                    # Load outputs
+
+                    # Inference
+                    if self.settings.num_inference_pred_steps:
+                        tensor_data = torch.empty(
+                            (
+                                self.settings.num_inference_pred_steps,
+                                *tmp_state.tensor.shape[1:],
+                            )
+                        )
+
+                    # Training
+                    else:
+                        tmp_out = ds[param.name].sel(step=sample.output_terms).values
+                        if len(tmp_out.shape) != 4:
+                            tmp_out = np.expand_dims(tmp_out, axis=1)
+                        tmp_out = np.transpose(tmp_out, axes=[0, 2, 3, 1])
+                        if self.settings.standardize:
+                            tmp_out = (tmp_out - means) / std
+                        tensor_data = torch.from_numpy(tmp_out)
+
+                    tmp_state = NamedTensor(
+                        tensor=tensor_data,
+                        feature_names=param.parameter_short_name,
+                        names=["timestep", "lat", "lon", "features"],
+                    )
+                    loutputs.append(tmp_state)
+
                 # Read outputs.
-                if param.kind in ["ouput", "input_output"]:
+                if param.kind == "ouput":
+
                     tmp_out = ds[param.name].sel(step=sample.output_terms).values
                     if len(tmp_out.shape) != 4:
                         tmp_out = np.expand_dims(tmp_out, axis=1)
                     tmp_out = np.transpose(tmp_out, axes=[0, 2, 3, 1])
                     if self.settings.standardize:
                         tmp_out = (tmp_out - means) / std
+                    tensor_data = torch.from_numpy(tmp_out)
                     tmp_state = NamedTensor(
-                        tensor=torch.from_numpy(tmp_out),
+                        tensor=tensor_data,
                         feature_names=param.parameter_short_name,
                         names=["timestep", "lat", "lon", "features"],
                     )
+
                     loutputs.append(tmp_state)
+
             except KeyError as e:
                 print("Error for param {param}")
                 raise e
@@ -759,6 +795,7 @@ class SmeagolDataset(DatasetABC, Dataset):
             grid_limits=self.grid.grid_limits, projection=self.grid.projection
         )
 
+
 class InferSmeagolDataset(SmeagolDataset):
     """
     Inherite from the SmeagolDataset class.
@@ -870,7 +907,7 @@ class InferSmeagolDataset(SmeagolDataset):
                 )
                 param_list.append(param)
 
-        inference_period = (Period(**conf["periods"]["test"], name="infer"))
+        inference_period = Period(**conf["periods"]["test"], name="infer")
         ds = InferSmeagolDataset(
             grid,
             inference_period,

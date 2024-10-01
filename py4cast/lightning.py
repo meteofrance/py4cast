@@ -352,7 +352,6 @@ class AutoRegressiveLightning(pl.LightningModule):
 
         # Here we do the autoregressive prediction looping
         # for the desired number of ar steps.
-
         for i in range(batch.num_pred_steps):
             if not inference:
                 border_state = batch.outputs.tensor[:, i]
