@@ -400,7 +400,6 @@ class PoesyDataset(DatasetABC, Dataset):
                         number += 1
 
         print("All samples are now defined")
-
         return samples
 
     @cached_property
@@ -776,13 +775,10 @@ class PoesyDataset(DatasetABC, Dataset):
         Usefull information for plotting.
         """
         grib_keys = {}
-        levels = []
-        names = []
         typesOflevel = {}
 
         for p in self.params:
             psn = p.parameter_short_name
-            print(psn)
             match psn:
                 case ["t2m_1"]:
                     grib_keys["t2m_1"] = {
@@ -790,34 +786,27 @@ class PoesyDataset(DatasetABC, Dataset):
                         "name": "t2m",
                         "typeOfLevel": "heightAboveGround",
                     }
-                    names.append("t2m")
-                    levels.append(2)
+
                 case ["u_1"]:
                     grib_keys["u_1"] = {
                         "level": 10,
                         "name": "u10",
                         "typeOfLevel": "heightAboveGround",
                     }
-                    names.append("u10")
-                    if 10 not in levels:
-                        levels.append(10)
+
                 case ["v_1"]:
                     grib_keys["v_1"] = {
                         "level": 10,
                         "name": "v10",
                         "typeOfLevel": "heightAboveGround",
                     }
-                    names.append("v10")
-                    if 10 not in levels:
-                        levels.append(10)
+
                 case ["rrdecum_1"]:
                     grib_keys["rrdecum_1"] = {
                         "level": 0,
                         "name": "tirf",
                         "typeOfLevel": "surface",
                     }
-                    names.append("tirf")
-                    levels.append(0)
 
         for k in grib_keys.keys():
             if grib_keys[k]["typeOfLevel"] not in typesOflevel.keys():
@@ -832,8 +821,8 @@ class PoesyDataset(DatasetABC, Dataset):
                 typesOflevel[grib_keys[k]["typeOfLevel"]]["names"].append(
                     grib_keys[k]["name"]
                 )
-        print(typesOflevel)
-        return grib_keys, levels, names, typesOflevel
+
+        return grib_keys, typesOflevel
 
     @classmethod
     def prepare(cls, path_config: Path):
@@ -921,6 +910,7 @@ class InferPoesyDataset(PoesyDataset):
                         samples.append(samp)
                         number += 1
         print("All samples are now defined")
+        print(samples)
 
         return samples
 
@@ -968,8 +958,6 @@ class InferPoesyDataset(PoesyDataset):
                 param_list.append(param)
         inference_period = (
             Period(**conf["periods"]["test"], name="infer")
-            # if not config_override
-            # else Period(**config_override["periods"]["test"], name="infer")
         )
 
         ds = InferPoesyDataset(

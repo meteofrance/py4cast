@@ -1,17 +1,18 @@
 import datetime as dt
-from copy import deepcopy
-from pathlib import Path
-from typing import Any, Tuple, List
 import os
+from copy import deepcopy
 from dataclasses import dataclass
-from dataclasses_json import dataclass_json
+from pathlib import Path
+from typing import Any, Tuple, Union
 
 import numpy as np
 import xarray as xr
 from cfgrib import xarray_to_grib as xtg
+from dataclasses_json import dataclass_json
 
 from py4cast.datasets.base import DatasetABC, NamedTensor
 from py4cast.forcingutils import compute_hours_of_day
+
 
 @dataclass_json
 @dataclass
@@ -47,79 +48,67 @@ def saveNamedTensorToGrib(
             The last placeholders are reserved for timestamp.
     """
     if hasattr(ds, "grib_keys_converter"):
-        grib_keys, levels, names, typesOflevel = ds.grib_keys_converter
+        grib_keys, typesOflevel = ds.grib_keys_converter
     else:
         print(
             "Found no custom grib keys converter implemented for dataset, resorting to default grib keys getter"
         )
         params = ds.params
-        grib_keys, levels, names, typesOflevel = get_grib_keys(pred, params)
+        grib_keys, typesOflevel = get_grib_keys(pred, params)
 
     grib_groups = get_grib_groups(grib_keys, typesOflevel)
-    leadtimes = compute_hours_of_day(date, sample.output_terms)
+    validtimes = compute_hours_of_day(date, sample.output_terms)
     init_term = compute_hours_of_day(date, [sample.input_terms[-1]])[0]
+    leadtimes = validtimes - init_term
     predicted_time_steps = len(leadtimes)
-    model_ds = { c : 
-            xr.open_dataset(
-                Path(saving_settings.directory) / saving_settings.template_grib,
-                backend_kwargs={
-                    "indexpath": "",
-                    "read_keys": [
-                        "level",
-                        "shortname",
-                        "centre",
-                        "typeOfGeneratingProcess",
-                        "generatingProcessIdentifier",
-                        "typeOfLevel",
-                        "discipline",
-                        "parameterCategory",
-                        "parameterNumber",
-                        "unit",
-                    ],
-                    "filter_by_keys": grib_groups[c],
-                },
-            )
-            for c in grib_groups.keys()
+    model_ds = {
+        c: xr.open_dataset(
+            Path(saving_settings.directory) / saving_settings.template_grib,
+            backend_kwargs={
+                "indexpath": "",
+                "read_keys": [
+                    "level",
+                    "shortname",
+                    "centre",
+                    "typeOfGeneratingProcess",
+                    "generatingProcessIdentifier",
+                    "typeOfLevel",
+                    "discipline",
+                    "parameterCategory",
+                    "parameterNumber",
+                    "unit",
+                ],
+                "filter_by_keys": grib_groups[c],
+            },
+        )
+        for c in grib_groups.keys()
     }
 
     for t_idx in range(predicted_time_steps)[:1]:
         for group in model_ds.keys():
             target_ds = deepcopy(model_ds[group])
 
-            # if the shape of the dataset grid doesn't match grib template : fill the rest of the data with NaNs 
-            if (target_ds.latitude.values != ds.grid.lat[0, :]) or (
-                target_ds.longitude.values != ds.grid.lon[:, 0]
-            ):
-                nanmask = np.empty((len(target_ds.latitude), len(target_ds.longitude)))
-                nanmask[:] = np.nan
-                latmin, latmax = (
-                    np.where(
-                        np.round(target_ds.latitude.values, 5)
-                        == round(ds.grid.lat.min(), 5)
-                    )[0].item(),
-                    np.where(
-                        np.round(target_ds.latitude.values, 5)
-                        == round(ds.grid.lat.max(), 5)
-                    )[0].item(),
-                )
-                longmin, longmax = (
-                    np.where(
-                        np.round(target_ds.longitude.values, 5)
-                        == round(ds.grid.lon.min(), 5)
-                    )[0].item(),
-                    np.where(
-                        np.round(target_ds.longitude.values, 5)
-                        == round(ds.grid.lon.max(), 5)
-                    )[0].item(),
-                )
+            # if the shape of the dataset grid doesn't match grib template : fill the rest of the data with NaNs
 
-            else:
-                nanmask = np.empty()
+            nanmask, latlon = make_nan_mask(ds, target_ds)
+            (
+                latmin,
+                latmax,
+                longmin,
+                longmax,
+            ) = latlon
 
             target_ds["time"] = date
-            nanosecond_term = np.timedelta64(int(leadtimes[t_idx] * 3600 * 1000000000 - init_term * 3600 * 1000000000),'ns')
-            target_ds["step"] = nanosecond_term
-            target_ds["valid_time"] = np.datetime64(date) + nanosecond_term
+            ns_step = np.timedelta64(
+                int(leadtimes[t_idx] * 3600 * 1000000000),
+                "ns",
+            )
+            ns_valid = np.timedelta64(
+                int(validtimes[t_idx] * 3600 * 1000000000),
+                "ns",
+            )
+            target_ds["step"] = ns_step
+            target_ds["valid_time"] = np.datetime64(date) + ns_valid
 
             for feature_name in pred.feature_names_to_idx.keys():
                 name, level, tol = (
@@ -127,10 +116,12 @@ def saveNamedTensorToGrib(
                     grib_keys[feature_name]["level"],
                     grib_keys[feature_name]["typeOfLevel"],
                 )
-                if (name==group) or (level==group) or (tol==group) :
+                if (name == group) or (level == group) or (tol == group):
                     data = (
                         (
-                            pred.tensor[0, t_idx, :, :, pred.feature_names_to_idx[feature_name]]
+                            pred.tensor[
+                                0, t_idx, :, :, pred.feature_names_to_idx[feature_name]
+                            ]
                             .cpu()
                             .numpy()
                             .astype(np.float32)
@@ -138,14 +129,16 @@ def saveNamedTensorToGrib(
                         # TODO : correctly reshape spatial dims in the 1D-catch-all case
                         if pred.num_spatial_dims == 2
                         else (
-                            pred.tensor[0, t_idx, :, pred.feature_names_to_idx[feature_name]]
+                            pred.tensor[
+                                0, t_idx, :, pred.feature_names_to_idx[feature_name]
+                            ]
                             .cpu()
                             .numpy()
                             .astype(np.float32)
                         )
                     )
 
-                    if nanmask.size == 0:
+                    if nanmask is None:
                         data2grib = data
                     else:
                         data2grib = nanmask
@@ -153,10 +146,18 @@ def saveNamedTensorToGrib(
 
                     dims = model_ds[group][name].dims
                     target_ds[name] = (dims, data2grib)
-                    target_ds[name] = target_ds[name].assign_attrs(**model_ds[group][name].attrs)
+                    target_ds[name] = target_ds[name].assign_attrs(
+                        **model_ds[group][name].attrs
+                    )
 
-            filename = f"{saving_settings.directory}/{saving_settings.output_fmt.format(*saving_settings.output_kwargs, date, leadtimes[t_idx] - init_term)}"
-            option = 'wb' if not os.path.exists(filename) else 'ab'
+            filename = saving_settings.output_fmt.format(
+                *saving_settings.output_kwargs, date, leadtimes[t_idx]
+            )
+            option = (
+                "wb"
+                if not os.path.exists(f"{saving_settings.directory}/{filename}")
+                else "ab"
+            )
             xtg.to_grib(
                 target_ds,
                 filename,
@@ -216,7 +217,7 @@ def get_grib_keys(pred: NamedTensor, params: list) -> Tuple[dict, list, list, di
             f"There where unmatched features in pred tensor (no associated param found) : {unmatched_feature_names}"
         )
 
-    return grib_keys, levels, names, typesOflevel
+    return grib_keys, typesOflevel
 
 
 def get_grib_groups(grib_keys: dict, typesOflevel: dict) -> dict:
@@ -255,3 +256,41 @@ def get_grib_groups(grib_keys: dict, typesOflevel: dict) -> dict:
                 grib_groups[c] = filter_keys
 
     return grib_groups
+
+
+def make_nan_mask(
+    infer_dataset: DatasetABC, template_dataset: xr.Dataset
+) -> Tuple[Union[np.ndarray, None], Tuple]:
+    if (template_dataset.latitude.values != infer_dataset.grid.lat[0, :]) or (
+        template_dataset.longitude.values != infer_dataset.grid.lon[:, 0]
+    ):
+        nanmask = np.empty(
+            (len(template_dataset.latitude), len(template_dataset.longitude))
+        )
+        nanmask[:] = np.nan
+        latmin, latmax = (
+            np.where(
+                np.round(template_dataset.latitude.values, 5)
+                == round(infer_dataset.grid.lat.min(), 5)
+            )[0].item(),
+            np.where(
+                np.round(template_dataset.latitude.values, 5)
+                == round(infer_dataset.grid.lat.max(), 5)
+            )[0].item(),
+        )
+        longmin, longmax = (
+            np.where(
+                np.round(template_dataset.longitude.values, 5)
+                == round(infer_dataset.grid.lon.min(), 5)
+            )[0].item(),
+            np.where(
+                np.round(template_dataset.longitude.values, 5)
+                == round(infer_dataset.grid.lon.max(), 5)
+            )[0].item(),
+        )
+
+    else:
+        nanmask = None
+        longmin, longmax, latmin, latmax = None, None, None, None
+
+    return nanmask, (latmin, latmax, longmin, longmax)

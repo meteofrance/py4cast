@@ -4,10 +4,10 @@ from pathlib import Path
 
 from pytorch_lightning import Trainer
 
+from IO.writing_outputs import GribSavingSettings, saveNamedTensorToGrib
 from py4cast.datasets import get_datasets
 from py4cast.datasets.base import TorchDataloaderSettings
 from py4cast.lightning import AutoRegressiveLightning
-from IO.writing_outputs import saveNamedTensorToGrib, GribSavingSettings
 
 default_config_root = Path(__file__).parents[1] / "config/IO/"
 
@@ -21,6 +21,12 @@ if __name__ == "__main__":
         "--dataset", type=str, help="Dataset used in inference", default="poesy_infer"
     )
     parser.add_argument(
+        "--dataset_conf",
+        type=str,  # Union[str, None] # Union does not work from CLI.
+        default=None,
+        help="Configuration file for the dataset. If None, default configuration is used.",
+    )
+    parser.add_argument(
         "--infer_steps", type=int, help="Number of inference steps", default=1
     )
     parser.add_argument(
@@ -31,7 +37,7 @@ if __name__ == "__main__":
     )
 
     parser.add_argument(
-        "--saving_config",
+        "--saving_conf",
         type=str,
         help="name of the config file for write settings (json)",
         default="poesy_grib_settings.json",
@@ -52,7 +58,7 @@ if __name__ == "__main__":
 
     if args.date is not None:
         config_override = {
-            "periods": {"test": {"start": args.date, "end": args.date, "step": 2}},
+            "periods": {"test": {"start": args.date, "end": args.date, "step": 1}},
             "num_inference_pred_steps": args.infer_steps,
         }
     else:
@@ -64,7 +70,7 @@ if __name__ == "__main__":
         hparams.num_input_steps,
         hparams.num_pred_steps_train,
         hparams.num_pred_steps_val_test,
-        hparams.dataset_conf,
+        args.dataset_conf,
         config_override=config_override,
     )
 
@@ -73,11 +79,9 @@ if __name__ == "__main__":
     infer_loader = infer_ds.torch_dataloader(dl_settings)
     trainer = Trainer(devices="auto")
     preds = trainer.predict(lightning_module, infer_loader)
-    with open(default_config_root / args.saving_config, "r") as f:
+    with open(default_config_root / args.saving_conf, "r") as f:
         save_settings = GribSavingSettings(**json.load(f))
-         
-    for sample, pred in zip(infer_ds.sample_list[:1], preds[:1]):
-        # TODO : add json schema validation
 
+    for sample, pred in zip(infer_ds.sample_list[:1], preds[:1]):
         date = sample.date
         saveNamedTensorToGrib(pred, infer_ds, sample, date, save_settings)
