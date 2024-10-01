@@ -543,6 +543,7 @@ class PoesyDataset(DatasetABC, Dataset):
                         param,
                         sample.date,
                         terms=sample.terms,
+                        member=sample.member,
                         inference_steps=self.settings.num_inference_pred_steps,
                     )
                     state_kwargs["names"][0] = "timestep"
