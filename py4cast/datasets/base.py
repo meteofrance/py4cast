@@ -625,7 +625,7 @@ class DatasetABC(ABC):
         n_features = len(random_inputs.feature_names)
         sum_means = torch.zeros(n_features)
         sum_squares = torch.zeros(n_features)
-        flat_input = random_inputs.tensor.flatten(0, 3) # (X, Features)
+        flat_input = random_inputs.tensor.flatten(0, 3)  # (X, Features)
         best_min = torch.min(flat_input, dim=0).values
         best_max = torch.max(flat_input, dim=0).values
         counter = 0
@@ -720,7 +720,7 @@ class DatasetABC(ABC):
 
         diff_mean = sum_means / counter
         diff_second_moment = sum_squares / counter
-        diff_std = torch.sqrt(diff_second_moment - diff_mean ** 2)  # (d_features)
+        diff_std = torch.sqrt(diff_second_moment - diff_mean**2)  # (d_features)
         store_d = {}
 
         # Storing variable statistics

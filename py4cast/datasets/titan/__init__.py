@@ -16,7 +16,6 @@ import torch
 import tqdm
 import typer
 import xarray as xr
-from joblib import Parallel, delayed
 from skimage.transform import resize
 from torch.utils.data import DataLoader, Dataset
 
@@ -37,7 +36,6 @@ from py4cast.datasets.titan.settings import (
 )
 from py4cast.forcingutils import generate_toa_radiation_forcing, get_year_hour_forcing
 from py4cast.plots import DomainInfo
-from py4cast.settings import CACHE_DIR
 from py4cast.utils import merge_dicts
 
 app = typer.Typer()
@@ -504,16 +502,24 @@ class Sample:
 #                            DATASET                        #
 #############################################################
 
-def get_dataset_path(name:str, grid:Grid):
+
+def get_dataset_path(name: str, grid: Grid):
     str_subdomain = "-".join([str(i) for i in grid.subdomain])
     subdataset_name = f"{name}_{grid.name}_{str_subdomain}"
     return SCRATCH_PATH / "subdatasets" / subdataset_name
 
-def get_param_list(conf: dict, grid: Grid, dataset_path:Path) -> List[Param]:
+
+def get_param_list(conf: dict, grid: Grid, dataset_path: Path) -> List[Param]:
     param_list = []
     for name, values in conf["params"].items():
         for lvl in values["levels"]:
-            param = Param(name=name, level=lvl, kind=values["kind"], grid=grid, npy_path=dataset_path / "data")
+            param = Param(
+                name=name,
+                level=lvl,
+                kind=values["kind"],
+                grid=grid,
+                npy_path=dataset_path / "data",
+            )
             param_list.append(param)
     return param_list
 
@@ -522,7 +528,12 @@ class TitanDataset(DatasetABC, Dataset):
     # Si on doit travailler avec plusieurs grilles, on fera un super dataset qui contient
     # plusieurs datasets chacun sur une seule grille
     def __init__(
-        self, name:str, grid: Grid, period: Period, params: List[Param], settings: TitanSettings
+        self,
+        name: str,
+        grid: Grid,
+        period: Period,
+        params: List[Param],
+        settings: TitanSettings,
     ):
         self.name = name
         self.grid = grid
@@ -585,13 +596,15 @@ class TitanDataset(DatasetABC, Dataset):
                 dates_str = [line[:-1] for line in f.readlines()]
                 dateformat = "%Y-%m-%d_%Hh%M"
                 dates = [dt.datetime.strptime(ds, dateformat) for ds in dates_str]
-                dates = list(set(dates).intersection(set(self.period.date_list)) )
+                dates = list(set(dates).intersection(set(self.period.date_list)))
                 samples = [
                     Sample(date, self.settings, self.params, stats, self.grid)
                     for date in dates
                 ]
         else:
-            print(f"Valid samples file {self.valid_samples_file} does not exist. Computing samples list...")
+            print(
+                f"Valid samples file {self.valid_samples_file} does not exist. Computing samples list..."
+            )
             samples = []
             for date in tqdm.tqdm(self.period.date_list):
                 sample = Sample(date, self.settings, self.params, stats, self.grid)
@@ -640,12 +653,10 @@ class TitanDataset(DatasetABC, Dataset):
         item = sample.load()
         return item
 
-    
-
     @classmethod
     def from_dict(
         cls,
-        name:str,
+        name: str,
         conf: dict,
         num_input_steps: int,
         num_pred_steps_train: int,
@@ -685,7 +696,11 @@ class TitanDataset(DatasetABC, Dataset):
             if config_override is not None:
                 conf = merge_dicts(conf, config_override)
         return cls.from_dict(
-            fname.stem, conf, num_input_steps, num_pred_steps_train, num_pred_steps_val_test
+            fname.stem,
+            conf,
+            num_input_steps,
+            num_pred_steps_train,
+            num_pred_steps_val_test,
         )
 
     def __str__(self) -> str:
@@ -775,7 +790,6 @@ class TitanDataset(DatasetABC, Dataset):
         )
 
 
-
 @app.command()
 def prepare(
     path_config: Path = DEFAULT_CONFIG,
@@ -784,7 +798,7 @@ def prepare(
     num_pred_steps_val_test: int = 1,
     convert_grib2npy: bool = False,
     compute_stats: bool = True,
-    write_valid_samples_list: bool = True
+    write_valid_samples_list: bool = True,
 ):
     """Prepares Titan dataset for training.
     This command will:
@@ -800,7 +814,11 @@ def prepare(
 
     print("Creating folders...")
     train_ds, valid_ds, test_ds = TitanDataset.from_dict(
-        path_config.stem, conf, num_input_steps, num_pred_steps_train, num_pred_steps_val_test
+        path_config.stem,
+        conf,
+        num_input_steps,
+        num_pred_steps_train,
+        num_pred_steps_val_test,
     )
     train_ds.cache_dir.mkdir(exist_ok=True)
     data_dir = train_ds.cache_dir / "data"
@@ -809,9 +827,12 @@ def prepare(
 
     if convert_grib2npy:
         print("Converting gribs to npy...")
-        src_path = SCRATCH_PATH / "grib"
         param_list = get_param_list(conf, train_ds.grid, train_ds.cache_dir)
-        sum_dates = list(train_ds.period.date_list) + list(valid_ds.period.date_list) + list(test_ds.period.date_list)
+        sum_dates = (
+            list(train_ds.period.date_list)
+            + list(valid_ds.period.date_list)
+            + list(test_ds.period.date_list)
+        )
         dates = sorted(list(set(sum_dates)))
         for date in tqdm.tqdm(dates):
             process_sample_dataset(date, param_list)
@@ -819,7 +840,11 @@ def prepare(
 
     conf["settings"]["standardize"] = False
     train_ds, valid_ds, test_ds = TitanDataset.from_dict(
-        path_config.stem, conf, num_input_steps, num_pred_steps_train, num_pred_steps_val_test
+        path_config.stem,
+        conf,
+        num_input_steps,
+        num_pred_steps_train,
+        num_pred_steps_val_test,
     )
     if compute_stats:
         print("Computing stats on each parameter...")
@@ -833,7 +858,11 @@ def prepare(
         print("Computing time stats on each parameters, between 2 timesteps...")
         conf["settings"]["standardize"] = True
         train_ds, valid_ds, test_ds = TitanDataset.from_dict(
-            path_config.stem, conf, num_input_steps, num_pred_steps_train, num_pred_steps_val_test
+            path_config.stem,
+            conf,
+            num_input_steps,
+            num_pred_steps_train,
+            num_pred_steps_val_test,
         )
         train_ds.compute_time_step_stats()
 

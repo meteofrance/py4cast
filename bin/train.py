@@ -249,7 +249,7 @@ else:
 
 # Get Log folders
 if args.no_log:
-    save_path=None
+    save_path = None
 else:
     log_dir = ROOTDIR / "logs"
     folder = Path(args.campaign_name) / args.dataset / args.model
