@@ -214,7 +214,7 @@ class AutoRegressiveLightning(pl.LightningModule):
 
         save_path = self.hparams["hparams"].save_path
         max_pred_step = self.hparams["hparams"].num_pred_steps_val_test - 1
-        if not self.hparams["hparams"].no_log:
+        if self.logging_enabled:
             self.rmse_psd_plot_metric = MetricPSDVar(pred_step=max_pred_step)
             self.psd_plot_metric = MetricPSDK(save_path, pred_step=max_pred_step)
             self.acc_metric = MetricACC(self.hparams["hparams"].dataset_info)
