@@ -248,19 +248,16 @@ else:
     len_loader = len(train_loader)
 
 # Get Log folders
-if args.no_log:
-    save_path = None
-else:
-    log_dir = ROOTDIR / "logs"
-    folder = Path(args.campaign_name) / args.dataset / args.model
-    run_name = f"{username[:4]}_{args.run_name}"
-    if args.dev_mode:
-        run_name += "_dev"
-    list_subdirs = list((log_dir / folder).glob(f"{run_name}*"))
-    list_versions = sorted([int(d.name.split("_")[-1]) for d in list_subdirs])
-    version = 0 if list_subdirs == [] else list_versions[-1] + 1
-    subfolder = f"{run_name}_{version}"
-    save_path = log_dir / folder / subfolder
+log_dir = ROOTDIR / "logs"
+folder = Path(args.campaign_name) / args.dataset / args.model
+run_name = f"{username[:4]}_{args.run_name}"
+if args.dev_mode:
+    run_name += "_dev"
+list_subdirs = list((log_dir / folder).glob(f"{run_name}*"))
+list_versions = sorted([int(d.name.split("_")[-1]) for d in list_subdirs])
+version = 0 if list_subdirs == [] else list_versions[-1] + 1
+subfolder = f"{run_name}_{version}"
+save_path = log_dir / folder / subfolder
 
 
 hp = ArLightningHyperParam(
