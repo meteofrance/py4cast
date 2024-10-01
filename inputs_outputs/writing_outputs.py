@@ -2,6 +2,7 @@ import datetime as dt
 from copy import deepcopy
 from pathlib import Path
 from typing import Any, Tuple
+import os
 
 import numpy as np
 import xarray as xr
@@ -47,9 +48,9 @@ def saveNamedTensorToGrib(
     grib_groups = get_grib_groups(grib_keys, typesOflevel)
     leadtimes = compute_hours_of_day(date, sample.output_terms)
     predicted_time_steps = len(leadtimes)
-
-    model_ds = xr.merge(
-        [
+    print(sample)
+    print(sample.output_terms)
+    model_ds = { c : 
             xr.open_dataset(
                 Path(saving_settings["directory"]) / saving_settings["template_grib"],
                 backend_kwargs={
@@ -70,95 +71,88 @@ def saveNamedTensorToGrib(
                 },
             )
             for c in grib_groups.keys()
-        ],
-        compat="override",
-    )
-
-    print(model_ds)
+    }
 
     for t_idx in range(predicted_time_steps)[:1]:
-        target_ds = deepcopy(model_ds)
+        for group_idx, group in enumerate(model_ds.keys()):
+            target_ds = deepcopy(model_ds[group])
 
-        # fill the rest of the data with NaNs if the shape of the dataset grid does not match the grib template grid
-        if (target_ds.latitude.values != ds.grid.lat[0, :]) or (
-            target_ds.longitude.values != ds.grid.lon[:, 0]
-        ):
-            nanmask = np.empty((len(target_ds.latitude), len(target_ds.longitude)))
-            nanmask[:] = np.nan
-            latmin, latmax = (
-                np.where(
-                    np.round(target_ds.latitude.values, 5)
-                    == round(ds.grid.lat.min(), 5)
-                )[0].item(),
-                np.where(
-                    np.round(target_ds.latitude.values, 5)
-                    == round(ds.grid.lat.max(), 5)
-                )[0].item(),
-            )
-            longmin, longmax = (
-                np.where(
-                    np.round(target_ds.longitude.values, 5)
-                    == round(ds.grid.lon.min(), 5)
-                )[0].item(),
-                np.where(
-                    np.round(target_ds.longitude.values, 5)
-                    == round(ds.grid.lon.max(), 5)
-                )[0].item(),
-            )
-
-        else:
-            nanmask = np.empty()
-
-        target_ds["time"] = date
-        nanosecond_term = int(leadtimes[t_idx] * 3600 * 1000000000)
-        target_ds["step"] = np.timedelta64(nanosecond_term, "ns")
-        target_ds["valid_time"] = np.datetime64(date) + np.timedelta64(
-            nanosecond_term, "ns"
-        )
-
-        for feature_name in pred.feature_names_to_idx.keys():
-            print(grib_keys[feature_name])
-            name, level, tol = (
-                grib_keys[feature_name]["name"],
-                grib_keys[feature_name]["level"],
-                grib_keys[feature_name]["typeOfLevel"],
-            )
-            data = (
-                (
-                    pred.tensor[0, t_idx, :, :, pred.feature_names_to_idx[feature_name]]
-                    .cpu()
-                    .numpy()
-                    .astype(np.float32)
+            # if the shape of the dataset grid doesn't match grib template : fill the rest of the data with NaNs 
+            if (target_ds.latitude.values != ds.grid.lat[0, :]) or (
+                target_ds.longitude.values != ds.grid.lon[:, 0]
+            ):
+                nanmask = np.empty((len(target_ds.latitude), len(target_ds.longitude)))
+                nanmask[:] = np.nan
+                latmin, latmax = (
+                    np.where(
+                        np.round(target_ds.latitude.values, 5)
+                        == round(ds.grid.lat.min(), 5)
+                    )[0].item(),
+                    np.where(
+                        np.round(target_ds.latitude.values, 5)
+                        == round(ds.grid.lat.max(), 5)
+                    )[0].item(),
                 )
-                # TODO : correctly reshape spatial dims in the 1D-catch-all case
-                if pred.num_spatial_dims == 2
-                else (
-                    pred.tensor[0, t_idx, :, pred.feature_names_to_idx[feature_name]]
-                    .cpu()
-                    .numpy()
-                    .astype(np.float32)
+                longmin, longmax = (
+                    np.where(
+                        np.round(target_ds.longitude.values, 5)
+                        == round(ds.grid.lon.min(), 5)
+                    )[0].item(),
+                    np.where(
+                        np.round(target_ds.longitude.values, 5)
+                        == round(ds.grid.lon.max(), 5)
+                    )[0].item(),
                 )
-            )
 
-            print(data.mean(), data.min(), data.max())
-
-            if nanmask.size == 0:
-                data2grib = data
             else:
-                data2grib = nanmask
-                data2grib[latmax : latmin + 1, longmin : longmax + 1] = data
+                nanmask = np.empty()
 
-            dims = model_ds[name].dims
-            target_ds[name] = (dims, data2grib)
-            target_ds[name] = target_ds[name].assign_attrs(**model_ds[name].attrs)
-        xtg.to_grib(
-            target_ds,
-            Path(saving_settings["directory"])
-            / saving_settings["output_fmt"].format(
-                *saving_settings["output_kwargs"], date, leadtimes[t_idx]
-            ),
-            "wb",
-        )
+            target_ds["time"] = date
+            nanosecond_term = np.timedelta64(int(leadtimes[t_idx] * 3600 * 1000000000),'ns') - np.datetime64(date,'ns')
+            target_ds["step"] = nanosecond_term
+            target_ds["valid_time"] = np.datetime64(date) + nanosecond_term
+
+            for feature_name in pred.feature_names_to_idx.keys():
+                name, level, tol = (
+                    grib_keys[feature_name]["name"],
+                    grib_keys[feature_name]["level"],
+                    grib_keys[feature_name]["typeOfLevel"],
+                )
+                if (name==group) or (level==group) or (tol==group) :
+                    data = (
+                        (
+                            pred.tensor[0, t_idx, :, :, pred.feature_names_to_idx[feature_name]]
+                            .cpu()
+                            .numpy()
+                            .astype(np.float32)
+                        )
+                        # TODO : correctly reshape spatial dims in the 1D-catch-all case
+                        if pred.num_spatial_dims == 2
+                        else (
+                            pred.tensor[0, t_idx, :, pred.feature_names_to_idx[feature_name]]
+                            .cpu()
+                            .numpy()
+                            .astype(np.float32)
+                        )
+                    )
+
+                    if nanmask.size == 0:
+                        data2grib = data
+                    else:
+                        data2grib = nanmask
+                        data2grib[latmax : latmin + 1, longmin : longmax + 1] = data
+
+                    dims = model_ds[group][name].dims
+                    target_ds[name] = (dims, data2grib)
+                    target_ds[name] = target_ds[name].assign_attrs(**model_ds[group][name].attrs)
+
+            filename = f"{saving_settings['directory']}/{saving_settings['output_fmt'].format(*saving_settings['output_kwargs'], date, nanosecond_term)}"
+            option = 'wb' if not os.path.exists(filename) else 'ab'
+            xtg.to_grib(
+                target_ds,
+                filename,
+                option,
+            )
 
 
 def get_grib_keys(pred: NamedTensor, params: list) -> Tuple[dict, list, list, dict]:
@@ -183,10 +177,9 @@ def get_grib_keys(pred: NamedTensor, params: list) -> Tuple[dict, list, list, di
     typesOflevel = {}
     unmatched_feature_names = set(pred.feature_names)
     for param in params:
-        print(param)
+
         trial_names = param.parameter_short_name
         for ft_idx, ftname in enumerate(trial_names):
-            print(ftname)
             if ftname in pred_feature_names:
                 level, name, typeoflevel = (
                     param.levels[ft_idx],
