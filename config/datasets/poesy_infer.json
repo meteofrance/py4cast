@@ -36,7 +36,7 @@
             ],
             "term": {
                 "start": 0,
-                "end": 2,
+                "end": 0,
                 "timestep": 1
             },
             "var": {

@@ -1,8 +1,10 @@
 import datetime as dt
 from copy import deepcopy
 from pathlib import Path
-from typing import Any, Tuple
+from typing import Any, Tuple, List
 import os
+from dataclasses import dataclass
+from dataclasses_json import dataclass_json
 
 import numpy as np
 import xarray as xr
@@ -10,6 +12,14 @@ from cfgrib import xarray_to_grib as xtg
 
 from py4cast.datasets.base import DatasetABC, NamedTensor
 from py4cast.forcingutils import compute_hours_of_day
+
+@dataclass_json
+@dataclass
+class GribSavingSettings:
+    template_grib: str
+    output_fmt: str
+    output_kwargs: list[str]
+    directory: str
 
 
 def saveNamedTensorToGrib(
@@ -47,12 +57,11 @@ def saveNamedTensorToGrib(
 
     grib_groups = get_grib_groups(grib_keys, typesOflevel)
     leadtimes = compute_hours_of_day(date, sample.output_terms)
+    init_term = compute_hours_of_day(date, [sample.input_terms[-1]])[0]
     predicted_time_steps = len(leadtimes)
-    print(sample)
-    print(sample.output_terms)
     model_ds = { c : 
             xr.open_dataset(
-                Path(saving_settings["directory"]) / saving_settings["template_grib"],
+                Path(saving_settings.directory) / saving_settings.template_grib,
                 backend_kwargs={
                     "indexpath": "",
                     "read_keys": [
@@ -74,7 +83,7 @@ def saveNamedTensorToGrib(
     }
 
     for t_idx in range(predicted_time_steps)[:1]:
-        for group_idx, group in enumerate(model_ds.keys()):
+        for group in model_ds.keys():
             target_ds = deepcopy(model_ds[group])
 
             # if the shape of the dataset grid doesn't match grib template : fill the rest of the data with NaNs 
@@ -108,7 +117,7 @@ def saveNamedTensorToGrib(
                 nanmask = np.empty()
 
             target_ds["time"] = date
-            nanosecond_term = np.timedelta64(int(leadtimes[t_idx] * 3600 * 1000000000),'ns') - np.datetime64(date,'ns')
+            nanosecond_term = np.timedelta64(int(leadtimes[t_idx] * 3600 * 1000000000 - init_term * 3600 * 1000000000),'ns')
             target_ds["step"] = nanosecond_term
             target_ds["valid_time"] = np.datetime64(date) + nanosecond_term
 
@@ -146,7 +155,7 @@ def saveNamedTensorToGrib(
                     target_ds[name] = (dims, data2grib)
                     target_ds[name] = target_ds[name].assign_attrs(**model_ds[group][name].attrs)
 
-            filename = f"{saving_settings['directory']}/{saving_settings['output_fmt'].format(*saving_settings['output_kwargs'], date, nanosecond_term)}"
+            filename = f"{saving_settings.directory}/{saving_settings.output_fmt.format(*saving_settings.output_kwargs, date, leadtimes[t_idx] - init_term)}"
             option = 'wb' if not os.path.exists(filename) else 'ab'
             xtg.to_grib(
                 target_ds,

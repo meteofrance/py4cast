@@ -7,7 +7,7 @@ from pytorch_lightning import Trainer
 from py4cast.datasets import get_datasets
 from py4cast.datasets.base import TorchDataloaderSettings
 from py4cast.lightning import AutoRegressiveLightning
-from py4cast.writing_outputs import saveNamedTensorToGrib
+from IO.writing_outputs import saveNamedTensorToGrib, GribSavingSettings
 
 default_config_root = Path(__file__).parents[1] / "config/IO/"
 
@@ -74,7 +74,8 @@ if __name__ == "__main__":
     trainer = Trainer(devices="auto")
     preds = trainer.predict(lightning_module, infer_loader)
     with open(default_config_root / args.saving_config, "r") as f:
-        save_settings = json.load(f)
+        save_settings = GribSavingSettings(**json.load(f))
+         
     for sample, pred in zip(infer_ds.sample_list[:1], preds[:1]):
         # TODO : add json schema validation
 
