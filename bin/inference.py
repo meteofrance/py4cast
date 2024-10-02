@@ -4,9 +4,9 @@ from pathlib import Path
 
 from pytorch_lightning import Trainer
 
-from py4cast.io.writing_outputs import GribSavingSettings, save_named_tensors_to_grib
 from py4cast.datasets import get_datasets
 from py4cast.datasets.base import TorchDataloaderSettings
+from py4cast.io.writing_outputs import GribSavingSettings, save_named_tensors_to_grib
 from py4cast.lightning import AutoRegressiveLightning
 
 default_config_root = Path(__file__).parents[1] / "config/IO/"
@@ -38,7 +38,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--grib",
         action="store_true",
-        help="Whether the outputs should be saved as grib"
+        help="Whether the outputs should be saved as grib",
     )
     parser.add_argument(
         "--saving_conf",
@@ -81,10 +81,10 @@ if __name__ == "__main__":
     # Transform in dataloader
     dl_settings = TorchDataloaderSettings(batch_size=1)
     infer_loader = infer_ds.torch_dataloader(dl_settings)
-    
+
     trainer = Trainer(devices="auto")
     preds = trainer.predict(lightning_module, infer_loader)
-    
+
     if args.grib:
         with open(default_config_root / args.saving_conf, "r") as f:
             save_settings = GribSavingSettings.schema().loads((f.read()))
@@ -92,10 +92,12 @@ if __name__ == "__main__":
             kw = len(save_settings.output_kwargs)
             fi = len(save_settings.sample_identifiers)
             try:
-                assert ph==(fi + kw)
+                assert ph == (fi + kw)
             except AssertionError:
-                raise ValueError(f"Filename fmt has {ph} placeholders,\
-                    but {kw} output_kwargs and {fi} sample identifiers.")
-            
+                raise ValueError(
+                    f"Filename fmt has {ph} placeholders,\
+                    but {kw} output_kwargs and {fi} sample identifiers."
+                )
+
         for sample, pred in zip(infer_ds.sample_list, preds):
             save_named_tensors_to_grib(pred, infer_ds, sample, save_settings)

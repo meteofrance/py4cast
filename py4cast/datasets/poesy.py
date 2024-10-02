@@ -174,10 +174,10 @@ class Grid:
 class Param:
     name: str
     shortname: str
-    levels: Tuple[int,...]
-    grid: Grid # Parameter grid.
+    levels: Tuple[int, ...]
+    grid: Grid  # Parameter grid.
     fnamer: Callable[[], [str]]
-    filenameref: str # string to retrieve the datafile corresponding to Param
+    filenameref: str  # string to retrieve the datafile corresponding to Param
     level_type: str = "isobaricInHpa"  # To be read in nc file ?
     kind: Literal["input", "output", "input_output"] = "input_output"
     unit: str = "FakeUnit"  # To be read in nc FIle  ?
@@ -596,8 +596,8 @@ class PoesyDataset(DatasetABC, Dataset):
                     levels=vard.pop("level", [2]),
                     grid=grid,
                     fnamer=poesy_forecast_namer,
-                    filenameref=vard.pop("filename","t2m"),
-                    level_type=vard.pop("typeOfLevel","heightAboveGround"),
+                    filenameref=vard.pop("filename", "t2m"),
+                    level_type=vard.pop("typeOfLevel", "heightAboveGround"),
                     **vard,
                 )
                 param_list.append(param)
@@ -881,21 +881,19 @@ class InferPoesyDataset(PoesyDataset):
             members = conf["dataset"][data_source].get("members", [0])
             term = conf["dataset"][data_source]["term"]
             for var in data["var"]:
-                vard = data["var"][var]                
+                vard = data["var"][var]
                 param = Param(
                     name=var,
                     shortname=vard.pop("shortname", "t2m"),
                     levels=vard.pop("level", [2]),
                     grid=grid,
                     fnamer=poesy_forecast_namer,
-                    filenameref=vard.pop("filename","t2m"),
-                    level_type=vard.pop("typeOfLevel","heightAboveGround"),
+                    filenameref=vard.pop("filename", "t2m"),
+                    level_type=vard.pop("typeOfLevel", "heightAboveGround"),
                     **vard,
                 )
                 param_list.append(param)
-        inference_period = (
-            Period(**conf["periods"]["test"], name="infer")
-        )
+        inference_period = Period(**conf["periods"]["test"], name="infer")
 
         ds = InferPoesyDataset(
             grid,
