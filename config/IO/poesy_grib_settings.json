@@ -1,6 +1,7 @@
 {
     "template_grib": "grid.arome-forecast.eurw1s40+0001:00.grib",
-    "output_fmt" : "grid.emul_aro_ai_dataset_{}_date{}_ech{}.grib",
+    "directory" : "/scratch/shared/py4cast/gribs_writing",
     "output_kwargs" : ["poesy_eurw1s40"],
-    "directory" : "/scratch/shared/py4cast/gribs_writing"
+    "sample_identifiers" : ["member", "date", "leadtime"],
+    "output_fmt" : "grid.emul_aro_ai_dataset_{}_member_{}_date_{}_ech_{}.grib"
 }

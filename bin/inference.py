@@ -4,7 +4,7 @@ from pathlib import Path
 
 from pytorch_lightning import Trainer
 
-from IO.writing_outputs import GribSavingSettings, saveNamedTensorToGrib
+from py4cast.io.writing_outputs import GribSavingSettings, save_named_tensors_to_grib
 from py4cast.datasets import get_datasets
 from py4cast.datasets.base import TorchDataloaderSettings
 from py4cast.lightning import AutoRegressiveLightning
@@ -35,7 +35,11 @@ if __name__ == "__main__":
         help="floating point precision for the inference",
         default="32",
     )
-
+    parser.add_argument(
+        "--grib",
+        action="store_true",
+        help="Whether the outputs should be saved as grib"
+    )
     parser.add_argument(
         "--saving_conf",
         type=str,
@@ -77,11 +81,21 @@ if __name__ == "__main__":
     # Transform in dataloader
     dl_settings = TorchDataloaderSettings(batch_size=1)
     infer_loader = infer_ds.torch_dataloader(dl_settings)
+    
     trainer = Trainer(devices="auto")
     preds = trainer.predict(lightning_module, infer_loader)
-    with open(default_config_root / args.saving_conf, "r") as f:
-        save_settings = GribSavingSettings(**json.load(f))
-
-    for sample, pred in zip(infer_ds.sample_list[:1], preds[:1]):
-        date = sample.date
-        saveNamedTensorToGrib(pred, infer_ds, sample, date, save_settings)
+    
+    if args.grib:
+        with open(default_config_root / args.saving_conf, "r") as f:
+            save_settings = GribSavingSettings.schema().loads((f.read()))
+            ph = len(save_settings.output_fmt.split("{}")) - 1
+            kw = len(save_settings.output_kwargs)
+            fi = len(save_settings.sample_identifiers)
+            try:
+                assert ph==(fi + kw)
+            except AssertionError:
+                raise ValueError(f"Filename fmt has {ph} placeholders,\
+                    but {kw} output_kwargs and {fi} sample identifiers.")
+            
+        for sample, pred in zip(infer_ds.sample_list, preds):
+            save_named_tensors_to_grib(pred, infer_ds, sample, save_settings)

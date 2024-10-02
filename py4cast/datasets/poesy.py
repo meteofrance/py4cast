@@ -40,20 +40,22 @@ DATA_SHAPE = (600, 600, 45, 16)
 SECONDS_IN_YEAR = 365 * 24 * 60 * 60
 
 
-def poesy_forecast_namer(date: dt.datetime, shortname, **kwargs):
+def poesy_forecast_namer(date: dt.datetime, var_file_name, **kwargs):
     """
     use to find local files
     """
-    return f"{date.strftime('%Y-%m-%dT%H:%M:%SZ')}_{shortname}_lt1-45_crop.npy"
+    return f"{date.strftime('%Y-%m-%dT%H:%M:%SZ')}_{var_file_name}_lt1-45_crop.npy"
 
 
-def get_weight(level: int, kind: str):
-    if kind == "hPa":
-        return 1 + (level) / (90)
-    elif kind == "m":
-        return 2
+def get_weight(level: float, level_type: str) -> float:
+    if level_type == "isobaricInHpa":
+        return 1.0 + (level) / (90)
+    elif level_type == "heightAboveGround":
+        return 2.0
+    elif level_type == "surface":
+        return 1.0
     else:
-        raise Exception(f"unknown kind:{kind}, must be hPa or m right now")
+        raise Exception(f"unknown level_type:{level_type}")
 
 
 @dataclass(slots=True)
@@ -172,13 +174,11 @@ class Grid:
 class Param:
     name: str
     shortname: str
-    levels: Tuple[int]
-    grid: Grid  # Parameter grid.
-    # It is not necessarly the same as the model grid.
-    # Function which can return the filenames.
-    # It should accept member and date as argument (as well as term).
-    fnamer: Callable[[], [str]]  # VSCode doesn't like this, is it ok ?
-    level_type: str = "hPa"  # To be read in nc file ?
+    levels: Tuple[int,...]
+    grid: Grid # Parameter grid.
+    fnamer: Callable[[], [str]]
+    filenameref: str # string to retrieve the datafile corresponding to Param
+    level_type: str = "isobaricInHpa"  # To be read in nc file ?
     kind: Literal["input", "output", "input_output"] = "input_output"
     unit: str = "FakeUnit"  # To be read in nc FIle  ?
     ndims: int = 2
@@ -214,7 +214,7 @@ class Param:
         """
         Return the filename.
         """
-        return SCRATCH_PATH / self.fnamer(date=date, shortname=self.shortname)
+        return SCRATCH_PATH / self.fnamer(date=date, var_file_name=self.filenameref)
 
     def load_data(self, date: dt.datetime, term: List, member: int) -> np.array:
         """
@@ -590,17 +590,14 @@ class PoesyDataset(DatasetABC, Dataset):
             for var in data["var"]:
                 vard = data["var"][var]
                 # Change grid definition
-                if "level" in vard:
-                    level_type = "hPa"
-                else:
-                    level_type = "m"
                 param = Param(
                     name=var,
                     shortname=vard.pop("shortname", "t2m"),
-                    levels=vard.pop("level", [0]),
+                    levels=vard.pop("level", [2]),
                     grid=grid,
-                    level_type=level_type,
                     fnamer=poesy_forecast_namer,
+                    filenameref=vard.pop("filename","t2m"),
+                    level_type=vard.pop("typeOfLevel","heightAboveGround"),
                     **vard,
                 )
                 param_list.append(param)
@@ -768,62 +765,6 @@ class PoesyDataset(DatasetABC, Dataset):
             grid_limits=self.grid.grid_limits, projection=self.grid.projection
         )
 
-    @cached_property
-    def grib_keys_converter(self) -> Tuple[dict, list, list, dict]:
-        # TODO : correct the informations in the POESY dataset and remove this func
-        """Information on the domain considered.
-        Usefull information for plotting.
-        """
-        grib_keys = {}
-        typesOflevel = {}
-
-        for p in self.params:
-            psn = p.parameter_short_name
-            match psn:
-                case ["t2m_1"]:
-                    grib_keys["t2m_1"] = {
-                        "level": 2,
-                        "name": "t2m",
-                        "typeOfLevel": "heightAboveGround",
-                    }
-
-                case ["u_1"]:
-                    grib_keys["u_1"] = {
-                        "level": 10,
-                        "name": "u10",
-                        "typeOfLevel": "heightAboveGround",
-                    }
-
-                case ["v_1"]:
-                    grib_keys["v_1"] = {
-                        "level": 10,
-                        "name": "v10",
-                        "typeOfLevel": "heightAboveGround",
-                    }
-
-                case ["rrdecum_1"]:
-                    grib_keys["rrdecum_1"] = {
-                        "level": 0,
-                        "name": "tirf",
-                        "typeOfLevel": "surface",
-                    }
-
-        for k in grib_keys.keys():
-            if grib_keys[k]["typeOfLevel"] not in typesOflevel.keys():
-                typesOflevel[grib_keys[k]["typeOfLevel"]] = {
-                    "levels": [grib_keys[k]["level"]],
-                    "names": [grib_keys[k]["name"]],
-                }
-            else:
-                typesOflevel[grib_keys[k]["typeOfLevel"]]["levels"].append(
-                    grib_keys[k]["level"]
-                )
-                typesOflevel[grib_keys[k]["typeOfLevel"]]["names"].append(
-                    grib_keys[k]["name"]
-                )
-
-        return grib_keys, typesOflevel
-
     @classmethod
     def prepare(cls, path_config: Path):
         print("--> Preparing Poesy Dataset...")
@@ -940,19 +881,15 @@ class InferPoesyDataset(PoesyDataset):
             members = conf["dataset"][data_source].get("members", [0])
             term = conf["dataset"][data_source]["term"]
             for var in data["var"]:
-                vard = data["var"][var]
-                # Change grid definition
-                if "level" in vard:
-                    level_type = "hPa"
-                else:
-                    level_type = "m"
+                vard = data["var"][var]                
                 param = Param(
                     name=var,
                     shortname=vard.pop("shortname", "t2m"),
-                    levels=vard.pop("level", [0]),
+                    levels=vard.pop("level", [2]),
                     grid=grid,
-                    level_type=level_type,
                     fnamer=poesy_forecast_namer,
+                    filenameref=vard.pop("filename","t2m"),
+                    level_type=vard.pop("typeOfLevel","heightAboveGround"),
                     **vard,
                 )
                 param_list.append(param)
