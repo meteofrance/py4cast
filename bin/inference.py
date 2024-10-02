@@ -1,5 +1,4 @@
 import argparse
-import json
 from pathlib import Path
 
 from pytorch_lightning import Trainer
