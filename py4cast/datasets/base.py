@@ -625,7 +625,8 @@ class DatasetABC(ABC):
         n_features = len(random_inputs.feature_names)
         sum_means = torch.zeros(n_features)
         sum_squares = torch.zeros(n_features)
-        flat_input = random_inputs.tensor.flatten(0, 3)  # (X, Features)
+        ndim_features = len(random_inputs.tensor.shape) - 1
+        flat_input = random_inputs.tensor.flatten(0, ndim_features - 1)  # (X, Features)
         best_min = torch.min(flat_input, dim=0).values
         best_max = torch.max(flat_input, dim=0).values
         counter = 0
