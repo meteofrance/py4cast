@@ -56,7 +56,7 @@ parser.add_argument(
 )
 parser.add_argument(
     "--dataset_conf",
-    type=str,  # Union[str, None] # Union does not work from CLI.
+    type=Path,  # Union[str, None] # Union does not work from CLI.
     default=None,
     help="Configuration file for the dataset. If None, default configuration is used.",
 )

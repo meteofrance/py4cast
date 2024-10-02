@@ -624,10 +624,15 @@ class DatasetABC(ABC):
         """
         Compute mean and standard deviation for this dataset.
         """
-        means = []
-        squares = []
-        mins = []
-        maxs = []
+        random_inputs = next(iter(self.torch_dataloader())).inputs
+        n_features = len(random_inputs.feature_names)
+        sum_means = torch.zeros(n_features)
+        sum_squares = torch.zeros(n_features)
+        ndim_features = len(random_inputs.tensor.shape) - 1
+        flat_input = random_inputs.tensor.flatten(0, ndim_features - 1)  # (X, Features)
+        best_min = torch.min(flat_input, dim=0).values
+        best_max = torch.max(flat_input, dim=0).values
+        counter = 0
         print(
             "We are going to compute statistics on the dataset. This can take a while."
         )
@@ -637,7 +642,6 @@ class DatasetABC(ABC):
         for batch in tqdm(self.torch_dataloader(), desc="Computing stats"):
 
             # Here we assume that data are in 2 or 3 D
-
             inputs = batch.inputs.tensor
             outputs = batch.outputs.tensor
 
@@ -653,44 +657,51 @@ class DatasetABC(ABC):
                 1, 3
             )  # Flatten everybody to be (Batch, X, Features)
 
-            means.append(in_out.mean(dim=1))
-            squares.append((in_out**2).mean(dim=1))
-            maxi, _ = torch.max(in_out, 1)
-            mini, _ = torch.min(in_out, 1)
-            mins.append(mini)  # (N_batch, d_features,)
-            maxs.append(maxi)  # (N_batch, d_features,)
+            counter += in_out.shape[0]  # += batch size
 
-        mean = torch.mean(torch.cat(means, dim=0), dim=0)  # (d_features)
-        second_moment = torch.mean(torch.cat(squares, dim=0), dim=0)
+            sum_means += torch.sum(in_out.mean(dim=1), dim=0)  # (d_features)
+            sum_squares += torch.sum((in_out**2).mean(dim=1), dim=0)  # (d_features)
+
+            mini = torch.min(in_out, 1).values[0]
+            stack_mini = torch.stack([best_min, mini], dim=0)
+            best_min = torch.min(stack_mini, dim=0).values  # (d_features)
+
+            maxi = torch.max(in_out, 1).values[0]
+            stack_maxi = torch.stack([best_max, maxi], dim=0)
+            best_max = torch.max(stack_maxi, dim=0).values  # (d_features)
+
+        mean = sum_means / counter
+        second_moment = sum_squares / counter
         std = torch.sqrt(second_moment - mean**2)  # (d_features)
-        maxi, _ = torch.max(torch.cat(maxs, dim=0), dim=0)
-        mini, _ = torch.min(torch.cat(mins, dim=0), dim=0)
-
-        # Store in dictionnary
-        store_d = {}
 
         # Storing variable statistics
+        store_d = {}
         for i, name in enumerate(batch.inputs.feature_names):
             store_d[name] = {
                 "mean": mean[i],
                 "std": std[i],
-                "min": mini[i],
-                "max": maxi[i],
+                "min": best_min[i],
+                "max": best_max[i],
             }
-        torch_save(store_d, self.cache_dir / "parameters_stats.pt")
+        dest_file = self.cache_dir / "parameters_stats.pt"
+        torch_save(store_d, dest_file)
+        print(f"Parameters statistics saved in {dest_file}")
 
     def compute_time_step_stats(self):
-        diff_means = []
-        diff_squares = []
+        random_inputs = next(iter(self.torch_dataloader())).inputs
+        n_features = len(random_inputs.feature_names)
+        sum_means = torch.zeros(n_features)
+        sum_squares = torch.zeros(n_features)
+        counter = 0
         if not self.settings.standardize:
             print(
                 f"Your dataset {self} is not normalized. If you do not normalized your output it could be intended."
             )
             print("Otherwise consider standardizing your inputs.")
+
         for batch in tqdm(self.torch_dataloader()):
 
-            # Here we postpone that data are in 2 or 3 D
-
+            # Here we assume that data are in 2 or 3 D
             inputs = batch.inputs.tensor
             outputs = batch.outputs.tensor
 
@@ -707,13 +718,12 @@ class DatasetABC(ABC):
             )  # Substract information on time dimension
             diff = diff.flatten(1, 3)  # Flatten everybody to be (Batch, X, Features)
 
-            diff_means.append(diff.mean(dim=1))
-            diff_squares.append((diff**2).mean(dim=1))
+            counter += in_out.shape[0]  # += batch size
+            sum_means += torch.sum(diff.mean(dim=1), dim=0)  # (d_features)
+            sum_squares += torch.sum((diff**2).mean(dim=1), dim=0)  # (d_features)
 
-        # This should not work
-        # We should be aware that dataset shoul
-        diff_mean = torch.mean(torch.cat(diff_means, dim=0), dim=0)
-        diff_second_moment = torch.mean(torch.cat(diff_squares, dim=0), dim=0)
+        diff_mean = sum_means / counter
+        diff_second_moment = sum_squares / counter
         diff_std = torch.sqrt(diff_second_moment - diff_mean**2)  # (d_features)
         store_d = {}
 
@@ -723,7 +733,9 @@ class DatasetABC(ABC):
                 "mean": diff_mean[i],
                 "std": diff_std[i],
             }
+        dest_file = self.cache_dir / "diff_stats.pt"
         torch_save(store_d, self.cache_dir / "diff_stats.pt")
+        print(f"Parameters time diff stats saved in {dest_file}")
 
     @property
     def dataset_extra_statics(self) -> List[NamedTensor]:
