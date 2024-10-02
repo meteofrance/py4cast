@@ -278,6 +278,7 @@ hp = ArLightningHyperParam(
     save_path=save_path,
     use_lr_scheduler=args.use_lr_scheduler,
     precision=args.precision,
+    no_log=args.no_log,
 )
 
 # Logger & checkpoint callback
@@ -306,7 +307,9 @@ else:
     )
     callback_list.append(checkpoint_callback)
     callback_list.append(LearningRateMonitor(logging_interval="step"))
-callback_list.append(EarlyStopping(monitor="val_mean_loss", mode="min", patience=50))
+    callback_list.append(
+        EarlyStopping(monitor="val_mean_loss", mode="min", patience=50)
+    )
 
 # Setup profiler
 if args.profiler == "pytorch":
