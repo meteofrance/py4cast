@@ -189,12 +189,13 @@ class NamedTensor(TensorWrapper):
 
     def __getitem__(self, feature_name: str) -> torch.Tensor:
         """
-        Get one feature of the tensor by name.
+        Get one feature from the features dimension of the tensor by name.
+        The returned tensor has the same number of dimensions as the original tensor.
         """
         try:
-            return self.tensor[..., self.feature_names_to_idx[feature_name]].unsqueeze(
-                -1
-            )
+            return self.select_dim(
+                self.feature_dim_name, self.feature_names_to_idx[feature_name]
+            ).unsqueeze(self.names.index(self.feature_dim_name))
         except KeyError:
             raise ValueError(
                 f"Feature {feature_name} not found in {self.feature_names}"

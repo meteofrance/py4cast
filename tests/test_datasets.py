@@ -189,6 +189,18 @@ def test_named_tensor():
     # test dim_index
     assert nt_cat.dim_index("features") == 3
 
+    # test NamedTensor with features in second dim
+    nt = NamedTensor(
+        torch.rand(3, 50, 256, 256),
+        names=["batch", "features", "lat", "lon"],
+        feature_names=[f"feature_{i}" for i in range(50)],
+    )
+    assert nt.dim_size("features") == 50
+    assert nt.dim_index("features") == 1
+    # test __getitem__ with feature name
+    f = nt["feature_0"]
+    assert f.shape == (3, 1, 256, 256)
+
 
 def test_item():
     """
