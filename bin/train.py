@@ -200,6 +200,13 @@ parser.add_argument(
     default=False,
     help="Use pin_memory in dataloader",
 )
+parser.add_argument(
+    "--channels_last",
+    "-cl",
+    action=BooleanOptionalAction,
+    default=False,
+    help="Use torch's channel last",
+)
 
 args, other = parser.parse_known_args()
 username = getpass.getuser()
@@ -279,6 +286,7 @@ hp = ArLightningHyperParam(
     use_lr_scheduler=args.use_lr_scheduler,
     precision=args.precision,
     no_log=args.no_log,
+    channels_last=args.channels_last,
 )
 
 # Logger & checkpoint callback

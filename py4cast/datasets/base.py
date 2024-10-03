@@ -374,6 +374,12 @@ class NamedTensor(TensorWrapper):
         """
         self.tensor = self.tensor.pin_memory()
 
+    def to_(self, *args, **kwargs):
+        """
+        'In place' operation to call torch's 'to' method on the underlying tensor.
+        """
+        self.tensor = self.tensor.to(*args, **kwargs)
+
 
 @dataclass(slots=True)
 class Item:
@@ -404,6 +410,14 @@ class Item:
         self.inputs.squeeze_(dim_name)
         self.outputs.squeeze_(dim_name)
         self.forcing.squeeze_(dim_name)
+
+    def to_(self, *args, **kwargs):
+        """
+        'In place' operation to call torch's 'to' method on the underlying NamedTensors.
+        """
+        self.inputs.to_(*args, **kwargs)
+        self.outputs.to_(*args, **kwargs)
+        self.forcing.to_(*args, **kwargs)
 
     def pin_memory(self):
         """

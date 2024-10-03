@@ -66,6 +66,7 @@ class ArLightningHyperParam:
     use_lr_scheduler: bool = False
     precision: str = "bf16"
     no_log: bool = False
+    channels_last: bool = False
 
     def __post_init__(self):
         """
@@ -179,6 +180,8 @@ class AutoRegressiveLightning(pl.LightningModule):
             hparams.model_conf,
             statics.grid_shape,
         )
+        if hparams.channels_last:
+            self.model = self.model.to(memory_format=torch.channels_last)
 
         exp_summary(hparams, self.model)
 
@@ -414,6 +417,8 @@ class AutoRegressiveLightning(pl.LightningModule):
             for k in range(num_inter_steps):
                 x = self._next_x(batch, prev_states, i)
                 # Graph (B, N_grid, d_f) or Conv (B, N_lat,N_lon d_f)
+                if self.hparams["hparams"].channels_last:
+                    x = x.to(memory_format=torch.channels_last)
                 y = self.model(x)
 
                 # We update the latest of our prev_states with the network output
