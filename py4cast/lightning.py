@@ -441,23 +441,23 @@ class AutoRegressiveLightning(pl.LightningModule):
                 if i < batch.num_pred_steps - 1 or k < num_inter_steps - 1:
                     # Update input states for next iteration: drop oldest, append new_state
                     timestep_dim_index = batch.inputs.dim_index("timestep")
+                    new_prev_states_tensor = torch.cat(
+                        [
+                            # Drop the oldest timestep (select all but the first)
+                            prev_states.index_select_dim(
+                                "timestep",
+                                range(1, prev_states.dim_size("timestep")),
+                            ),
+                            # Add the timestep dimension to the new state
+                            new_state.unsqueeze(timestep_dim_index),
+                        ],
+                        dim=timestep_dim_index,
+                    )
 
                     # Make a new NamedTensor with the new state with the same dimensions
                     # and features as the inputs
                     prev_states = NamedTensor.new_like(
-                        torch.cat(
-                            [
-                                # Drop the oldest timestep (select all but the first)
-                                prev_states.index_select_dim(
-                                    "timestep",
-                                    range(1, prev_states.dim_size("timestep")),
-                                ),
-                                # Add the timestep dimension to the new state
-                                new_state.unsqueeze(timestep_dim_index),
-                            ],
-                            dim=timestep_dim_index,
-                        ),
-                        batch.inputs,
+                        new_prev_states_tensor, batch.inputs
                     )
             # Append prediction to prediction list only "normal steps"
             prediction_list.append(new_state)
