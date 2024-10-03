@@ -248,7 +248,7 @@ class NamedTensor(TensorWrapper):
 
     def unsqueeze_(self, dim_name: str, dim_index: int):
         """ "
-        Insert a new dimension dim_name at dim_index of size 1
+        Insert a new dimension dim_name of size 1 at dim_index
         """
         self.tensor = torch.unsqueeze(self.tensor, dim_index)
         self.names.insert(dim_index, dim_name)
