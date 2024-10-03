@@ -328,6 +328,8 @@ if args.profiler == "pytorch":
         profile_memory=True,
     )
     print("Initiate pytorchProfiler")
+elif args.profiler in ("simple", "advanced"):
+    profiler = args.profiler
 else:
     profiler = None
     print(f"No profiler set {args.profiler}")
