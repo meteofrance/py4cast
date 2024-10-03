@@ -284,19 +284,22 @@ class AutoRegressiveLightning(pl.LightningModule):
             return opt
 
     def _next_x(
-        self, batch: ItemBatch, prev_states: torch.Tensor, step_idx: int
+        self, batch: ItemBatch, prev_states: NamedTensor, step_idx: int
     ) -> torch.Tensor:
         """
-        Build the next x input for the model at step_idx using the :
+        Build the next x input for the model at timestep step_idx using the :
         - previous states
         - forcing
         - static features
         """
-        forcing = batch.forcing.tensor[:, step_idx]
+        forcing = batch.forcing.select_dim("timestep", step_idx, bare_tensor=False)
         x = torch.cat(
-            [prev_states[:, idx] for idx in range(batch.num_input_steps)]
-            + [self.grid_static_features[: batch.batch_size], forcing],
-            dim=-1,
+            [
+                prev_states.select_dim("timestep", idx)
+                for idx in range(batch.num_input_steps)
+            ]
+            + [self.grid_static_features[: batch.batch_size], forcing.tensor],
+            dim=forcing.dim_index("features"),
         )
         return x
 
@@ -381,14 +384,14 @@ class AutoRegressiveLightning(pl.LightningModule):
             # Stack original shape to reshape later
             self.original_shape = batch.inputs.tensor.shape
             # Graph model, we flatten the batch spatial dims
-            batch.inputs.flatten_("ngrid", 2, 3)
+            batch.inputs.flatten_("ngrid", *batch.inputs.spatial_dim_idx)
 
             if not inference:
-                batch.outputs.flatten_("ngrid", 2, 3)
+                batch.outputs.flatten_("ngrid", *batch.outputs.spatial_dim_idx)
 
-            batch.forcing.flatten_("ngrid", 2, 3)
+            batch.forcing.flatten_("ngrid", *batch.forcing.spatial_dim_idx)
 
-        prev_states = batch.inputs.tensor
+        prev_states = batch.inputs
         prediction_list = []
 
         # Here we do the autoregressive prediction looping
@@ -396,7 +399,7 @@ class AutoRegressiveLightning(pl.LightningModule):
 
         for i in range(batch.num_pred_steps):
             if not inference:
-                border_state = batch.outputs.tensor[:, i]
+                border_state = batch.outputs.select_dim("timestep", i)
 
             if scale_y:
                 step_diff_std, step_diff_mean = self._step_diffs(
@@ -416,10 +419,13 @@ class AutoRegressiveLightning(pl.LightningModule):
                 # We update the latest of our prev_states with the network output
                 if scale_y:
                     predicted_state = (
-                        prev_states[:, -1] + y * step_diff_std + step_diff_mean
+                        # select the last timestep
+                        prev_states.select_dim("timestep", -1)
+                        + y * step_diff_std
+                        + step_diff_mean
                     )
                 else:
-                    predicted_state = prev_states[:, -1] + y
+                    predicted_state = prev_states.select_dim("timestep", -1) + y
 
                 # Overwrite border with true state
                 # Force it to true state for all intermediary step
@@ -434,8 +440,18 @@ class AutoRegressiveLightning(pl.LightningModule):
                 # Only update the prev_states if we are not at the last step
                 if i < batch.num_pred_steps - 1 or k < num_inter_steps - 1:
                     # Update input states for next iteration: drop oldest, append new_state
-                    prev_states = torch.cat(
-                        [prev_states[:, 1:], new_state.unsqueeze(1)], dim=1
+                    prev_states = NamedTensor.new_like(
+                        torch.cat(
+                            [
+                                prev_states.index_select_dim(
+                                    "timestep",
+                                    range(1, prev_states.dim_size("timestep")),
+                                ),
+                                new_state.unsqueeze(batch.inputs.dim_index("timestep")),
+                            ],
+                            dim=batch.inputs.dim_index("timestep"),
+                        ),
+                        batch.inputs,
                     )
             # Append prediction to prediction list only "normal steps"
             prediction_list.append(new_state)
