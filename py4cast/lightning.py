@@ -454,10 +454,10 @@ class AutoRegressiveLightning(pl.LightningModule):
                         dim=timestep_dim_index,
                     )
 
-                    # Make a new NamedTensor with the new state with the same dimensions
-                    # and features as the inputs
+                    # Make a new NamedTensor with the same dim and
+                    # feature names as the original prev_states
                     prev_states = NamedTensor.new_like(
-                        new_prev_states_tensor, batch.inputs
+                        new_prev_states_tensor, prev_states
                     )
             # Append prediction to prediction list only "normal steps"
             prediction_list.append(new_state)
