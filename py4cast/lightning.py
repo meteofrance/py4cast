@@ -1,5 +1,6 @@
 import getpass
 import shutil
+import subprocess
 from copy import deepcopy
 from dataclasses import asdict, dataclass
 from functools import cached_property
@@ -256,6 +257,19 @@ class AutoRegressiveLightning(pl.LightningModule):
                 shutil.copyfile(
                     hparams.model_conf, hparams.save_path / "model_conf.json"
                 )
+            # Write commit and state of git repo in log file
+            dest_git_log = hparams.save_path / "git_log.txt"
+            out_log = (
+                subprocess.check_output(["git", "log", "-n", "1"])
+                .strip()
+                .decode("utf-8")
+            )
+            out_status = (
+                subprocess.check_output(["git", "status"]).strip().decode("utf-8")
+            )
+            with open(dest_git_log, "w") as f:
+                f.write(out_log)
+                f.write(out_status)
 
     def on_fit_start(self):
         self.log_hparams_tb()
