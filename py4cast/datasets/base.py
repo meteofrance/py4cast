@@ -68,8 +68,8 @@ class NamedTensor(TensorWrapper):
             )
         if tensor.shape[names.index(feature_dim_name)] != len(feature_names):
             raise ValueError(
-                f"Number of feature names ({len(feature_names)}:{feature_names}) must match"
-                f"number of features ({tensor.shape[names.index(feature_dim_name)]})"
+                f"Number of feature names ({len(feature_names)}:{feature_names}) must match "
+                f"number of features ({tensor.shape[names.index(feature_dim_name)]}) in the supplied tensor"
             )
 
         super().__init__(tensor)
@@ -275,7 +275,7 @@ class NamedTensor(TensorWrapper):
 
     def index_select_dim(
         self, dim_name: str, indices: torch.Tensor, bare_tensor: bool = True
-    ) -> torch.Tensor:
+    ) -> Union["NamedTensor", torch.Tensor]:
         """
         Return the tensor indexed along the dimension dim_name
         with the indices tensor.
