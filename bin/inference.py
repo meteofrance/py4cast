@@ -37,7 +37,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--grib",
         action="store_true",
-        help="Whether the outputs should be saved as grib",
+        help="Whether the outputs should be saved as grib, needs saving conf",
     )
     parser.add_argument(
         "--saving_conf",
@@ -66,7 +66,7 @@ if __name__ == "__main__":
         }
     else:
         config_override = {"num_inference_pred_steps": args.infer_steps}
-
+en gros faut qu'on refac
     # Get dataset for inference
     _, _, infer_ds = get_datasets(
         args.dataset,
@@ -79,15 +79,7 @@ if __name__ == "__main__":
 
     # Transform in dataloader
     dl_settings = TorchDataloaderSettings(batch_size=1)
-    infer_loader = infer_ds.torch_dataloader(dl_settings)
-
-    trainer = Trainer(devices="auto")
-    preds = trainer.predict(lightning_module, infer_loader)
-
-    if args.grib:
-        with open(default_config_root / args.saving_conf, "r") as f:
-            save_settings = GribSavingSettings.schema().loads((f.read()))
-            ph = len(save_settings.output_fmt.split("{}")) - 1
+    infer_loader = infer_ds.torch_dataloader(dl_settings)en gros faut qu'on refac
             kw = len(save_settings.output_kwargs)
             fi = len(save_settings.sample_identifiers)
             try:
