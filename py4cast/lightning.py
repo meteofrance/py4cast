@@ -440,16 +440,22 @@ class AutoRegressiveLightning(pl.LightningModule):
                 # Only update the prev_states if we are not at the last step
                 if i < batch.num_pred_steps - 1 or k < num_inter_steps - 1:
                     # Update input states for next iteration: drop oldest, append new_state
+                    timestep_dim_index = batch.inputs.dim_index("timestep")
+
+                    # Make a new NamedTensor with the new state with the same dimensions
+                    # and features as the inputs
                     prev_states = NamedTensor.new_like(
                         torch.cat(
                             [
+                                # Drop the oldest timestep (select all but the first)
                                 prev_states.index_select_dim(
                                     "timestep",
                                     range(1, prev_states.dim_size("timestep")),
                                 ),
-                                new_state.unsqueeze(batch.inputs.dim_index("timestep")),
+                                # Add the timestep dimension to the new state
+                                new_state.unsqueeze(timestep_dim_index),
                             ],
-                            dim=batch.inputs.dim_index("timestep"),
+                            dim=timestep_dim_index,
                         ),
                         batch.inputs,
                     )
