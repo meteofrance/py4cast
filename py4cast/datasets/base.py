@@ -261,6 +261,7 @@ class NamedTensor(TensorWrapper):
         Return the tensor indexed along the dimension dim_name
         with the index index.
         The given dimension is removed from the tensor.
+        See https://pytorch.org/docs/stable/generated/torch.select.html
         """
         if bare_tensor:
             return self.tensor.select(self.names.index(dim_name), index)
@@ -283,6 +284,7 @@ class NamedTensor(TensorWrapper):
         The returned tensor has the same number of dimensions as the original tensor (input).
         The dimth dimension has the same size as the length of index; other dimensions have
         the same size as in the original tensor.
+        See https://pytorch.org/docs/stable/generated/torch.index_select.html
         """
         if bare_tensor:
             return self.tensor.index_select(
