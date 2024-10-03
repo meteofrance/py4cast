@@ -241,7 +241,7 @@ class AutoRegressiveLightning(pl.LightningModule):
 
     @rank_zero_only
     def log_hparams_tb(self):
-        if self.logger:
+        if self.logging_enabled and self.logger:
             hparams = self.hparams["hparams"]
             # Log hparams in tensorboard hparams window
             dict_log = asdict(hparams)
