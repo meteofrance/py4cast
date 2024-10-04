@@ -108,9 +108,11 @@ class Grid:
         filename = SCRATCH_PATH / LATLON_FNAME
         with open(filename, "rb") as f:
             lonlat = np.load(f)
-        return lonlat[
-            1, self.subgrid[0] : self.subgrid[1], self.subgrid[2] : self.subgrid[3]
-        ]
+        return np.transpose(
+            lonlat[
+                1, self.subgrid[0] : self.subgrid[1], self.subgrid[2] : self.subgrid[3]
+            ]
+        )
 
     @cached_property
     def lon(self) -> np.array:
@@ -174,7 +176,7 @@ class Grid:
 class Param:
     name: str
     shortname: str
-    levels: Tuple[int, ...]
+    levels: Tuple[float, ...]
     grid: Grid  # Parameter grid.
     fnamer: Callable[[], [str]]
     filenameref: str  # string to retrieve the datafile corresponding to Param

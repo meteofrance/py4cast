@@ -24,13 +24,6 @@ class GribSavingSettings:
     output_fmt: str = "grid.forecast_ai_date_{}_ech_{}.json"
 
 
-@dataclass
-class Feature:
-    feature_name: str
-    level: float
-    typeOfLevel: str
-
-
 def save_named_tensors_to_grib(
     pred: NamedTensor,
     ds: DatasetABC,
@@ -118,7 +111,11 @@ def save_named_tensors_to_grib(
                     feature_name, ["level", "name", "typeOfLevel"]
                 ]
 
-                if (name == group) or (level == group) or (tol == group):
+                if (
+                    (f"{name}_{tol}" == group)
+                    or (f"{level}_{tol}" == group)
+                    or (tol == group)
+                ):
                     data = (
                         (
                             pred.tensor[
@@ -252,14 +249,17 @@ def get_grib_groups(grib_features: pd.DataFrame) -> dict[str:dict]:
     Returns:
         dict[str : dict]: mapping of group identifiers to grib-style key filtering
     """
-    grib_groups = {
-        "surface": {
-            "cfVarName": grib_features["name"]
-            .loc[(grib_features["typeOfLevel"] == "surface")]
-            .tolist(),
-            "typeOfLevel": "surface",
-        },
-    }
+    if "surface" in grib_features["typeOfLevel"]:
+        grib_groups = {
+            "surface": {
+                "cfVarName": grib_features["name"]
+                .loc[(grib_features["typeOfLevel"] == "surface")]
+                .tolist(),
+                "typeOfLevel": "surface",
+            },
+        }
+    else:
+        grib_groups = {}
 
     typesOflevel = grib_features["typeOfLevel"].drop_duplicates().tolist()
 
@@ -285,7 +285,7 @@ def get_grib_groups(grib_features: pd.DataFrame) -> dict[str:dict]:
                         "cfVarName": c,
                         "typeOfLevel": tol,
                     }
-                grib_groups[c] = filter_keys
+                grib_groups[f"{c}_{tol}"] = filter_keys
 
     return grib_groups
 
@@ -315,8 +315,23 @@ def make_nan_mask(
             f"The dataset {infer_dataset} has no grid attribute, cannot write grib."
         )
 
-    if (template_dataset.latitude.values != infer_dataset.grid.lat[0, :]) or (
-        template_dataset.longitude.values != infer_dataset.grid.lon[:, 0]
+    if (
+        (
+            np.array(template_dataset.latitude.values.min())
+            <= infer_dataset.grid.lat[:, 0].min()
+        )
+        and (
+            np.array(template_dataset.latitude.values.max())
+            >= infer_dataset.grid.lat[:, 0].max()
+        )
+        and (
+            np.array(template_dataset.longitude.values.min())
+            <= infer_dataset.grid.lon[:, 0].min()
+        )
+        and (
+            np.array(template_dataset.longitude.values.max())
+            >= infer_dataset.grid.lon[:, 0].max()
+        )
     ):
         nanmask = np.empty(
             (len(template_dataset.latitude), len(template_dataset.longitude))
@@ -346,21 +361,17 @@ def make_nan_mask(
             )[0],
         )
 
-        try:
-            # having value error here means the item() fails, i.e empty arrays : shape mismatch
-            latmin, latmax, longmin, longmax = (
-                latmin.item(),
-                latmax.item(),
-                longmin.item(),
-                longmax.item(),
-            )
-        except ValueError:
-            raise ValueError(
-                f"Lat/Lon dims of the {infer_dataset} do not fit in template grid, cannot write grib."
-            )
+        latmin, latmax, longmin, longmax = (
+            latmin.item(),
+            latmax.item(),
+            longmin.item(),
+            longmax.item(),
+        )
 
     else:
-        nanmask = None
-        longmin, longmax, latmin, latmax = None, None, None, None
+
+        raise ValueError(
+            f"Lat/Lon dims of the {infer_dataset} do not fit in template grid, cannot write grib."
+        )
 
     return nanmask, (latmin, latmax, longmin, longmax)
