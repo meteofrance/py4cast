@@ -273,6 +273,7 @@ class NamedTensor(TensorWrapper):
                 self.names[: self.names.index(dim_name)]
                 + self.names[self.names.index(dim_name) + 1 :],
                 self.feature_names,
+                feature_dim_name=self.feature_dim_name,
             )
 
     def index_select_dim(
@@ -298,6 +299,7 @@ class NamedTensor(TensorWrapper):
                 self.feature_names
                 if dim_name != self.feature_dim_name
                 else [self.feature_names[i] for i in indices],
+                feature_dim_name=self.feature_dim_name,
             )
 
     def dim_size(self, dim_name: str) -> int:
