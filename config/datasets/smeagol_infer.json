@@ -1,0 +1,138 @@
+{
+    "periods": {
+        "train": {
+            "start": 2022080600,
+            "end": 2023010600,
+            "step": 3
+        },
+        "test": {
+            "start": 2023010700,
+            "end": 2023012700,
+            "step": 3
+        },
+        "valid": {
+            "start": 2023012800,
+            "end": 2023021600,
+            "step": 3
+        }
+    },
+    "grid":{
+        "geometry":"franmgsp32", 
+        "border_size":10, 
+        "domain":"france",
+        "model":"arome",
+        "subgrid":[50,562,50,562]
+    }, 
+    "dataset": {
+        "arome": {
+            "grid":{
+                "domain": "france",
+                "model": "arome",
+                "geometry": "franmgsp32"
+                },
+            "members": [
+                0,
+                1, 
+                2,
+                3,
+                4
+            ],
+            "term": {
+                "start": 3,
+                "end": 9,
+                "timestep": 0.25
+            },
+            "var": {
+                "TEMPERATURE": {
+                    "shortname":"t",
+                    "level": [
+                        90,
+                        85,
+                        80,
+                        75,
+                        70,
+                        65,
+                        60,
+                        55,
+                        50,
+                        45,
+                        40,
+                        30,
+                        20,
+                        10,
+                        1
+                    ]
+                },
+                "WIND.V.PHYS": {
+                    "shortname":"v",
+                    "level": [
+                        90,
+                        85,
+                        80,
+                        75,
+                        70,
+                        65,
+                        60,
+                        55,
+                        50,
+                        45,
+                        40,
+                        30,
+                        20,
+                        10,
+                        1
+                    ]
+                },
+                "WIND.U.PHYS":{
+                    "shortname":"u",
+                    "level": [
+                        90,
+                        85,
+                        80,
+                        75,
+                        70,
+                        65,
+                        60,
+                        55,
+                        50,
+                        45,
+                        40,
+                        30,
+                        20,
+                        10,
+                        1
+                    ]
+                },
+                "HUMI.SPECIFI":{
+                    "shortname":"q",
+                    "level": [
+                        90,
+                        85,
+                        80,
+                        75,
+                        70,
+                        65,
+                        60,
+                        55,
+                        50,
+                        45,
+                        40,
+                        30,
+                        20,
+                        10,
+                        1
+                    ]
+                },
+                "SURFTEMPERATURE":{"shortname":"surf_t"},
+                "CLSTEMPERATURE":{"shortname":"2t"},
+                "CLSHUMI.RELATIVE":{"shortname":"2hu"},
+                "CLSVENT.ZONAL":{"shortname":"10u"},
+                "CLSVENT.MERIDIEN":{"shortname":"10v"},
+                "CLSU.RAF60M.XFU":{"shortname":"u_raf"},
+                "CLSV.RAF60M.XFU":{"shortname":"v_raf"},
+                "SURFPRESSION":{"shortname":"psurf"},
+                "SURFACCPLUIE":{"shortname":"rain"}
+                }
+            }
+        }
+}
