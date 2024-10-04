@@ -31,7 +31,7 @@ from skimage.transform import resize
 from tqdm import trange
 
 from py4cast.datasets import get_datasets
-from py4cast.datasets.base import Item, collate_fn
+from py4cast.datasets.base import Item
 from py4cast.datasets.titan.settings import AROME_PATH, METADATA
 from py4cast.lightning import ArLightningHyperParam, AutoRegressiveLightning
 from py4cast.plots import DomainInfo
@@ -157,7 +157,7 @@ def get_item_for_date(date: str, hparams: ArLightningHyperParam) -> Item:
 
 def make_forecast(model: AutoRegressiveLightning, item: Item) -> torch.tensor:
     """Applies a model an Item to make a forecast."""
-    batch_item = collate_fn([item])
+    batch_item = item.unsqueeze_("batch", 0)
     preds = model(batch_item)
     forecast = preds.tensor
     # Here we reshape output from GNNS to be on the grid
