@@ -116,26 +116,10 @@ def save_named_tensors_to_grib(
                     or (f"{level}_{tol}" == group)
                     or (tol == group)
                 ):
-                    data = (
-                        (
-                            pred.tensor[
-                                0, t_idx, :, :, pred.feature_names_to_idx[feature_name]
-                            ]
-                            .cpu()
-                            .numpy()
-                            .astype(np.float32)
-                        )
-                        # TODO : correctly reshape spatial dims in the 1D-catch-all case
-                        if pred.num_spatial_dims == 2
-                        else (
-                            pred.tensor[
-                                0, t_idx, :, pred.feature_names_to_idx[feature_name]
-                            ]
-                            .cpu()
-                            .numpy()
-                            .astype(np.float32)
-                        )
-                    )
+
+                    # collapsing batch dimension and selecting a given timestep
+                    pred.squeeze_("batch")
+                    data = pred.select_dim("timestep", t_idx, bare_tensor=False)[feature_name]
 
                     if nanmask is None:
                         data2grib = data
