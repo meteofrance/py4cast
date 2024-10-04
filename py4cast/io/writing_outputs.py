@@ -105,7 +105,7 @@ def save_named_tensors_to_grib(
             target_ds["step"] = ns_step
             target_ds["valid_time"] = np.datetime64(sample.date) + ns_valid
 
-            for feature_name in pred.feature_names_to_idx.keys():
+            for feature_name in pred.feature_names_to_idx:
 
                 level, name, tol = grib_features.loc[
                     feature_name, ["level", "name", "typeOfLevel"]
