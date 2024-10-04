@@ -221,9 +221,7 @@ class Param:
         date : Date of file.
         term : Position of leadtimes in file.
         """
-        data_array = np.memmap(
-            self.filename(date=date), dtype="float32", mode="r", shape=DATA_SHAPE
-        )
+        data_array = np.load(self.filename(date=date), mmap_mode="r")
 
         return data_array[
             self.grid.subgrid[0] : self.grid.subgrid[1],
@@ -540,6 +538,7 @@ class PoesyDataset(DatasetABC, Dataset):
                         param,
                         sample.date,
                         terms=sample.terms,
+                        member=sample.member,
                         inference_steps=self.settings.num_inference_pred_steps,
                     )
                     state_kwargs["names"][0] = "timestep"
