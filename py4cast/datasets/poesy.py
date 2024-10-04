@@ -258,7 +258,6 @@ class PoesySettings:
 @dataclass(slots=True)
 class Sample:
     # Describe a sample
-    # TODO consider members
     member: int
     settings: PoesySettings
     date: dt.datetime
