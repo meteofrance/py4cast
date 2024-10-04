@@ -1,7 +1,6 @@
 """
 Unit tests for datasets and NamedTensor.
 """
-import datetime
 from dataclasses import dataclass
 from functools import cached_property
 
