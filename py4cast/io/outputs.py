@@ -109,6 +109,8 @@ def save_named_tensors_to_grib(
             target_ds["step"] = ns_step
             target_ds["valid_time"] = np.datetime64(sample.date) + ns_valid
 
+            # collapsing batch dimension and selecting a given timestep
+
             data_tidx = pred.select_dim("timestep", t_idx, bare_tensor=False)
             for feature_name in pred.feature_names_to_idx:
 
@@ -122,9 +124,7 @@ def save_named_tensors_to_grib(
                     or (tol == group)
                 ):
 
-                    # collapsing batch dimension and selecting a given timestep
-                    pred.squeeze_("batch")
-                    data = data_tidx[feature_name]
+                    data = data_tidx[feature_name].squeeze().cpu().numpy()
 
                     if nanmask is None:
                         data2grib = data
