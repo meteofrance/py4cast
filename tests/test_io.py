@@ -12,7 +12,7 @@ import xarray as xr
 
 from py4cast.datasets.base import NamedTensor
 from py4cast.datasets.dummy import DummyDataset
-from py4cast.io import writing_outputs as wr
+from py4cast.io import outputs as out
 
 
 class FakeXarrayLatLon(xr.Dataset):
@@ -40,14 +40,14 @@ def test_nan_mask():
     dummy_template = FakeXarrayLatLon(exact_lat, exact_lon)
 
     # the function should throw no error and return an exact fit
-    nanmask, latlons_idx = wr.make_nan_mask(dummy_ds, dummy_template.template_ds)
+    nanmask, latlons_idx = out.make_nan_mask(dummy_ds, dummy_template.template_ds)
 
     # returning all None
     # nanmask definition
     assert nanmask.shape == dummy_template.Shape
 
     # checking values for latitudes, then longitudes
-    print(latlons_idx)
+
     assert latlons_idx[:2] == (0, 63)
     assert latlons_idx[2:] == (0, 63)
 
@@ -57,7 +57,7 @@ def test_nan_mask():
     dummy_template = FakeXarrayLatLon(fitting_lat, fitting_lon)
 
     # the function should throw no error and have correct results
-    nanmask, latlons_idx = wr.make_nan_mask(dummy_ds, dummy_template.template_ds)
+    nanmask, latlons_idx = out.make_nan_mask(dummy_ds, dummy_template.template_ds)
 
     # nanmask definition
     assert nanmask.shape == dummy_template.Shape
@@ -72,7 +72,7 @@ def test_nan_mask():
         fit_lon = (np.arange(64) + 30) * 0.5
         dummy_template = FakeXarrayLatLon(unfit_lat, fit_lon)
 
-        nanmask, latlons_idx = wr.make_nan_mask(dummy_ds, dummy_template.template_ds)
+        nanmask, latlons_idx = out.make_nan_mask(dummy_ds, dummy_template.template_ds)
 
     # wrong longitude grid
     with pytest.raises(ValueError):
@@ -80,7 +80,7 @@ def test_nan_mask():
         unfit_lon = (np.arange(64) + 25) * 0.5
         dummy_template = FakeXarrayLatLon(fit_lat, unfit_lon)
 
-        nanmask, latlons_idx = wr.make_nan_mask(dummy_ds, dummy_template.template_ds)
+        nanmask, latlons_idx = out.make_nan_mask(dummy_ds, dummy_template.template_ds)
 
 
 @dataclass
@@ -111,7 +111,7 @@ def test_get_grib_param_dataframe():
         tensor, names=["batch", "lat", "lon", "features"], feature_names=plist
     )
 
-    dataframe = wr.get_grib_param_dataframe(pred, params)
+    dataframe = out.get_grib_param_dataframe(pred, params)
     reference = pd.DataFrame(
         {
             "feature_name": [
@@ -166,7 +166,7 @@ def test_get_grib_groups():
         }
     )
 
-    groups = wr.get_grib_groups(reference)
+    groups = out.get_grib_groups(reference)
 
     assert set(groups.keys()) == {
         "u_heightAboveGround",
@@ -200,7 +200,7 @@ class FakeSample:
 
 def test_get_output_filename():
 
-    saving_settings = wr.GribSavingSettings(
+    saving_settings = out.GribSavingSettings(
         template_grib="fake_grib.grib",
         directory="fakedirectory",
         sample_identifiers=("date", "leadtime"),
@@ -209,10 +209,10 @@ def test_get_output_filename():
     sample = FakeSample(date="1911-10-30", fancy_ident="first solvay congress")
     leadtime = 1.0
 
-    filename = wr.get_output_filename(saving_settings, sample, leadtime)
+    filename = out.get_output_filename(saving_settings, sample, leadtime)
     assert filename == f"grid.forecast_ai_date_1911-10-30_ech_{leadtime}.json"
 
-    saving_settings = wr.GribSavingSettings(
+    saving_settings = out.GribSavingSettings(
         template_grib="fake_grib.grib",
         directory="fakedirectory",
         output_kwargs=("congress",),
@@ -220,10 +220,4 @@ def test_get_output_filename():
         output_fmt="grid.forecast_{}_date_{}_ech_{}.json",
     )
 
-    filename = wr.get_output_filename(saving_settings, sample, leadtime)
-
-
-if __name__ == "__main__":
-    test_nan_mask()
-    test_get_grib_param_dataframe()
-    test_get_grib_groups()
+    filename = out.get_output_filename(saving_settings, sample, leadtime)

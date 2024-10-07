@@ -5,7 +5,7 @@ from pytorch_lightning import Trainer
 
 from py4cast.datasets import get_datasets
 from py4cast.datasets.base import TorchDataloaderSettings
-from py4cast.io.writing_outputs import GribSavingSettings, save_named_tensors_to_grib
+from py4cast.io.outputs import GribSavingSettings, save_named_tensors_to_grib
 from py4cast.lightning import AutoRegressiveLightning
 
 default_config_root = Path(__file__).parents[1] / "config/IO/"

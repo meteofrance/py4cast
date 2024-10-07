@@ -17,6 +17,15 @@ from py4cast.forcingutils import compute_hours_of_day
 @dataclass_json
 @dataclass
 class GribSavingSettings:
+    """
+    - a template grib path
+    - the saving directory
+    - the name format of the grib to be written (as fillable f-string with empty placeholders)
+    - the keywords to insert in the given name format.
+    - the sample identifiers to insert in the given name format.
+    There should be p-i keywords, where p is the number of placeholders and i the number of sample identifiers.
+    """
+
     template_grib: str
     directory: str
     output_kwargs: tuple[str, ...] = ()
@@ -36,16 +45,11 @@ def save_named_tensors_to_grib(
     The template grib should contain all keys necessary to write new data as values.
     Args:
         pred (NamedTensor): the output tensor (pred)
-        params (list): list of Param objects used to reference parameters description for writing grib
-        leadtimes (list) : list of lead times, as a multiple of prediction steps by the size of a time step (in hours)
+        ds (DatasetABC): dataset containing all information's needed to describe samples and terms
+        sample (Any) : an instance of the DataSet Sample, containing informations on parameters, date, leadtimes
         date (dt.datetime) : the date of the initial state
-        saving_settings (dict) : settings for the writing process, containing :
-            - a template grib path
-            - the saving directory
-            - the name format of the grib to be written (as fillable f-string with empty placeholders)
-            - the keywords to insert in the given name format.
-            There should be N-2 keywords, where N is the number of placeholders in the name format.
-            The last placeholders are reserved for timestamp.
+        saving_settings (GribaSavingSettings) : settings for the writing process
+
     """
 
     params = ds.params
@@ -105,6 +109,7 @@ def save_named_tensors_to_grib(
             target_ds["step"] = ns_step
             target_ds["valid_time"] = np.datetime64(sample.date) + ns_valid
 
+            data_tidx = pred.select_dim("timestep", t_idx, bare_tensor=False)
             for feature_name in pred.feature_names_to_idx:
 
                 level, name, tol = grib_features.loc[
@@ -119,7 +124,7 @@ def save_named_tensors_to_grib(
 
                     # collapsing batch dimension and selecting a given timestep
                     pred.squeeze_("batch")
-                    data = pred.select_dim("timestep", t_idx, bare_tensor=False)[feature_name]
+                    data = data_tidx[feature_name]
 
                     if nanmask is None:
                         data2grib = data
