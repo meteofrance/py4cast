@@ -7,8 +7,8 @@ from py4cast.models.base import ModelABC
 
 from .nlam.models import GraphLAM, HiLAM, HiLAMParallel
 from .vision.conv import HalfUnet, Unet
-from .vision.transformers_bin import Segformer, SwinUNETR
-from .vision.hiera_model import Hiera
+from .vision.transformers import Segformer, SwinUNETR
+from .vision.hiera import Hiera
 from .vision.unetrpp import UNETRPP
 
 # Models MUST be added to the registry

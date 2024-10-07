@@ -590,12 +590,7 @@ class Hiera(nn.Module, PyTorchModelHubMixin):
             if return_intermediates and i in self.stage_ends:
                 intermediates.append(self.reroll(x, i, mask=mask))
             print("x in hiera forward after blk=",i, x.shape)
-
-        if mask is None:
-            x = x.mean(dim=1)
-            x = self.norm(x)
-            x = self.head(x)
-        print("x in hiera forward mask is none", x.shape, x)
+        
         # x may not always be in spatial order here.
         # e.g. if q_pool = 2, mask_unit_size = (8, 8), and
         # q_stride = (2, 2), not all unrolls were consumed,
@@ -604,6 +599,7 @@ class Hiera(nn.Module, PyTorchModelHubMixin):
             return x, intermediates
 
         #x = features_second_to_last(x)
+        print("x in hiera forward FINAL", x.shape)
 
         return x
 
