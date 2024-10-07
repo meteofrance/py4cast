@@ -1,8 +1,8 @@
 import datetime as dt
 import json
 import os
-from collections.abc import Callable
 from abc import abstractmethod
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from functools import cached_property, partial
 from pathlib import Path
@@ -24,6 +24,7 @@ from py4cast.datasets.base import (
     collate_fn,
 )
 from py4cast.forcingutils import generate_toa_radiation_forcing, get_year_hour_forcing
+
 
 @dataclass(slots=True)
 class Period:
@@ -50,9 +51,9 @@ class Period:
 class Grid:
     domain: str
     model: str
-    geometry: str = "EURW1S40" 
+    geometry: str = "EURW1S40"
     border_size: int = 0
-    scratch_path : str
+    scratch_path: str
     # Subgrid selection. If (0,0,0,0) the whole grid is kept.
     subgrid: Tuple[int] = (0, 0, 0, 0)
     x: int = field(init=False)  # X dimension
@@ -78,7 +79,7 @@ class Grid:
 
     @cached_property
     def lat(self) -> np.array:
-       return np.empty()
+        return np.empty()
 
     @cached_property
     def lon(self) -> np.array:
@@ -126,16 +127,18 @@ class Grid:
 class Param:
     name: str
     shortname: str
-    levels: Tuple[float,...]
+    levels: Tuple[float, ...]
     grid: Grid  # Parameter grid.
     # It is not necessarly the same as the model grid.
     # Function which can return the filenames.
     # It should accept member and date as argument (as well as term).
     fnamer: Callable[[], [str]]  # VSCode doesn't like this, is it ok ?
-    level_type: Literal["isobaricInhPa", "heightAboveGround", "surface"]  # To be read in nc file ?
+    level_type: Literal[
+        "isobaricInhPa", "heightAboveGround", "surface"
+    ]  # To be read in nc file ?
     kind: Literal["input", "output", "input_output"] = "input_output"
     unit: str = "FakeUnit"  # To be read in nc FIle  ?
-    ndims: int = 2 # number of spatial dimensions
+    ndims: int = 2  # number of spatial dimensions
 
     @property
     def number(self) -> int:
@@ -165,17 +168,16 @@ class Param:
         return [self.unit for _ in self.levels]
 
     @abstractmethod
-    def get_weight(self, level: float, level_type:str) -> float:
+    def get_weight(self, level: float, level_type: str) -> float:
         return 1.0
-
-
-
 
 
 @dataclass(slots=True)
 class Settings:
     term: dict
-    extra_identifiers: Tuple[str] # name of the attributes needed to identify a unique sample, except for date and terms
+    extra_identifiers: Tuple[
+        str
+    ]  # name of the attributes needed to identify a unique sample, except for date and terms
     num_input_steps: int  # = 2  # Number of input timesteps
     num_output_steps: int  # = 1  # Number of output timesteps (= 0 for inference)
     num_inference_pred_steps: int = 0  # 0 in training config ; else used to provide future information about forcings
@@ -204,24 +206,24 @@ class Sample:
 
     def __post_init__(self):
         for ident in self.Settings.extra_identifiers:
-            assert (hasattr(self, ident))
+            assert hasattr(self, ident)
         self.terms = self.input_terms + self.output_terms
-    
+
     @abstractmethod
-    def exist(param : Param):
+    def exist(param: Param):
         """
         Check if the given parameter is recorded in the dataset for the current sample
         """
 
     @abstractmethod
-    def load_data(self, *args, **kwargs)->:
+    def load_data(self, *args, **kwargs):
         """
         date : Date of file.
         term : Position of leadtimes in file.
         """
 
-        @abstractmethod
-    def filenames(self, *args) -> List[str]:
+    @abstractmethod
+    def filenames(self, *args):
         """
         date : Date of file.
         term : Position of leadtimes in file.
@@ -253,9 +255,15 @@ class InferSample(Sample):
     def __post_init__(self):
         self.terms = self.input_terms
 
-class GriddedDataset(DatasetABC,Dataset):
-        def __init__(
-        self, name, grid: Grid, period: Period, params: List[Param], settings: Settings
+
+class GriddedDataset(DatasetABC, Dataset):
+    def __init__(
+        self,
+        name: str,
+        grid: Grid,
+        period: Period,
+        params: List[Param],
+        settings: Settings,
     ):
         self.name = name
         self.grid = grid
