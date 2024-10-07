@@ -201,6 +201,18 @@ def test_named_tensor():
     f = nt["feature_0"]
     assert f.shape == (3, 1, 256, 256)
 
+    # test feature_dim_name is preserved by select_dim and index_select_dim
+    nt = NamedTensor(
+        torch.rand(3, 50, 256, 256),
+        names=["batch", "feats", "lat", "lon"],
+        feature_names=[f"feature_{i}" for i in range(50)],
+        feature_dim_name="feats",
+    )
+    t = nt.select_dim("batch", 0, bare_tensor=False)
+    assert t.feature_dim_name == "feats"
+    t = nt.index_select_dim("feats", [0, 1, 2], bare_tensor=False)
+    assert t.feature_dim_name == "feats"
+
 
 def test_item():
     """
