@@ -26,7 +26,6 @@ RUN curl -O https://confluence.ecmwf.int/download/attachments/45757960/eccodes-$
 RUN pip install --upgrade pip
 COPY requirements.txt /root/requirements.txt
 RUN set -eux && pip install --default-timeout=100 -r /root/requirements.txt
-RUN pip install flash-attn --no-build-isolation
 
 ARG USERNAME
 ARG GROUPNAME
