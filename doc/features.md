@@ -88,7 +88,7 @@ def register_loss_state_buffers(
 
 ## Available Plots
 
-Plots are done using the **matplotlib** library. We wrap each plot in a **Plotter** class. Below is an example of a plot that shows the spatial distribution of the error for all the variables together. See our [observer.py](../py4cast/plots.py#L212) for more examples.
+Plots are done using the **matplotlib** library. We wrap each plot in a **Plotter** class. Below is an example of a plot that shows the spatial distribution of the error for all the variables together. See our [plots.py](../py4cast/plots.py#L212) for more examples.
 
 ```python
 class SpatialErrorPlot(Plotter):
