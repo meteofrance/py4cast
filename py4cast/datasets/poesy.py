@@ -223,7 +223,6 @@ class Param:
         term : Position of leadtimes in file.
         """
         data_array = np.load(self.filename(date=date), mmap_mode="r")
-
         return data_array[
             self.grid.subgrid[0] : self.grid.subgrid[1],
             self.grid.subgrid[2] : self.grid.subgrid[3],
@@ -649,7 +648,7 @@ class PoesyDataset(DatasetABC, Dataset):
     ) -> DataLoader:
         return DataLoader(
             self,
-            tl_settings.batch_size,
+            batch_size = tl_settings.batch_size,
             num_workers=tl_settings.num_workers,
             shuffle=self.shuffle,
             prefetch_factor=tl_settings.prefetch_factor,

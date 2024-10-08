@@ -3,9 +3,9 @@ from pathlib import Path
 
 from pytorch_lightning import Trainer
 
-from py4cast.datasets import get_datasets
 from py4cast.datasets.base import TorchDataloaderSettings
-from py4cast.lightning import AutoRegressiveLightning
+from py4cast.lightning import AutoRegressiveLightning, PlDataModule
+
 
 if __name__ == "__main__":
 
@@ -25,7 +25,6 @@ if __name__ == "__main__":
         help="floating point precision for the inference",
         default="32",
     )
-
     args = parser.parse_args()
 
     # Load checkpoint
@@ -47,18 +46,16 @@ if __name__ == "__main__":
     else:
         config_override = {"num_inference_pred_steps": args.infer_steps}
 
-    # Get dataset for inference
-    _, _, infer_ds = get_datasets(
-        args.dataset,
-        hparams.num_input_steps,
-        hparams.num_pred_steps_train,
-        hparams.num_pred_steps_val_test,
-        hparams.dataset_conf,
-        config_override=config_override,
+    dl_settings = TorchDataloaderSettings(batch_size=hparams.batch_size)
+    dm = PlDataModule(
+        dataset = args.dataset,
+        num_input_steps = hparams.num_input_steps,
+        num_pred_steps_train= hparams.num_pred_steps_train,
+        num_pred_steps_val_test= hparams.num_pred_steps_val_test,
+        dl_settings = dl_settings,
+        dataset_conf = hparams.dataset_conf,
+        config_override = config_override
     )
-
-    # Transform in dataloader
-    dl_settings = TorchDataloaderSettings(batch_size=1)
-    infer_loader = infer_ds.torch_dataloader(dl_settings)
     trainer = Trainer(devices="auto")
-    preds = trainer.predict(lightning_module, infer_loader)
+    preds = trainer.predict(lightning_module, dm)
+    print(preds.shape)

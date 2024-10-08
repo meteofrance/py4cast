@@ -5,7 +5,7 @@ from copy import deepcopy
 from dataclasses import asdict, dataclass
 from functools import cached_property
 from pathlib import Path
-from typing import List, Tuple, Union
+from typing import List, Tuple, Union, Dict
 
 import einops
 import matplotlib
@@ -35,6 +35,61 @@ LR_SCHEDULER_PERIOD: int = 10
 # PNG plots period in epochs. Plots are made, logged and saved every nth epoch.
 PLOT_PERIOD: int = 10
 
+from py4cast.datasets.base import TorchDataloaderSettings
+from py4cast.datasets import get_datasets
+
+@dataclass
+class PlDataModule(pl.LightningDataModule):
+    """
+    DataModule to encapsulate data splits and data loading.
+    """
+
+    dataset: str
+    num_input_steps: int
+    num_pred_steps_train: int
+    num_pred_steps_val_test: int
+    dl_settings: TorchDataloaderSettings
+    dataset_conf: Union[Path, None] = None
+    config_override: Union[Dict, None] = None,
+
+    def __post_init__(self):
+        super().__init__()
+
+        # Get dataset in initialisation to have access to this attribute before method trainer.fit
+        self.datasets = get_datasets(
+            self.dataset,
+            self.num_input_steps,
+            self.num_pred_steps_train,
+            self.num_pred_steps_val_test,
+            self.dataset_conf,
+            self.config_override,
+        )
+    
+    def get_info_for_training(self):
+        train_ds = self.datasets[0]
+        return len(train_ds.torch_dataloader(self.dl_settings)), train_ds.dataset_info
+
+    def prepare_data(self):
+        # download, IO, etc. Useful with shared filesystems
+        # only called on 1 GPU/TPU in distributed
+        pass
+
+    def setup(self, stage):
+        # make assignments here (val/train/test split)
+        # called on every process in DDP
+        pass
+
+    def train_dataloader(self):
+        return self.datasets[0].torch_dataloader(self.dl_settings)
+
+    def val_dataloader(self):
+        return self.datasets[1].torch_dataloader(self.dl_settings)
+
+    def test_dataloader(self):
+        return self.datasets[2].torch_dataloader(self.dl_settings)
+    
+    def predict_dataloader(self):
+        return self.datasets[2].torch_dataloader(self.dl_settings)
 
 @dataclass
 class ArLightningHyperParam:

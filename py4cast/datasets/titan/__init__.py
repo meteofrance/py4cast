@@ -711,7 +711,7 @@ class TitanDataset(DatasetABC, Dataset):
     ) -> DataLoader:
         return DataLoader(
             self,
-            tl_settings.batch_size,
+            batch_size = tl_settings.batch_size,
             num_workers=tl_settings.num_workers,
             shuffle=self.shuffle,
             prefetch_factor=tl_settings.prefetch_factor,

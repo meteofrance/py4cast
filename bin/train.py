@@ -18,10 +18,9 @@ from lightning_fabric.utilities import seed
 from pytorch_lightning.callbacks import LearningRateMonitor
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 
-from py4cast.datasets import get_datasets
-from py4cast.datasets import registry as dataset_registry
 from py4cast.datasets.base import TorchDataloaderSettings
-from py4cast.lightning import ArLightningHyperParam, AutoRegressiveLightning
+from py4cast.datasets import registry as dataset_registry
+from py4cast.lightning import ArLightningHyperParam, AutoRegressiveLightning, PlDataModule
 from py4cast.models import registry as model_registry
 from py4cast.settings import ROOTDIR
 
@@ -30,7 +29,6 @@ layout = {
         "loss": ["Multiline", ["mean_loss_epoch/train", "mean_loss_epoch/validation"]],
     },
 }
-
 
 # Variables for multi-nodes multi-gpu training
 nb_nodes = int(os.environ.get("SLURM_NNODES", 1))
@@ -223,25 +221,24 @@ if args.dev_mode:
 run_id = date.strftime("%b-%d-%Y-%M-%S")
 seed.seed_everything(args.seed)
 
-
-# Init datasets and dataloaders
-datasets = get_datasets(
-    args.dataset,
-    args.num_input_steps,
-    args.num_pred_steps_train,
-    args.num_pred_steps_val_test,
-    args.dataset_conf,
-)
 dl_settings = TorchDataloaderSettings(
     batch_size=args.batch_size,
     num_workers=args.num_workers,
     prefetch_factor=args.prefetch_factor,
     pin_memory=args.pin_memory,
+    )
+
+dm = PlDataModule(
+    dataset = args.dataset,
+    num_input_steps = args.num_input_steps,
+    num_pred_steps_train= args.num_pred_steps_train,
+    num_pred_steps_val_test= args.num_pred_steps_val_test,
+    dl_settings= dl_settings,
+    dataset_conf= args.dataset_conf,
+    config_override = None
 )
-train_ds, val_ds, test_ds = datasets
-train_loader = train_ds.torch_dataloader(dl_settings)
-val_loader = val_ds.torch_dataloader(dl_settings)
-test_loader = test_ds.torch_dataloader(dl_settings)
+
+len_loader, dataset_info = dm.get_info_for_training()
 
 # Setup GPU usage + get len of loader for LR scheduler
 if torch.cuda.is_available():
@@ -249,10 +246,10 @@ if torch.cuda.is_available():
     torch.backends.cuda.matmul.allow_tf32 = True
     torch.backends.cudnn.allow_tf32 = True
     torch.set_float32_matmul_precision("high")  # Allows using Tensor Cores on A100s
-    len_loader = len(train_loader) // (torch.cuda.device_count() * nb_nodes)
+    len_loader = len_loader // (torch.cuda.device_count() * nb_nodes)
 else:
     device_name = "cpu"
-    len_loader = len(train_loader)
+    len_loader = len_loader
 
 # Get Log folders
 log_dir = ROOTDIR / "logs"
@@ -268,7 +265,7 @@ save_path = log_dir / folder / subfolder
 
 
 hp = ArLightningHyperParam(
-    dataset_info=datasets[0].dataset_info,
+    dataset_info=dataset_info,
     dataset_name=args.dataset,
     dataset_conf=args.dataset_conf,
     batch_size=args.batch_size,
@@ -358,6 +355,7 @@ trainer = pl.Trainer(
     limit_val_batches=args.limit_train_batches,  # No reason to spend hours on validation if we limit the training.
     limit_test_batches=args.limit_train_batches,
 )
+
 if args.load_model_ckpt:
     lightning_module = AutoRegressiveLightning.load_from_checkpoint(
         args.load_model_ckpt, hparams=hp
@@ -370,9 +368,14 @@ else:
 print("Starting training !")
 trainer.fit(
     model=lightning_module,
-    train_dataloaders=train_loader,
-    val_dataloaders=val_loader,
+    datamodule = dm,
 )
+# print("Starting training !")
+# trainer.fit(
+#     model=lightning_module,
+#     train_dataloaders=train_loader,
+#     val_dataloaders=val_loader,
+# )
 
 if not args.no_log:
     # If we saved a model, we test it.
@@ -383,4 +386,5 @@ if not args.no_log:
     print(
         f"Testing using {'best' if best_checkpoint else 'last'} model at {model_to_test}"
     )
-    trainer.test(ckpt_path=model_to_test, dataloaders=test_loader)
+    trainer.test(ckpt_path=model_to_test, datamodule = dm)
+    # trainer.test(ckpt_path=model_to_test, dataloaders=test_loader)
