@@ -857,7 +857,6 @@ class InferPoesyDataset(PoesyDataset):
                         samples.append(samp)
                         number += 1
         print("All samples are now defined")
-        print(samples)
 
         return samples
 

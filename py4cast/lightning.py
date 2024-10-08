@@ -60,7 +60,7 @@ class PlDataModule(pl.LightningDataModule):
         super().__init__()
 
         # Get dataset in initialisation to have access to this attribute before method trainer.fit
-        self.datasets = get_datasets(
+        self.train_ds, self.val_ds, self.test_ds = get_datasets(
             self.dataset,
             self.num_input_steps,
             self.num_pred_steps_train,
@@ -71,24 +71,27 @@ class PlDataModule(pl.LightningDataModule):
 
     @property
     def get_len_train_dl(self):
-        return len(self.datasets[0].torch_dataloader(self.dl_settings))
+        return len(self.train_ds.torch_dataloader(self.dl_settings))
 
     @property
     def get_train_dataset_info(self):
-        return self.datasets[0].dataset_info
+        return self.train_ds.dataset_info
+    
+    @property
+    def get_infer_ds(self):
+        return self.test_ds
 
     def train_dataloader(self):
-        return self.datasets[0].torch_dataloader(self.dl_settings)
+        return self.train_ds.torch_dataloader(self.dl_settings)
 
     def val_dataloader(self):
-        return self.datasets[1].torch_dataloader(self.dl_settings)
+        return self.val_ds.torch_dataloader(self.dl_settings)
 
     def test_dataloader(self):
-        return self.datasets[2].torch_dataloader(self.dl_settings)
+        return self.test_ds.torch_dataloader(self.dl_settings)
 
     def predict_dataloader(self):
-        return self.datasets[2].torch_dataloader(self.dl_settings)
-
+        return self.test_ds.torch_dataloader(self.dl_settings)
 
 @dataclass
 class ArLightningHyperParam:
