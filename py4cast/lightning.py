@@ -69,21 +69,13 @@ class PlDataModule(pl.LightningDataModule):
             self.config_override,
         )
 
+    @property
     def get_len_train_dl(self):
         return len(self.datasets[0].torch_dataloader(self.dl_settings))
 
+    @property
     def get_train_dataset_info(self):
         return self.datasets[0].dataset_info
-
-    def prepare_data(self):
-        # download, IO, etc. Useful with shared filesystems
-        # only called on 1 GPU/TPU in distributed
-        pass
-
-    def setup(self, stage):
-        # make assignments here (val/train/test split)
-        # called on every process in DDP
-        pass
 
     def train_dataloader(self):
         return self.datasets[0].torch_dataloader(self.dl_settings)
