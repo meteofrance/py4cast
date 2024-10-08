@@ -5,7 +5,7 @@ from copy import deepcopy
 from dataclasses import asdict, dataclass
 from functools import cached_property
 from pathlib import Path
-from typing import List, Tuple, Union, Dict
+from typing import Dict, List, Tuple, Union
 
 import einops
 import matplotlib
@@ -16,7 +16,13 @@ from torch import nn
 from torchinfo import summary
 from transformers import get_cosine_schedule_with_warmup
 
-from py4cast.datasets.base import DatasetInfo, ItemBatch, NamedTensor
+from py4cast.datasets import get_datasets
+from py4cast.datasets.base import (
+    DatasetInfo,
+    ItemBatch,
+    NamedTensor,
+    TorchDataloaderSettings,
+)
 from py4cast.losses import ScaledLoss, WeightedLoss
 from py4cast.metrics import MetricACC, MetricPSDK, MetricPSDVar
 from py4cast.models import build_model_from_settings, get_model_kls_and_settings
@@ -35,8 +41,6 @@ LR_SCHEDULER_PERIOD: int = 10
 # PNG plots period in epochs. Plots are made, logged and saved every nth epoch.
 PLOT_PERIOD: int = 10
 
-from py4cast.datasets.base import TorchDataloaderSettings
-from py4cast.datasets import get_datasets
 
 @dataclass
 class PlDataModule(pl.LightningDataModule):
@@ -50,7 +54,7 @@ class PlDataModule(pl.LightningDataModule):
     num_pred_steps_val_test: int
     dl_settings: TorchDataloaderSettings
     dataset_conf: Union[Path, None] = None
-    config_override: Union[Dict, None] = None,
+    config_override: Union[Dict, None] = (None,)
 
     def __post_init__(self):
         super().__init__()
@@ -64,10 +68,12 @@ class PlDataModule(pl.LightningDataModule):
             self.dataset_conf,
             self.config_override,
         )
-    
-    def get_info_for_training(self):
-        train_ds = self.datasets[0]
-        return len(train_ds.torch_dataloader(self.dl_settings)), train_ds.dataset_info
+
+    def get_len_train_dl(self):
+        return len(self.datasets[0].torch_dataloader(self.dl_settings))
+
+    def get_train_dataset_info(self):
+        return self.datasets[0].dataset_info
 
     def prepare_data(self):
         # download, IO, etc. Useful with shared filesystems
@@ -87,9 +93,10 @@ class PlDataModule(pl.LightningDataModule):
 
     def test_dataloader(self):
         return self.datasets[2].torch_dataloader(self.dl_settings)
-    
+
     def predict_dataloader(self):
         return self.datasets[2].torch_dataloader(self.dl_settings)
+
 
 @dataclass
 class ArLightningHyperParam:

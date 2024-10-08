@@ -6,7 +6,6 @@ from pytorch_lightning import Trainer
 from py4cast.datasets.base import TorchDataloaderSettings
 from py4cast.lightning import AutoRegressiveLightning, PlDataModule
 
-
 if __name__ == "__main__":
 
     # Parse arguments: model_path, dataset name and config file and finally date for inference
@@ -47,15 +46,17 @@ if __name__ == "__main__":
         config_override = {"num_inference_pred_steps": args.infer_steps}
 
     dl_settings = TorchDataloaderSettings(batch_size=hparams.batch_size)
+
     dm = PlDataModule(
-        dataset = args.dataset,
-        num_input_steps = hparams.num_input_steps,
-        num_pred_steps_train= hparams.num_pred_steps_train,
-        num_pred_steps_val_test= hparams.num_pred_steps_val_test,
-        dl_settings = dl_settings,
-        dataset_conf = hparams.dataset_conf,
-        config_override = config_override
+        dataset=args.dataset,
+        num_input_steps=hparams.num_input_steps,
+        num_pred_steps_train=hparams.num_pred_steps_train,
+        num_pred_steps_val_test=hparams.num_pred_steps_val_test,
+        dl_settings=dl_settings,
+        dataset_conf=hparams.dataset_conf,
+        config_override=config_override,
     )
+
     trainer = Trainer(devices="auto")
     preds = trainer.predict(lightning_module, dm)
-    print(preds.shape)
+    print(preds[0].tensor.shape)

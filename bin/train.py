@@ -18,9 +18,13 @@ from lightning_fabric.utilities import seed
 from pytorch_lightning.callbacks import LearningRateMonitor
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 
-from py4cast.datasets.base import TorchDataloaderSettings
 from py4cast.datasets import registry as dataset_registry
-from py4cast.lightning import ArLightningHyperParam, AutoRegressiveLightning, PlDataModule
+from py4cast.datasets.base import TorchDataloaderSettings
+from py4cast.lightning import (
+    ArLightningHyperParam,
+    AutoRegressiveLightning,
+    PlDataModule,
+)
 from py4cast.models import registry as model_registry
 from py4cast.settings import ROOTDIR
 
@@ -226,19 +230,22 @@ dl_settings = TorchDataloaderSettings(
     num_workers=args.num_workers,
     prefetch_factor=args.prefetch_factor,
     pin_memory=args.pin_memory,
-    )
-
-dm = PlDataModule(
-    dataset = args.dataset,
-    num_input_steps = args.num_input_steps,
-    num_pred_steps_train= args.num_pred_steps_train,
-    num_pred_steps_val_test= args.num_pred_steps_val_test,
-    dl_settings= dl_settings,
-    dataset_conf= args.dataset_conf,
-    config_override = None
 )
 
-len_loader, dataset_info = dm.get_info_for_training()
+# Wrap dataset with lightning datamodule
+dm = PlDataModule(
+    dataset=args.dataset,
+    num_input_steps=args.num_input_steps,
+    num_pred_steps_train=args.num_pred_steps_train,
+    num_pred_steps_val_test=args.num_pred_steps_val_test,
+    dl_settings=dl_settings,
+    dataset_conf=args.dataset_conf,
+    config_override=None,
+)
+
+# Get essential info to instantiate ArLightningHyperParam
+len_loader = dm.get_len_train_dl()
+dataset_info = dm.get_train_dataset_info()
 
 # Setup GPU usage + get len of loader for LR scheduler
 if torch.cuda.is_available():
@@ -262,7 +269,6 @@ list_versions = sorted([int(d.name.split("_")[-1]) for d in list_subdirs])
 version = 0 if list_subdirs == [] else list_versions[-1] + 1
 subfolder = f"{run_name}_{version}"
 save_path = log_dir / folder / subfolder
-
 
 hp = ArLightningHyperParam(
     dataset_info=dataset_info,
@@ -368,14 +374,8 @@ else:
 print("Starting training !")
 trainer.fit(
     model=lightning_module,
-    datamodule = dm,
+    datamodule=dm,
 )
-# print("Starting training !")
-# trainer.fit(
-#     model=lightning_module,
-#     train_dataloaders=train_loader,
-#     val_dataloaders=val_loader,
-# )
 
 if not args.no_log:
     # If we saved a model, we test it.
@@ -386,5 +386,4 @@ if not args.no_log:
     print(
         f"Testing using {'best' if best_checkpoint else 'last'} model at {model_to_test}"
     )
-    trainer.test(ckpt_path=model_to_test, datamodule = dm)
-    # trainer.test(ckpt_path=model_to_test, dataloaders=test_loader)
+    trainer.test(ckpt_path=model_to_test, datamodule=dm)

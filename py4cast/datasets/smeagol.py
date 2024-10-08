@@ -24,6 +24,7 @@ from py4cast.datasets.base import (
 )
 from py4cast.forcingutils import generate_toa_radiation_forcing, get_year_hour_forcing
 from py4cast.plots import DomainInfo
+from py4cast.utils import merge_dicts
 
 # torch.set_num_threads(8)
 SCRATCH_PATH = Path(os.environ.get("PY4CAST_SMEAGOL_PATH", "/scratch/shared/smeagol"))
@@ -597,8 +598,14 @@ class SmeagolDataset(DatasetABC, Dataset):
         num_pred_steps_val_test: int,
         config_override: Union[Dict, None] = None,
     ) -> Tuple["SmeagolDataset", "SmeagolDataset", "SmeagolDataset"]:
+        """
+        Return 3 SmeagolDataset.
+        Override configuration file if needed.
+        """
         with open(fname, "r") as fp:
             conf = json.load(fp)
+            if config_override is not None:
+                conf = merge_dicts(conf, config_override)
 
         grid = Grid(**conf["grid"])
         param_list = []
@@ -678,7 +685,7 @@ class SmeagolDataset(DatasetABC, Dataset):
     ) -> DataLoader:
         return DataLoader(
             self,
-            batch_size = tl_settings.batch_size,
+            batch_size=tl_settings.batch_size,
             num_workers=tl_settings.num_workers,
             shuffle=self.shuffle,
             prefetch_factor=tl_settings.prefetch_factor,

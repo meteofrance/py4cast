@@ -579,8 +579,14 @@ class PoesyDataset(DatasetABC, Dataset):
         num_pred_steps_val_test: int,
         config_override: Union[Dict, None] = None,
     ) -> Tuple["PoesyDataset", "PoesyDataset", "PoesyDataset"]:
+        """
+        Return 3 PoesyDataset.
+        Override configuration file if needed.
+        """
         with open(fname, "r") as fp:
             conf = json.load(fp)
+            if config_override is not None:
+                conf = merge_dicts(conf, config_override)
 
         grid = Grid(**conf["grid"])
         param_list = []
@@ -648,7 +654,7 @@ class PoesyDataset(DatasetABC, Dataset):
     ) -> DataLoader:
         return DataLoader(
             self,
-            batch_size = tl_settings.batch_size,
+            batch_size=tl_settings.batch_size,
             num_workers=tl_settings.num_workers,
             shuffle=self.shuffle,
             prefetch_factor=tl_settings.prefetch_factor,
