@@ -74,7 +74,7 @@ if __name__ == "__main__":
         num_pred_steps_train=hparams.num_pred_steps_train,
         num_pred_steps_val_test=hparams.num_pred_steps_val_test,
         dl_settings=dl_settings,
-        dataset_conf=hparams.dataset_conf,
+        dataset_conf=args.dataset_conf,
         config_override=config_override,
     )
 
