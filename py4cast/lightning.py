@@ -76,7 +76,7 @@ class PlDataModule(pl.LightningDataModule):
     @property
     def get_train_dataset_info(self):
         return self.train_ds.dataset_info
-    
+
     @property
     def get_infer_ds(self):
         return self.test_ds
@@ -92,6 +92,7 @@ class PlDataModule(pl.LightningDataModule):
 
     def predict_dataloader(self):
         return self.test_ds.torch_dataloader(self.dl_settings)
+
 
 @dataclass
 class ArLightningHyperParam:
