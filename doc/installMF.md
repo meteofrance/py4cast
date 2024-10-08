@@ -3,7 +3,7 @@ The instructions here follow Météo-France's security policy, and are subjected
 Installing on HPC is typically made with conda, following the README.md instructions (README.md#Install with conda).
 However, there are two configuration settings to add :
 
-- Set the content of your `$HOME/.condarc` file to
+- Set the content of your `$HOME/.condarc` file (create it if needed) to
 
 ```
 ssl_verify: false
@@ -15,7 +15,7 @@ channels:
 channel_priority: strict
 ```
 
- - Set the content of your `$HOME/.config/pip/pip.conf` file to :
+ - Set the content of your `$HOME/.config/pip/pip.conf` file (create it if needed) to :
 
 ```
 [global]
