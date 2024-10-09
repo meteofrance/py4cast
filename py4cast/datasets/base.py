@@ -9,7 +9,7 @@ from dataclasses import dataclass, field, fields
 from functools import cached_property
 from itertools import chain
 from pathlib import Path
-from typing import Dict, List, Literal, Tuple, Union
+from typing import TYPE_CHECKING, Dict, List, Literal, Tuple, Union
 
 import einops
 import numpy as np
@@ -19,7 +19,9 @@ from torch.utils.data import DataLoader
 from torch.utils.data._utils.collate import collate_tensor_fn
 from tqdm import tqdm
 
-from py4cast.plots import DomainInfo
+if TYPE_CHECKING:
+    from py4cast.plots import DomainInfo
+
 from py4cast.utils import RegisterFieldsMixin, torch_save
 
 
@@ -608,7 +610,7 @@ class DatasetInfo:
     """
 
     name: str  # Name of the dataset
-    domain_info: DomainInfo  # Information used for plotting
+    domain_info: "DomainInfo"  # Information used for plotting
     units: Dict[str, str]  # d[shortname] = unit (str)
     weather_dim: int
     forcing_dim: int

@@ -21,7 +21,7 @@ from py4cast.losses import ScaledLoss, WeightedLoss
 from py4cast.metrics import MetricACC, MetricPSDK, MetricPSDVar
 from py4cast.models import build_model_from_settings, get_model_kls_and_settings
 from py4cast.models.base import expand_to_batch
-from py4cast.observer import (
+from py4cast.plots import (
     PredictionEpochPlot,
     PredictionTimestepPlot,
     SpatialErrorPlot,
@@ -589,7 +589,7 @@ class AutoRegressiveLightning(pl.LightningModule):
 
     def on_validation_start(self):
         """
-        Add some observers when starting validation
+        Add some plots when starting validation
         """
         if self.logging_enabled:
             l1_loss = ScaledLoss("L1Loss", reduction="none")

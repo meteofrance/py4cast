@@ -88,10 +88,10 @@ def register_loss_state_buffers(
 
 ## Available Plots
 
-Plots are done using the **matplotlib** library. We wrap each plot in a **ErrorObserver** class. Below is an example of a plot that shows the spatial distribution of the error for all the variables together. See our [observer.py](../py4cast/observer.py#L40) for more examples.
+Plots are done using the **matplotlib** library. We wrap each plot in a **Plotter** class. Below is an example of a plot that shows the spatial distribution of the error for all the variables together. See our [plots.py](../py4cast/plots.py#L212) for more examples.
 
 ```python
-class SpatialErrorPlot(ErrorObserver):
+class SpatialErrorPlot(Plotter):
     """
     Produce a map which shows where the error are accumulating (all variables together).
     """
@@ -120,7 +120,7 @@ class SpatialErrorPlot(ErrorObserver):
         """
 ```
 
-In order to add your own plot, you can create a new class that inherits from **ErrorObserver** and implement the **update** and **on_step_end** methods. You can then add your plot to the **AutoRegressiveLightning** class in the **valid_plotters** or [**test_plotters** list](../py4cast/lightning.py#L398).
+In order to add your own plot, you can create a new class that inherits from **Plotter** and implement the **update** and **on_step_end** methods. You can then add your plot to the **AutoRegressiveLightning** class in the **valid_plotters** or [**test_plotters** list](../py4cast/lightning.py#L398).
 
 ```python
 self.test_plotters = [
