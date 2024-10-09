@@ -86,57 +86,18 @@ def save_named_tensors_to_grib(
 
     for t_idx in range(predicted_time_steps)[:1]:
         for group in model_ds.keys():
-            target_ds = deepcopy(model_ds[group])
-
-            # if the shape of the dataset grid doesn't match grib template, fill the rest of the data with NaNs
-            nanmask, latlon = make_nan_mask(ds, target_ds)
-            (
-                latmin,
-                latmax,
-                longmin,
-                longmax,
-            ) = latlon
-
-            target_ds["time"] = sample.date
-            ns_step = np.timedelta64(
-                int(leadtimes[t_idx] * 3600 * 1000000000),
-                "ns",
+            raw_data = pred.select_dim("timestep", t_idx, bare_tensor=False)
+            receiver_ds = write_template_dataset(
+                pred,
+                ds,
+                model_ds[group],
+                group,
+                sample,
+                validtimes[t_idx],
+                leadtimes[t_idx],
+                raw_data,
+                grib_features,
             )
-            ns_valid = np.timedelta64(
-                int(validtimes[t_idx] * 3600 * 1000000000),
-                "ns",
-            )
-            target_ds["step"] = ns_step
-            target_ds["valid_time"] = np.datetime64(sample.date) + ns_valid
-
-            # collapsing batch dimension and selecting a given timestep
-
-            data_tidx = pred.select_dim("timestep", t_idx, bare_tensor=False)
-            for feature_name in pred.feature_names_to_idx:
-
-                level, name, tol = grib_features.loc[
-                    feature_name, ["level", "name", "typeOfLevel"]
-                ]
-
-                if (
-                    (f"{name}_{tol}" == group)
-                    or (f"{level}_{tol}" == group)
-                    or (tol == group)
-                ):
-
-                    data = data_tidx[feature_name].squeeze().cpu().numpy()
-
-                    if nanmask is None:
-                        data2grib = data
-                    else:
-                        data2grib = nanmask
-                        data2grib[latmax : latmin + 1, longmin : longmax + 1] = data
-
-                    dims = model_ds[group][name].dims
-                    target_ds[name] = (dims, data2grib)
-                    target_ds[name] = target_ds[name].assign_attrs(
-                        **model_ds[group][name].attrs
-                    )
             filename = get_output_filename(saving_settings, sample, leadtimes[t_idx])
             option = (
                 "wb"
@@ -144,10 +105,86 @@ def save_named_tensors_to_grib(
                 else "ab"
             )
             xtg.to_grib(
-                target_ds,
+                receiver_ds,
                 Path(saving_settings.directory) / filename,
                 option,
             )
+
+
+def write_template_dataset(
+    pred: NamedTensor,
+    ds: DatasetABC,
+    template_ds: xr.Dataset,
+    group: str,
+    sample: Any,
+    validtime: float,
+    leadtime: float,
+    raw_data: NamedTensor,
+    grib_features: pd.DataFrame,
+) -> xr.Dataset:
+    """Write the template xarray dataset with raw data tensor from inference
+
+    Args:
+        pred (NamedTensor): complete namedtensor, containing feature names
+        ds (DatasetABC): inference dataset
+        template_ds (xr.Dataset): xarray dataset extracted from the template grib
+        group (str): index of the template_ds in the template dict containing coherent groups
+        sample (Any): the inference sample to be saved
+        validtime (float): time of validity of the current sample
+        leadtime (float): lead time of the current sample
+        raw_data (NamedTensor): extraction from pred at current timestep
+        grib_features (pd.DataFrame): complete description of feature names and definition
+
+    Returns:
+        xr.Dataset: the template dataset, filled with data from raw_data, in the correct format
+    """
+    receiver_ds = deepcopy(template_ds)
+
+    # if the shape of the dataset grid doesn't match grib template, fill the rest of the data with NaNs
+    nanmask, latlon = make_nan_mask(ds, receiver_ds)
+    (
+        latmin,
+        latmax,
+        longmin,
+        longmax,
+    ) = latlon
+
+    receiver_ds["time"] = sample.date
+    ns_step = np.timedelta64(
+        int(leadtime * 3600 * 1000000000),
+        "ns",
+    )
+    ns_valid = np.timedelta64(
+        int(validtime * 3600 * 1000000000),
+        "ns",
+    )
+    receiver_ds["step"] = ns_step
+    receiver_ds["valid_time"] = np.datetime64(sample.date) + ns_valid
+
+    # collapsing batch dimension and selecting a given timestep
+
+    for feature_name in pred.feature_names_to_idx:
+
+        level, name, tol = grib_features.loc[
+            feature_name, ["level", "name", "typeOfLevel"]
+        ]
+
+        if (f"{name}_{tol}" == group) or (f"{level}_{tol}" == group) or (tol == group):
+
+            data = raw_data[feature_name].squeeze().cpu().numpy()
+
+            if nanmask is None:
+                data2grib = data
+            else:
+                data2grib = nanmask
+                data2grib[latmax : latmin + 1, longmin : longmax + 1] = data
+
+            dims = template_ds[name].dims
+            receiver_ds[name] = (dims, data2grib)
+            receiver_ds[name] = receiver_ds[name].assign_attrs(
+                **template_ds[name].attrs
+            )
+    return receiver_ds
 
 
 def get_output_filename(

@@ -192,10 +192,76 @@ def test_get_grib_groups():
     assert groups["v_isobaricInhPa"]["typeOfLevel"] == "isobaricInhPa"
 
 
+class FakeXarrayDs(xr.Dataset):
+    def __init__(self, lat, lon, levels, variables):
+        super().__init__()
+        self.Shape = (len(lat), len(lon))
+        self.template_ds = xr.Dataset(
+            data_vars={
+                variables[v]: (
+                    ("latitude", "longitude", "isobaricInhPa"),
+                    np.ones(self.Shape).astype(np.float32),
+                )
+                for v in variables
+            },
+            coords={"latitude": lat, "longitude": lon, "isobaricInhPa": levels},
+        )
+
+
 @dataclass
 class FakeSample:
     date: str
     fancy_ident: str
+
+
+def test_write_template_dataset():
+    grib_features = pd.DataFrame(
+        {
+            "feature_name": [
+                "u_900.0",
+                "u_50.0",
+            ],
+            "level": [900.0, 50.0],
+            "name": ["u", "u"],
+            "typeOfLevel": [
+                "isobaricInhPa",
+                "isobaricInhPa",
+            ],
+        }
+    )
+    lat = (np.arange(64) - 16) * 0.5
+    lon = (np.arange(64) + 30) * 0.5
+    levels = (900.0, 50.0)
+    variables = {"u_900.0": "u", "u_50.0": "u"}
+    dummy_template = FakeXarrayDs(lat, lon, levels, variables)
+    validtime = 1.0
+    leadtime = 1.0
+    sample = FakeSample("1911-10-30", "first solvay congress")
+    _, _, dummy_ds = DummyDataset.from_json("fakepath.json", 1, 2, 4)
+    pred = NamedTensor(
+        torch.ones((1, 5, 2, 64, 64)) * 3.14,
+        names=["batch", "timestep", "features", "lat", "lon"],
+    )
+    raw_data = pred.select_dim("timestep", 0, bare_tensor=False)
+
+    receiver_ds = out.write_template_dataset(
+        pred,
+        dummy_ds,
+        dummy_template.template_ds,
+        "u",
+        sample,
+        validtime,
+        leadtime,
+        raw_data,
+        grib_features,
+    )
+
+    print(receiver_ds)
+
+    assert receiver_ds.u.dims == ("latitude", "longitude", "isobaricInhPa")
+    assert receiver_ds.u.values.shape == (64, 64, 2)
+    assert receiver_ds.levels == (900.0, 50.0)
+    assert receiver_ds.u.values.mean() == 3.14
 
 
 def test_get_output_filename():
@@ -221,3 +287,7 @@ def test_get_output_filename():
     )
 
     filename = out.get_output_filename(saving_settings, sample, leadtime)
+
+
+if __name__ == "__main__":
+    test_write_template_dataset()
