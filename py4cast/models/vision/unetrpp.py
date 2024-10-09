@@ -410,6 +410,7 @@ class UnetrPPEncoder(nn.Module):
     def forward_features(self, x):
         hidden_states = []
 
+#UTILE ?
         x = self.downsample_layers[0](x)
         x = self.stages[0](x)
 
@@ -425,7 +426,7 @@ class UnetrPPEncoder(nn.Module):
                     x = einops.rearrange(x, "b c h w d -> b (h w d) c")
             hidden_states.append(x)
         return x, hidden_states
-
+#UTILE ?
     def forward(self, x):
         x, hidden_states = self.forward_features(x)
         return x, hidden_states

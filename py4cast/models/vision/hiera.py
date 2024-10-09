@@ -1,5 +1,5 @@
 import math
-from typing import List, Tuple, Optional, Type, Callable, Dict, Union
+from typing import List, Tuple, Optional, Type, Callable, Dict, Union, Sequence
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -12,19 +12,18 @@ import importlib.util
 import importlib.metadata
 from packaging import version
 import inspect
+from tqdm import tqdm
+
+from monai.networks.blocks.dynunet_block import (
+    get_output_padding,
+    get_padding,
+)
 
 from py4cast.models.vision.utils import features_last_to_second, features_second_to_last
 from py4cast.models.base import ModelABC
-
-
-
+from py4cast.models.vision.unetrpp import UnetrUpBlock
 
 ##################################################################################################
-
-
-
-
-
 
 def is_huggingface_hub_available():
     available: bool = importlib.util.find_spec("huggingface_hub") is not None
@@ -56,6 +55,7 @@ else:
             raise RuntimeError(cls.error_str)
 
 
+#########################################################################################################
 
 # Saves the input args to the function as self.config, also allows
 # loading a config instead of kwdargs.
@@ -78,7 +78,7 @@ def has_config(func):
         func(self, **kwdargs)
     return wrapper
 
-
+#########################################################################################################
 
 def pretrained_model(checkpoints: Dict[str, str], default: str = None) -> Callable:
     """ Loads a Hiera model from a pretrained source (if pretrained=True). Use "checkpoint" to specify the checkpoint. """
@@ -122,7 +122,7 @@ def pretrained_model(checkpoints: Dict[str, str], default: str = None) -> Callab
     
     return inner
 
-
+#########################################################################################################
 
 def conv_nd(n: int) -> Type[nn.Module]:
     """
@@ -131,11 +131,13 @@ def conv_nd(n: int) -> Type[nn.Module]:
     """
     return [nn.Identity, nn.Conv1d, nn.Conv2d, nn.Conv3d][n]
 
+#########################################################################################################
 
 def do_pool(x: torch.Tensor, stride: int) -> torch.Tensor:
     # Refer to `Unroll` to see how this performs a maxpool-Nd
     return x.view(x.shape[0], stride, -1, x.shape[-1]).max(dim=1).values
 
+#########################################################################################################
 
 def get_resized_mask(target_size: torch.Size, mask: torch.Tensor) -> torch.Tensor:
     # target_size: [(T), (H), W]
@@ -148,6 +150,7 @@ def get_resized_mask(target_size: torch.Size, mask: torch.Tensor) -> torch.Tenso
         return F.interpolate(mask.float(), size=target_size)
     return mask
 
+#########################################################################################################
 
 def do_masked_conv(
     x: torch.Tensor, conv: nn.Module, mask: Optional[torch.Tensor] = None
@@ -162,6 +165,7 @@ def do_masked_conv(
     mask = get_resized_mask(target_size=x.shape[2:], mask=mask)
     return conv(x * mask.bool())
 
+#########################################################################################################
 
 def undo_windowing(
     x: torch.Tensor, shape: List[int], mu_shape: List[int]
@@ -196,7 +200,7 @@ def undo_windowing(
 
     return x
 
-
+#########################################################################################################
 
 class Unroll(nn.Module):
     """
@@ -262,6 +266,7 @@ class Unroll(nn.Module):
         x = x.reshape(-1, math.prod(self.size), C)
         return x
 
+#########################################################################################################
 
 class Reroll(nn.Module):
     """
@@ -342,10 +347,6 @@ class Reroll(nn.Module):
         x = undo_windowing(x, size, cur_mu_shape)
 
         return x
-    
-
-
-
 
 ##################################################################################################
 
@@ -371,7 +372,9 @@ class HieraSettings:
     head_dropout: float = 0.0
     head_init_scale: float = 0.001
     sep_pos_embed: bool = False
+    decoder: str = "hiera"
 
+#########################################################################################################
 
 class Hiera(nn.Module, PyTorchModelHubMixin):
 
@@ -389,11 +392,21 @@ class Hiera(nn.Module, PyTorchModelHubMixin):
         input_shape: Tuple[int, ...] = (224, 224),  #nb_pixel x nb_pixel
     ) -> None:
         super().__init__()
+
+        self.num_input_features = num_input_features
+        self.num_output_features = num_output_features
+        self.settings = settings
+        self.input_shape = input_shape
+
+        """
+        ENCODER PART
+        """
+
         # Do it this way to ensure that the init args are all PoD (for config usage)
         if isinstance(settings.norm_layer, str):
             settings.norm_layer = partial(getattr(nn, settings.norm_layer), eps=1e-6)
 
-        depth = sum(settings.stages) #number of layers
+        depth = sum(settings.stages) #sum of layers per stage
         self.patch_stride = settings.patch_stride
         self.tokens_spatial_shape = [i // s for (i, s) in list(zip(input_shape, settings.patch_stride))]
         num_tokens = math.prod(self.tokens_spatial_shape)
@@ -443,10 +456,11 @@ class Hiera(nn.Module, PyTorchModelHubMixin):
         # stochastic depth decay rule
         dpr = [x.item() for x in torch.linspace(0, settings.drop_path_rate, depth)]
 
+        bottleneck_shape = [(input_shape[0]*input_shape[1])/(16*4**(len(settings.stages)-1)), settings.embed_dim*2**(len(settings.stages)-1)]
+
         # Transformer blocks
         cur_stage = 0
         self.blocks = nn.ModuleList()
-
         for i in range(depth):
             dim_out = settings.embed_dim
             # Mask unit or global attention.
@@ -487,6 +501,26 @@ class Hiera(nn.Module, PyTorchModelHubMixin):
         self.apply(partial(self._init_weights))
         self.head.projection.weight.data.mul_(settings.head_init_scale)
         self.head.projection.bias.data.mul_(settings.head_init_scale)
+
+
+        """
+        ENCODER PART
+        """
+
+        if settings.decoder == "hiera":
+            self.decoder = HieraDecoder(
+                in_channels = bottleneck_shape[1],
+                out_channels = bottleneck_shape[1],
+                kernel_size = 3,
+                upsample_kernel_size=2,
+                linear_upsampling  = False,
+                settings = HieraSettings,
+            )
+        elif settings == "conv":
+            self.decoder = ConvDecoder()
+        else:
+            raise Exception(f"unknwon decoder: {settings.decoder}")
+    
 
     def _init_weights(self, m, init_bias=0.02):
         if isinstance(m, (nn.Linear, nn.Conv1d, nn.Conv2d, nn.Conv3d)):
@@ -584,8 +618,9 @@ class Hiera(nn.Module, PyTorchModelHubMixin):
                 x.shape[0], -1, x.shape[-1]
             )
         print("x in hiera forward after mask is not none", x.shape)
-
-        for i, blk in enumerate(self.blocks):
+        skip_list=[]
+        for i, blk in tqdm(enumerate(self.blocks)):
+            skip_list.append(x)
             x = blk(x)
             if return_intermediates and i in self.stage_ends:
                 intermediates.append(self.reroll(x, i, mask=mask))
@@ -597,25 +632,12 @@ class Hiera(nn.Module, PyTorchModelHubMixin):
         # intermediates[-1] is x in spatial order        
         if return_intermediates:
             return x, intermediates
-
-        #x = features_second_to_last(x)
+        
         print("x in hiera forward FINAL", x.shape)
-
-        return x
-
-
-
-
-
+        return self.decoder(skip_list, x)
 
 
 ##################################################################################################
-
-
-
-
-
-
 
 def apply_fusion_head(head: nn.Module, x: torch.Tensor) -> torch.Tensor:
     if isinstance(head, nn.Identity):
@@ -631,6 +653,7 @@ def apply_fusion_head(head: nn.Module, x: torch.Tensor) -> torch.Tensor:
     x = x.permute(permute).reshape(B, num_mask_units, *x.shape[2:], x.shape[1])
     return x
 
+#########################################################################################################
 
 class MaskedAutoencoderHiera(Hiera):
     """Masked Autoencoder with Hiera backbone"""
@@ -885,13 +908,7 @@ class MaskedAutoencoderHiera(Hiera):
         # Toggle mask, to generate labels for *masked* tokens
         return (*self.forward_loss(x, pred, ~pred_mask), mask)
 
-
-
-
 ##################################################################################################
-
-
-
 
 class MaskUnitAttention(nn.Module):
     """
@@ -968,6 +985,7 @@ class MaskUnitAttention(nn.Module):
         x = self.proj(x)
         return x
 
+#########################################################################################################
 
 class HieraBlock(nn.Module):
     def __init__(
@@ -1011,6 +1029,7 @@ class HieraBlock(nn.Module):
         x = x + self.drop_path(self.mlp(self.norm2(x)))
         return x
 
+#########################################################################################################
 
 class Head(nn.Module):
     def __init__(
@@ -1033,6 +1052,7 @@ class Head(nn.Module):
             x = self.act_func(x)
         return x
 
+#########################################################################################################
 
 class PatchEmbed(nn.Module):
     """Patch embed that supports any number of spatial dimensions (1d, 2d, 3d)."""
@@ -1064,3 +1084,67 @@ class PatchEmbed(nn.Module):
         x = x.reshape(x.shape[0], x.shape[1], -1).transpose(2, 1)
         return x
 
+#########################################################################################################
+
+class HieraDecoder(nn.Module):
+    def __init__(
+        self,
+        in_channels_conv: int,
+        in_channels_embed: int,
+        kernel_size: Union[Sequence[int], int],
+        upsample_kernel_size: Union[Sequence[int], int],
+        linear_upsampling: bool = False,
+        settings = HieraSettings,
+    ) -> None:
+        super().__init__()
+# UPSAMPLING
+        padding = get_padding(upsample_kernel_size, upsample_kernel_size)
+        if linear_upsampling:
+            self.transp_conv = nn.Sequential(
+                nn.UpsamplingBilinear2d(scale_factor=upsample_kernel_size),
+                nn.Conv2d(
+                    in_channels_conv, in_channels_conv, kernel_size=kernel_size, padding=1
+                ),
+            )
+        else:
+            self.transp_conv = nn.ConvTranspose2d(
+                in_channels_conv,
+                in_channels_conv,
+                kernel_size=upsample_kernel_size,
+                stride=upsample_kernel_size,
+                padding=padding,
+                output_padding=get_output_padding(
+                    upsample_kernel_size, upsample_kernel_size, padding
+                ),
+                dilation=1,
+            )
+# ATTENTION BLOCK
+        self.decoder_block = nn.ModuleList()
+        stage_blocks = []
+        for i in range(len(settings.stages)):
+            in_channels = int(in_channels * settings.dim_mul)
+            settings.num_heads = int(settings.num_heads * settings.head_mul)
+            block = HieraBlock(
+                dim = in_channels,
+                dim_out = in_channels,
+                heads = settings.num_heads,
+                mlp_ratio = 4.0,
+                drop_path = 0.0,
+                norm_layer = nn.LayerNorm,
+                q_stride = 1,
+                window_size = 0,
+                use_mask_unit_attn = False,
+            )
+            stage_blocks.append(block)
+            self.decoder_block.append(nn.Sequential(*stage_blocks))
+
+    def forward(self, skip_list, x):
+        for i in range(len(skip_list)):
+            x_temp = self.transp_conv(x)
+            print("x_temp after trans_conv:", x_temp.shape)
+            x_temp = skip_list[i] + x_temp
+            print("x_temp after trans_conv + skip:", x_temp.shape)
+            x = self.decoder_block[i](x_temp)
+            print("x_temp after decoder_block:", x.shape)
+        x = features_second_to_last(x)
+        return(x)

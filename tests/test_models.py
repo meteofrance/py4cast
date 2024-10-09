@@ -35,7 +35,7 @@ class FakeSumDataset(torch.utils.data.Dataset):
     def __getitem__(self, idx: int):
         x = torch.rand((self.grid_height, self.grid_width, self.num_inputs))
         y = torch.sum(x, -1).unsqueeze(-1)
-        y_prime = torch.rand((2, 5))
+        y_prime = torch.rand((49, 768))
         return x, y_prime
 
 

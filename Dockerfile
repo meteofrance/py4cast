@@ -52,7 +52,7 @@ RUN curl -fsSL https://code-server.dev/install.sh | sh
 
 RUN pip install timm
 RUN pip install timm --upgrade
-
+RUN pip install tqdm
 
 
 
