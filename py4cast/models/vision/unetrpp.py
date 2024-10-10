@@ -305,7 +305,8 @@ class EPA(nn.Module):
                 )
             elif self.attention_code == "flash":
                 # flash attention expects inputs of shape (batch_size, seqlen, nheads, headdim)
-                # so we need to permute the dimensions from (batch, head, channels, spatial_dim) to (batch, channels, head, spatial_dim)
+                # so we need to permute the dimensions from (batch, head, channels, spatial_dim) 
+                # to (batch, channels, head, spatial_dim)
                 q_shared = q_shared.permute(0, 2, 1, 3)
                 k_shared = k_shared.permute(0, 2, 1, 3)
                 v_CA = v_CA.permute(0, 2, 1, 3)
