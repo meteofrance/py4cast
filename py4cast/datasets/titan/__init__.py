@@ -203,9 +203,9 @@ class Param:
             self.level_type = "hPa"
         self.long_name = param_info["long_name"]
         self.native_grid = param_info["grid"]
-        if self.native_grid not in ["PAAROME_1S100", "PAAROME_1S40"]:
+        if self.native_grid not in ["PAAROME_1S100", "PAAROME_1S40", "PA_01D"]:
             raise NotImplementedError(
-                "Parameter native grid must be in ['PAAROME_1S100', 'PAAROME_1S40']"
+                "Parameter native grid must be in ['PAAROME_1S100', 'PAAROME_1S40', 'PA_01D']"
             )
 
     @property

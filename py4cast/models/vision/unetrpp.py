@@ -361,7 +361,7 @@ class UnetrPPEncoder(nn.Module):
         dropout=0.0,
         transformer_dropout_rate=0.1,
         downsampling_rate: int = 4,
-        proj_size: int = 64,
+        proj_sizes: Tuple[int, ...] = (64, 64, 64, 32),
         attention_code: str = "torch",
     ):
         super().__init__()
@@ -404,7 +404,7 @@ class UnetrPPEncoder(nn.Module):
         )  # 4 feature resolution stages, each consisting of multiple Transformer blocks
         for i in range(4):
             stage_blocks = []
-            for j in range(depths[i]):
+            for _ in range(depths[i]):
                 stage_blocks.append(
                     TransformerBlock(
                         input_size=input_size[i],
@@ -412,7 +412,7 @@ class UnetrPPEncoder(nn.Module):
                         num_heads=num_heads,
                         dropout_rate=transformer_dropout_rate,
                         pos_embed=True,
-                        proj_size=proj_size,
+                        proj_size=proj_sizes[i],
                         attention_code=attention_code,
                     )
                 )
@@ -569,7 +569,6 @@ class UnetrUpBlock(nn.Module):
             nn.init.constant_(m.weight, 1.0)
 
     def forward(self, inp, skip):
-
         out = self.transp_conv(inp)
         out = out + skip
         out = self.decoder_block[0](out)
@@ -592,7 +591,8 @@ class UNETRPPSettings:
     spatial_dims = 2
     linear_upsampling: bool = False
     downsampling_rate: int = 4
-    proj_size: int = 64
+    decoder_proj_size: int = 64
+    encoder_proj_sizes: Tuple[int, ...] = (64, 64, 64, 32)
 
     # Specify the attention implementation to use
     # Options: "torch" : scaled_dot_product_attention from torch.nn.functional
@@ -602,7 +602,6 @@ class UNETRPPSettings:
 
 
 class UNETRPP(ModelABC, nn.Module):
-
     """
     UNETR++ based on: "Shaker et al.,
     UNETR++: Delving into Efficient and Accurate 3D Medical Image Segmentation"
@@ -689,7 +688,7 @@ class UNETRPP(ModelABC, nn.Module):
             spatial_dims=settings.spatial_dims,
             in_channels=num_input_features,
             downsampling_rate=settings.downsampling_rate,
-            proj_size=settings.proj_size,
+            proj_sizes=settings.encoder_proj_sizes,
             attention_code=settings.attention_code,
         )
 
@@ -710,7 +709,7 @@ class UNETRPP(ModelABC, nn.Module):
             norm_name=settings.norm_name,
             out_size=no_pixels // 16,
             linear_upsampling=settings.linear_upsampling,
-            proj_size=settings.proj_size,
+            proj_size=settings.decoder_proj_size,
             attention_code=settings.attention_code,
             num_heads=settings.num_heads_decoder,
         )
@@ -723,7 +722,7 @@ class UNETRPP(ModelABC, nn.Module):
             norm_name=settings.norm_name,
             out_size=no_pixels // 4,
             linear_upsampling=settings.linear_upsampling,
-            proj_size=settings.proj_size,
+            proj_size=settings.decoder_proj_size,
             attention_code=settings.attention_code,
             num_heads=settings.num_heads_decoder,
         )
@@ -736,7 +735,7 @@ class UNETRPP(ModelABC, nn.Module):
             norm_name=settings.norm_name,
             out_size=no_pixels,
             linear_upsampling=settings.linear_upsampling,
-            proj_size=settings.proj_size,
+            proj_size=settings.decoder_proj_size,
             attention_code=settings.attention_code,
             num_heads=settings.num_heads_decoder,
         )
@@ -750,7 +749,7 @@ class UNETRPP(ModelABC, nn.Module):
             out_size=no_pixels * (settings.downsampling_rate**2),
             conv_decoder=True,
             linear_upsampling=settings.linear_upsampling,
-            proj_size=settings.proj_size,
+            proj_size=settings.decoder_proj_size,
             attention_code=settings.attention_code,
             num_heads=settings.num_heads_decoder,
         )
@@ -793,7 +792,6 @@ class UNETRPP(ModelABC, nn.Module):
         return x
 
     def forward(self, x_in):
-
         x_in = features_last_to_second(x_in)
 
         _, hidden_states = self.unetr_pp_encoder(x_in)
