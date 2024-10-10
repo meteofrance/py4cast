@@ -456,7 +456,7 @@ class Hiera(nn.Module, PyTorchModelHubMixin):
         # stochastic depth decay rule
         dpr = [x.item() for x in torch.linspace(0, settings.drop_path_rate, depth)]
 
-        bottleneck_shape = [(input_shape[0]*input_shape[1])/(16*4**(len(settings.stages)-1)), settings.embed_dim*2**(len(settings.stages)-1)]
+        self.bottleneck_shape = [int((input_shape[0]*input_shape[1])//(16*4**(len(settings.stages)-1))), int(settings.embed_dim*2**(len(settings.stages)-1))]
 
         # Transformer blocks
         cur_stage = 0
@@ -509,11 +509,11 @@ class Hiera(nn.Module, PyTorchModelHubMixin):
 
         if settings.decoder == "hiera":
             self.decoder = HieraDecoder(
-                in_channels = bottleneck_shape[1],
-                out_channels = bottleneck_shape[1],
+                in_channels_conv = self.bottleneck_shape[0],
+                in_channels_embed = self.bottleneck_shape[1],
                 kernel_size = 3,
-                upsample_kernel_size=2,
-                linear_upsampling  = False,
+                upsample_kernel_size=4,
+                linear_upsampling  = True,
                 settings = HieraSettings,
             )
         elif settings == "conv":
@@ -595,7 +595,7 @@ class Hiera(nn.Module, PyTorchModelHubMixin):
         if isinstance(x, list):
             x = x[0]
         intermediates = []
-        print("x in hiera forward after last to second", x.shape)
+        #print("x in hiera forward after last to second", x.shape)
         x = self.patch_embed(
             x,
             mask=mask.view(
@@ -604,27 +604,28 @@ class Hiera(nn.Module, PyTorchModelHubMixin):
             if mask is not None
             else None,
         )
-        print("x in hiera forward after patch embed", x.shape)
+        #print("x in hiera forward after patch embed", x.shape)
 
         x = x + self.get_pos_embed()
-        print("x in hiera forward after get pos embed", x.shape)
+        #print("x in hiera forward after get pos embed", x.shape)
 
         x = self.unroll(x)
-        print("x in hiera forward after unroll", x.shape)
+        #print("x in hiera forward after unroll", x.shape)
 
         # Discard masked tokens
         if mask is not None:
             x = x[mask[..., None].tile(1, self.mu_size, x.shape[2])].view(
                 x.shape[0], -1, x.shape[-1]
             )
-        print("x in hiera forward after mask is not none", x.shape)
+        #print("x in hiera forward after mask is not none", x.shape)
         skip_list=[]
         for i, blk in tqdm(enumerate(self.blocks)):
-            skip_list.append(x)
+            if i in self.stage_ends:
+                skip_list.append(x)
             x = blk(x)
             if return_intermediates and i in self.stage_ends:
                 intermediates.append(self.reroll(x, i, mask=mask))
-            print("x in hiera forward after blk=",i, x.shape)
+            #print("x in hiera forward after blk=",i, x.shape)
         
         # x may not always be in spatial order here.
         # e.g. if q_pool = 2, mask_unit_size = (8, 8), and
@@ -633,7 +634,7 @@ class Hiera(nn.Module, PyTorchModelHubMixin):
         if return_intermediates:
             return x, intermediates
         
-        print("x in hiera forward FINAL", x.shape)
+        #print("x in hiera forward FINAL", x.shape)
         return self.decoder(skip_list, x)
 
 
@@ -1093,40 +1094,53 @@ class HieraDecoder(nn.Module):
         in_channels_embed: int,
         kernel_size: Union[Sequence[int], int],
         upsample_kernel_size: Union[Sequence[int], int],
-        linear_upsampling: bool = False,
+        linear_upsampling: bool = True,
         settings = HieraSettings,
     ) -> None:
         super().__init__()
-# UPSAMPLING
+        self.stage_blocks = []
+        self.transp_conv = []
         padding = get_padding(upsample_kernel_size, upsample_kernel_size)
-        if linear_upsampling:
-            self.transp_conv = nn.Sequential(
-                nn.UpsamplingBilinear2d(scale_factor=upsample_kernel_size),
-                nn.Conv2d(
-                    in_channels_conv, in_channels_conv, kernel_size=kernel_size, padding=1
-                ),
+
+# UPSAMPLING + CONV
+        for i in range(len(settings.stages)-1):
+            out_channels_embed = int(in_channels_embed//2)
+            if linear_upsampling:
+                self.transp_conv.append(nn.Sequential(
+                    nn.Upsample(scale_factor=upsample_kernel_size),
+                    nn.Conv1d(
+                        in_channels_embed, out_channels_embed, kernel_size=kernel_size, padding=1
+                    ),
+                )
+                )
+            else:
+                self.transp_conv.append(nn.ConvTranspose1d(
+                    in_channels_embed,
+                    out_channels_embed,
+                    kernel_size=upsample_kernel_size,
+                    stride=upsample_kernel_size,
+                    padding=padding,
+                    output_padding=get_output_padding(
+                        upsample_kernel_size, upsample_kernel_size, padding
+                    ),
+                    dilation=1,
+                )
+                )
+            in_channels_embed = out_channels_embed
+
+        self.transp_conv.append(nn.Sequential(
+            nn.Upsample(scale_factor=upsample_kernel_size*upsample_kernel_size),
+            nn.Conv1d(in_channels_embed, 3, kernel_size=kernel_size, padding=1),
             )
-        else:
-            self.transp_conv = nn.ConvTranspose2d(
-                in_channels_conv,
-                in_channels_conv,
-                kernel_size=upsample_kernel_size,
-                stride=upsample_kernel_size,
-                padding=padding,
-                output_padding=get_output_padding(
-                    upsample_kernel_size, upsample_kernel_size, padding
-                ),
-                dilation=1,
-            )
+        )
+
+
 # ATTENTION BLOCK
-        self.decoder_block = nn.ModuleList()
-        stage_blocks = []
         for i in range(len(settings.stages)):
-            in_channels = int(in_channels * settings.dim_mul)
             settings.num_heads = int(settings.num_heads * settings.head_mul)
             block = HieraBlock(
-                dim = in_channels,
-                dim_out = in_channels,
+                dim = in_channels_conv,
+                dim_out = in_channels_conv,
                 heads = settings.num_heads,
                 mlp_ratio = 4.0,
                 drop_path = 0.0,
@@ -1135,16 +1149,22 @@ class HieraDecoder(nn.Module):
                 window_size = 0,
                 use_mask_unit_attn = False,
             )
-            stage_blocks.append(block)
-            self.decoder_block.append(nn.Sequential(*stage_blocks))
+            in_channels_conv = int(in_channels_conv * upsample_kernel_size)
+            self.stage_blocks.append(block)
+            #self.decoder_block.append(nn.Sequential(*stage_blocks))
 
     def forward(self, skip_list, x):
         for i in range(len(skip_list)):
-            x_temp = self.transp_conv(x)
-            print("x_temp after trans_conv:", x_temp.shape)
-            x_temp = skip_list[i] + x_temp
-            print("x_temp after trans_conv + skip:", x_temp.shape)
-            x = self.decoder_block[i](x_temp)
-            print("x_temp after decoder_block:", x.shape)
-        x = features_second_to_last(x)
+            #print()
+            #print("skip shape:",(skip_list[len(skip_list) - i-1]).shape)
+            x = skip_list[len(skip_list) - i-1] + x
+            #print("x after skip:", x.shape)
+            x = torch.permute(x, (0,2,1))
+            x = self.stage_blocks[i](x)
+            #print("x after decoder_block:", x.shape)
+            x = self.transp_conv[i](x)
+            x = torch.permute(x, (0,2,1))
+            #print("x after trans_conv:", x.shape)
+        x = x.reshape(x.shape[0], 224, 224, x.shape[2])
+        #print("x final:", x.shape)
         return(x)
