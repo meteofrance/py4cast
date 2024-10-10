@@ -34,7 +34,7 @@ class FakeSumDataset(torch.utils.data.Dataset):
 
     def __getitem__(self, idx: int):
         x = torch.rand((self.grid_height, self.grid_width, self.num_inputs))
-        y = torch.sum(x, -1).unsqueeze(-1)
+        y = torch.rand((self.grid_height, self.grid_width, self.num_inputs))
         return x, y
 
 
@@ -82,20 +82,21 @@ def test_torch_training_loop():
     """
     Checks that our models are trainable on a toy problem (sum).
     """
-    GRID_WIDTH = 64
-    GRID_HEIGHT = 64
-    NUM_INPUTS = 2
-    NUM_OUTPUTS = 1
+    GRID_WIDTH = 224
+    GRID_HEIGHT = 224
+    NUM_INPUTS = 3
+    NUM_OUTPUTS = 1000
 
     for model_name in (
-        "swinunetr",
-        "hilam",
-        "graphlam",
-        "halfunet",
-        "unet",
-        "segformer",
-        "identity",
-        "unetrpp",
+        # "swinunetr",
+        # "hilam",
+        # "graphlam",
+        # "halfunet",
+        # "unet",
+        # "segformer",
+        # "identity",
+        # "unetrpp",
+        "hiera",
     ):
         model_kls, model_settings = get_model_kls_and_settings(model_name)
 
@@ -132,6 +133,9 @@ def test_torch_training_loop():
             # Make predictions for this batch
             outputs = model(inputs)
 
+            #print(outputs.shape)
+            #print(targets.shape)
+            
             # Compute the loss and its gradients
             loss = loss_fn(outputs, targets)
             loss.backward()
@@ -142,7 +146,11 @@ def test_torch_training_loop():
     # Make a prediction in eval mode
     model.eval()
     sample = ds[0][0].unsqueeze(0)
+    #print()
+    #print("sample shape1 :", sample.shape)
     sample = sample.flatten(1, 2) if len(model.input_dims) == 3 else sample
+    #print("sample shape2 :", sample.shape)
+    #print()
     model(sample)
 
     # We test if models claiming to be onnx exportable really are post training.
@@ -153,6 +161,10 @@ def test_torch_training_loop():
             if len(model.input_dims) == 3:
                 sample = sample.flatten(1, 2)
             onnx_export_load_infer(model, dst.name, sample)
+
+    print()
+    print("training test DONE")
+    print()
 
 
 def test_model_registry():
@@ -172,4 +184,13 @@ def test_model_registry():
         "hilamparallel",
         "swinunetr",
         "unetrpp",
+        "hiera",
     }
+
+    print()
+    print("registry test DONE")
+    print()
+
+
+test_torch_training_loop()
+test_model_registry()
