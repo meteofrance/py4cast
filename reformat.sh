@@ -4,5 +4,5 @@ set -eux
 
 id
 pwd
-isort --profile black $1
-black $1
+python -m isort --profile black $1
+python -m black $1

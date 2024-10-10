@@ -141,8 +141,7 @@ class TransformerBlock(nn.Module):
             dropout_rate: faction of the input units to drop.
             pos_embed: bool argument to determine if positional embedding is used.
             proj_size: size of the projection space for Spatial Attention.
-            use_scaled_dot_product_CA : bool argument to determine if torch's scaled_dot_product_attenton
-            is used for Channel Attention.
+            attention_code: type of attention implementation to use. See EPA for more details.
         """
 
         super().__init__()
@@ -247,6 +246,7 @@ class EPA(nn.Module):
             raise NotImplementedError(
                 "Attention code should be one of 'torch', 'flash' or 'manual'"
             )
+        self.attention_code = attention_code
         if attention_code == "flash":
             from flash_attn import flash_attn_func
 
@@ -274,6 +274,7 @@ class EPA(nn.Module):
         self.attn_drop_2 = nn.Dropout(spatial_attn_drop)
 
     def forward(self, x):
+        # TODO: fully optimize this function for each attention code
         B, N, C = x.shape
 
         qkvv = self.qkvv(x).reshape(B, N, 4, self.num_heads, C // self.num_heads)
@@ -298,7 +299,30 @@ class EPA(nn.Module):
         q_shared = torch.nn.functional.normalize(q_shared, dim=-1).type_as(q_shared)
         k_shared = torch.nn.functional.normalize(k_shared, dim=-1).type_as(k_shared)
         if self.use_scaled_dot_product_CA:
-            x_CA = self.attn_func(q_shared, k_shared, v_CA, dropout_p=self.attn_drop.p)
+            if self.attention_code == "torch":
+                # print(q_shared.shape)
+                x_CA = self.attn_func(
+                    q_shared, k_shared, v_CA, dropout_p=self.attn_drop.p
+                )
+            elif self.attention_code == "flash":
+                # flash attention expects inputs of shape (batch_size, seqlen, nheads, headdim)
+                # so we need to permute the dimensions from (batch, head, channels, spatial_dim) to (batch, channels, head, spatial_dim)
+                q_shared = q_shared.permute(0, 2, 1, 3)
+                k_shared = k_shared.permute(0, 2, 1, 3)
+                v_CA = v_CA.permute(0, 2, 1, 3)
+
+                x_CA = self.attn_func(
+                    q_shared, k_shared, v_CA, dropout_p=self.attn_drop.p
+                )
+
+                # flash attention returns the output in the same shape as the input
+                # so we need to permute it back
+                x_CA = x_CA.permute(0, 2, 1, 3)
+
+                # we permute back the inputs
+                q_shared = q_shared.permute(0, 2, 1, 3)
+                k_shared = k_shared.permute(0, 2, 1, 3)
+
         else:
             attn_CA = (q_shared @ k_shared.transpose(-2, -1)) * self.temperature
             attn_CA = attn_CA.softmax(dim=-1)
@@ -446,7 +470,7 @@ class UnetrUpBlock(nn.Module):
         conv_decoder: bool = False,
         linear_upsampling: bool = False,
         proj_size: int = 64,
-        use_scaled_dot_product_CA: bool = True,
+        attention_code: str = "torch",
     ) -> None:
         """
         Args:
@@ -522,7 +546,7 @@ class UnetrUpBlock(nn.Module):
             )
         else:
             stage_blocks = []
-            for j in range(depth):
+            for _ in range(depth):
                 stage_blocks.append(
                     TransformerBlock(
                         input_size=out_size,
@@ -531,7 +555,7 @@ class UnetrUpBlock(nn.Module):
                         dropout_rate=0.1,
                         pos_embed=True,
                         proj_size=proj_size,
-                        attention_code=use_scaled_dot_product_CA,
+                        attention_code=attention_code,
                     )
                 )
             self.decoder_block.append(nn.Sequential(*stage_blocks))
@@ -558,7 +582,8 @@ class UnetrUpBlock(nn.Module):
 @dataclass
 class UNETRPPSettings:
     hidden_size: int = 256
-    num_heads: int = 4
+    num_heads_encoder: int = 4
+    num_heads_decoder: int = 4
     pos_embed: str = "perceptron"
     norm_name: Union[Tuple, str] = "instance"
     dropout_rate: float = 0.0
@@ -661,7 +686,7 @@ class UNETRPP(ModelABC, nn.Module):
                 h_size,
             ),
             depths=settings.depths,
-            num_heads=settings.num_heads,
+            num_heads=settings.num_heads_encoder,
             spatial_dims=settings.spatial_dims,
             in_channels=num_input_features,
             downsampling_rate=settings.downsampling_rate,
@@ -687,7 +712,8 @@ class UNETRPP(ModelABC, nn.Module):
             out_size=no_pixels // 16,
             linear_upsampling=settings.linear_upsampling,
             proj_size=settings.proj_size,
-            use_scaled_dot_product_CA=settings.attention_code,
+            attention_code=settings.attention_code,
+            num_heads=settings.num_heads_decoder,
         )
         self.decoder4 = UnetrUpBlock(
             spatial_dims=settings.spatial_dims,
@@ -699,7 +725,8 @@ class UNETRPP(ModelABC, nn.Module):
             out_size=no_pixels // 4,
             linear_upsampling=settings.linear_upsampling,
             proj_size=settings.proj_size,
-            use_scaled_dot_product_CA=settings.attention_code,
+            attention_code=settings.attention_code,
+            num_heads=settings.num_heads_decoder,
         )
         self.decoder3 = UnetrUpBlock(
             spatial_dims=settings.spatial_dims,
@@ -711,7 +738,8 @@ class UNETRPP(ModelABC, nn.Module):
             out_size=no_pixels,
             linear_upsampling=settings.linear_upsampling,
             proj_size=settings.proj_size,
-            use_scaled_dot_product_CA=settings.attention_code,
+            attention_code=settings.attention_code,
+            num_heads=settings.num_heads_decoder,
         )
         self.decoder2 = UnetrUpBlock(
             spatial_dims=settings.spatial_dims,
@@ -724,7 +752,8 @@ class UNETRPP(ModelABC, nn.Module):
             conv_decoder=True,
             linear_upsampling=settings.linear_upsampling,
             proj_size=settings.proj_size,
-            use_scaled_dot_product_CA=settings.attention_code,
+            attention_code=settings.attention_code,
+            num_heads=settings.num_heads_decoder,
         )
         self.out1 = UnetOutBlock(
             spatial_dims=settings.spatial_dims,
