@@ -6,8 +6,8 @@ from typing import Any, Tuple, Union
 
 import numpy as np
 import pandas as pd
-import xarray as xr
 import torch
+import xarray as xr
 from cfgrib import xarray_to_grib as xtg
 from dataclasses_json import dataclass_json
 
@@ -140,7 +140,7 @@ def write_template_dataset(
         xr.Dataset: the template dataset, filled with data from raw_data, in the correct format
     """
     receiver_ds = deepcopy(template_ds)
-    
+
     # if the shape of the dataset grid doesn't match grib template, fill the rest of the data with NaNs
     nanmask, latlon = make_nan_mask(ds, receiver_ds)
     (
@@ -161,50 +161,80 @@ def write_template_dataset(
     )
     receiver_ds["step"] = ns_step
     receiver_ds["valid_time"] = np.datetime64(sample.date) + ns_valid
-    
+
     namelist = list(receiver_ds.keys())
-    used_grib_feat = grib_features.loc[
-        (grib_features["name"] in namelist)
-        ]
+    used_grib_feat = grib_features[(grib_features["name"].isin(namelist))]
     name = namelist[0]
     feature_names = used_grib_feat["feature_name"].tolist()
     levels = used_grib_feat["level"].tolist()
     tol = used_grib_feat["typeOfLevel"].drop_duplicates().tolist()[0]
     feature_idx = torch.tensor([pred.feature_names_to_idx[f] for f in feature_names])
-    data = raw_data.index_select_dim("features",feature_idx, bare_tensor=True).squeeze().cpu().numpy()
 
-    if (f"{name}_{tol}" == group):
-        # in this case, there might be a third dimension (eg isobaricInhPa) : basis for nanmask duplication
+    data = (
+        raw_data.index_select_dim("features", feature_idx, bare_tensor=True)
+        .squeeze()
+        .cpu()
+        .numpy()
+    )
+
+    if f"{name}_{tol}" == group:
+        # there might be a third dimension (eg isobaricInhPa) : basis for nanmask duplication
         dims = template_ds.dims
-        try:
-            maybe_repeat = dims[tol]
-        except KeyError:
-            maybe_repeat = 0
 
+        try:
+            # supplementary dim
+            maybe_repeat = template_ds.sizes[tol]
+            data2grib = np.repeat(nanmask[np.newaxis], maybe_repeat, axis=0)
+            data2grib[:, latmax : latmin + 1, longmin : longmax + 1] = data
+            receiver_ds[name] = (dims, data2grib.astype(np.float32))
+            receiver_ds[name] = receiver_ds[name].assign_attrs(
+                **template_ds[name].attrs
+            )
+
+        except KeyError:
+
+            maybe_repeat = len(feature_names) if len(feature_names) > 1 else 0
+            if maybe_repeat:
+                # no suplementary dim but several variables
+                data2grib = np.repeat(nanmask[np.newaxis], maybe_repeat, axis=0)
+                data2grib[:, latmax : latmin + 1, longmin : longmax + 1] = data
+                if set(namelist).issubset(set(receiver_ds.keys())):
+                    receiver_ds.update(
+                        {
+                            f: (dims, data2grib[pred.feature_names_to_idx[f]])
+                            for f in feature_names
+                        }
+                    )
+                else:
+                    receiver_ds.assign(
+                        {
+                            f: (dims, data2grib[pred.feature_names_to_idx[f]])
+                            for f in feature_names
+                        }
+                    )
+            else:
+                "only one variable"
+                data2grib = nanmask
+                data2grib[latmax : latmin + 1, longmin : longmax + 1] = data
+                receiver_ds[name] = (dims, data2grib.astype(np.float32))
+                receiver_ds[name] = receiver_ds[name].assign_attrs(
+                    **template_ds[name].attrs
+                )
+    elif tol == group:
+        # in this case, there might be several variables : basis for nanmask duplication
+        dims = template_ds.dims
+        maybe_repeat = len(feature_idx) if len(feature_idx) > 1 else 0
         if maybe_repeat:
             data2grib = np.repeat(nanmask[np.newaxis], maybe_repeat, axis=0)
-            data2grib[:,latmax : latmin + 1, longmin : longmax + 1] = data
+            data2grib[:, latmax : latmin + 1, longmin : longmax + 1] = data
         else:
             data2grib = nanmask
             data2grib[latmax : latmin + 1, longmin : longmax + 1] = data
 
-        receiver_ds[name] = (dims, data2grib.astype(np.float32))
-        receiver_ds[name] = receiver_ds[name].assign_attrs(
-            **template_ds[name].attrs
+        receiver_ds.update(
+            {f: (dims, data2grib[pred.feature_names_to_idx[f]]) for f in feature_names}
         )
-    elif (tol == group):
-        # in this case, there might be a third dimension (number of fields) : basis for nanmask duplication
-
-        dims = template_ds.dims
-
-        maybe_repeat = len(feature_idx) if len(feature_idx)>1 else 0
-        data2grib = np.repeat(nanmask[np.newaxis], maybe_repeat, axis=0) if maybe_repeat else nanmask
-        data2grib[latmax : latmin + 1, longmin : longmax + 1] = data
-        #TODO : check whether the order of feature names is respected
-        receiver_ds.assign({feature_names[idx] : data2grib[idx] for idx in range(len(feature_names))})
-        receiver_ds[name] = receiver_ds[name].assign_attrs(
-            **template_ds[name].attrs
-        )
+        receiver_ds[name] = receiver_ds[name].assign_attrs(**template_ds[name].attrs)
 
     return receiver_ds
 
