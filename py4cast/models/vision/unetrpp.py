@@ -300,7 +300,6 @@ class EPA(nn.Module):
         k_shared = torch.nn.functional.normalize(k_shared, dim=-1).type_as(k_shared)
         if self.use_scaled_dot_product_CA:
             if self.attention_code == "torch":
-                # print(q_shared.shape)
                 x_CA = self.attn_func(
                     q_shared, k_shared, v_CA, dropout_p=self.attn_drop.p
                 )
