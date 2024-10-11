@@ -600,6 +600,9 @@ class UNETRPPSettings:
     downsampling_rate: int = 4
     decoder_proj_size: int = 64
     encoder_proj_sizes: Tuple[int, ...] = (64, 64, 64, 32)
+    # Adds skip connection between encoder layers outputs
+    # and corresponding decoder layers inputs
+    add_skip_connections: bool = True
 
     # Specify the attention implementation to use
     # Options: "torch" : scaled_dot_product_attention from torch.nn.functional
@@ -644,6 +647,7 @@ class UNETRPP(ModelABC, nn.Module):
         super().__init__()
 
         self.do_ds = settings.do_ds
+        self.add_skip_connections = settings.add_skip_connections
         self.conv_op = getattr(nn, settings.conv_op)
         self.num_classes = num_output_features
         if not (0 <= settings.dropout_rate <= 1):
@@ -812,11 +816,27 @@ class UNETRPP(ModelABC, nn.Module):
 
         # Four decoders
         dec4 = self.proj_feat(enc4)
-        dec3 = self.decoder5(dec4, enc3)
-        dec2 = self.decoder4(dec3, enc2)
-        dec1 = self.decoder3(dec2, enc1)
+        dec3 = (
+            self.decoder5(dec4, enc3)
+            if self.add_skip_connections
+            else self.decoder5(dec4)
+        )
+        dec2 = (
+            self.decoder4(dec3, enc2)
+            if self.add_skip_connections
+            else self.decoder4(dec3)
+        )
+        dec1 = (
+            self.decoder3(dec2, enc1)
+            if self.add_skip_connections
+            else self.decoder3(dec2)
+        )
 
-        out = self.decoder2(dec1, convBlock)
+        out = (
+            self.decoder2(dec1, convBlock)
+            if self.add_skip_connections
+            else self.decoder2(dec1)
+        )
         if self.do_ds:
             logits = [self.out1(out), self.out2(dec1), self.out3(dec2)]
         else:
