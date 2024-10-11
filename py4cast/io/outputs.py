@@ -167,7 +167,7 @@ def write_template_dataset(
     used_grib_feat = grib_features[(grib_features["name"].isin(namelist))]
 
     # will only be used if namelist has a single item
-    name = namelist[0] 
+    name = namelist[0]
     feature_names = used_grib_feat["feature_name"].tolist()
     tol = used_grib_feat["typeOfLevel"].drop_duplicates().tolist()[0]
     feature_idx = torch.tensor([pred.feature_names_to_idx[f] for f in feature_names])
