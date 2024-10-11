@@ -162,11 +162,13 @@ def write_template_dataset(
     receiver_ds["step"] = ns_step
     receiver_ds["valid_time"] = np.datetime64(sample.date) + ns_valid
 
+    # retrieving key metadata to be able to parallelize writing
     namelist = list(receiver_ds.keys())
     used_grib_feat = grib_features[(grib_features["name"].isin(namelist))]
-    name = namelist[0]
+
+    # will only be used if namelist has a single item
+    name = namelist[0] 
     feature_names = used_grib_feat["feature_name"].tolist()
-    levels = used_grib_feat["level"].tolist()
     tol = used_grib_feat["typeOfLevel"].drop_duplicates().tolist()[0]
     feature_idx = torch.tensor([pred.feature_names_to_idx[f] for f in feature_names])
 
@@ -193,7 +195,7 @@ def write_template_dataset(
 
         except KeyError:
 
-            maybe_repeat = len(feature_names) if len(feature_names) > 1 else 0
+            maybe_repeat = len(feature_idx) if len(feature_idx) > 1 else 0
             if maybe_repeat:
                 # no suplementary dim but several variables
                 data2grib = np.repeat(nanmask[np.newaxis], maybe_repeat, axis=0)

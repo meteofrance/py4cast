@@ -266,7 +266,7 @@ class FakeSample:
 
 def test_write_template_dataset():
 
-    #### testing with only isobaric levels
+    # testing with only isobaric levels
     grib_features = pd.DataFrame(
         {
             "feature_name": [
@@ -321,7 +321,7 @@ def test_write_template_dataset():
     assert np.isclose(np.nanmean(receiver_ds.u.values[0]), 3.1416).all()
     assert np.isclose(np.nanmean(receiver_ds.u.values[1]), 6.2832).all()
 
-    #### testing with only surface variables
+    # testing with only surface variables
 
     grib_features = pd.DataFrame(
         {
@@ -376,7 +376,7 @@ def test_write_template_dataset():
     assert np.isclose(np.nanmean(receiver_ds.tirf.values[0]), 3.1416).all()
     assert np.isclose(np.nanmean(receiver_ds.mpsl.values[1]), 6.2832).all()
 
-    #### testing with 'heightaboveground' variables
+    # testing with 'heightaboveground' variables
 
     grib_features = pd.DataFrame(
         {
