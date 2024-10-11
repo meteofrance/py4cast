@@ -16,7 +16,7 @@ cfgrib==0.9.14.0
 dataclasses-json==0.6.4
 xarray==2024.7.0
 argparse-dataclass==2.0.0
-tensorboard==2.13.0
+tensorboard==2.16.1
 typer==0.9.0
 netCDF4==1.6.5
 tensorboard-plugin-profile==2.17.0
@@ -35,7 +35,7 @@ gif==23.3.0
 scikit-image==0.24.0
 typer==0.9.0
 transformers==4.44.2
-tensorflow==2.13.1
+tensorflow==2.16.1
 py-spy
 pyg-lib==0.4.0
 torch-scatter==2.1.2
