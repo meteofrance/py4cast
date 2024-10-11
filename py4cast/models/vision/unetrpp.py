@@ -569,9 +569,15 @@ class UnetrUpBlock(nn.Module):
             nn.init.constant_(m.bias, 0)
             nn.init.constant_(m.weight, 1.0)
 
-    def forward(self, inp, skip):
+    def forward(self, inp, skip=None):
+        """
+        Forward pass:
+        1. Upsampling using bi/tri-linear OR Conv{2,3}dTranspose
+        2. Adds skip connection if available
+        3. Conv or Transformer block
+        """
         out = self.transp_conv(inp)
-        out = out + skip
+        out = out + skip if skip is not None else out
         out = self.decoder_block[0](out)
 
         return out

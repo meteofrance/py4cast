@@ -26,6 +26,8 @@ RUN curl -O https://confluence.ecmwf.int/download/attachments/45757960/eccodes-$
 RUN pip install --upgrade pip
 COPY requirements.txt /root/requirements.txt
 RUN set -eux && pip install --default-timeout=100 -r /root/requirements.txt
+COPY requirements_lint.txt /root/requirements_lint.txt
+RUN pip install --default-timeout=100 -r /root/requirements_lint.txt
 
 ARG USERNAME
 ARG GROUPNAME
@@ -48,7 +50,6 @@ RUN set -eux && pip install pyg-lib==0.4.0 torch-scatter==2.1.2 torch-sparse==0.
 
 WORKDIR $HOME_DIR
 RUN curl -fsSL https://code-server.dev/install.sh | sh
-
 
 
 
