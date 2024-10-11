@@ -172,12 +172,7 @@ def write_storable_dataset(
     tol = used_grib_feat["typeOfLevel"].drop_duplicates().tolist()[0]
     feature_idx = torch.tensor([pred.feature_names_to_idx[f] for f in feature_names])
 
-    data = (
-        raw_data.index_select_dim("features", feature_idx)
-        .squeeze()
-        .cpu()
-        .numpy()
-    )
+    data = raw_data.index_select_dim("features", feature_idx).squeeze().cpu().numpy()
 
     if f"{name}_{tol}" == group:
         # there might be a third dimension (eg isobaricInhPa) : basis for nanmask duplication
