@@ -88,7 +88,7 @@ def save_named_tensors_to_grib(
     for t_idx in range(predicted_time_steps)[:1]:
         for group in model_ds.keys():
             raw_data = pred.select_dim("timestep", t_idx, bare_tensor=False)
-            receiver_ds = write_template_dataset(
+            storable = write_storable_dataset(
                 pred,
                 ds,
                 model_ds[group],
@@ -106,13 +106,13 @@ def save_named_tensors_to_grib(
                 else "ab"
             )
             xtg.to_grib(
-                receiver_ds,
+                storable,
                 Path(saving_settings.directory) / filename,
                 option,
             )
 
 
-def write_template_dataset(
+def write_storable_dataset(
     pred: NamedTensor,
     ds: DatasetABC,
     template_ds: xr.Dataset,
@@ -173,7 +173,7 @@ def write_template_dataset(
     feature_idx = torch.tensor([pred.feature_names_to_idx[f] for f in feature_names])
 
     data = (
-        raw_data.index_select_dim("features", feature_idx, bare_tensor=True)
+        raw_data.index_select_dim("features", feature_idx)
         .squeeze()
         .cpu()
         .numpy()
