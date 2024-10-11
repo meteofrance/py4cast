@@ -188,7 +188,7 @@ For conda users remove the **runai exec** prefix.
 
 ### Continuous Integration
 
-We have a github pipeline that runs linting (flake8, isort, black, bandit) and tests on every push to the repository. See the [gitlab-ci.yml](../.gitlab-ci.yml) file for more details.
+We have a github pipeline that runs linting (flake8, isort, black, bandit) and tests on every push to the repository. See the [github workflow](../.github/workflows/tests.yml) file for more details.
 
 Our CI also launches two runs of the full system (*bin/train.py*) with our **Dummy** dataset using **HiLam** and **HalfUnet32**.
 
