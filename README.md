@@ -104,7 +104,7 @@ For HPC, see the related doc (doc/installMF.md) to get the right installation se
 
 You can install a conda environment, including `py4cast` in editable mode, using
 ```sh
-conda env create --file env_conda.yaml
+conda env create --file env.yaml
 ```
 
 From an exixting conda environment, you can now install manually `py4cast` in development mode using

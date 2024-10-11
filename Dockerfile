@@ -25,6 +25,7 @@ RUN curl -O https://confluence.ecmwf.int/download/attachments/45757960/eccodes-$
 
 RUN pip install --upgrade pip
 COPY requirements.txt /app/requirements.txt
+RUN pip config set global.find-links 'https://download.pytorch.org/whl/cu121 https://data.pyg.org/whl/torch-2.2.2+cu121.html'
 RUN set -eux && pip install --default-timeout=100 -r /app/requirements.txt
 COPY requirements_lint.txt /app/requirements_lint.txt
 RUN pip install --default-timeout=100 -r /app/requirements_lint.txt
@@ -44,9 +45,6 @@ RUN set -eux && groupadd --gid $USER_GUID $GROUPNAME \
     && chmod 0440 /etc/sudoers.d/$USERNAME \
     && echo "$USERNAME:$USERNAME" | chpasswd \
     && mkdir /run/sshd
-
-RUN set -eux && pip install pyg-lib==0.4.0 torch-scatter==2.1.2 torch-sparse==0.6.18 torch-cluster==1.6.2\
-    torch-geometric==2.3.1 -f https://data.pyg.org/whl/torch-2.1.2+cpu.html
 
 WORKDIR $HOME_DIR
 RUN curl -fsSL https://code-server.dev/install.sh | sh
