@@ -192,10 +192,239 @@ def test_get_grib_groups():
     assert groups["v_isobaricInhPa"]["typeOfLevel"] == "isobaricInhPa"
 
 
+class FakeIsoDs:
+    def __init__(self, lat, lon, levels, variables):
+        super().__init__()
+        self.Shape = (len(levels), len(lat), len(lon))
+        self.template_ds = xr.Dataset(
+            data_vars={
+                variables[v]: (
+                    ("isobaricInhPa", "latitude", "longitude"),
+                    np.ones(self.Shape).astype(np.float32),
+                )
+                for v in variables
+            },
+            coords={
+                "latitude": lat,
+                "longitude": lon,
+                "isobaricInhPa": np.array(levels),
+            },
+        )
+
+
+class FakeSurfaceDs:
+    def __init__(self, lat, lon, level, variables):
+        super().__init__()
+        self.Shape = (len(lat), len(lon))
+        self.template_ds = xr.Dataset(
+            data_vars={
+                variables[v]: (
+                    ("latitude", "longitude"),
+                    np.ones(self.Shape).astype(np.float32),
+                )
+                for v in variables
+            },
+            coords={
+                "latitude": lat,
+                "longitude": lon,
+                "level": level,
+                "time": "None",
+                "step": "None",
+                "valid_time": "None",
+            },
+        )
+
+
+class FakeHaGDs:
+    def __init__(self, lat, lon, level, variables):
+        super().__init__()
+        self.Shape = (len(lat), len(lon))
+        self.template_ds = xr.Dataset(
+            data_vars={
+                variables[v]: (
+                    ("latitude", "longitude"),
+                    np.ones(self.Shape).astype(np.float32),
+                )
+                for v in variables
+            },
+            coords={
+                "latitude": lat,
+                "longitude": lon,
+                "time": "None",
+                "step": "None",
+                "valid_time": "None",
+                "heightAboveGround": level,
+            },
+        )
+
+
 @dataclass
 class FakeSample:
     date: str
     fancy_ident: str
+
+
+def test_write_template_dataset():
+
+    # testing with only isobaric levels
+    grib_features = pd.DataFrame(
+        {
+            "feature_name": [
+                "u_900.0",
+                "u_50.0",
+            ],
+            "level": [900.0, 50.0],
+            "name": ["u", "u"],
+            "typeOfLevel": [
+                "isobaricInhPa",
+                "isobaricInhPa",
+            ],
+        },
+        index=[
+            "u_900.0",
+            "u_50.0",
+        ],
+    )
+    lat = (np.arange(64) - 16) * 0.5
+    lon = (np.arange(64) + 30) * 0.5
+    levels = [900.0, 50.0]
+    variables = {"u_900.0": "u", "u_50.0": "u"}
+    dummy_template = FakeIsoDs(lat[::-1], lon, levels, variables)
+    validtime = 1.0
+    leadtime = 1.0
+    sample = FakeSample("1911-10-30", "first solvay congress")
+    _, _, dummy_ds = DummyDataset.from_json("fakepath.json", 1, 2, 4)
+    pred = NamedTensor(
+        torch.ones((1, 5, 2, 64, 64), dtype=torch.float32) * 3.14160000,
+        names=["batch", "timestep", "features", "lat", "lon"],
+        feature_names=["u_900.0", "u_50.0"],
+    )
+
+    pred.tensor[0, :, 1] = torch.tensor(6.28320000, dtype=torch.float32)
+    raw_data = pred.select_dim("timestep", 0, bare_tensor=False)
+
+    receiver_ds = out.write_storable_dataset(
+        pred,
+        dummy_ds,
+        dummy_template.template_ds,
+        "u_isobaricInhPa",
+        sample,
+        validtime,
+        leadtime,
+        raw_data,
+        grib_features,
+    )
+
+    assert receiver_ds.u.dims == ("isobaricInhPa", "latitude", "longitude")
+    assert receiver_ds.u.values.shape == (2, 64, 64)
+    assert (receiver_ds.isobaricInhPa == np.array([900.0, 50.0])).all()
+    assert np.isclose(np.nanmean(receiver_ds.u.values[0]), 3.1416).all()
+    assert np.isclose(np.nanmean(receiver_ds.u.values[1]), 6.2832).all()
+
+    # testing with only surface variables
+
+    grib_features = pd.DataFrame(
+        {
+            "feature_name": [
+                "tirf",
+                "mpsl",
+            ],
+            "level": [0.0],
+            "name": ["tirf", "mpsl"],
+            "typeOfLevel": [
+                "surface",
+                "surface",
+            ],
+        },
+        index=[
+            "tirf",
+            "mpsl",
+        ],
+    )
+
+    levels = 0.0
+    variables = {"tirf": "tirf", "mpsl": "mpsl"}
+    dummy_template = FakeSurfaceDs(lat[::-1], lon, levels, variables)
+    validtime = 1.0
+    leadtime = 1.0
+    sample = FakeSample("1911-10-30", "first solvay congress")
+    _, _, dummy_ds = DummyDataset.from_json("fakepath.json", 1, 2, 4)
+    pred = NamedTensor(
+        torch.ones((1, 5, 2, 64, 64), dtype=torch.float32) * 3.14160000,
+        names=["batch", "timestep", "features", "lat", "lon"],
+        feature_names=["tirf", "mpsl"],
+    )
+
+    pred.tensor[0, :, 1] = torch.tensor(6.28320000, dtype=torch.float32)
+    raw_data = pred.select_dim("timestep", 0, bare_tensor=False)
+
+    receiver_ds = out.write_storable_dataset(
+        pred,
+        dummy_ds,
+        dummy_template.template_ds,
+        "surface",
+        sample,
+        validtime,
+        leadtime,
+        raw_data,
+        grib_features,
+    )
+
+    assert set(receiver_ds.keys()) == {"tirf", "mpsl"}
+    assert receiver_ds.tirf.dims == ("latitude", "longitude")
+    assert receiver_ds.tirf.values.shape == (64, 64)
+    assert np.isclose(np.nanmean(receiver_ds.tirf.values[0]), 3.1416).all()
+    assert np.isclose(np.nanmean(receiver_ds.mpsl.values[1]), 6.2832).all()
+
+    # testing with 'heightaboveground' variables
+
+    grib_features = pd.DataFrame(
+        {
+            "feature_name": [
+                "u10_10",
+            ],
+            "level": [10],
+            "name": ["u10"],
+            "typeOfLevel": [
+                "heightAboveGround",
+            ],
+        },
+        index=[
+            "u10",
+        ],
+    )
+
+    levels = [10]
+    validtime = 1.0
+    leadtime = 1.0
+    sample = FakeSample("1911-10-30", "first solvay congress")
+    _, _, dummy_ds = DummyDataset.from_json("fakepath.json", 1, 2, 4)
+    pred = NamedTensor(
+        torch.ones((1, 5, 1, 64, 64), dtype=torch.float32) * 3.14160000,
+        names=["batch", "timestep", "features", "lat", "lon"],
+        feature_names=["u10_10"],
+    )
+
+    raw_data = pred.select_dim("timestep", 0, bare_tensor=False)
+
+    dummy_template = FakeHaGDs(lat[::-1], lon, levels[0], {"u10_10": "u10"})
+
+    receiver_ds = out.write_storable_dataset(
+        pred,
+        dummy_ds,
+        dummy_template.template_ds,
+        "u10_heightAboveGround",
+        sample,
+        validtime,
+        leadtime,
+        raw_data,
+        grib_features,
+    )
+
+    assert set(receiver_ds.keys()) == {"u10"}
+    assert receiver_ds.u10.dims == ("latitude", "longitude")
+    assert receiver_ds.u10.values.shape == (64, 64)
+    assert np.isclose(np.nanmean(receiver_ds.u10.values[0]), 3.1416).all()
 
 
 def test_get_output_filename():
