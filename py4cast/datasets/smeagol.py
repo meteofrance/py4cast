@@ -24,6 +24,7 @@ from py4cast.datasets.base import (
 )
 from py4cast.forcingutils import generate_toa_radiation_forcing, get_year_hour_forcing
 from py4cast.plots import DomainInfo
+from py4cast.utils import merge_dicts
 
 # torch.set_num_threads(8)
 SCRATCH_PATH = Path(os.environ.get("PY4CAST_SMEAGOL_PATH", "/scratch/shared/smeagol"))
@@ -246,6 +247,27 @@ class Param:
 
 
 @dataclass(slots=True)
+class SmeagolSettings:
+    term: dict  # Terms used in this configuration. Should be present in nc files.
+    num_input_steps: int  # = 2  # Number of input timesteps
+    num_output_steps: int  # = 1  # Number of output timesteps (= 0 for inference)
+    num_inference_pred_steps: int = 0  # 0 in training config ; else used to provide future information about forcings
+    standardize: bool = True  # Do we need to standardize our data ?
+    members: Tuple[int] = (
+        0,
+    )  # Number of member used in this configuration. Each member is independant.
+
+    @property
+    def num_total_steps(self):
+        """
+        Total number of timesteps
+        for one sample.
+        """
+        # Nb of step in on sample
+        return self.num_input_steps + self.num_output_steps
+
+
+@dataclass(slots=True)
 class Sample:
     # Describe a sample
     member: int
@@ -260,34 +282,6 @@ class Sample:
 
     def __repr__(self):
         return f"member : {self.member}, date {self.date}, terms {self.terms}"
-
-    @property
-    def hours_of_day(self) -> np.array:
-        """
-        Hour of the day.
-        For output terms only. This is a float.
-        """
-        hours = []
-        for term in self.output_terms:
-            date_tmp = self.date + dt.timedelta(hours=float(term))
-            hours.append(date_tmp.hour + date_tmp.minute / 60)
-        return np.asarray(hours)
-
-    @property
-    def seconds_from_start_of_year(self) -> np.array:
-        """
-        Second from the start of the year.
-        For output terms only
-        """
-        start_of_year = dt.datetime(self.date.year, 1, 1)
-        return np.asarray(
-            [
-                (
-                    self.date + dt.timedelta(hours=float(term)) - start_of_year
-                ).total_seconds()
-                for term in self.output_terms
-            ]
-        )
 
     def is_valid(self, param_list: List) -> bool:
         """
@@ -305,24 +299,13 @@ class Sample:
                 return True
 
 
-@dataclass(slots=True)
-class SmeagolSettings:
-    term: dict  # Terms used in this configuration. Should be present in nc files.
-    num_input_steps: int = 2  # Number of input timesteps
-    num_pred_steps: int = 1  # Number of output timesteps
-    standardize: bool = True  # Do we need to standardize our data ?
-    members: Tuple[int] = (
-        0,
-    )  # Number of member used in this configuration. Each member is independant.
+class InferSample(Sample):
+    """
+    Sample dedicated to inference. No outputs terms, only inputs.
+    """
 
-    @property
-    def num_total_steps(self):
-        """
-        Total number of timesteps
-        for one sample.
-        """
-        # Nb of step in on sample
-        return self.num_input_steps + self.num_pred_steps
+    def __post_init__(self):
+        self.terms = self.input_terms
 
 
 class SmeagolDataset(DatasetABC, Dataset):
@@ -395,7 +378,7 @@ class SmeagolDataset(DatasetABC, Dataset):
                         + self.settings.num_input_steps : sample
                         * self.settings.num_total_steps
                         + self.settings.num_input_steps
-                        + self.settings.num_pred_steps
+                        + self.settings.num_output_steps
                     ]
                     samp = Sample(
                         member=member,
@@ -558,20 +541,51 @@ class SmeagolDataset(DatasetABC, Dataset):
                     )
                     linputs.append(tmp_state)
 
+                    # Load outputs
+                    # Inference
+                    if self.settings.num_inference_pred_steps:
+                        tensor_data = torch.empty(
+                            (
+                                self.settings.num_inference_pred_steps,
+                                *tmp_state.tensor.shape[1:],
+                            )
+                        )
+
+                    # Training
+                    else:
+                        tmp_out = ds[param.name].sel(step=sample.output_terms).values
+                        if len(tmp_out.shape) != 4:
+                            tmp_out = np.expand_dims(tmp_out, axis=1)
+                        tmp_out = np.transpose(tmp_out, axes=[0, 2, 3, 1])
+                        if self.settings.standardize:
+                            tmp_out = (tmp_out - means) / std
+                        tensor_data = torch.from_numpy(tmp_out)
+
+                    tmp_state = NamedTensor(
+                        tensor=tensor_data,
+                        feature_names=param.parameter_short_name,
+                        names=["timestep", "lat", "lon", "features"],
+                    )
+                    loutputs.append(tmp_state)
+
                 # Read outputs.
-                if param.kind in ["ouput", "input_output"]:
+                if param.kind == "ouput":
+
                     tmp_out = ds[param.name].sel(step=sample.output_terms).values
                     if len(tmp_out.shape) != 4:
                         tmp_out = np.expand_dims(tmp_out, axis=1)
                     tmp_out = np.transpose(tmp_out, axes=[0, 2, 3, 1])
                     if self.settings.standardize:
                         tmp_out = (tmp_out - means) / std
+                    tensor_data = torch.from_numpy(tmp_out)
                     tmp_state = NamedTensor(
-                        tensor=torch.from_numpy(tmp_out),
+                        tensor=tensor_data,
                         feature_names=param.parameter_short_name,
                         names=["timestep", "lat", "lon", "features"],
                     )
+
                     loutputs.append(tmp_state)
+
             except KeyError as e:
                 print("Error for param {param}")
                 raise e
@@ -642,7 +656,7 @@ class SmeagolDataset(DatasetABC, Dataset):
             SmeagolSettings(
                 members=members,
                 term=term,
-                num_pred_steps=num_pred_steps_train,
+                num_output_steps=num_pred_steps_train,
                 num_input_steps=num_input_steps,
             ),
         )
@@ -653,7 +667,7 @@ class SmeagolDataset(DatasetABC, Dataset):
             SmeagolSettings(
                 members=members,
                 term=term,
-                num_pred_steps=num_pred_steps_val_test,
+                num_output_steps=num_pred_steps_val_test,
                 num_input_steps=num_input_steps,
             ),
         )
@@ -664,7 +678,7 @@ class SmeagolDataset(DatasetABC, Dataset):
             SmeagolSettings(
                 members=members,
                 term=term,
-                num_pred_steps=num_pred_steps_val_test,
+                num_output_steps=num_pred_steps_val_test,
                 num_input_steps=num_input_steps,
             ),
         )
@@ -779,3 +793,130 @@ class SmeagolDataset(DatasetABC, Dataset):
         return DomainInfo(
             grid_limits=self.grid.grid_limits, projection=self.grid.projection
         )
+
+
+class InferSmeagolDataset(SmeagolDataset):
+    """
+    Inherite from the SmeagolDataset class.
+    This class is used for inference, the class overrides methods sample_list and from_json.
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    @cached_property
+    def sample_list(self):
+        """
+        Create a list of sample from information.
+        Outputs terms are computed from the number of prediction steps in argument.
+        """
+        print("Start forming samples")
+        terms = list(
+            np.arange(
+                self.settings.term["start"],
+                self.settings.term["end"],
+                self.settings.term["timestep"],
+            )
+        )
+
+        sample_by_date = len(terms) // self.settings.num_total_steps
+
+        samples = []
+        number = 0
+
+        for date in self.period.date_list:
+            for member in self.settings.members:
+                for sample in range(0, sample_by_date):
+
+                    input_terms = terms[
+                        sample
+                        * self.settings.num_total_steps : sample
+                        * self.settings.num_total_steps
+                        + self.settings.num_input_steps
+                    ]
+
+                    output_terms = [
+                        input_terms[-1] + self.settings.term["timestep"] * (step + 1)
+                        for step in range(self.settings.num_inference_pred_steps)
+                    ]
+
+                    samp = InferSample(
+                        date=date,
+                        member=member,
+                        input_terms=input_terms,
+                        output_terms=output_terms,
+                    )
+
+                    if samp.is_valid(self.params):
+
+                        samples.append(samp)
+                        number += 1
+        print("All samples are now defined")
+
+        return samples
+
+    @classmethod
+    def from_json(
+        cls,
+        fname: Path,
+        num_input_steps: int,
+        num_pred_steps_train: int,
+        num_pred_steps_val_tests: int,
+        config_override: Union[Dict, None] = None,
+    ) -> Tuple[None, None, "InferSmeagolDataset"]:
+        """
+        Return 1 InferPoesyDataset.
+        Override configuration file if needed.
+        """
+        with open(fname, "r") as fp:
+            conf = json.load(fp)
+            if config_override is not None:
+                conf = merge_dicts(conf, config_override)
+
+        grid = Grid(**conf["grid"])
+        param_list = []
+        # Reflechir a comment le faire fonctionner avec plusieurs sources.
+        for data_source in conf["dataset"]:
+            data = conf["dataset"][data_source]
+            members = conf["dataset"][data_source].get("members", [0])
+            term = conf["dataset"][data_source]["term"]
+            param_grid = Grid(**data["grid"])
+            for var in data["var"]:
+                vard = data["var"][var]
+                # Change grid definition
+                if "level" in vard:
+                    level_type = "hPa"
+                    var_file = var
+                else:
+                    level_type = "m"
+                    var_file = "surface"
+                param = Param(
+                    name=var,
+                    levels=vard.pop("level", [0]),
+                    grid=param_grid,
+                    level_type=level_type,
+                    fnamer=partial(
+                        smeagol_forecast_namer,
+                        model=data["grid"]["model"],
+                        domain=data["grid"]["domain"],
+                        geometry=data["grid"]["geometry"],
+                        var=var_file,
+                    ),
+                    **vard,
+                )
+                param_list.append(param)
+
+        inference_period = Period(**conf["periods"]["test"], name="infer")
+        ds = InferSmeagolDataset(
+            grid,
+            inference_period,
+            param_list,
+            SmeagolSettings(
+                members=members,
+                term=term,
+                num_input_steps=num_input_steps,
+                num_output_steps=0,
+                num_inference_pred_steps=conf["num_inference_pred_steps"],
+            ),
+        )
+        return None, None, ds
