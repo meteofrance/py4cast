@@ -277,8 +277,8 @@ def make_gif(
         preds_t = [pred[t] for pred in preds]
         target_t = target[t] if target is not None else None
         if feature == "aro_t2m_2m": # Convert to °C
-            if target is not None:
-                target = target - 273.15
+            if target_t is not None:
+                target_t = target_t - 273.15
             preds_t = [pred - 273.15 for pred in preds_t]
         frame = plot_frame(
             feature,
@@ -289,7 +289,7 @@ def make_gif(
             models_names,
         )
         frames.append(frame)
-    gif.save(frames, f"{args.date}_{feature}.gif", duration=500)
+    gif.save(frames, f"{date}_{feature}.gif", duration=500)
 
 
 if __name__ == "__main__":

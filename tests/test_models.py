@@ -246,6 +246,3 @@ def test_model_registry():
         "swinunetr",
         "unetrpp",
     }
-
-if __name__=="__main__":
-    test_lightning_fit_inference()
