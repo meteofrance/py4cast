@@ -7,20 +7,18 @@ Test our pure PyTorch models to make sure they can be :
 """
 import tempfile
 from dataclasses import dataclass
+from pathlib import Path
 
 import numpy as np
 import onnx
 import onnxruntime
+import pytorch_lightning as pl
 import torch
 
-from py4cast.models import get_model_kls_and_settings
-from py4cast.datasets.base import TorchDataloaderSettings
-from py4cast.lightning import ArLightningHyperParam, AutoRegressiveLightning
 from py4cast.datasets import get_datasets
-from pathlib import Path
-from py4cast.datasets.base import Item, collate_fn
-
-import pytorch_lightning as pl
+from py4cast.datasets.base import TorchDataloaderSettings, collate_fn
+from py4cast.lightning import ArLightningHyperParam, AutoRegressiveLightning
+from py4cast.models import get_model_kls_and_settings
 
 
 def to_numpy(tensor):
@@ -168,7 +166,7 @@ def test_lightning_fit_inference():
     NUM_INPUTS = 2
     NUM_OUTPUTS = 1
     DATASET = "dummy"
-    MODEL= "halfunet"
+    MODEL = "halfunet"
     BATCH_SIZE = 2
     datasets = get_datasets(
         DATASET,
@@ -225,7 +223,6 @@ def test_lightning_fit_inference():
     batch_item = collate_fn([item])  # Transform to BatchItem
     model(batch_item)
     print("All good!")
-
 
 
 def test_model_registry():

@@ -15,10 +15,9 @@ example: python bin/gif_comparison.py --ckpt AROME --ckpt /.../logs/my_run/epoch
                                       --date 2023061812 --num_pred_steps 10
 """
 
-from argparse import ArgumentParser, BooleanOptionalAction
-
 import datetime as dt
 import math
+from argparse import ArgumentParser, BooleanOptionalAction
 from pathlib import Path
 from typing import List, Tuple
 
@@ -52,7 +51,7 @@ PARAMS_INFO = {
         "cmap": "Spectral",
         "vmin": 0,
         "vmax": 100,
-        "label": "Humidité à 2m (%)"
+        "label": "Humidité à 2m (%)",
     },
     "tp": {
         "grib_name": "AROME_1S100_ECH1_SOL.grib",
@@ -276,7 +275,7 @@ def make_gif(
         title = f"{date_str} +{t+1}h"
         preds_t = [pred[t] for pred in preds]
         target_t = target[t] if target is not None else None
-        if feature == "aro_t2m_2m": # Convert to °C
+        if feature == "aro_t2m_2m":  # Convert to °C
             if target_t is not None:
                 target_t = target_t - 273.15
             preds_t = [pred - 273.15 for pred in preds_t]
