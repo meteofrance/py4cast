@@ -164,7 +164,6 @@ def test_torch_training_loop():
 
     print()
     print("training test DONE")
-    print()
 
 
 def test_model_registry():
@@ -189,7 +188,6 @@ def test_model_registry():
 
     print()
     print("registry test DONE")
-    print()
 
 
 test_torch_training_loop()
