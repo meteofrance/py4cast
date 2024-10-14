@@ -899,19 +899,19 @@ class InferPoesyDataset(PoesyDataset):
                 )
                 param_list.append(param)
 
-            inference_period = Period(**conf["periods"]["test"], name="infer")
-            ds = InferPoesyDataset(
-                grid,
-                inference_period,
-                param_list,
-                PoesySettings(
-                    members=members,
-                    term=term,
-                    num_input_steps=num_input_steps,
-                    num_output_steps=0,
-                    num_inference_pred_steps=conf["num_inference_pred_steps"],
-                ),
-            )
+        inference_period = Period(**conf["periods"]["test"], name="infer")
+        ds = InferPoesyDataset(
+            grid,
+            inference_period,
+            param_list,
+            PoesySettings(
+                members=members,
+                term=term,
+                num_input_steps=num_input_steps,
+                num_output_steps=0,
+                num_inference_pred_steps=conf["num_inference_pred_steps"],
+            ),
+        )
 
         return None, None, ds
 
