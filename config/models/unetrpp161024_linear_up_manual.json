@@ -1,0 +1,7 @@
+{
+"num_heads_encoder": 16,
+"hidden_size": 1024,
+"linear_upsampling": true,
+"attention_code": "manual"
+}
+

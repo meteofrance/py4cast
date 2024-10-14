@@ -367,11 +367,7 @@ class AutoRegressiveLightning(pl.LightningModule):
             with torch.cuda.amp.autocast(dtype=self.dtype):
                 return self._common_step(batch, inference)
         else:
-            if "bf16" in self.trainer.precision:
-                with torch.cpu.amp.autocast(dtype=self.dtype):
-                    return self._common_step(batch, inference)
-            else:
-                return self._common_step(batch, inference)
+            return self._common_step(batch, inference)
 
     def _common_step(
         self, batch: ItemBatch, inference: bool = False
