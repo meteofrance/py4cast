@@ -81,7 +81,7 @@ if __name__ == "__main__":
     trainer = Trainer(devices="auto")
     preds = trainer.predict(lightning_module, dm)
 
-    infer_ds = dm.get_infer_ds
+    infer_ds = dm.infer_ds
 
     if args.grib:
         with open(default_config_root / args.saving_conf, "r") as f:

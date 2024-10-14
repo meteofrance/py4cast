@@ -244,8 +244,8 @@ dm = PlDataModule(
 )
 
 # Get essential info to instantiate ArLightningHyperParam
-len_loader = dm.get_len_train_dl
-dataset_info = dm.get_train_dataset_info
+len_loader = dm.len_train_dl
+dataset_info = dm.train_dataset_info
 
 # Setup GPU usage + get len of loader for LR scheduler
 if torch.cuda.is_available():
