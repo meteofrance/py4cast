@@ -70,15 +70,15 @@ class PlDataModule(pl.LightningDataModule):
         )
 
     @property
-    def get_len_train_dl(self):
+    def len_train_dl(self):
         return len(self.train_ds.torch_dataloader(self.dl_settings))
 
     @property
-    def get_train_dataset_info(self):
+    def train_dataset_info(self):
         return self.train_ds.dataset_info
 
     @property
-    def get_infer_ds(self):
+    def infer_ds(self):
         return self.test_ds
 
     def train_dataloader(self):
