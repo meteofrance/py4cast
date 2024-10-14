@@ -303,7 +303,7 @@ def test_write_template_dataset():
     pred.tensor[0, :, 1] = torch.tensor(6.28320000, dtype=torch.float32)
     raw_data = pred.select_dim("timestep", 0, bare_tensor=False)
 
-    receiver_ds = out.write_template_dataset(
+    receiver_ds = out.write_storable_dataset(
         pred,
         dummy_ds,
         dummy_template.template_ds,
@@ -358,7 +358,7 @@ def test_write_template_dataset():
     pred.tensor[0, :, 1] = torch.tensor(6.28320000, dtype=torch.float32)
     raw_data = pred.select_dim("timestep", 0, bare_tensor=False)
 
-    receiver_ds = out.write_template_dataset(
+    receiver_ds = out.write_storable_dataset(
         pred,
         dummy_ds,
         dummy_template.template_ds,
@@ -409,7 +409,7 @@ def test_write_template_dataset():
 
     dummy_template = FakeHaGDs(lat[::-1], lon, levels[0], {"u10_10": "u10"})
 
-    receiver_ds = out.write_template_dataset(
+    receiver_ds = out.write_storable_dataset(
         pred,
         dummy_ds,
         dummy_template.template_ds,
