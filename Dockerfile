@@ -33,7 +33,6 @@ ARG CUDA_VERS
 RUN pip install --upgrade pip
 COPY requirements.txt /app/requirements.txt
 RUN PIP_CUDA_VERS=$(python3 -c "print(''.join('${CUDA_VERS}'.split('.')[0:2]))") \
-    && echo ${PIP_CUDA_VERS} \
     && pip config set global.find-links "https://download.pytorch.org/whl/cu${PIP_CUDA_VERS} https://data.pyg.org/whl/torch-${TORCH_VERS}+cu${PIP_CUDA_VERS}.html" \
     && mv /root/.config/pip/pip.conf /etc/pip.conf
 RUN set -eux \
