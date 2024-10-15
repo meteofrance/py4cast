@@ -7,12 +7,17 @@ Test our pure PyTorch models to make sure they can be :
 """
 import tempfile
 from dataclasses import dataclass
+from pathlib import Path
 
 import numpy as np
 import onnx
 import onnxruntime
+import pytorch_lightning as pl
 import torch
 
+from py4cast.datasets import get_datasets
+from py4cast.datasets.base import TorchDataloaderSettings, collate_fn
+from py4cast.lightning import ArLightningHyperParam, AutoRegressiveLightning
 from py4cast.models import get_model_kls_and_settings
 
 
@@ -153,6 +158,71 @@ def test_torch_training_loop():
             if len(model.input_dims) == 3:
                 sample = sample.flatten(1, 2)
             onnx_export_load_infer(model, dst.name, sample)
+
+
+def test_lightning_fit_inference():
+    """Checks that our Lightning module and training loop is working and
+    that we can make a simple inference with the trained model."""
+    NUM_INPUTS = 2
+    NUM_OUTPUTS = 1
+    DATASET = "dummy"
+    MODEL = "halfunet"
+    BATCH_SIZE = 2
+    datasets = get_datasets(
+        DATASET,
+        NUM_INPUTS,
+        NUM_OUTPUTS,
+        NUM_OUTPUTS,
+        None,
+    )
+    dl_settings = TorchDataloaderSettings(
+        batch_size=BATCH_SIZE,
+        num_workers=2,
+    )
+    train_ds, val_ds, test_ds = datasets
+    train_loader = train_ds.torch_dataloader(dl_settings)
+    val_loader = val_ds.torch_dataloader(dl_settings)
+    test_loader = test_ds.torch_dataloader(dl_settings)
+    trainer = pl.Trainer(
+        max_epochs=3,
+        limit_train_batches=3,
+        limit_val_batches=3,
+        limit_test_batches=3,
+    )
+    save_path = Path("lightning_logs/")
+    hp = ArLightningHyperParam(
+        dataset_info=datasets[0].dataset_info,
+        dataset_name=DATASET,
+        dataset_conf=None,
+        batch_size=BATCH_SIZE,
+        model_name=MODEL,
+        model_conf=None,
+        num_input_steps=NUM_INPUTS,
+        num_pred_steps_train=NUM_OUTPUTS,
+        num_pred_steps_val_test=NUM_OUTPUTS,
+        save_path=save_path,
+    )
+    lightning_module = AutoRegressiveLightning(hp)
+    trainer.fit(
+        model=lightning_module,
+        train_dataloaders=train_loader,
+        val_dataloaders=val_loader,
+    )
+    trainer.test(ckpt_path="best", dataloaders=test_loader)
+
+    # Load model for simple inference
+    log_dir = sorted(list(save_path.glob("version_*")))[-1]
+    ckpt_path = log_dir / "checkpoints/epoch=2-step=9.ckpt"
+    print(ckpt_path)
+    model = AutoRegressiveLightning.load_from_checkpoint(ckpt_path)
+    hparams = model.hparams["hparams"]
+    hparams.num_pred_steps_val_test = NUM_OUTPUTS
+    model.eval()
+
+    item = test_ds[0]  # Load data directly from dataset (no dataloader)
+    batch_item = collate_fn([item])  # Transform to BatchItem
+    model(batch_item)
+    print("All good!")
 
 
 def test_model_registry():

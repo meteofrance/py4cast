@@ -15,9 +15,9 @@ example: python bin/gif_comparison.py --ckpt AROME --ckpt /.../logs/my_run/epoch
                                       --date 2023061812 --num_pred_steps 10
 """
 
-import argparse
 import datetime as dt
 import math
+from argparse import ArgumentParser, BooleanOptionalAction
 from pathlib import Path
 from typing import List, Tuple
 
@@ -31,7 +31,7 @@ from skimage.transform import resize
 from tqdm import trange
 
 from py4cast.datasets import get_datasets
-from py4cast.datasets.base import Item
+from py4cast.datasets.base import Item, collate_fn
 from py4cast.datasets.titan.settings import AROME_PATH, METADATA
 from py4cast.lightning import ArLightningHyperParam, AutoRegressiveLightning
 from py4cast.plots import DomainInfo
@@ -41,8 +41,9 @@ PARAMS_INFO = {
         "grib_name": "AROME_1S100_ECH0_2M.grib",
         "titan_name": "aro_t2m_2m",
         "cmap": "Spectral_r",
-        "vmin": 240,
-        "vmax": 320,
+        "vmin": 0,
+        "vmax": 40,
+        "label": "Température à 2m (C°)",
     },
     "r2": {
         "grib_name": "AROME_1S100_ECH0_2M.grib",
@@ -50,13 +51,15 @@ PARAMS_INFO = {
         "cmap": "Spectral",
         "vmin": 0,
         "vmax": 100,
+        "label": "Humidité à 2m (%)",
     },
     "tp": {
         "grib_name": "AROME_1S100_ECH1_SOL.grib",
         "titan_name": "aro_tp_0m",
         "cmap": "Spectral_r",
         "vmin": 0.5,
-        "vmax": 100,
+        "vmax": 60,
+        "label": "Précipitations (mm)",
     },
     "u10": {
         "grib_name": "AROME_1S100_ECH0_10M.grib",
@@ -64,6 +67,7 @@ PARAMS_INFO = {
         "cmap": "RdBu",
         "vmin": -20,
         "vmax": 20,
+        "label": "Composante U du vent à 10m (m/s)",
     },
     "v10": {
         "grib_name": "AROME_1S100_ECH0_10M.grib",
@@ -71,6 +75,7 @@ PARAMS_INFO = {
         "cmap": "RdBu",
         "vmin": -20,
         "vmax": 20,
+        "label": "Composante V du vent à 10m (m/s)",
     },
 }
 
@@ -157,7 +162,7 @@ def get_item_for_date(date: str, hparams: ArLightningHyperParam) -> Item:
 
 def make_forecast(model: AutoRegressiveLightning, item: Item) -> torch.tensor:
     """Applies a model an Item to make a forecast."""
-    batch_item = item.unsqueeze_("batch", 0)
+    batch_item = collate_fn([item])
     preds = model(batch_item)
     forecast = preds.tensor
     # Here we reshape output from GNNS to be on the grid
@@ -190,13 +195,10 @@ def plot_frame(
     domain_info: DomainInfo,
     title: str = None,
     models_names: List[str] = None,
-    colorbar_label: str = None,
-    vmin: float = None,
-    vmax: float = None,
 ) -> None:
     """Plots one frame of the animation."""
 
-    nb_preds = len(predictions) + 1
+    nb_preds = len(predictions) + 1 if target is not None else len(predictions)
     lines = int(math.sqrt(nb_preds))
     cols = nb_preds // lines
     if nb_preds % lines != 0:
@@ -207,8 +209,13 @@ def plot_frame(
         cmap = PARAMS_INFO[param]["cmap"]
         vmin = PARAMS_INFO[param]["vmin"]
         vmax = PARAMS_INFO[param]["vmax"]
+        colorbar_label = PARAMS_INFO[param]["label"]
     else:
         cmap = "plasma"
+        vmin, vmax = None, None
+        short_name = "_".join(feature_name.split("_")[:2])
+        feature_str = METADATA["WEATHER_PARAMS"][short_name]["long_name"][6:]
+        colorbar_label = f"{feature_str} ({hparams.dataset_info.units[feature_name]})"
 
     if (lines, cols) == (1, 3):
         figsize = (12, 5)
@@ -225,9 +232,11 @@ def plot_frame(
     extent = domain_info.grid_limits
 
     axs = axes.flat
-    for i, data in enumerate([target] + predictions):
+    data_list = [target] + predictions if target is not None else predictions
+
+    for i, data in enumerate(data_list):
         axs[i].coastlines()
-        if param == "tp":  # precipitations
+        if param == "tp":  # threshold precipitations
             data = np.where(data < 0.5, np.nan, data)
         im = axs[i].imshow(
             data,
@@ -258,40 +267,45 @@ def make_gif(
     domain_info: DomainInfo,
 ):
     """Plots a gifs comparing multiple forecasts of one feature."""
-    vmin, vmax = target.min(), target.max()
     date = dt.datetime.strptime(date, "%Y%m%d%H")
     date_str = date.strftime("%Y-%m-%d %Hh UTC")
-    short_name = "_".join(feature.split("_")[:2])
-    feature_str = METADATA["WEATHER_PARAMS"][short_name]["long_name"][6:]
-    unit = f"{feature_str} ({hparams.dataset_info.units[feature]})"
 
     frames = []
-    for t in trange(target.shape[0]):
+    for t in trange(preds[0].shape[0]):
         title = f"{date_str} +{t+1}h"
         preds_t = [pred[t] for pred in preds]
+        target_t = target[t] if target is not None else None
+        if feature == "aro_t2m_2m":  # Convert to °C
+            if target_t is not None:
+                target_t = target_t - 273.15
+            preds_t = [pred - 273.15 for pred in preds_t]
         frame = plot_frame(
             feature,
-            target[t],
+            target_t,
             preds_t,
             domain_info,
             title,
             models_names,
-            unit,
-            vmin,
-            vmax,
         )
         frames.append(frame)
-    gif.save(frames, f"{args.date}_{feature}.gif", duration=500)
+    gif.save(frames, f"{date}_{feature}.gif", duration=500)
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser("Plot animations")
+    parser = ArgumentParser("Plot animations")
     parser.add_argument(
         "--ckpt",
         type=str,
         action="append",
         help="Paths to the model checkpoint or AROME",
         required=True,
+    )
+    parser.add_argument(
+        "--plot_analysis",
+        "-pa",
+        action=BooleanOptionalAction,
+        default=False,
+        help="Plot the ground truth ie Arome analysis",
     )
     parser.add_argument(
         "--date", type=str, help="Date for inference. Format YYYYMMDDHH.", required=True
@@ -325,16 +339,13 @@ if __name__ == "__main__":
     y_true = item.outputs.tensor
     y_true = post_process_outputs(y_true, feature_names, feature_idx_dict)
     domain_info = hparams.dataset_info.domain_info
-    models_names = ["AROME Analysis"] + models_names
-
-    print(f"Model {models_names[0]} - shape {y_true.shape}")
-    for i in range(len(y_preds)):
-        print(f"Model {models_names[i+1]} - shape {y_preds[i].shape}")
+    if args.plot_analysis:
+        models_names = ["AROME Analysis"] + models_names
 
     for feature_name in feature_names:
         print(feature_name)
         idx_feature = feature_idx_dict[feature_name]
-        target_feat = y_true[:, :, :, idx_feature]
+        target_feat = y_true[:, :, :, idx_feature] if args.plot_analysis else None
         list_preds_feat = [pred[:, :, :, idx_feature] for pred in y_preds]
         make_gif(
             feature_name,
