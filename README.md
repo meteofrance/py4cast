@@ -98,7 +98,7 @@ When working at Météo-France, you can use either runai + Docker or Conda/Micro
 
 See the [runai repository](https://git.meteo.fr/dsm-labia/monorepo4ai) for installation instructions.
 
-For HPC, see the related doc (doc/installMF.md) to get the right installation settings.
+For HPC, see the related doc (doc/install/install_MF.md) to get the right installation settings.
 
 ### Install with conda
 
