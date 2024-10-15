@@ -72,5 +72,5 @@ conda activate py4cast
 
 set -x
 
-srun --cpus-per-task=8 --ntasks-per-node=8 --gpus-per-node=8 python bin/train.py --dataset titan --dataset_conf config/datasets/titan_full.json --model unetrpp --model_conf config/models/unetrpp161024_linear_up.json --epochs 10 --batch_size 8 --num_workers 8 --num_pred_steps_val_test 1 --num_input_steps 1 --strategy scaled_ar --prefetch_factor 2 --seed 42
+srun python bin/train.py --dataset titan --dataset_conf config/datasets/titan_full.json --model unetrpp --model_conf config/models/unetrpp161024_linear_up.json --epochs 10 --batch_size 8 --num_workers 8 --num_pred_steps_val_test 1 --num_input_steps 1 --strategy scaled_ar --prefetch_factor 2 --seed 42
 ```
