@@ -45,9 +45,9 @@ export PY4CAST_TITAN_PATH=/lustre/fsn1/projects/rech/dxp/commun/Titan/
 
 * Interactive session on dev A100 node: `srun --pty --nodes=1 --ntasks-per-node=8 --cpus-per-task=8 --hint=nomultithread --gres=gpu:8 --qos qos_gpu_a100-dev --account=dxp@a100 -C a100 --time=2:00:00 bash`
 
-* Job on one A100 node: `sbatch PATH_TO_SBATCH_CARD.sh`
+* Job on one A100 octo-gpu node: `sbatch PATH_TO_SBATCH_CARD.sh`
 
-and write your SBATCH card:
+and write your SBATCH card (don't forget to change the paths and execution time):
 
 ```bash
 #!/bin/bash
@@ -55,15 +55,14 @@ and write your SBATCH card:
 
 #SBATCH --job-name=train_py4cast
 #SBATCH --nodes=1
-#SBATCH --output=PATH_TO_WORK_DIR/A100_8GPU.%j.out
-#SBATCH --ntasks-per-node=8          # avec une tache par noeud
+#SBATCH --output=/lustre/fswork/projects/rech/dxp/USERNAME/py4cast/slurm_A100_8GPU.%j.out
+#SBATCH --ntasks-per-node=8
 #SBATCH --cpus-per-task=8
 #SBATCH --gres=gpu:8
 #SBATCH --hint=nomultithread
-#SBATCH --time=01:50:00              # temps maximum d'execution demande (HH:MM:SS)
+#SBATCH --time=01:50:00
 #SBATCH --account=dxp@a100
 #SBATCH -C a100
-#SBATCH --qos qos_gpu_a100-dev       # Quality of Service
 
 echo `date`
 module purge
@@ -73,5 +72,5 @@ conda activate py4cast
 
 set -x
 
-srun --cpus-per-task=8 --ntasks-per-node=8 --gpus-per-node=8 python bin/train.py --dataset titan --dataset_conf config/datasets/titan_full.json --model unetrpp --model_conf config/models/unetrpp161024_linear_up_flash.json --epochs 10 --batch_size 8
+srun --cpus-per-task=8 --ntasks-per-node=8 --gpus-per-node=8 python bin/train.py --dataset titan --dataset_conf config/datasets/titan_full.json --model unetrpp --model_conf config/models/unetrpp161024_linear_up.json --epochs 10 --batch_size 8 --num_workers 8 --num_pred_steps_val_test 1 --num_input_steps 1 --strategy scaled_ar --prefetch_factor 2 --seed 42
 ```
