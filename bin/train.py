@@ -122,13 +122,13 @@ parser.add_argument(
 parser.add_argument(
     "--num_pred_steps_val_test",
     type=int,
-    default=5,
+    default=1,
     help="Number of auto-regressive steps/prediction steps during validation and tests",
 )
 parser.add_argument(
     "--num_input_steps",
     type=int,
-    default=2,
+    default=1,
     help="Number of previous timesteps supplied as inputs to the model",
 )
 parser.add_argument(
