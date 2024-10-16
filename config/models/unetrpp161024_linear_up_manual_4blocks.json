@@ -3,7 +3,7 @@
 "hidden_size": 1024,
 "linear_upsampling": true,
 "attention_code": "manual",
-"no_transformer_blocks_encoder": [4, 4, 4, 4],
-"no_transformer_blocks_decoder": 4
+"num_transformer_blocks_encoder": [4, 4, 4, 4],
+"num_transformer_blocks_decoder": 4
 }
 

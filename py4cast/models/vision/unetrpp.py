@@ -355,7 +355,7 @@ class UnetrPPEncoder(nn.Module):
         self,
         input_size=[32 * 32 * 32, 16 * 16 * 16, 8 * 8 * 8, 4 * 4 * 4],
         dims=[32, 64, 128, 256],
-        no_transformer_blocks_encoder=(3, 3, 3, 3),
+        num_transformer_blocks_encoder=(3, 3, 3, 3),
         num_heads=4,
         spatial_dims=2,
         in_channels=4,
@@ -405,7 +405,7 @@ class UnetrPPEncoder(nn.Module):
         )  # 4 feature resolution stages, each consisting of multiple Transformer blocks
         for i in range(4):
             stage_blocks = []
-            for _ in range(no_transformer_blocks_encoder[i]):
+            for _ in range(num_transformer_blocks_encoder[i]):
                 stage_blocks.append(
                     TransformerBlock(
                         input_size=input_size[i],
@@ -466,7 +466,7 @@ class UnetrUpBlock(nn.Module):
         norm_name: Union[Tuple, str],
         num_heads: int = 4,
         out_size: int = 0,
-        no_transformer_blocks: int = 3,
+        num_transformer_blocks: int = 3,
         conv_decoder: bool = False,
         linear_upsampling: bool = False,
         proj_size: int = 64,
@@ -546,7 +546,7 @@ class UnetrUpBlock(nn.Module):
             )
         else:
             stage_blocks = []
-            for _ in range(no_transformer_blocks):
+            for _ in range(num_transformer_blocks):
                 stage_blocks.append(
                     TransformerBlock(
                         input_size=out_size,
@@ -592,7 +592,7 @@ class UNETRPPSettings:
     pos_embed: str = "perceptron"
     norm_name: Union[Tuple, str] = "instance"
     dropout_rate: float = 0.0
-    no_transformer_blocks_encoder: Tuple[int, ...] = (3, 3, 3, 3)
+    num_transformer_blocks_encoder: Tuple[int, ...] = (3, 3, 3, 3)
     conv_op: str = "Conv2d"
     do_ds = False
     spatial_dims = 2
@@ -600,7 +600,7 @@ class UNETRPPSettings:
     downsampling_rate: int = 4
     decoder_proj_size: int = 64
     encoder_proj_sizes: Tuple[int, ...] = (64, 64, 64, 32)
-    no_transformer_blocks_decoder: int = 3
+    num_transformer_blocks_decoder: int = 3
     # Adds skip connection between encoder layers outputs
     # and corresponding decoder layers inputs
     add_skip_connections: bool = True
@@ -695,7 +695,7 @@ class UNETRPP(ModelABC, nn.Module):
                 h_size // 2,
                 h_size,
             ),
-            no_transformer_blocks_encoder=settings.no_transformer_blocks_encoder,
+            num_transformer_blocks_encoder=settings.num_transformer_blocks_encoder,
             num_heads=settings.num_heads_encoder,
             spatial_dims=settings.spatial_dims,
             in_channels=num_input_features,
@@ -724,7 +724,7 @@ class UNETRPP(ModelABC, nn.Module):
             proj_size=settings.decoder_proj_size,
             attention_code=settings.attention_code,
             num_heads=settings.num_heads_decoder,
-            no_transformer_blocks=settings.no_transformer_blocks_decoder,
+            num_transformer_blocks=settings.num_transformer_blocks_decoder,
         )
         self.decoder4 = UnetrUpBlock(
             spatial_dims=settings.spatial_dims,
@@ -738,7 +738,7 @@ class UNETRPP(ModelABC, nn.Module):
             proj_size=settings.decoder_proj_size,
             attention_code=settings.attention_code,
             num_heads=settings.num_heads_decoder,
-            no_transformer_blocks=settings.no_transformer_blocks_decoder,
+            num_transformer_blocks=settings.num_transformer_blocks_decoder,
         )
         self.decoder3 = UnetrUpBlock(
             spatial_dims=settings.spatial_dims,
@@ -752,7 +752,7 @@ class UNETRPP(ModelABC, nn.Module):
             proj_size=settings.decoder_proj_size,
             attention_code=settings.attention_code,
             num_heads=settings.num_heads_decoder,
-            no_transformer_blocks=settings.no_transformer_blocks_decoder,
+            num_transformer_blocks=settings.num_transformer_blocks_decoder,
         )
         self.decoder2 = UnetrUpBlock(
             spatial_dims=settings.spatial_dims,
@@ -767,7 +767,7 @@ class UNETRPP(ModelABC, nn.Module):
             proj_size=settings.decoder_proj_size,
             attention_code=settings.attention_code,
             num_heads=settings.num_heads_decoder,
-            no_transformer_blocks=settings.no_transformer_blocks_decoder,
+            num_transformer_blocks=settings.num_transformer_blocks_decoder,
         )
         self.out1 = UnetOutBlock(
             spatial_dims=settings.spatial_dims,
