@@ -140,7 +140,7 @@ By default, the `CUDA` and `pytorch` version are extracted from the `env.yaml` r
 
 #### Convert to Singularity image
 
-To convert the previously built docker image to a Singularitu container run:
+To convert the previously built docker image to a Singularity container run:
 ```sh
 docker save py4cast:your_tag -o py4cast-your_tag.tar
 singularity build py4cast-your_tag.sif docker-archive://py4cast-your_tag.tar
