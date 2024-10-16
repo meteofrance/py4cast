@@ -212,8 +212,9 @@ def test_lightning_fit_inference():
 
     # Load model for simple inference
     log_dir = sorted(list(save_path.glob("version_*")))[-1]
-    ckpt_path = log_dir / "checkpoints/epoch=2-step=9.ckpt"
-    print(ckpt_path)
+    log_dir = log_dir / "checkpoints"
+    # finds the first .ckpt file
+    ckpt_path = next(log_dir.glob("*.ckpt"))
     model = AutoRegressiveLightning.load_from_checkpoint(ckpt_path)
     hparams = model.hparams["hparams"]
     hparams.num_pred_steps_val_test = NUM_OUTPUTS
