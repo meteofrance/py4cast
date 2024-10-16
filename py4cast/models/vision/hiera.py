@@ -14,10 +14,13 @@ from packaging import version
 import inspect
 from tqdm import tqdm
 
-from py4cast.models.vision.utils import features_last_to_second, features_second_to_last
+from py4cast.models.vision.utils import features_last_to_second
 
+from monai.networks.blocks.dynunet_block import (
+    get_output_padding,
+    get_padding,
+)
 
-##################################################################################################
 
 def is_huggingface_hub_available():
     available: bool = importlib.util.find_spec("huggingface_hub") is not None
@@ -27,29 +30,29 @@ def is_huggingface_hub_available():
     else:
         hfversion = importlib.metadata.version("huggingface_hub")
         return version.parse(hfversion) >= version.parse("0.21.0")
-    
+
 
 if is_huggingface_hub_available():
     from huggingface_hub import PyTorchModelHubMixin
 else:
     # Empty class in case modelmixins dont exist
     class PyTorchModelHubMixin:
-        error_str: str = 'This feature requires "huggingface-hub >= 0.21.0" to be installed.'
+        error_str: str = (
+            'This feature requires "huggingface-hub >= 0.21.0" to be installed.'
+        )
 
         @classmethod
         def from_pretrained(cls, *args, **kwdargs):
             raise RuntimeError(cls.error_str)
-        
+
         @classmethod
         def save_pretrained(cls, *args, **kwdargs):
             raise RuntimeError(cls.error_str)
-        
+
         @classmethod
         def push_to_hub(cls, *args, **kwdargs):
             raise RuntimeError(cls.error_str)
 
-
-#########################################################################################################
 
 # Saves the input args to the function as self.config, also allows
 # loading a config instead of kwdargs.
@@ -63,49 +66,67 @@ def has_config(func):
             kwdargs.update(**config)
 
         self.config = {
-            k: v.default if (i-1) >= len(args) else args[i-1]
+            k: v.default if (i - 1) >= len(args) else args[i - 1]
             for i, (k, v) in enumerate(signature.parameters.items())
             if v.default is not inspect.Parameter.empty
         }
         self.config.update(**kwdargs)
 
         func(self, **kwdargs)
+
     return wrapper
 
-#########################################################################################################
 
 def pretrained_model(checkpoints: Dict[str, str], default: str = None) -> Callable:
-    """ Loads a Hiera model from a pretrained source (if pretrained=True). Use "checkpoint" to specify the checkpoint. """
+    """Loads a Hiera model from a pretrained source (if pretrained=True). Use "checkpoint" to specify the checkpoint."""
 
     def inner(model_func: Callable) -> Callable:
-        def model_def(pretrained: bool = False, checkpoint: str = default, strict: bool = True, **kwdargs) -> nn.Module:
+        def model_def(
+            pretrained: bool = False,
+            checkpoint: str = default,
+            strict: bool = True,
+            **kwdargs,
+        ) -> nn.Module:
             if pretrained:
                 if checkpoints is None:
-                    raise RuntimeError("This model currently doesn't have pretrained weights available.")
+                    raise RuntimeError(
+                        "This model currently doesn't have pretrained weights available."
+                    )
                 elif checkpoint is None:
                     raise RuntimeError("No checkpoint specified.")
                 elif checkpoint not in checkpoints:
-                    raise RuntimeError(f"Invalid checkpoint specified ({checkpoint}). Options are: {list(checkpoints.keys())}.")
+                    raise RuntimeError(
+                        f"Invalid checkpoint specified ({checkpoint}). Options are: {list(checkpoints.keys())}."
+                    )
 
-                state_dict = torch.hub.load_state_dict_from_url(checkpoints[checkpoint], map_location="cpu")
-            
+                state_dict = torch.hub.load_state_dict_from_url(
+                    checkpoints[checkpoint], map_location="cpu"
+                )
+
                 if "head.projection.weight" in state_dict["model_state"]:
                     # Set the number of classes equal to the state_dict only if the user doesn't want to overwrite it
                     if "num_classes" not in kwdargs:
-                        kwdargs["num_classes"] = state_dict["model_state"]["head.projection.weight"].shape[0]
+                        kwdargs["num_classes"] = state_dict["model_state"][
+                            "head.projection.weight"
+                        ].shape[0]
                     # If the user specified a different number of classes, remove the projection weights or else we'll error out
-                    elif kwdargs["num_classes"] != state_dict["model_state"]["head.projection.weight"].shape[0]:
+                    elif (
+                        kwdargs["num_classes"]
+                        != state_dict["model_state"]["head.projection.weight"].shape[0]
+                    ):
                         del state_dict["model_state"]["head.projection.weight"]
                         del state_dict["model_state"]["head.projection.bias"]
 
             model = model_func(**kwdargs)
             if pretrained:
                 # Disable being strict when trying to load a encoder-decoder model into an encoder-only model
-                if "decoder_pos_embed" in state_dict["model_state"] and not hasattr(model, "decoder_pos_embed"):
+                if "decoder_pos_embed" in state_dict["model_state"] and not hasattr(
+                    model, "decoder_pos_embed"
+                ):
                     strict = False
 
                 model.load_state_dict(state_dict["model_state"], strict=strict)
-            
+
             return model
 
         # Keep some metadata so we can do things that require looping through all available models
@@ -113,10 +134,9 @@ def pretrained_model(checkpoints: Dict[str, str], default: str = None) -> Callab
         model_def.default = default
 
         return model_def
-    
+
     return inner
 
-#########################################################################################################
 
 def conv_nd(n: int) -> Type[nn.Module]:
     """
@@ -125,13 +145,11 @@ def conv_nd(n: int) -> Type[nn.Module]:
     """
     return [nn.Identity, nn.Conv1d, nn.Conv2d, nn.Conv3d][n]
 
-#########################################################################################################
 
 def do_pool(x: torch.Tensor, stride: int) -> torch.Tensor:
     # Refer to `Unroll` to see how this performs a maxpool-Nd
     return x.view(x.shape[0], stride, -1, x.shape[-1]).max(dim=1).values
 
-#########################################################################################################
 
 def get_resized_mask(target_size: torch.Size, mask: torch.Tensor) -> torch.Tensor:
     # target_size: [(T), (H), W]
@@ -144,7 +162,6 @@ def get_resized_mask(target_size: torch.Size, mask: torch.Tensor) -> torch.Tenso
         return F.interpolate(mask.float(), size=target_size)
     return mask
 
-#########################################################################################################
 
 def do_masked_conv(
     x: torch.Tensor, conv: nn.Module, mask: Optional[torch.Tensor] = None
@@ -159,7 +176,6 @@ def do_masked_conv(
     mask = get_resized_mask(target_size=x.shape[2:], mask=mask)
     return conv(x * mask.bool())
 
-#########################################################################################################
 
 def undo_windowing(
     x: torch.Tensor, shape: List[int], mu_shape: List[int]
@@ -194,7 +210,6 @@ def undo_windowing(
 
     return x
 
-#########################################################################################################
 
 class Unroll(nn.Module):
     """
@@ -260,7 +275,6 @@ class Unroll(nn.Module):
         x = x.reshape(-1, math.prod(self.size), C)
         return x
 
-#########################################################################################################
 
 class Reroll(nn.Module):
     """
@@ -342,7 +356,6 @@ class Reroll(nn.Module):
 
         return x
 
-##################################################################################################
 
 @dataclass_json
 @dataclass
@@ -366,31 +379,30 @@ class HieraSettings:
     head_dropout: float = 0.0
     head_init_scale: float = 0.001
     sep_pos_embed: bool = False
-    decoder: str = "unetrpp"
+    decoder: str = "hiera"  # hiera or unetrpp
 
-#########################################################################################################
 
 class Hiera(nn.Module, PyTorchModelHubMixin):
-
     onnx_supported = False
     input_dims: Tuple[str, ...] = ("batch", "height", "width", "features")
     output_dims: Tuple[str, ...] = ("batch", "height", "width", "features")
     settings_kls = HieraSettings
 
-    @has_config
+    #@has_config
     def __init__(
         self,
-        num_input_features: int = 3, #RGB
-        num_output_features: int = 1000, #number of classes
-        settings = HieraSettings,
-        input_shape: Tuple[int, ...] = (224, 224),  #nb_pixel x nb_pixel
+        num_input_features: int = 3,  # RGB
+        num_output_features: int = 1000,  # number of classes
+        settings=HieraSettings,
+        input_shape: Tuple[int, ...] = (225, 225),  # nb_pixel x nb_pixel
     ) -> None:
         super().__init__()
-
-        self.num_input_features = num_input_features
-        self.num_output_features = num_output_features
-        self.settings = settings
-        self.input_shape = input_shape
+        print("iput shape", input_shape)
+        print("num_input_features", num_input_features)
+        print("num_output_features", num_output_features)
+        
+        if (input_shape[0] % 32 != 0) or (input_shape[1] % 32 != 0):
+            raise Exception("input shapes need to be multiples of 32")
 
         """
         ENCODER PART
@@ -400,9 +412,11 @@ class Hiera(nn.Module, PyTorchModelHubMixin):
         if isinstance(settings.norm_layer, str):
             settings.norm_layer = partial(getattr(nn, settings.norm_layer), eps=1e-6)
 
-        depth = sum(settings.stages) #sum of layers per stage
+        depth = sum(settings.stages)  # sum of layers per stage
         self.patch_stride = settings.patch_stride
-        self.tokens_spatial_shape = [i // s for (i, s) in list(zip(input_shape, settings.patch_stride))]
+        self.tokens_spatial_shape = [
+            i // s for (i, s) in list(zip(input_shape, settings.patch_stride))
+        ]
         num_tokens = math.prod(self.tokens_spatial_shape)
         flat_mu_size = math.prod(settings.mask_unit_size)
         flat_q_stride = math.prod(settings.q_stride)
@@ -413,10 +427,16 @@ class Hiera(nn.Module, PyTorchModelHubMixin):
         self.mask_spatial_shape = [
             i // s for (i, s) in zip(self.tokens_spatial_shape, self.mask_unit_size)
         ]
-        self.stage_ends = [sum(settings.stages[:i]) - 1 for i in range(1, len(settings.stages) + 1)]
+        self.stage_ends = [
+            sum(settings.stages[:i]) - 1 for i in range(1, len(settings.stages) + 1)
+        ]
 
         self.patch_embed = PatchEmbed(
-            num_input_features, settings.embed_dim, settings.patch_kernel, settings.patch_stride, settings.patch_padding
+            num_input_features,
+            settings.embed_dim,
+            settings.patch_kernel,
+            settings.patch_stride,
+            settings.patch_padding,
         )
 
         self.sep_pos_embed = settings.sep_pos_embed
@@ -432,11 +452,15 @@ class Hiera(nn.Module, PyTorchModelHubMixin):
                 torch.zeros(1, self.tokens_spatial_shape, settings.embed_dim)
             )
         else:
-            self.pos_embed = nn.Parameter(torch.zeros(1, num_tokens, settings.embed_dim))
+            self.pos_embed = nn.Parameter(
+                torch.zeros(1, num_tokens, settings.embed_dim)
+            )
 
         # Setup roll and reroll modules
         self.unroll = Unroll(
-            input_shape, settings.patch_stride, [settings.q_stride] * len(self.stage_ends[:-1])
+            input_shape,
+            settings.patch_stride,
+            [settings.q_stride] * len(self.stage_ends[:-1]),
         )
         self.reroll = Reroll(
             input_shape,
@@ -446,11 +470,17 @@ class Hiera(nn.Module, PyTorchModelHubMixin):
             settings.q_pool,
         )
         # q_pool locations
-        q_pool_blocks = [x + 1 for x in self.stage_ends[:settings.q_pool]]
+        q_pool_blocks = [x + 1 for x in self.stage_ends[: settings.q_pool]]
         # stochastic depth decay rule
         dpr = [x.item() for x in torch.linspace(0, settings.drop_path_rate, depth)]
 
-        self.bottleneck_shape = [int((input_shape[0]*input_shape[1])//(16*4**(len(settings.stages)-1))), int(settings.embed_dim*2**(len(settings.stages)-1))]
+        self.bottleneck_shape = [
+            int(
+                (input_shape[0] * input_shape[1])
+                // (16 * 4 ** (len(settings.stages) - 1))
+            ),
+            int(settings.embed_dim * 2 ** (len(settings.stages) - 1)),
+        ]
 
         # Transformer blocks
         cur_stage = 0
@@ -484,7 +514,9 @@ class Hiera(nn.Module, PyTorchModelHubMixin):
             settings.embed_dim = dim_out
             self.blocks.append(block)
         self.norm = settings.norm_layer(settings.embed_dim)
-        self.head = Head(settings.embed_dim, num_output_features, dropout_rate=settings.head_dropout)
+        self.head = Head(
+            settings.embed_dim, num_output_features, dropout_rate=settings.head_dropout
+        )
 
         # Initialize everything
         if settings.sep_pos_embed:
@@ -496,34 +528,38 @@ class Hiera(nn.Module, PyTorchModelHubMixin):
         self.head.projection.weight.data.mul_(settings.head_init_scale)
         self.head.projection.bias.data.mul_(settings.head_init_scale)
 
-
         """
         ENCODER PART
         """
 
         if settings.decoder == "hiera":
-            from py4cast.models.vision.hiera_decoder import HieraDecoder
             self.decoder = HieraDecoder(
-                in_channels_conv = self.bottleneck_shape[0],
-                in_channels_embed = self.bottleneck_shape[1],
-                kernel_size = 3,
+                input_shape=input_shape,
+                in_channels_embed=self.bottleneck_shape[1],
+                kernel_size=3,
                 upsample_kernel_size=4,
-                linear_upsampling  = True,
-                settings = HieraSettings,
+                linear_upsampling=True,
+                settings=HieraSettings,
             )
-        elif settings.decoder == "unetrpp":
-            from py4cast.models.vision.unetrpp_decoder import UnetrppDecoder
+        elif (
+            settings.decoder == "unetrpp"
+        ):  # Généralisable pour n'importe quel Model (remplacer unetrpp par model_example)
+            from py4cast.models.vision.unetrpp import (
+                UnetrppDecoder,
+                UnetrppDecoderSettings,
+            )
+
             self.decoder = UnetrppDecoder(
-                in_channels_conv = self.bottleneck_shape[0],
-                in_channels_embed = self.bottleneck_shape[1],
-                kernel_size = 3,
+                input_shape=input_shape,
+                in_channels_conv=self.bottleneck_shape[0],
+                in_channels_embed=self.bottleneck_shape[1],
+                kernel_size=3,
                 upsample_kernel_size=4,
-                linear_upsampling = True,
-                settings = HieraSettings,
+                linear_upsampling=True,
+                settings=UnetrppDecoderSettings,
             )
         else:
             raise Exception(f"unknwon decoder: {settings.decoder}")
-    
 
     def _init_weights(self, m, init_bias=0.02):
         if isinstance(m, (nn.Linear, nn.Conv1d, nn.Conv2d, nn.Conv3d)):
@@ -590,15 +626,14 @@ class Hiera(nn.Module, PyTorchModelHubMixin):
         Note: 1 in mask is *keep*, 0 is *remove*; mask.sum(dim=-1) should be the same across the batch.
         """
 
-        #print("x in hiera forward before last to second", x.shape)
+        # print("x in hiera forward before last to second", x.shape)
         x = features_last_to_second(x)
-
 
         # Slowfast training passes in a list
         if isinstance(x, list):
             x = x[0]
         intermediates = []
-        #print("x in hiera forward after last to second", x.shape)
+        # print("x in hiera forward after last to second", x.shape)
         x = self.patch_embed(
             x,
             mask=mask.view(
@@ -607,41 +642,39 @@ class Hiera(nn.Module, PyTorchModelHubMixin):
             if mask is not None
             else None,
         )
-        #print("x in hiera forward after patch embed", x.shape)
+        # print("x in hiera forward after patch embed", x.shape)
 
         x = x + self.get_pos_embed()
-        #print("x in hiera forward after get pos embed", x.shape)
+        # print("x in hiera forward after get pos embed", x.shape)
 
         x = self.unroll(x)
-        #print("x in hiera forward after unroll", x.shape)
+        # print("x in hiera forward after unroll", x.shape)
 
         # Discard masked tokens
         if mask is not None:
             x = x[mask[..., None].tile(1, self.mu_size, x.shape[2])].view(
                 x.shape[0], -1, x.shape[-1]
             )
-        #print("x in hiera forward after mask is not none", x.shape)
-        skip_list=[]
-        for i, blk in tqdm(enumerate(self.blocks)):
+        # print("x in hiera forward after mask is not none", x.shape)
+        skip_list = []
+        for i, blk in enumerate(self.blocks):
             if i in self.stage_ends:
                 skip_list.append(x)
             x = blk(x)
             if return_intermediates and i in self.stage_ends:
                 intermediates.append(self.reroll(x, i, mask=mask))
-            #print("x in hiera forward after blk=",i, x.shape)
-        
+            # print("x in hiera forward after blk=",i, x.shape)
+
         # x may not always be in spatial order here.
         # e.g. if q_pool = 2, mask_unit_size = (8, 8), and
         # q_stride = (2, 2), not all unrolls were consumed,
-        # intermediates[-1] is x in spatial order        
+        # intermediates[-1] is x in spatial order
         if return_intermediates:
             return x, intermediates
-        
-        #print("x in hiera forward FINAL", x.shape)
+
+        # print("x in hiera forward FINAL", x.shape)
         return self.decoder(skip_list, x)
 
-
-##################################################################################################
 
 def apply_fusion_head(head: nn.Module, x: torch.Tensor) -> torch.Tensor:
     if isinstance(head, nn.Identity):
@@ -657,7 +690,6 @@ def apply_fusion_head(head: nn.Module, x: torch.Tensor) -> torch.Tensor:
     x = x.permute(permute).reshape(B, num_mask_units, *x.shape[2:], x.shape[1])
     return x
 
-#########################################################################################################
 
 class MaskedAutoencoderHiera(Hiera):
     """Masked Autoencoder with Hiera backbone"""
@@ -790,11 +822,13 @@ class MaskedAutoencoderHiera(Hiera):
         # mask (boolean tensor): True must correspond to *masked*
 
         # We use time strided loss, only take the first frame from each token
-        input_vid = input_vid[:, :, ::self.patch_stride[0], :, :]
+        input_vid = input_vid[:, :, :: self.patch_stride[0], :, :]
 
         size = self.pred_stride
         label = input_vid.unfold(3, size, size).unfold(4, size, size)
-        label = label.permute(0, 2, 3, 4, 5, 6, 1)  # Different from 2d, mistake during training lol
+        label = label.permute(
+            0, 2, 3, 4, 5, 6, 1
+        )  # Different from 2d, mistake during training lol
         label = label.flatten(1, 3).flatten(2)
         label = label[mask]
 
@@ -805,11 +839,9 @@ class MaskedAutoencoderHiera(Hiera):
 
         return label
 
-
     def forward_encoder(
         self, x: torch.Tensor, mask_ratio: float, mask: Optional[torch.Tensor] = None
     ) -> Tuple[torch.Tensor, torch.Tensor]:
-
         if mask is None:
             mask = self.get_random_mask(x, mask_ratio)  # [B, #MUs_all]
 
@@ -903,7 +935,6 @@ class MaskedAutoencoderHiera(Hiera):
         mask_ratio: float = 0.6,
         mask: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-
         latent, mask = self.forward_encoder(x, mask_ratio, mask=mask)
         pred, pred_mask = self.forward_decoder(
             latent, mask
@@ -912,7 +943,6 @@ class MaskedAutoencoderHiera(Hiera):
         # Toggle mask, to generate labels for *masked* tokens
         return (*self.forward_loss(x, pred, ~pred_mask), mask)
 
-##################################################################################################
 
 class MaskUnitAttention(nn.Module):
     """
@@ -946,7 +976,7 @@ class MaskUnitAttention(nn.Module):
         self.heads = heads
         self.q_stride = q_stride
 
-        self.head_dim = dim_out // heads
+        self.head_dim = dim_out // self.heads
         self.scale = (self.head_dim) ** -0.5
 
         self.qkv = nn.Linear(dim, 3 * dim_out)
@@ -956,8 +986,9 @@ class MaskUnitAttention(nn.Module):
         self.use_mask_unit_attn = use_mask_unit_attn
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """ Input should be of shape [batch, tokens, channels]. """
+        """Input should be of shape [batch, tokens, channels]."""
         B, N, _ = x.shape
+
         num_windows = (
             (N // (self.q_stride * self.window_size)) if self.use_mask_unit_attn else 1
         )
@@ -983,13 +1014,12 @@ class MaskUnitAttention(nn.Module):
         else:
             attn = (q * self.scale) @ k.transpose(-1, -2)
             attn = attn.softmax(dim=-1)
-            x = (attn @ v)
+            x = attn @ v
 
         x = x.transpose(1, 3).reshape(B, -1, self.dim_out)
         x = self.proj(x)
         return x
 
-#########################################################################################################
 
 class HieraBlock(nn.Module):
     def __init__(
@@ -1009,7 +1039,6 @@ class HieraBlock(nn.Module):
 
         self.dim = dim
         self.dim_out = dim_out
-
         self.norm1 = norm_layer(dim)
         self.attn = MaskUnitAttention(
             dim, dim_out, heads, q_stride, window_size, use_mask_unit_attn
@@ -1033,7 +1062,6 @@ class HieraBlock(nn.Module):
         x = x + self.drop_path(self.mlp(self.norm2(x)))
         return x
 
-#########################################################################################################
 
 class Head(nn.Module):
     def __init__(
@@ -1041,7 +1069,9 @@ class Head(nn.Module):
         dim: int,
         num_classes: int,
         dropout_rate: float = 0.0,
-        act_func: Callable[[torch.Tensor], torch.Tensor] = lambda x: x, # x.softmax(dim=-1),
+        act_func: Callable[
+            [torch.Tensor], torch.Tensor
+        ] = lambda x: x,  # x.softmax(dim=-1),
     ):
         super().__init__()
         self.dropout = nn.Dropout(dropout_rate) if dropout_rate > 0 else nn.Identity()
@@ -1056,7 +1086,6 @@ class Head(nn.Module):
             x = self.act_func(x)
         return x
 
-#########################################################################################################
 
 class PatchEmbed(nn.Module):
     """Patch embed that supports any number of spatial dimensions (1d, 2d, 3d)."""
@@ -1086,4 +1115,95 @@ class PatchEmbed(nn.Module):
     ) -> torch.Tensor:
         x = do_masked_conv(x, self.proj, mask)
         x = x.reshape(x.shape[0], x.shape[1], -1).transpose(2, 1)
+        return x
+
+
+class HieraDecoder(nn.Module):
+    def __init__(
+        self,
+        input_shape: Union[Sequence[int], int],
+        in_channels_embed: int,
+        kernel_size: Union[Sequence[int], int],
+        upsample_kernel_size: Union[Sequence[int], int],
+        linear_upsampling: bool = True,
+        settings=HieraSettings,
+    ) -> None:
+        super().__init__()
+        self.stage_blocks = nn.ModuleList()
+        self.transp_conv = nn.ModuleList()
+        self.input_shape = input_shape
+        padding = get_padding(upsample_kernel_size, upsample_kernel_size)
+        in_channels_embed_memory = in_channels_embed
+        # UPSAMPLING + CONV
+        for i in range(len(settings.stages) - 1):
+            out_channels_embed = int(in_channels_embed // 2)
+            if linear_upsampling:
+                self.transp_conv.append(
+                    nn.Sequential(
+                        nn.Upsample(scale_factor=upsample_kernel_size),
+                        nn.Conv1d(
+                            in_channels_embed,
+                            out_channels_embed,
+                            kernel_size=kernel_size,
+                            padding=1,
+                        ),
+                    )
+                )
+            else:
+                self.transp_conv.append(
+                    nn.ConvTranspose1d(
+                        in_channels_embed,
+                        out_channels_embed,
+                        kernel_size=upsample_kernel_size,
+                        stride=upsample_kernel_size,
+                        padding=padding,
+                        output_padding=get_output_padding(
+                            upsample_kernel_size, upsample_kernel_size, padding
+                        ),
+                        dilation=1,
+                    )
+                )
+            in_channels_embed = out_channels_embed
+
+        self.transp_conv.append(
+            nn.Sequential(
+                nn.Upsample(scale_factor=upsample_kernel_size * upsample_kernel_size),
+                nn.Conv1d(in_channels_embed, 3, kernel_size=kernel_size, padding=1),
+            )
+        )
+
+        # ATTENTION BLOCK
+        in_channels_embed = in_channels_embed_memory
+        for i in range(len(settings.stages)):
+            settings.num_heads = int(settings.num_heads * settings.head_mul)
+            block = HieraBlock(
+                dim=in_channels_embed,
+                dim_out=in_channels_embed,
+                heads=settings.num_heads,
+                mlp_ratio=4.0,
+                drop_path=0.0,
+                norm_layer=nn.LayerNorm,
+                q_stride=1,
+                window_size=0,
+                use_mask_unit_attn=False,
+            )
+            in_channels_embed = int(in_channels_embed // 2)
+            self.stage_blocks.append(block)
+
+    def forward(self, skip_list, x):
+        for i in range(len(skip_list)):
+            k = len(skip_list) - i - 1
+            # print()
+            # print("skip shape:", (skip_list[k]).shape)
+            x = skip_list[k] + x
+            # print("x after skip:", x.shape)
+            x = self.stage_blocks[i](x)
+            x = torch.permute(x, (0, 2, 1))
+            # print("x after decoder_block:", x.shape)
+            x = self.transp_conv[i](x)
+            x = torch.permute(x, (0, 2, 1))
+            # print("x after trans_conv:", x.shape)
+        B, _, C = x.shape
+        x = x.reshape(B, self.input_shape[0], self.input_shape[1], C)
+        # print("x final:", x.shape)
         return x
