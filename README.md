@@ -136,7 +136,7 @@ To build the docker image please use the `build-docker.sh` script.
 ```sh
 bash ./build-docker.sh
 ```
-By default, the `CUDA` and `pytorch` version are extracted from the `env.yaml` reference file. Nevertheless, for test purpose, you can edit the `build-docker.sh` file to build the image for a different environment.
+By default, the `CUDA` and `pytorch` version are extracted from the `env.yaml` reference file. Nevertheless, for test purpose, you can set the **PY4CAST_CUDA_VERSION** and **PY4CAST_TORCH_VERSION** to override the default versions.
 
 #### Convert to Singularity image
 
