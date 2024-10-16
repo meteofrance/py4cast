@@ -130,10 +130,87 @@ From an exixting micromamba environment, you can now install manually `py4cast` 
 pip install --editable .
 ```
 
+### Build docker image
+
+To build the docker image please use the `build-docker.sh` script.
+```sh
+bash ./build-docker.sh
+```
+By default, the `CUDA` and `pytorch` version are extracted from the `env.yaml` reference file. Nevertheless, for test purpose, you can edit the `build-docker.sh` file to build the image for a different environment.
+
+#### Convert to Singularity image
+
+To convert the previously built docker image to a Singularitu container run:
+```sh
+docker save py4cast:your_tag -o py4cast-your_tag.tar
+singularity build py4cast-your_tag.sif docker-archive://py4cast-your_tag.tar
+```
+Please, be sure to get enough free disk space to store the .tar and .sif files.
+
 
 ## Usage
 
-### Docker and runai
+### Docker
+
+From your `py4cast` source directory, to run an experiment using the docker image you need to mount in the container :
+- The dataset path
+- The py4cast sources
+- The PY4CAST_ROOTDIR path
+
+Here is an example of command to run a "dev_mode" training of the HiLam model with the TITAN dataset, using all the GPUs:
+```sh
+docker run \
+    --name hilam-titan \
+    --rm \
+    --gpus all \
+    -v ./${HOME} \
+    -v <path-to-datasets>/TITAN:/dataset/TITAN \
+    -v <your_py4cast_root_dir>:<your_py4cast_root_dir> \
+    -e PY4CAST_ROOTDIR=<your_py4cast_root_dir> \
+    -e PY4CAST_TITAN_PATH=/dataset/TITAN \
+    py4cast:<your_tag> \
+    bash -c " \
+        pip install -e . &&  \
+        python bin/train.py \
+            --dataset titan \
+            --model hilam \
+            --dataset_conf config/datasets/titan_full.json \
+            --dev_mode \
+            --no_log \
+            --num_pred_steps_val_test 1 \
+            --num_input_steps 1 \
+    "
+```
+
+### Singularity
+
+From your `py4cast` source directory, to run an experiment using a singularity container you need to mount in the container :
+- The dataset path
+- The PY4CAST_ROOTDIR path
+
+Here is an example of command to run a "dev_mode" training of the HiLam model with the TITAN dataset:
+```sh
+PY4CAST_TITAN_PATH=/dataset/TITAN \
+PY4CAST_ROOTDIR=<your_py4cast_root_dir> \
+singularity exec \
+    --nv \
+    --bind <path-to-datasets>/TITAN:/dataset/TITAN \
+    --bind <your_py4cast_root_dir>:<your_py4cast_root_dir> \
+    py4cast-<your_tag>.sif \
+    bash -c " \
+        pip install -e . &&  \
+        python bin/train.py \
+            --dataset titan \
+            --model hilam \
+            --dataset_conf config/datasets/titan_full.json \
+            --dev_mode \
+            --no_log \
+            --num_pred_steps_val_test 1 \
+            --num_input_steps 1 \
+    "
+```
+
+### runai
 
 For now this works only for internal Météo-France users.
 
