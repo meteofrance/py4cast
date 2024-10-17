@@ -1,5 +1,4 @@
 # Parse script options
-FORMAT="docker"
 while [[ $# -gt 0 ]]; do
   case $1 in
     -f|--format)
@@ -11,21 +10,20 @@ while [[ $# -gt 0 ]]; do
       echo "Unknown option $1"
       exit 1
       ;;
-    *)
-      POSITIONAL_ARGS+=("$1") # save positional arg
-      shift # past argument
-      ;;
   esac
 done
 
-if [[ ${FORMAT} = "podman" ]]; then
+if [[ -z ${FORMAT} ]]; then
+    echo "Error: --format option is required, please choose in {docker, podman}."
+    exit 2
+elif [[ ${FORMAT} = "podman" ]]; then
     BUILDER=$(which podman)
     OPTIONS="--storage-opt overlay.mount_program=/usr/bin/fuse-overlayfs"
 elif [[ ${FORMAT} = "docker" ]]; then
     BUILDER=$(which docker)
 else
     echo "Format \"${FORMAT}\" not supported, please choose in {docker, podman}."
-    exit 2
+    exit 3
 fi
 
 # Automatically retrieve the CUDA and torch version from env var, otherwise set them from reference file env.yaml
