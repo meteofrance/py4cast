@@ -16,8 +16,11 @@ import torch
 import tqdm
 import typer
 import xarray as xr
-from skimage.transform import resize
+from skimage.transform import resize, rescale
+from scipy.interpolate import griddata
+from scipy.ndimage import zoom
 from torch.utils.data import DataLoader, Dataset
+
 
 from py4cast.datasets.base import (
     DatasetABC,
@@ -254,25 +257,40 @@ class Param:
             return arr
         anti_aliasing = self.grid.name == "PAAROME_1S40"  # True if downsampling
         return resize(arr, self.grid.full_size, anti_aliasing=anti_aliasing)
+        
 
     def load_data_grib(self, date: dt.datetime) -> np.ndarray:
         path_grib = self.get_filepath(date, "grib")
         ds = read_grib(path_grib)
         level_type = ds[self.grib_param].attrs["GRIB_typeOfLevel"]
+        lats = ds.latitude.values
+        lons = ds.longitude.values
         if level_type != "isobaricInhPa":  # Only one level
             arr = ds[self.grib_param].values
         else:
             arr = ds[self.grib_param].sel(isobaricInhPa=self.level).values
-        return arr
+        return arr, lons, lats
 
     def load_data(
         self, date: dt.datetime, file_format: Literal["npy", "grib"] = "grib"
     ):
         if file_format == "grib":
-            arr = self.load_data_grib(date)
+            arr, lons, lats = self.load_data_grib(date)
+
+
+            if self.native_grid == "PA_01D":
+                grid_coords = METADATA["GRIDS"][self.grid.name]["extent"]
+
+                shape = METADATA["GRIDS"][self.grid.name]["size"]
+                
+                # Mask ARPEGE data to AROME bounding box for forcing 
+                mask_lon = (lons >= grid_coords[2]) & (lons <= grid_coords[3])
+                mask_lat = (lats >= grid_coords[1]) & (lats <= grid_coords[0])
+                arr = arr[mask_lat, :][:, mask_lon]
+                
             arr = self.fit_to_grid(arr)
             subdomain = self.grid.subdomain
-            arr = arr[subdomain[0] : subdomain[1], subdomain[2] : subdomain[3]]
+            arr = arr[subdomain[0]: subdomain[1], subdomain[2] : subdomain[3]]
             return arr[::-1]  # invert latitude
         else:
             return np.load(self.get_filepath(date, file_format))
@@ -907,3 +925,7 @@ def speedtest(path_config: Path = DEFAULT_CONFIG, n_iter: int = 5):
 
 if __name__ == "__main__":
     app()
+
+
+
+

@@ -79,7 +79,7 @@ GRIDS:
     - -12.0
     - 16.0
     prefix: aro
-    resolution: 0.25
+    resolution: 0.025
     size: &id004
     - 717
     - 1121

@@ -48,7 +48,7 @@
             "kind": "input_output"
         },
         "aro_t": {
-            "levels": [250, 500, 700, 850],
+            "levels": [250, 500, 700, 850, 1000],
             "kind": "input_output"
         },
         "aro_u": {

@@ -29,7 +29,8 @@ from py4cast.plots import DomainInfo
 from py4cast.settings import CACHE_DIR
 from py4cast.utils import merge_dicts
 
-SCRATCH_PATH = Path("/scratch/shared/poesy/poesy_crop")
+#SCRATCH_PATH = Path("/scratch/shared/poesy/poesy_crop")
+SCRATCH_PATH = Path("/scratch/mrmn/akodads/poesy_512_512")
 OROGRAPHY_FNAME = "PEARO_EURW1S40_Orography_crop.npy"
 LATLON_FNAME = "latlon_crop.npy"
 
@@ -40,11 +41,11 @@ DATA_SHAPE = (600, 600, 45, 16)
 SECONDS_IN_YEAR = 365 * 24 * 60 * 60
 
 
-def poesy_forecast_namer(date: dt.datetime, shortname, **kwargs):
+def poesy_forecast_namer(date: dt.datetime, member: int, shortname, **kwargs):
     """
     use to find local files
     """
-    return f"{date.strftime('%Y-%m-%dT%H:%M:%SZ')}_{shortname}_lt1-45_crop.npy"
+    return f"{date.strftime('%Y-%m-%dT%H:%M:%SZ')}_{shortname}_lt1-45_{str(member)}.npy"
 
 
 def get_weight(level: int, kind: str):
@@ -210,29 +211,28 @@ class Param:
         """
         return [self.unit for _ in self.levels]
 
-    def filename(self, date: dt.datetime) -> str:
+    def filename(self, date: dt.datetime, member:int) -> str:
         """
         Return the filename.
         """
 
-        return SCRATCH_PATH / self.fnamer(date=date, shortname=self.shortname)
+        return SCRATCH_PATH / self.fnamer(date=date, shortname=self.shortname, member=member)
 
     def load_data(self, date: dt.datetime, term: List, member: int) -> np.array:
         """
         date : Date of file.
         term : Position of leadtimes in file.
         """
-        data_array = np.load(self.filename(date=date), mmap_mode="r")
-
+        data_array = np.load(self.filename(date=date, member=member), mmap_mode="r")
+        print("data", data_array)
         return data_array[
             self.grid.subgrid[0] : self.grid.subgrid[1],
             self.grid.subgrid[2] : self.grid.subgrid[3],
-            term,
-            member,
+            term
         ]
 
-    def exist(self, date: dt.datetime) -> bool:
-        flist = self.filename(date=date)
+    def exist(self, date: dt.datetime, member:int) -> bool:
+        flist = self.filename(date=date,member=member)
         return flist.exists()
 
 
@@ -267,7 +267,7 @@ class Sample:
 
     # Term wrt to the date {date}. Gives validity
     terms: Tuple[float] = field(init=False)
-
+    
     def __post_init__(self):
         self.terms = self.input_terms + self.output_terms
 
@@ -283,7 +283,7 @@ class Sample:
 
         for param in param_list:
 
-            if not param.exist(self.date):
+            if not param.exist(self.date,self.member):
                 return False
 
         return True
@@ -395,6 +395,8 @@ class PoesyDataset(DatasetABC, Dataset):
                         output_terms=output_terms,
                     )
 
+                    print(member, samp)
+                    exit()
                     if samp.is_valid(self.params):
 
                         samples.append(samp)
@@ -606,6 +608,7 @@ class PoesyDataset(DatasetABC, Dataset):
                     **vard,
                 )
                 param_list.append(param)
+
         train_period = Period(**conf["periods"]["train"], name="train")
         valid_period = Period(**conf["periods"]["valid"], name="valid")
         test_period = Period(**conf["periods"]["test"], name="test")
@@ -943,16 +946,16 @@ if __name__ == "__main__":
     train_ds.dataset_info.summary()
 
     print("Test __get_item__")
-    print("Len dataset : ", len(train_ds))
+    print("Len dataset : ", len(train_ds.__getitem__(0)))
 
-    print("First Item description :")
-    data_iter = iter(train_ds.torch_dataloader())
-    print(next(data_iter))
+    # print("First Item description :")
+    # data_iter = iter(train_ds.torch_dataloader())
+    # print(next(data_iter))
 
-    print("Speed test:")
-    start_time = time.time()
-    for i in tqdm.trange(args.n_iter, desc="Loading samples"):
-        _ = next(data_iter)
-    delta = time.time() - start_time
-    speed = args.n_iter / delta
-    print(f"Loading speed: {round(speed, 3)} sample(s)/sec")
+    # print("Speed test:")
+    # start_time = time.time()
+    # for i in tqdm.trange(args.n_iter, desc="Loading samples"):
+    #     _ = next(data_iter)
+    # delta = time.time() - start_time
+    # speed = args.n_iter / delta
+    # print(f"Loading speed: {round(speed, 3)} sample(s)/sec")
