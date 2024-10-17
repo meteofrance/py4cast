@@ -31,8 +31,7 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt \
-                    torch==${{ steps.pytorch_version.outputs.PYTORCH_VERS }} \
-                    -f https://data.pyg.org/whl/torch-${{ steps.pytorch_version.outputs.PYTORCH_VERS }}+cpu.html
+                    torch==${{ steps.pytorch_version.outputs.PYTORCH_VERS }}
         pip install -r requirements_lint.txt
         pip install --editable .
 

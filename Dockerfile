@@ -27,13 +27,8 @@ ARG CURL_CA_BUNDLE
 ARG ECCODES_VER=2.35.0
 RUN curl -O https://confluence.ecmwf.int/download/attachments/45757960/eccodes-$ECCODES_VER-Source.tar.gz && tar -xzf eccodes-$ECCODES_VER-Source.tar.gz && mkdir build && cd build && cmake ../eccodes-$ECCODES_VER-Source -DENABLE_AEC=ON -DENABLE_NETCDF=ON -DENABLE_FORTRAN=OFF && make && ctest && make install && ldconfig
 
-ARG CUDA_VERS
-
 RUN pip install --upgrade pip
 COPY requirements.txt /app/requirements.txt
-RUN PIP_CUDA_VERS=$(python3 -c "print(''.join('${CUDA_VERS}'.split('.')[0:2]))") \
-    && pip config set global.find-links https://download.pytorch.org/whl/cu${PIP_CUDA_VERS} \
-    && mv /root/.config/pip/pip.conf /etc/pip.conf
 RUN set -eux \
     && pip install --default-timeout=100 -r /app/requirements.txt
 COPY requirements_lint.txt /app/requirements_lint.txt
