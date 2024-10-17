@@ -3,10 +3,9 @@ from pathlib import Path
 
 from pytorch_lightning import Trainer
 
-from py4cast.datasets import get_datasets
 from py4cast.datasets.base import TorchDataloaderSettings
 from py4cast.io.outputs import GribSavingSettings, save_named_tensors_to_grib
-from py4cast.lightning import AutoRegressiveLightning
+from py4cast.lightning import AutoRegressiveLightning, PlDataModule
 
 default_config_root = Path(__file__).parents[1] / "config/IO/"
 
@@ -67,22 +66,22 @@ if __name__ == "__main__":
     else:
         config_override = {"num_inference_pred_steps": args.infer_steps}
 
-    # Get dataset for inference
-    _, _, infer_ds = get_datasets(
-        args.dataset,
-        hparams.num_input_steps,
-        hparams.num_pred_steps_train,
-        hparams.num_pred_steps_val_test,
-        args.dataset_conf,
+    dl_settings = TorchDataloaderSettings(batch_size=hparams.batch_size)
+
+    dm = PlDataModule(
+        dataset=args.dataset,
+        num_input_steps=hparams.num_input_steps,
+        num_pred_steps_train=hparams.num_pred_steps_train,
+        num_pred_steps_val_test=hparams.num_pred_steps_val_test,
+        dl_settings=dl_settings,
+        dataset_conf=args.dataset_conf,
         config_override=config_override,
     )
 
-    # Transform into dataloader
-    dl_settings = TorchDataloaderSettings(batch_size=1)
-    infer_loader = infer_ds.torch_dataloader(dl_settings)
-
     trainer = Trainer(devices="auto")
-    preds = trainer.predict(lightning_module, infer_loader)
+    preds = trainer.predict(lightning_module, dm)
+
+    infer_ds = dm.infer_ds
 
     if args.grib:
         with open(default_config_root / args.saving_conf, "r") as f:

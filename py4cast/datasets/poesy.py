@@ -224,7 +224,6 @@ class Param:
         term : Position of leadtimes in file.
         """
         data_array = np.load(self.filename(date=date), mmap_mode="r")
-
         return data_array[
             self.grid.subgrid[0] : self.grid.subgrid[1],
             self.grid.subgrid[2] : self.grid.subgrid[3],
@@ -577,8 +576,14 @@ class PoesyDataset(DatasetABC, Dataset):
         num_pred_steps_val_test: int,
         config_override: Union[Dict, None] = None,
     ) -> Tuple["PoesyDataset", "PoesyDataset", "PoesyDataset"]:
+        """
+        Return 3 PoesyDataset.
+        Override configuration file if needed.
+        """
         with open(fname, "r") as fp:
             conf = json.load(fp)
+            if config_override is not None:
+                conf = merge_dicts(conf, config_override)
 
         grid = Grid(**conf["grid"])
         param_list = []
@@ -643,7 +648,7 @@ class PoesyDataset(DatasetABC, Dataset):
     ) -> DataLoader:
         return DataLoader(
             self,
-            tl_settings.batch_size,
+            batch_size=tl_settings.batch_size,
             num_workers=tl_settings.num_workers,
             shuffle=self.shuffle,
             prefetch_factor=tl_settings.prefetch_factor,
@@ -849,7 +854,6 @@ class InferPoesyDataset(PoesyDataset):
                         samples.append(samp)
                         number += 1
         print("All samples are now defined")
-        print(samples)
 
         return samples
 
