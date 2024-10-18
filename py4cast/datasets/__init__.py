@@ -89,7 +89,7 @@ def get_datasets(
             f"Dataset {name} not found in registry, available datasets are :{registry.keys()}"
         ) from ke
 
-    config_file = default_config if config_file is None else config_file
+    config_file = default_config if config_file is None else Path(config_file)
 
     return dataset_kls.from_json(
         config_file,
