@@ -1,8 +1,8 @@
 # Parse script options
 while [[ $# -gt 0 ]]; do
   case $1 in
-    -f|--builder)
-      BUILDER="$2"
+    -r|--runtime)
+      RUNTIME="$2"
       shift # past argument
       shift # past value
       ;;
@@ -13,16 +13,16 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ -z ${BUILDER} ]]; then
-    echo "Error: --builder option is required, please choose in {docker, podman}."
+if [[ -z ${RUNTIME} ]]; then
+    echo "Error: --runtime option is required, please choose in {docker, podman}."
     exit 2
-elif [[ ${BUILDER} = "podman" ]]; then
-    BUILDER=$(which podman)
+elif [[ ${RUNTIME} = "podman" ]]; then
+    RUNTIME=$(which podman)
     OPTIONS="--storage-opt overlay.mount_program=/usr/bin/fuse-overlayfs"
-elif [[ ${BUILDER} = "docker" ]]; then
-    BUILDER=$(which docker)
+elif [[ ${RUNTIME} = "docker" ]]; then
+    RUNTIME=$(which docker)
 else
-    echo "Builder \"${builder}\" not supported, please choose in {docker, podman}."
+    echo "runtime \"${RUNTIME}\" not supported, please choose in {docker, podman}."
     exit 3
 fi
 
@@ -43,7 +43,7 @@ fi
 TAG=$(git rev-parse --short HEAD)
 
 # Build the py4cast docker image
-${BUILDER} build \
+${RUNTIME} build \
     ${OPTIONS} \
     --build-arg CUDA_VERS=${PY4CAST_CUDA_VERSION} \
     --build-arg TORCH_VERS=${PY4CAST_TORCH_VERSION} \

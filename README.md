@@ -134,7 +134,7 @@ pip install --editable .
 
 To build the docker image please use the `oci-image-build.sh` script.
 ```sh
-bash ./oci-image-build.sh --builder docker
+bash ./oci-image-build.sh --runtime docker
 ```
 By default, the `CUDA` and `pytorch` version are extracted from the `env.yaml` reference file. Nevertheless, for test purpose, you can set the **PY4CAST_CUDA_VERSION** and **PY4CAST_TORCH_VERSION** to override the default versions.
 
@@ -147,7 +147,7 @@ As an alternative to docker, you can use podman to build the image.
 
 To build the podman image please use the `oci-image-build.sh` script.
 ```sh
-bash ./oci-image-build.sh --builder podman
+bash ./oci-image-build.sh --runtime podman
 ```
 By default, the `CUDA` and `pytorch` version are extracted from the `env.yaml` reference file. Nevertheless, for test purpose, you can set the **PY4CAST_CUDA_VERSION** and **PY4CAST_TORCH_VERSION** to override the default versions.
 
