@@ -362,9 +362,9 @@ class Reroll(nn.Module):
 class HieraSettings:
     embed_dim: int = 96  # initial embed dim
     num_heads: int = 1  # initial number of heads
-    stages: Tuple[int, ...] = (2, 3, 16, 3)
+    stages: Tuple[int, ...] = (2, 2, 2, 2) # number of layers per stage
     q_pool: int = 3  # number of q_pool stages
-    q_stride: Tuple[int, ...] = (2, 2)
+    q_stride: Tuple[int, ...] = (2, 2) # len of the stride
     mask_unit_size: Tuple[int, ...] = (8, 8)  # must divide q_stride ** (#stages-1)
     # mask_unit_attn: which stages use mask unit attention?
     mask_unit_attn: Tuple[bool, ...] = (True, True, False, False)
@@ -379,7 +379,7 @@ class HieraSettings:
     head_dropout: float = 0.0
     head_init_scale: float = 0.001
     sep_pos_embed: bool = False
-    decoder: str = "hiera"  # hiera or unetrpp
+    decoder: str = "halfunet"  # hiera, unetrpp, halfunet
 
 
 class Hiera(nn.Module, PyTorchModelHubMixin):
@@ -388,22 +388,19 @@ class Hiera(nn.Module, PyTorchModelHubMixin):
     output_dims: Tuple[str, ...] = ("batch", "height", "width", "features")
     settings_kls = HieraSettings
 
-    #@has_config
+    # @has_config
     def __init__(
         self,
-        num_input_features: int = 3,  # RGB
+        num_input_features: int = 21,  # RGB=3, titan=21
         num_output_features: int = 1000,  # number of classes
         settings=HieraSettings,
         input_shape: Tuple[int, ...] = (225, 225),  # nb_pixel x nb_pixel
     ) -> None:
         super().__init__()
-        print("iput shape", input_shape)
-        print("num_input_features", num_input_features)
-        print("num_output_features", num_output_features)
-        
+
         if (input_shape[0] % 32 != 0) or (input_shape[1] % 32 != 0):
             raise Exception("input shapes need to be multiples of 32")
-
+        self.copy_embed_dim = settings.embed_dim
         """
         ENCODER PART
         """
@@ -525,7 +522,7 @@ class Hiera(nn.Module, PyTorchModelHubMixin):
         else:
             nn.init.trunc_normal_(self.pos_embed, std=0.02)
         self.apply(partial(self._init_weights))
-        self.head.projection.weight.data.mul_(settings.head_init_scale)
+        self.head.projection.weight.data.mul_(settings.head_init_scale) #useful only if classification
         self.head.projection.bias.data.mul_(settings.head_init_scale)
 
         """
@@ -543,7 +540,7 @@ class Hiera(nn.Module, PyTorchModelHubMixin):
             )
         elif (
             settings.decoder == "unetrpp"
-        ):  # Généralisable pour n'importe quel Model (remplacer unetrpp par model_example)
+        ):
             from py4cast.models.vision.unetrpp import (
                 UnetrppDecoder,
                 UnetrppDecoderSettings,
@@ -557,6 +554,16 @@ class Hiera(nn.Module, PyTorchModelHubMixin):
                 upsample_kernel_size=4,
                 linear_upsampling=True,
                 settings=UnetrppDecoderSettings,
+            )
+
+        elif (
+            settings.decoder == "halfunet"
+        ):
+            self.decoder = HalfUNetDecoder(
+                in_channels = self.copy_embed_dim,
+                out_channels = num_input_features,
+                input_shape = input_shape,
+                settings = HalfUNetSettings(),
             )
         else:
             raise Exception(f"unknwon decoder: {settings.decoder}")
@@ -1207,3 +1214,213 @@ class HieraDecoder(nn.Module):
         x = x.reshape(B, self.input_shape[0], self.input_shape[1], C)
         # print("x final:", x.shape)
         return x
+
+
+from collections import OrderedDict
+from functools import reduce
+
+
+@dataclass_json
+@dataclass(slots=True)
+class HalfUNetSettings:
+    num_filters: int = 96
+    dilation: int = 1
+    bias: bool = False
+    use_ghost: bool = False
+    last_activation: str = "Identity"
+
+
+class GhostModule(nn.Module):
+    def __init__(
+        self,
+        in_channels: int = 64,
+        out_channels: int = 64,
+        bias: bool = False,
+        kernel_size=3,
+        padding="same",
+        dilation=1,
+    ):
+        super().__init__()
+
+        self.conv = nn.Conv2d(
+            in_channels=in_channels,
+            out_channels=out_channels // 2,
+            kernel_size=kernel_size,
+            padding=padding,
+            bias=bias,
+            dilation=dilation,
+        )
+        self.sepconv = nn.Conv2d(
+            in_channels=out_channels // 2,
+            out_channels=out_channels // 2,
+            kernel_size=kernel_size,
+            padding=padding,
+            bias=bias,
+            groups=out_channels // 2,
+        )
+        self.bn = nn.BatchNorm2d(num_features=out_channels)
+        self.relu = nn.ReLU(inplace=True)
+
+    def forward(self, x):
+        x = self.conv(x)
+        x2 = self.sepconv(x)
+        x = torch.cat([x, x2], dim=1)
+        x = self.bn(x)
+        return self.relu(x)
+
+
+class HalfUNetDecoder(nn.Module):
+    settings_kls = HalfUNetSettings
+    onnx_supported = True
+    input_dims: Tuple[str, ...] = ("batch", "height", "width", "features")
+    output_dims: Tuple[str, ...] = ("batch", "height", "width", "features")
+
+    def __init__(
+        self, 
+        in_channels: int,
+        out_channels: int,
+        input_shape: Union[None, Tuple[int, int]] = None,
+        settings: HalfUNetSettings = HalfUNetSettings(),
+        *args,
+        **kwargs,
+    ):
+        super().__init__(*args, **kwargs)
+
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.input_shape = input_shape
+
+
+        self.up2 = nn.Upsample(scale_factor=4)
+        self.down2 = nn.Upsample(scale_factor=1/2)
+
+        self.up3 = nn.Upsample(scale_factor=16)
+        self.down3 = nn.Upsample(scale_factor=1/4)
+
+        self.up4 = nn.Upsample(scale_factor=64)
+        self.down4 = nn.Upsample(scale_factor=1/8)
+
+        self.decoder = self._block(
+            settings.num_filters,
+            settings.num_filters,
+            name="decoder",
+            bias=settings.bias,
+            use_ghost=settings.use_ghost,
+            dilation=settings.dilation,
+            grid_shape=input_shape,
+        )
+
+        self.outconv = nn.Conv2d(
+            in_channels=self.in_channels,
+            out_channels=out_channels,
+            kernel_size=1,
+            bias=settings.bias,
+        )
+
+        self.activation = getattr(nn, settings.last_activation)()
+
+    def forward(self, skip_list, x):
+
+        skip_list[0] = torch.permute(skip_list[0], (0, 2, 1))
+
+        skip_list[1] = self.down2(skip_list[1])
+        skip_list[1] = torch.permute(skip_list[1], (0, 2, 1))
+        skip_list[1] = self.up2(skip_list[1])
+
+        skip_list[2] = self.down3(skip_list[2])
+        skip_list[2] = torch.permute(skip_list[2], (0, 2, 1))
+        skip_list[2] = self.up3(skip_list[2])
+
+        skip_list[3] = self.down4(skip_list[3])
+        skip_list[3] = torch.permute(skip_list[3], (0, 2, 1))
+        skip_list[3] = self.up4(skip_list[3])
+
+        summed = reduce(
+            torch.Tensor.add_,
+            [skip_list[0], skip_list[1], skip_list[2], skip_list[3]],
+            torch.zeros_like(skip_list[0]),
+        )
+        summed = self.up3(summed) #*16
+        B, C, _ = summed.shape
+        summed = summed.reshape(B, C, self.input_shape[0], self.input_shape[1])
+        dec = self.decoder(summed)
+        conv = self.outconv(dec)
+        act = self.activation(conv)
+        act = torch.permute(act, (0,2,3,1))
+
+        return(act)
+
+    @staticmethod
+    def _block(
+        in_channels,
+        features,
+        name,
+        bias=False,
+        use_ghost: bool = False,
+        dilation: int = 1,
+        padding="same",
+        grid_shape: Tuple[int, int] = None,
+    ):
+        if use_ghost:
+            layers = nn.Sequential(
+                OrderedDict(
+                    [
+                        (
+                            name + "ghost1",
+                            GhostModule(
+                                in_channels=in_channels,
+                                out_channels=features,
+                                kernel_size=3,
+                                padding=padding,
+                                bias=bias,
+                                dilation=dilation,
+                            ),
+                        ),
+                        (
+                            name + "ghost2",
+                            GhostModule(
+                                in_channels=features,
+                                out_channels=features,
+                                kernel_size=3,
+                                padding=padding,
+                                bias=bias,
+                                dilation=dilation,
+                            ),
+                        ),
+                    ]
+                )
+            )
+        else:
+            layers = nn.Sequential(
+                OrderedDict(
+                    [
+                        (
+                            name + "conv1",
+                            nn.Conv2d(
+                                in_channels=in_channels,
+                                out_channels=features,
+                                kernel_size=3,
+                                padding=padding,
+                                bias=bias,
+                                dilation=dilation,
+                            ),
+                        ),
+                        (name + "norm1", nn.BatchNorm2d(num_features=features)),
+                        (name + "relu1", nn.ReLU(inplace=True)),
+                        (
+                            name + "conv2",
+                            nn.Conv2d(
+                                in_channels=features,
+                                out_channels=features,
+                                kernel_size=3,
+                                padding=padding,
+                                bias=bias,
+                                dilation=dilation,
+                            ),
+                        ),
+                        (name + "norm2", nn.BatchNorm2d(num_features=features)),
+                        (name + "relu2", nn.ReLU(inplace=True)),
+                    ]
+                )
+            )
+        return layers
