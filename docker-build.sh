@@ -1,8 +1,8 @@
 # Parse script options
 while [[ $# -gt 0 ]]; do
   case $1 in
-    -f|--format)
-      FORMAT="$2"
+    -f|--builder)
+      BUILDER="$2"
       shift # past argument
       shift # past value
       ;;
@@ -13,16 +13,16 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ -z ${FORMAT} ]]; then
-    echo "Error: --format option is required, please choose in {docker, podman}."
+if [[ -z ${BUILDER} ]]; then
+    echo "Error: --builder option is required, please choose in {docker, podman}."
     exit 2
-elif [[ ${FORMAT} = "podman" ]]; then
+elif [[ ${BUILDER} = "podman" ]]; then
     BUILDER=$(which podman)
     OPTIONS="--storage-opt overlay.mount_program=/usr/bin/fuse-overlayfs"
-elif [[ ${FORMAT} = "docker" ]]; then
+elif [[ ${BUILDER} = "docker" ]]; then
     BUILDER=$(which docker)
 else
-    echo "Format \"${FORMAT}\" not supported, please choose in {docker, podman}."
+    echo "Builder \"${builder}\" not supported, please choose in {docker, podman}."
     exit 3
 fi
 
