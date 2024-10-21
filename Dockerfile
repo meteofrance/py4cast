@@ -2,7 +2,7 @@ ARG DOCKER_REGISTRY=docker.io
 ARG TORCH_VERS=2.2.2
 ARG CUDA_VERS=12.1
 
-FROM ${DOCKER_REGISTRY}/pytorch/pytorch:${TORCH_VERS}-cuda${CUDA_VERS}-cudnn8-devel
+FROM ${DOCKER_REGISTRY}/pytorch/pytorch:${TORCH_VERS}-cuda${CUDA_VERS}-cudnn9-devel
 
 ARG INJECT_MF_CERT
 
