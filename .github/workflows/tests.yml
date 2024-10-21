@@ -18,10 +18,15 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
-    - name: Set up Python 3.10
+
+    - name: Get python version from env.yaml
+      id: python_version
+      run: echo PYTHON_VERS=$(cat env.yaml | grep python= | sed 's/.*python=\([0-9]\.[0-9]*\.[0-9]*\).*/\1/') >> $GITHUB_OUTPUT
+
+    - name: Set up Python ${{ steps.python_version.outputs.PYTHON_VERS }}
       uses: actions/setup-python@v3
       with:
-        python-version: "3.10"
+        python-version: "${{ steps.python_version.outputs.PYTHON_VERS }}"
 
     - name: Get pytorch version from env.yaml
       id: pytorch_version
