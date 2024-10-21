@@ -5,14 +5,13 @@ Test our pure PyTorch models to make sure they can be :
 3. onnx exported
 4. onnx loaded and used for inference
 """
+
 import tempfile
 from dataclasses import dataclass
-
 import numpy as np
 import onnx
 import onnxruntime
 import torch
-
 from py4cast.models import get_model_kls_and_settings
 
 
@@ -82,10 +81,10 @@ def test_torch_training_loop():
     """
     Checks that our models are trainable on a toy problem (sum).
     """
-    GRID_WIDTH = 224
+    GRID_WIDTH = 416
     GRID_HEIGHT = 224
-    NUM_INPUTS = 3
-    NUM_OUTPUTS = 1000
+    NUM_INPUTS = 21
+    NUM_OUTPUTS = 21
 
     for model_name in (
         # "swinunetr",
@@ -133,9 +132,9 @@ def test_torch_training_loop():
             # Make predictions for this batch
             outputs = model(inputs)
 
-            #print(outputs.shape)
-            #print(targets.shape)
-            
+            # print("output shape", outputs.shape)
+            # print("target shape", targets.shape)
+
             # Compute the loss and its gradients
             loss = loss_fn(outputs, targets)
             loss.backward()
@@ -146,11 +145,7 @@ def test_torch_training_loop():
     # Make a prediction in eval mode
     model.eval()
     sample = ds[0][0].unsqueeze(0)
-    #print()
-    #print("sample shape1 :", sample.shape)
     sample = sample.flatten(1, 2) if len(model.input_dims) == 3 else sample
-    #print("sample shape2 :", sample.shape)
-    #print()
     model(sample)
 
     # We test if models claiming to be onnx exportable really are post training.
@@ -186,8 +181,8 @@ def test_model_registry():
         "hiera",
     }
 
-    print()
     print("registry test DONE")
+    print()
 
 
 test_torch_training_loop()

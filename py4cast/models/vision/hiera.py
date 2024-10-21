@@ -1,5 +1,5 @@
 import math
-from typing import List, Tuple, Optional, Type, Callable, Dict, Union, Sequence
+from typing import List, Tuple, Optional, Type, Callable, Union, Sequence
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -8,135 +8,18 @@ from dataclasses import dataclass
 from dataclasses_json import dataclass_json
 from timm.models.layers import DropPath, Mlp
 from huggingface_hub import PyTorchModelHubMixin
-import importlib.util
-import importlib.metadata
-from packaging import version
-import inspect
-from tqdm import tqdm
-
-from py4cast.models.vision.utils import features_last_to_second
-
 from monai.networks.blocks.dynunet_block import (
     get_output_padding,
     get_padding,
 )
+from py4cast.models.vision.utils import features_last_to_second
 
+#HalfUNet imports
+from collections import OrderedDict
+from functools import reduce
 
-def is_huggingface_hub_available():
-    available: bool = importlib.util.find_spec("huggingface_hub") is not None
-
-    if not available:
-        return False
-    else:
-        hfversion = importlib.metadata.version("huggingface_hub")
-        return version.parse(hfversion) >= version.parse("0.21.0")
-
-
-if is_huggingface_hub_available():
-    from huggingface_hub import PyTorchModelHubMixin
-else:
-    # Empty class in case modelmixins dont exist
-    class PyTorchModelHubMixin:
-        error_str: str = (
-            'This feature requires "huggingface-hub >= 0.21.0" to be installed.'
-        )
-
-        @classmethod
-        def from_pretrained(cls, *args, **kwdargs):
-            raise RuntimeError(cls.error_str)
-
-        @classmethod
-        def save_pretrained(cls, *args, **kwdargs):
-            raise RuntimeError(cls.error_str)
-
-        @classmethod
-        def push_to_hub(cls, *args, **kwdargs):
-            raise RuntimeError(cls.error_str)
-
-
-# Saves the input args to the function as self.config, also allows
-# loading a config instead of kwdargs.
-def has_config(func):
-    signature = inspect.signature(func)
-
-    def wrapper(self, *args, **kwdargs):
-        if "config" in kwdargs:
-            config = kwdargs["config"]
-            del kwdargs["config"]
-            kwdargs.update(**config)
-
-        self.config = {
-            k: v.default if (i - 1) >= len(args) else args[i - 1]
-            for i, (k, v) in enumerate(signature.parameters.items())
-            if v.default is not inspect.Parameter.empty
-        }
-        self.config.update(**kwdargs)
-
-        func(self, **kwdargs)
-
-    return wrapper
-
-
-def pretrained_model(checkpoints: Dict[str, str], default: str = None) -> Callable:
-    """Loads a Hiera model from a pretrained source (if pretrained=True). Use "checkpoint" to specify the checkpoint."""
-
-    def inner(model_func: Callable) -> Callable:
-        def model_def(
-            pretrained: bool = False,
-            checkpoint: str = default,
-            strict: bool = True,
-            **kwdargs,
-        ) -> nn.Module:
-            if pretrained:
-                if checkpoints is None:
-                    raise RuntimeError(
-                        "This model currently doesn't have pretrained weights available."
-                    )
-                elif checkpoint is None:
-                    raise RuntimeError("No checkpoint specified.")
-                elif checkpoint not in checkpoints:
-                    raise RuntimeError(
-                        f"Invalid checkpoint specified ({checkpoint}). Options are: {list(checkpoints.keys())}."
-                    )
-
-                state_dict = torch.hub.load_state_dict_from_url(
-                    checkpoints[checkpoint], map_location="cpu"
-                )
-
-                if "head.projection.weight" in state_dict["model_state"]:
-                    # Set the number of classes equal to the state_dict only if the user doesn't want to overwrite it
-                    if "num_classes" not in kwdargs:
-                        kwdargs["num_classes"] = state_dict["model_state"][
-                            "head.projection.weight"
-                        ].shape[0]
-                    # If the user specified a different number of classes, remove the projection weights or else we'll error out
-                    elif (
-                        kwdargs["num_classes"]
-                        != state_dict["model_state"]["head.projection.weight"].shape[0]
-                    ):
-                        del state_dict["model_state"]["head.projection.weight"]
-                        del state_dict["model_state"]["head.projection.bias"]
-
-            model = model_func(**kwdargs)
-            if pretrained:
-                # Disable being strict when trying to load a encoder-decoder model into an encoder-only model
-                if "decoder_pos_embed" in state_dict["model_state"] and not hasattr(
-                    model, "decoder_pos_embed"
-                ):
-                    strict = False
-
-                model.load_state_dict(state_dict["model_state"], strict=strict)
-
-            return model
-
-        # Keep some metadata so we can do things that require looping through all available models
-        model_def.checkpoints = checkpoints
-        model_def.default = default
-
-        return model_def
-
-    return inner
-
+#Unetrpp imports
+from py4cast.models.vision.unetrpp import TransformerBlock
 
 def conv_nd(n: int) -> Type[nn.Module]:
     """
@@ -362,9 +245,9 @@ class Reroll(nn.Module):
 class HieraSettings:
     embed_dim: int = 96  # initial embed dim
     num_heads: int = 1  # initial number of heads
-    stages: Tuple[int, ...] = (2, 2, 2, 2) # number of layers per stage
+    stages: Tuple[int, ...] = (2, 2, 2, 2)  # number of layers per stage
     q_pool: int = 3  # number of q_pool stages
-    q_stride: Tuple[int, ...] = (2, 2) # len of the stride
+    q_stride: Tuple[int, ...] = (2, 2)  # len of the stride
     mask_unit_size: Tuple[int, ...] = (8, 8)  # must divide q_stride ** (#stages-1)
     # mask_unit_attn: which stages use mask unit attention?
     mask_unit_attn: Tuple[bool, ...] = (True, True, False, False)
@@ -379,7 +262,7 @@ class HieraSettings:
     head_dropout: float = 0.0
     head_init_scale: float = 0.001
     sep_pos_embed: bool = False
-    decoder: str = "halfunet"  # hiera, unetrpp, halfunet
+    decoder: str = "hiera"  # hiera, unetrpp, halfunet
 
 
 class Hiera(nn.Module, PyTorchModelHubMixin):
@@ -392,9 +275,9 @@ class Hiera(nn.Module, PyTorchModelHubMixin):
     def __init__(
         self,
         num_input_features: int = 21,  # RGB=3, titan=21
-        num_output_features: int = 1000,  # number of classes
+        num_output_features: int = 21,  # number of classes
         settings=HieraSettings,
-        input_shape: Tuple[int, ...] = (225, 225),  # nb_pixel x nb_pixel
+        input_shape: Tuple[int, ...] = (64, 64),  # nb_pixel x nb_pixel
     ) -> None:
         super().__init__()
 
@@ -522,7 +405,9 @@ class Hiera(nn.Module, PyTorchModelHubMixin):
         else:
             nn.init.trunc_normal_(self.pos_embed, std=0.02)
         self.apply(partial(self._init_weights))
-        self.head.projection.weight.data.mul_(settings.head_init_scale) #useful only if classification
+        self.head.projection.weight.data.mul_(
+            settings.head_init_scale
+        )  # useful only if classification
         self.head.projection.bias.data.mul_(settings.head_init_scale)
 
         """
@@ -531,39 +416,25 @@ class Hiera(nn.Module, PyTorchModelHubMixin):
 
         if settings.decoder == "hiera":
             self.decoder = HieraDecoder(
-                input_shape=input_shape,
-                in_channels_embed=self.bottleneck_shape[1],
-                kernel_size=3,
-                upsample_kernel_size=4,
-                linear_upsampling=True,
-                settings=HieraSettings,
+                output_channels = num_output_features,
+                input_shape = input_shape,                
+                bottleneck_shape = self.bottleneck_shape, # (Patched image, embedding)
+                settings = UnetrppDecoderSettings,
             )
-        elif (
-            settings.decoder == "unetrpp"
-        ):
-            from py4cast.models.vision.unetrpp import (
-                UnetrppDecoder,
-                UnetrppDecoderSettings,
-            )
-
+        elif settings.decoder == "unetrpp":
             self.decoder = UnetrppDecoder(
-                input_shape=input_shape,
-                in_channels_conv=self.bottleneck_shape[0],
-                in_channels_embed=self.bottleneck_shape[1],
-                kernel_size=3,
-                upsample_kernel_size=4,
-                linear_upsampling=True,
-                settings=UnetrppDecoderSettings,
+                output_channels = num_output_features,
+                input_shape = input_shape,                
+                bottleneck_shape = self.bottleneck_shape, # (Patched image, embedding)
+                settings = UnetrppDecoderSettings,
             )
 
-        elif (
-            settings.decoder == "halfunet"
-        ):
+        elif settings.decoder == "halfunet":
             self.decoder = HalfUNetDecoder(
-                in_channels = self.copy_embed_dim,
-                out_channels = num_input_features,
-                input_shape = input_shape,
-                settings = HalfUNetSettings(),
+                output_channels=num_output_features,
+                input_shape=input_shape,
+                bottleneck_shape = self.bottleneck_shape, # (Patched image, embedding)
+                settings=HalfUNetSettings(),
             )
         else:
             raise Exception(f"unknwon decoder: {settings.decoder}")
@@ -1125,33 +996,47 @@ class PatchEmbed(nn.Module):
         return x
 
 
+# ------------------------------------------------------------------------------#
+
+class _a:
+    a=1
+
+
+@dataclass_json
+@dataclass
+class HieraDecoderSettings:
+    linear_upsampling: bool = True
+    kernel_size: Union[Sequence[int], int] = 3
+    upsample_kernel_size: Union[Sequence[int], int] = 4
+    linear_upsampling: bool = True
+
 class HieraDecoder(nn.Module):
     def __init__(
         self,
         input_shape: Union[Sequence[int], int],
-        in_channels_embed: int,
-        kernel_size: Union[Sequence[int], int],
-        upsample_kernel_size: Union[Sequence[int], int],
-        linear_upsampling: bool = True,
-        settings=HieraSettings,
+        output_channels: int,
+        bottleneck_shape: Union[Sequence[int], int], # (Patched image, embedding)
+        settings = HieraSettings,
     ) -> None:
         super().__init__()
+
+        input_embed = bottleneck_shape[1]
         self.stage_blocks = nn.ModuleList()
         self.transp_conv = nn.ModuleList()
         self.input_shape = input_shape
-        padding = get_padding(upsample_kernel_size, upsample_kernel_size)
-        in_channels_embed_memory = in_channels_embed
+        padding = get_padding(settings.upsample_kernel_size, settings.upsample_kernel_size)
+
         # UPSAMPLING + CONV
         for i in range(len(settings.stages) - 1):
-            out_channels_embed = int(in_channels_embed // 2)
-            if linear_upsampling:
+            output_embed = int(input_embed // 2)
+            if settings.linear_upsampling:
                 self.transp_conv.append(
                     nn.Sequential(
-                        nn.Upsample(scale_factor=upsample_kernel_size),
+                        nn.Upsample(scale_factor=settings.upsample_kernel_size),
                         nn.Conv1d(
-                            in_channels_embed,
-                            out_channels_embed,
-                            kernel_size=kernel_size,
+                            input_embed,
+                            output_embed,
+                            kernel_size=settings.kernel_size,
                             padding=1,
                         ),
                     )
@@ -1159,33 +1044,33 @@ class HieraDecoder(nn.Module):
             else:
                 self.transp_conv.append(
                     nn.ConvTranspose1d(
-                        in_channels_embed,
-                        out_channels_embed,
-                        kernel_size=upsample_kernel_size,
-                        stride=upsample_kernel_size,
+                        input_embed,
+                        output_embed,
+                        kernel_size=settings.upsample_kernel_size,
+                        stride=settings.upsample_kernel_size,
                         padding=padding,
                         output_padding=get_output_padding(
-                            upsample_kernel_size, upsample_kernel_size, padding
+                            settings.upsample_kernel_size, settings.upsample_kernel_size, padding
                         ),
                         dilation=1,
                     )
                 )
-            in_channels_embed = out_channels_embed
+            input_embed = output_embed
 
         self.transp_conv.append(
             nn.Sequential(
-                nn.Upsample(scale_factor=upsample_kernel_size * upsample_kernel_size),
-                nn.Conv1d(in_channels_embed, 3, kernel_size=kernel_size, padding=1),
+                nn.Upsample(scale_factor=settings.upsample_kernel_size * settings.upsample_kernel_size),
+                nn.Conv1d(input_embed, output_channels, kernel_size=settings.kernel_size, padding=1),
             )
         )
 
         # ATTENTION BLOCK
-        in_channels_embed = in_channels_embed_memory
+        input_embed = bottleneck_shape[1]
         for i in range(len(settings.stages)):
             settings.num_heads = int(settings.num_heads * settings.head_mul)
             block = HieraBlock(
-                dim=in_channels_embed,
-                dim_out=in_channels_embed,
+                dim=input_embed,
+                dim_out=input_embed,
                 heads=settings.num_heads,
                 mlp_ratio=4.0,
                 drop_path=0.0,
@@ -1194,36 +1079,31 @@ class HieraDecoder(nn.Module):
                 window_size=0,
                 use_mask_unit_attn=False,
             )
-            in_channels_embed = int(in_channels_embed // 2)
+            input_embed = int(input_embed // 2)
             self.stage_blocks.append(block)
 
     def forward(self, skip_list, x):
         for i in range(len(skip_list)):
             k = len(skip_list) - i - 1
-            # print()
-            # print("skip shape:", (skip_list[k]).shape)
             x = skip_list[k] + x
-            # print("x after skip:", x.shape)
             x = self.stage_blocks[i](x)
             x = torch.permute(x, (0, 2, 1))
-            # print("x after decoder_block:", x.shape)
             x = self.transp_conv[i](x)
             x = torch.permute(x, (0, 2, 1))
-            # print("x after trans_conv:", x.shape)
         B, _, C = x.shape
         x = x.reshape(B, self.input_shape[0], self.input_shape[1], C)
-        # print("x final:", x.shape)
         return x
 
 
-from collections import OrderedDict
-from functools import reduce
+# ------------------------------------------------------------------------------#
 
+class _b:
+    a=1
 
 @dataclass_json
 @dataclass(slots=True)
 class HalfUNetSettings:
-    num_filters: int = 96
+    embed_dim: int = 96  # initial embed dim
     dilation: int = 1
     bias: bool = False
     use_ghost: bool = False
@@ -1276,33 +1156,29 @@ class HalfUNetDecoder(nn.Module):
     output_dims: Tuple[str, ...] = ("batch", "height", "width", "features")
 
     def __init__(
-        self, 
-        in_channels: int,
-        out_channels: int,
-        input_shape: Union[None, Tuple[int, int]] = None,
-        settings: HalfUNetSettings = HalfUNetSettings(),
+        self,
+        input_shape: Union[Sequence[int], int],
+        output_channels: int,
+        bottleneck_shape: Union[Sequence[int], int], # [Patched image, embedding]
+        settings = HalfUNetSettings,
         *args,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
-
-        self.in_channels = in_channels
-        self.out_channels = out_channels
         self.input_shape = input_shape
 
-
         self.up2 = nn.Upsample(scale_factor=4)
-        self.down2 = nn.Upsample(scale_factor=1/2)
+        self.down2 = nn.Upsample(scale_factor=1 / 2)
 
         self.up3 = nn.Upsample(scale_factor=16)
-        self.down3 = nn.Upsample(scale_factor=1/4)
+        self.down3 = nn.Upsample(scale_factor=1 / 4)
 
         self.up4 = nn.Upsample(scale_factor=64)
-        self.down4 = nn.Upsample(scale_factor=1/8)
+        self.down4 = nn.Upsample(scale_factor=1 / 8)
 
         self.decoder = self._block(
-            settings.num_filters,
-            settings.num_filters,
+            settings.embed_dim,
+            settings.embed_dim,
             name="decoder",
             bias=settings.bias,
             use_ghost=settings.use_ghost,
@@ -1311,8 +1187,8 @@ class HalfUNetDecoder(nn.Module):
         )
 
         self.outconv = nn.Conv2d(
-            in_channels=self.in_channels,
-            out_channels=out_channels,
+            in_channels=settings.embed_dim,
+            out_channels=output_channels,
             kernel_size=1,
             bias=settings.bias,
         )
@@ -1320,7 +1196,6 @@ class HalfUNetDecoder(nn.Module):
         self.activation = getattr(nn, settings.last_activation)()
 
     def forward(self, skip_list, x):
-
         skip_list[0] = torch.permute(skip_list[0], (0, 2, 1))
 
         skip_list[1] = self.down2(skip_list[1])
@@ -1340,15 +1215,14 @@ class HalfUNetDecoder(nn.Module):
             [skip_list[0], skip_list[1], skip_list[2], skip_list[3]],
             torch.zeros_like(skip_list[0]),
         )
-        summed = self.up3(summed) #*16
+        summed = self.up3(summed)  # *16
         B, C, _ = summed.shape
         summed = summed.reshape(B, C, self.input_shape[0], self.input_shape[1])
         dec = self.decoder(summed)
         conv = self.outconv(dec)
         act = self.activation(conv)
-        act = torch.permute(act, (0,2,3,1))
-
-        return(act)
+        act = torch.permute(act, (0, 2, 3, 1))
+        return act
 
     @staticmethod
     def _block(
@@ -1424,3 +1298,115 @@ class HalfUNetDecoder(nn.Module):
                 )
             )
         return layers
+
+
+# ------------------------------------------------------------------------------#
+class _c:
+    a=1
+
+@dataclass_json
+@dataclass
+class UnetrppDecoderSettings:
+    num_heads: int = 1  # initial number of heads
+    stages: Tuple[int, ...] = (2, 3, 16, 3)
+    head_mul: float = 2.0
+    linear_upsampling: bool = True
+    kernel_size: Union[Sequence[int], int] = 3
+    upsample_kernel_size: Union[Sequence[int], int] = 4
+    proj_size = 64
+    use_scaled_dot_product_CA = "torch"
+
+
+class UnetrppDecoder(nn.Module):  # "=" UnetrUpBlock
+    def __init__(
+        self,
+        input_shape: Union[Sequence[int], int],
+        output_channels: int,
+        bottleneck_shape: Union[Sequence[int], int], # (Patched image, embedding)
+        settings = UnetrppDecoderSettings,
+    ) -> None:
+        super().__init__()
+        
+        input_patch = bottleneck_shape[0]
+        input_embed = bottleneck_shape[1]
+        self.stage_blocks = nn.ModuleList()
+        self.transp_conv = nn.ModuleList()
+        self.input_shape = input_shape
+        padding = get_padding(settings.upsample_kernel_size, settings.upsample_kernel_size)
+
+
+        # UPSAMPLING + CONV
+        for i in range(len(settings.stages) - 1):
+            output_embed = int(input_embed // 2)
+            if settings.linear_upsampling:
+                self.transp_conv.append(
+                    nn.Sequential(
+                        nn.Upsample(scale_factor=settings.upsample_kernel_size),
+                        nn.Conv1d(
+                            input_embed,
+                            output_embed,
+                            kernel_size=settings.kernel_size,
+                            padding=1,
+                        ),
+                    )
+                )
+            else:
+                self.transp_conv.append(
+                    nn.ConvTranspose1d(
+                        input_embed,
+                        output_embed,
+                        kernel_size=settings.upsample_kernel_size,
+                        stride=settings.upsample_kernel_size,
+                        padding=padding,
+                        output_padding=get_output_padding(
+                            settings.upsample_kernel_size, settings.upsample_kernel_size, padding
+                        ),
+                        dilation=1,
+                    )
+                )
+            input_embed = output_embed
+
+        self.transp_conv.append(
+            nn.Sequential(
+                nn.Upsample(scale_factor=settings.upsample_kernel_size * settings.upsample_kernel_size),
+                nn.Conv1d(input_embed, output_channels, kernel_size=settings.kernel_size, padding=1),
+            )
+        )
+
+        # ATTENTION BLOCK
+        input_embed = bottleneck_shape[1]
+        for i in range(len(settings.stages)):
+            settings.num_heads = int(settings.num_heads * settings.head_mul)
+            block = TransformerBlock(
+                input_size=input_patch,
+                hidden_size=input_embed,
+                num_heads=settings.num_heads,
+                dropout_rate=0.1,
+                pos_embed=True,
+                proj_size=settings.proj_size,
+                attention_code=settings.use_scaled_dot_product_CA,
+            )
+            input_embed = int(input_embed // 2)
+            input_patch = int(input_patch * 4)
+            self.stage_blocks.append(block)
+
+    def forward(self, skip_list, x):
+        for i in range(len(skip_list)):
+            k = len(skip_list) - i - 1
+            height, width = self.input_shape
+            #skip connection
+            x = skip_list[k] + x
+            #attention block
+            x = torch.permute(x, (0, 2, 1))
+            B, C, _ = x.shape
+            x = x.reshape(B, C, int(height/(4*2**k)), int(width/(4*2**k)))
+            x = self.stage_blocks[i](x)
+            #conv
+            B, C, H, W = x.shape
+            x = x.reshape(B, C, H*W)
+            x = self.transp_conv[i](x)
+            x = torch.permute(x, (0, 2, 1))
+        B, _, C = x.shape
+        x = x.reshape(B, C, self.input_shape[0], self.input_shape[1])
+        x = torch.permute(x, (0, 2, 3, 1))
+        return x
