@@ -580,9 +580,9 @@ class TitanDataset(DatasetABC, Dataset):
             DatasetInfo: _description_
         """
         shortnames = {
-            "forcing": self.shortnames("forcing"),
+            "input": self.shortnames("input"),
             "input_output": self.shortnames("input_output"),
-            "diagnostic": self.shortnames("diagnostic"),
+            "output": self.shortnames("output"),
         }
         return DatasetInfo(
             name=str(self),
@@ -769,7 +769,7 @@ class TitanDataset(DatasetABC, Dataset):
         """
         names = []
         for param in self.params:
-            if param.kind in kind:
+            if param.kind == kind:
                 names += param.parameter_short_names
         return names
 

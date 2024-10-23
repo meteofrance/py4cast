@@ -629,14 +629,15 @@ class DatasetInfo:
         print(f"Step_duration {self.step_duration}")
         print(f"Static fields {self.statics.grid_static_features.feature_names}]")
         print(self.statics.grid_static_features)
-        for p in ["forcing", "input_output", "diagnostic"]:
+        print(self.shortnames)
+        for p in ["input", "input_output", "output"]:
             names = self.shortnames[p]
             mean = self.stats.to_list("mean", names)
             std = self.stats.to_list("std", names)
             mini = self.stats.to_list("min", names)
             maxi = self.stats.to_list("max", names)
             units = [self.units[name] for name in names]
-            if p != "forcing":
+            if p != "input":  # Forcing variables
                 diff_mean = self.diff_stats.to_list("mean", names)
                 diff_std = self.diff_stats.to_list("std", names)
                 weight = [self.state_weights[name] for name in names]
@@ -680,7 +681,7 @@ class TorchDataloaderSettings:
     """
 
     batch_size: int = 1
-    num_workers: int = 10
+    num_workers: int = 1
     pin_memory: bool = False
     prefetch_factor: Union[int, None] = None
     persistent_workers: bool = False
@@ -732,71 +733,63 @@ class DatasetABC(ABC):
         """
         pass
 
+    def compute_mean_std_min_max_feature(self, type_tensor: Literal["inputs", "outputs", "forcing"], feature_name:str):
+        """
+        Compute mean and standard deviation for one weather parameter.
+        """
+        random_batch = next(iter(self.torch_dataloader()))
+        tensor = getattr(random_batch, type_tensor)[feature_name]
+        sum_means, sum_squares = torch.zeros(1), torch.zeros(1)
+        flat_tensor = tensor.flatten(0, -1)
+        best_min = torch.min(flat_tensor, dim=0).values
+        best_max = torch.max(flat_tensor, dim=0).values
+        counter = 0
+
+        print(f"Computing stats on {feature_name} {type_tensor} parameter")
+        if self.settings.standardize:
+            raise ValueError("Your dataset should not be standardized.")
+
+        for batch in tqdm(self.torch_dataloader(), desc="Computing stats"):
+            tensor = getattr(batch, type_tensor)[feature_name]
+            counter += tensor.shape[0]  # += batch size
+            tensor = tensor.flatten(1, -1) # (batch_size, X)
+
+            sum_means += torch.sum(tensor.mean(dim=1), dim=0)
+            sum_squares += torch.sum((tensor**2).mean(dim=1), dim=0)
+            mini = torch.min(tensor)
+            best_min = torch.min(torch.stack([mini, best_min]))
+            maxi = torch.max(tensor)
+            best_max = torch.max(torch.stack([maxi, best_max]))
+
+        mean = sum_means / counter
+        second_moment = sum_squares / counter
+        std = torch.sqrt(second_moment - mean**2)
+
+        dict_stats = {"mean": mean, "std": std, "min": best_min, "max": best_max}
+        return dict_stats
+
+
     def compute_parameters_stats(self):
         """
         Compute mean and standard deviation for this dataset.
         """
-        random_inputs = next(iter(self.torch_dataloader())).inputs
-        n_features = len(random_inputs.feature_names)
-        sum_means = torch.zeros(n_features)
-        sum_squares = torch.zeros(n_features)
-        ndim_features = len(random_inputs.tensor.shape) - 1
-        flat_input = random_inputs.tensor.flatten(0, ndim_features - 1)  # (X, Features)
-        best_min = torch.min(flat_input, dim=0).values
-        best_max = torch.max(flat_input, dim=0).values
-        counter = 0
-        print(
-            "We are going to compute statistics on the dataset. This can take a while."
-        )
-        if self.settings.standardize:
-            raise ValueError("Your dataset should not be standardized.")
-        # When computing stat may force every body to be input/ouput
-        for batch in tqdm(self.torch_dataloader(), desc="Computing stats"):
+        # Retrieve list of weather params and in which tensor they are (input, forcing, output)
+        # If feature is in multiple tensors we keep only first occurence
+        dict_features = {}
+        random_batch = next(iter(self.torch_dataloader()))
+        for type_tensor in ["inputs", "outputs", "forcing"]:
+            features = getattr(random_batch, type_tensor).feature_names
+            for feature in features:
+                if feature not in dict_features.keys():
+                    dict_features[feature] = type_tensor
 
-            # Here we assume that data are in 2 or 3 D
-            inputs = batch.inputs.tensor
-            outputs = batch.outputs.tensor
+        all_stats = {}
+        for feature, type_tensor in dict_features.items():
+            dict_stats = self.compute_mean_std_min_max_feature(type_tensor, feature)
+            all_stats[feature] = dict_stats
 
-            # Check that no variable is a forcing variable
-            f_names = batch.forcing.feature_names
-            if len(f_names) > 0:
-                warnings.warn(
-                    f"Forcing variables {f_names} are present but no statistics will be computed."
-                )
-
-            in_out = torch.cat([inputs, outputs], dim=1)
-            in_out = in_out.flatten(
-                1, 3
-            )  # Flatten everybody to be (Batch, X, Features)
-
-            counter += in_out.shape[0]  # += batch size
-
-            sum_means += torch.sum(in_out.mean(dim=1), dim=0)  # (d_features)
-            sum_squares += torch.sum((in_out**2).mean(dim=1), dim=0)  # (d_features)
-
-            mini = torch.min(in_out, 1).values[0]
-            stack_mini = torch.stack([best_min, mini], dim=0)
-            best_min = torch.min(stack_mini, dim=0).values  # (d_features)
-
-            maxi = torch.max(in_out, 1).values[0]
-            stack_maxi = torch.stack([best_max, maxi], dim=0)
-            best_max = torch.max(stack_maxi, dim=0).values  # (d_features)
-
-        mean = sum_means / counter
-        second_moment = sum_squares / counter
-        std = torch.sqrt(second_moment - mean**2)  # (d_features)
-
-        # Storing variable statistics
-        store_d = {}
-        for i, name in enumerate(batch.inputs.feature_names):
-            store_d[name] = {
-                "mean": mean[i],
-                "std": std[i],
-                "min": best_min[i],
-                "max": best_max[i],
-            }
         dest_file = self.cache_dir / "parameters_stats.pt"
-        torch_save(store_d, dest_file)
+        torch_save(all_stats, dest_file)
         print(f"Parameters statistics saved in {dest_file}")
 
     def compute_time_step_stats(self):
@@ -806,10 +799,7 @@ class DatasetABC(ABC):
         sum_squares = torch.zeros(n_features)
         counter = 0
         if not self.settings.standardize:
-            print(
-                f"Your dataset {self} is not normalized. If you do not normalized your output it could be intended."
-            )
-            print("Otherwise consider standardizing your inputs.")
+            raise ValueError("Your dataset should be standardized.")
 
         for batch in tqdm(self.torch_dataloader()):
 
@@ -845,6 +835,10 @@ class DatasetABC(ABC):
                 "mean": diff_mean[i],
                 "std": diff_std[i],
             }
+        # Diff mean and std of forcing variables are not used during training so we
+        # store fixed values : mean = 0, std = 1
+        for name in batch.forcing.feature_names:
+            store_d[name] = {"mean": torch.tensor(0), "std": torch.tensor(1)}
         dest_file = self.cache_dir / "diff_stats.pt"
         torch_save(store_d, self.cache_dir / "diff_stats.pt")
         print(f"Parameters time diff stats saved in {dest_file}")

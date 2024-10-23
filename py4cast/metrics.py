@@ -360,7 +360,7 @@ class MetricACC(Metric):
         )
         names = (
             dataset_info.shortnames["input_output"]
-            + dataset_info.shortnames["diagnostic"]
+            + dataset_info.shortnames["output"]
         )
         self.climate_means = dataset_info.stats.to_list("mean", names).to(self.device)
 
