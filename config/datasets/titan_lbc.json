@@ -78,10 +78,6 @@
         "arp_z":{
             "levels": [250, 500, 700, 850],
             "kind": "input"
-        },
-        "arp_r":{
-            "levels": [250, 500, 700, 850],
-            "kind": "input"
         }
     }
 }
