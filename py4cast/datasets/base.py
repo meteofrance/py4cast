@@ -733,8 +733,9 @@ class DatasetABC(ABC):
         """
         pass
 
-
-    def compute_mean_std_min_max(self, type_tensor: Literal["inputs", "outputs", "forcing"]):
+    def compute_mean_std_min_max(
+        self, type_tensor: Literal["inputs", "outputs", "forcing"]
+    ):
         """
         Compute mean and standard deviation for this dataset.
         """
@@ -751,7 +752,9 @@ class DatasetABC(ABC):
         if self.settings.standardize:
             raise ValueError("Your dataset should not be standardized.")
 
-        for batch in tqdm(self.torch_dataloader(), desc=f"Computing {type_tensor} stats"):
+        for batch in tqdm(
+            self.torch_dataloader(), desc=f"Computing {type_tensor} stats"
+        ):
             tensor = getattr(batch, type_tensor).tensor
             tensor = tensor.flatten(1, 3)  # Flatten to be (Batch, X, Features)
             counter += tensor.shape[0]  # += batch size
@@ -781,7 +784,6 @@ class DatasetABC(ABC):
             }
         return stats
 
-
     def compute_parameters_stats(self):
         """
         Compute mean and standard deviation for this dataset.
@@ -797,7 +799,6 @@ class DatasetABC(ABC):
         dest_file = self.cache_dir / "parameters_stats.pt"
         torch_save(all_stats, dest_file)
         print(f"Parameters statistics saved in {dest_file}")
-
 
     def compute_time_step_stats(self):
         random_inputs = next(iter(self.torch_dataloader())).inputs

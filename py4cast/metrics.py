@@ -359,8 +359,7 @@ class MetricACC(Metric):
             may be very different from those outputted by this metric."
         )
         names = (
-            dataset_info.shortnames["input_output"]
-            + dataset_info.shortnames["output"]
+            dataset_info.shortnames["input_output"] + dataset_info.shortnames["output"]
         )
         self.climate_means = dataset_info.stats.to_list("mean", names).to(self.device)
 

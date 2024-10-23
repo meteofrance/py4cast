@@ -249,13 +249,18 @@ class Param:
             filename = f"{self.name}_{self.level}{self.level_type.lower()}.npy"
             return self.npy_path / date.strftime(FORMATSTR) / filename
 
-    def fit_to_grid(self, arr: np.ndarray, lons: np.ndarray, lats: np.ndarray) -> np.ndarray:
+    def fit_to_grid(
+        self, arr: np.ndarray, lons: np.ndarray, lats: np.ndarray
+    ) -> np.ndarray:
         # already on good grid, nothing to do:
         if self.grid.name == self.native_grid:
             return arr
 
         # crop arpege data to arome domain:
-        if self.native_grid == "PA_01D" and self.grid.name in ["PAAROME_1S100", "PAAROME_1S40"]:
+        if self.native_grid == "PA_01D" and self.grid.name in [
+            "PAAROME_1S100",
+            "PAAROME_1S40",
+        ]:
             grid_coords = METADATA["GRIDS"][self.grid.name]["extent"]
             # Mask ARPEGE data to AROME bounding box
             mask_lon = (lons >= grid_coords[2]) & (lons <= grid_coords[3])
@@ -344,12 +349,12 @@ class Sample:
     all_dates: Tuple[dt.datetime] = field(init=False)  # date of each step
 
     def __post_init__(self):
-        """ Setups time variables to be able to define a sample.
-            For example for n_inputs = 2, n_preds = 3, step_duration = 3h:
-            all_steps = [-1, 0, 1, 2, 3]
-            all_timesteps = [-3h, 0h, 3h, 6h, 9h]
-            pred_timesteps = [3h, 6h, 9h]
-            all_dates = [24/10/22 21:00,  24/10/23 00:00, 24/10/23 03:00, 24/10/23 06:00, 24/10/23 09:00]
+        """Setups time variables to be able to define a sample.
+        For example for n_inputs = 2, n_preds = 3, step_duration = 3h:
+        all_steps = [-1, 0, 1, 2, 3]
+        all_timesteps = [-3h, 0h, 3h, 6h, 9h]
+        pred_timesteps = [3h, 6h, 9h]
+        all_dates = [24/10/22 21:00,  24/10/23 00:00, 24/10/23 03:00, 24/10/23 06:00, 24/10/23 09:00]
         """
         n_inputs, n_preds = self.settings.num_input_steps, self.settings.num_pred_steps
         all_steps = list(range(-n_inputs + 1, n_preds + 1))
@@ -432,7 +437,9 @@ class Sample:
 
         time_forcing = NamedTensor(  # doy : day_of_year
             feature_names=["cos_hour", "sin_hour", "cos_doy", "sin_doy"],
-            tensor=get_year_hour_forcing(self.date_t0, self.pred_timesteps).type(torch.float32),
+            tensor=get_year_hour_forcing(self.date_t0, self.pred_timesteps).type(
+                torch.float32
+            ),
             names=["timestep", "features"],
         )
         solar_forcing = NamedTensor(
@@ -601,7 +608,9 @@ class TitanDataset(DatasetABC, Dataset):
     def write_list_valid_samples(self):
         print(f"Writing list of valid samples for {self.period.name} set...")
         with open(self.valid_samples_file, "w") as f:
-            for date in tqdm.tqdm(self.period.date_list, f"{self.period.name} samples validation"):
+            for date in tqdm.tqdm(
+                self.period.date_list, f"{self.period.name} samples validation"
+            ):
                 sample = Sample(date, self.settings, self.params, self.stats, self.grid)
                 if sample.is_valid():
                     f.write(f"{date.strftime('%Y-%m-%d_%Hh%M')}\n")
