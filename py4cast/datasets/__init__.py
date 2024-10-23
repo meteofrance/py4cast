@@ -73,7 +73,7 @@ def get_datasets(
     num_input_steps: int,
     num_pred_steps_train: int,
     num_pred_steps_val_test: int,
-    config_file: Union[Path, None] = None,
+    config_file: Union[str, None] = None,
     config_override: Union[Dict, None] = None,
 ) -> Tuple[DatasetABC, DatasetABC, DatasetABC]:
     """
