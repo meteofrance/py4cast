@@ -601,7 +601,7 @@ class TitanDataset(DatasetABC, Dataset):
     def write_list_valid_samples(self):
         print(f"Writing list of valid samples for {self.period.name} set...")
         with open(self.valid_samples_file, "w") as f:
-            for date in tqdm.tqdm(self.period.date_list, "Samples validation"):
+            for date in tqdm.tqdm(self.period.date_list, f"{self.period.name} samples validation"):
                 sample = Sample(date, self.settings, self.params, self.stats, self.grid)
                 if sample.is_valid():
                     f.write(f"{date.strftime('%Y-%m-%d_%Hh%M')}\n")
