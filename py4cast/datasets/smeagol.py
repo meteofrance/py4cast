@@ -251,7 +251,9 @@ class SmeagolSettings:
     term: dict  # Terms used in this configuration. Should be present in nc files.
     num_input_steps: int  # = 2  # Number of input timesteps
     num_output_steps: int  # = 1  # Number of output timesteps (= 0 for inference)
-    num_inference_pred_steps: int = 0  # 0 in training config ; else used to provide future information about forcings
+    num_inference_pred_steps: int = (
+        0  # 0 in training config ; else used to provide future information about forcings
+    )
     standardize: bool = True  # Do we need to standardize our data ?
     members: Tuple[int] = (
         0,

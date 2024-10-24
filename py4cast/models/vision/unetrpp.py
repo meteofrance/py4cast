@@ -676,9 +676,7 @@ class UNETRPP(ModelABC, nn.Module):
         self.hidden_size = settings.hidden_size
         self.spatial_dims = settings.spatial_dims
         # Number of pixels after stem layer
-        no_pixels = (input_shape[0] * input_shape[1]) // (
-            settings.downsampling_rate**2
-        )
+        no_pixels = (input_shape[0] * input_shape[1]) // (settings.downsampling_rate**2)
         encoder_input_size = [
             no_pixels,
             no_pixels // 4,

@@ -2,6 +2,7 @@
 Base classes defining our software components
 and their interfaces
 """
+
 import warnings
 from abc import ABC, abstractclassmethod, abstractmethod, abstractproperty
 from copy import deepcopy
@@ -298,9 +299,11 @@ class NamedTensor(TensorWrapper):
             return NamedTensor(
                 self.index_select_dim(dim_name, indices, bare_tensor=True),
                 self.names,
-                self.feature_names
-                if dim_name != self.feature_dim_name
-                else [self.feature_names[i] for i in indices],
+                (
+                    self.feature_names
+                    if dim_name != self.feature_dim_name
+                    else [self.feature_names[i] for i in indices]
+                ),
                 feature_dim_name=self.feature_dim_name,
             )
 
@@ -614,7 +617,9 @@ class DatasetInfo:
     units: Dict[str, str]  # d[shortname] = unit (str)
     weather_dim: int
     forcing_dim: int
-    step_duration: float  # Duration (in hour) of one step in the dataset. 0.25 means 15 minutes.
+    step_duration: (
+        float  # Duration (in hour) of one step in the dataset. 0.25 means 15 minutes.
+    )
     statics: Statics  # A lot of static variables
     stats: Stats
     diff_stats: Stats
