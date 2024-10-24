@@ -615,7 +615,7 @@ class DatasetInfo:
     weather_dim: int
     forcing_dim: int
     step_duration: float  # Duration (in hour) of one step in the dataset. 0.25 means 15 minutes.
-    statics: Statics  # A lot of static variable
+    statics: Statics  # A lot of static variables
     stats: Stats
     diff_stats: Stats
     state_weights: Dict[str, float]
@@ -627,9 +627,9 @@ class DatasetInfo:
         """
         print(f"\n Summarizing {self.name} \n")
         print(f"Step_duration {self.step_duration}")
-        print(f"Static fields {self.statics.grid_static_features.feature_names}]")
-        print(self.statics.grid_static_features)
-        print(self.shortnames)
+        print(f"Static fields {self.statics.grid_static_features.feature_names}")
+        print(f"Grid static features {self.statics.grid_static_features}")
+        print(f"Features shortnames {self.shortnames}")
         for p in ["input", "input_output", "output"]:
             names = self.shortnames[p]
             mean = self.stats.to_list("mean", names)

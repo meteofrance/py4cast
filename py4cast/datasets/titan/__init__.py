@@ -474,7 +474,8 @@ class Sample:
         levels = sorted(list(set([param.level for param in self.params])))
         dict_params = {level: [] for level in levels}
         for param in self.params:
-            dict_params[param.level].append(param)
+            if param.parameter_short_names[0] in ntensor.feature_names:
+                dict_params[param.level].append(param)
 
         # Groups levels 0m, 2m and 10m on one "surf" level
         dict_params["surf"] = []
