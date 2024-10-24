@@ -330,9 +330,9 @@ class PoesyDataset(DatasetABC, Dataset):
         """
 
         shortnames = {
-            "forcing": self.shortnames("forcing"),
+            "input": self.shortnames("input"),
             "input_output": self.shortnames("input_output"),
-            "diagnostic": self.shortnames("diagnostic"),
+            "output": self.shortnames("output"),
         }
 
         return DatasetInfo(
@@ -688,30 +688,30 @@ class PoesyDataset(DatasetABC, Dataset):
     def split(self) -> Literal["train", "valid", "test"]:
         return self.period.name
 
-    def __get_params_attr(
-        self,
-        attribute: str,
-        kind: Literal[
-            "all", "input", "output", "forcing", "diagnostic", "input_output"
-        ] = "all",
-    ) -> List[str]:
-        out_list = []
-        valid_params = (
-            ("output", ("output", "input_output")),
-            ("forcing", ("input",)),
-            ("input", ("input", "input_output")),
-            ("diagnostic", ("output",)),
-            ("input_output", ("input_output",)),
-            ("all", ("input", "input_output", "output")),
-        )
-        if kind not in [k for k, pk in valid_params]:
-            raise NotImplementedError(
-                f"{kind} is not known. Possibilites are {[k for k,pk in valid_params]}"
-            )
-        for param in self.params:
-            if any(kind == k and param.kind in pk for k, pk in valid_params):
-                out_list += getattr(param, attribute)
-        return out_list
+    # def __get_params_attr(
+    #     self,
+    #     attribute: str,
+    #     kind: Literal[
+    #         "all", "input", "output", "forcing", "diagnostic", "input_output"
+    #     ] = "all",
+    # ) -> List[str]:
+    #     out_list = []
+    #     valid_params = (
+    #         ("output", ("output", "input_output")),
+    #         ("forcing", ("input",)),
+    #         ("input", ("input", "input_output")),
+    #         ("diagnostic", ("output",)),
+    #         ("input_output", ("input_output",)),
+    #         ("all", ("input", "input_output", "output")),
+    #     )
+    #     if kind not in [k for k, pk in valid_params]:
+    #         raise NotImplementedError(
+    #             f"{kind} is not known. Possibilites are {[k for k,pk in valid_params]}"
+    #         )
+    #     for param in self.params:
+    #         if any(kind == k and param.kind in pk for k, pk in valid_params):
+    #             out_list += getattr(param, attribute)
+    #     return out_list
 
     @cached_property
     def units(self) -> Dict[str, int]:
@@ -741,7 +741,7 @@ class PoesyDataset(DatasetABC, Dataset):
         """
         names = []
         for param in self.params:
-            if param.kind in kind:
+            if param.kind == kind:
                 names += param.parameter_short_name
         return names
 
