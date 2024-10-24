@@ -143,7 +143,7 @@ class DummyDataset(DatasetABC, Dataset):
                 self.grid.y,
                 self.forcing_dim,
             ).clamp(-3, 3),
-            feature_names=self.shortnames("forcing"),
+            feature_names=self.shortnames("input"),
             names=["timestep", "lat", "lon", "features"],
         )
         return Item(
@@ -185,12 +185,12 @@ class DummyDataset(DatasetABC, Dataset):
     def weather_dim(self):
         return 3
 
-    def shortnames(self, kind: Literal["forcing", "input_output", "diagnostic"]):
+    def shortnames(self, kind: Literal["input", "input_output", "output"]):
         """
         Define the variable names
         """
         number = 0
-        if kind == "forcing":
+        if kind == "input":
             number = self.forcing_dim
         elif kind == "input_output":
             number = self.weather_dim
@@ -212,7 +212,7 @@ class DummyDataset(DatasetABC, Dataset):
         Return a dictionnary with name and units
         """
         dout = {}
-        for name in self.shortnames("input_output") + self.shortnames("forcing"):
+        for name in self.shortnames("input_output") + self.shortnames("input"):
             dout[name] = "FakeUnit"
         return dout
 
@@ -235,9 +235,9 @@ class DummyDataset(DatasetABC, Dataset):
             DatasetInfo: _description_
         """
         shortnames = {
-            "forcing": self.shortnames("forcing"),
+            "input": self.shortnames("input"),
             "input_output": self.shortnames("input_output"),
-            "diagnostic": self.shortnames("diagnostic"),
+            "output": self.shortnames("output"),
         }
         return DatasetInfo(
             name=str(self),
@@ -285,7 +285,13 @@ class DummyDataset(DatasetABC, Dataset):
         """
         # Generate fake stats
         d_stats = {}
-        for name in self.shortnames("input_output") + self.shortnames("forcing"):
+        features = (
+            self.shortnames("input")
+            + self.shortnames("input_output")
+            + self.shortnames("output")
+        )
+        features = list(set(features))
+        for name in features:
             d_stats[name] = {
                 "mean": torch.tensor(0.0),
                 "std": torch.tensor(1.0),
@@ -305,7 +311,13 @@ class DummyDataset(DatasetABC, Dataset):
         Read fake statistics from BytesIO files
         """
         d_stats = {}
-        for name in self.shortnames("input_output") + self.shortnames("forcing"):
+        features = (
+            self.shortnames("input")
+            + self.shortnames("input_output")
+            + self.shortnames("output")
+        )
+        features = list(set(features))
+        for name in features:
             d_stats[name] = {"mean": torch.tensor(0.0), "std": torch.tensor(1.42)}
         # Save them in byteIo
         buffer = BytesIO()

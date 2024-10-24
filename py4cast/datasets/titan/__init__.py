@@ -249,28 +249,46 @@ class Param:
             filename = f"{self.name}_{self.level}{self.level_type.lower()}.npy"
             return self.npy_path / date.strftime(FORMATSTR) / filename
 
-    def fit_to_grid(self, arr: np.ndarray) -> np.ndarray:
+    def fit_to_grid(
+        self, arr: np.ndarray, lons: np.ndarray, lats: np.ndarray
+    ) -> np.ndarray:
+        # already on good grid, nothing to do:
         if self.grid.name == self.native_grid:
             return arr
+
+        # crop arpege data to arome domain:
+        if self.native_grid == "PA_01D" and self.grid.name in [
+            "PAAROME_1S100",
+            "PAAROME_1S40",
+        ]:
+            grid_coords = METADATA["GRIDS"][self.grid.name]["extent"]
+            # Mask ARPEGE data to AROME bounding box
+            mask_lon = (lons >= grid_coords[2]) & (lons <= grid_coords[3])
+            mask_lat = (lats >= grid_coords[1]) & (lats <= grid_coords[0])
+            arr = arr[mask_lat, :][:, mask_lon]
+
         anti_aliasing = self.grid.name == "PAAROME_1S40"  # True if downsampling
+        # upscale or downscale to grid resolution:
         return resize(arr, self.grid.full_size, anti_aliasing=anti_aliasing)
 
     def load_data_grib(self, date: dt.datetime) -> np.ndarray:
         path_grib = self.get_filepath(date, "grib")
         ds = read_grib(path_grib)
         level_type = ds[self.grib_param].attrs["GRIB_typeOfLevel"]
+        lats = ds.latitude.values
+        lons = ds.longitude.values
         if level_type != "isobaricInhPa":  # Only one level
             arr = ds[self.grib_param].values
         else:
             arr = ds[self.grib_param].sel(isobaricInhPa=self.level).values
-        return arr
+        return arr, lons, lats
 
     def load_data(
         self, date: dt.datetime, file_format: Literal["npy", "grib"] = "grib"
     ):
         if file_format == "grib":
-            arr = self.load_data_grib(date)
-            arr = self.fit_to_grid(arr)
+            arr, lons, lats = self.load_data_grib(date)
+            arr = self.fit_to_grid(arr, lons, lats)
             subdomain = self.grid.subdomain
             arr = arr[subdomain[0] : subdomain[1], subdomain[2] : subdomain[3]]
             return arr[::-1]  # invert latitude
@@ -327,17 +345,25 @@ class Sample:
     params: List[Param]
     stats: Stats
     grid: Grid
-    terms: Tuple[float] = field(init=False)  # gap in hours btw step and t0
-    dates: Tuple[dt.datetime] = field(init=False)  # date of each step
+    pred_timesteps: Tuple[float] = field(init=False)  # gaps in hours btw step and t0
+    all_dates: Tuple[dt.datetime] = field(init=False)  # date of each step
 
     def __post_init__(self):
+        """Setups time variables to be able to define a sample.
+        For example for n_inputs = 2, n_preds = 3, step_duration = 3h:
+        all_steps = [-1, 0, 1, 2, 3]
+        all_timesteps = [-3h, 0h, 3h, 6h, 9h]
+        pred_timesteps = [3h, 6h, 9h]
+        all_dates = [24/10/22 21:00,  24/10/23 00:00, 24/10/23 03:00, 24/10/23 06:00, 24/10/23 09:00]
+        """
         n_inputs, n_preds = self.settings.num_input_steps, self.settings.num_pred_steps
-        steps = list(range(-n_inputs + 1, n_preds + 1))
-        self.terms = [self.settings.step_duration * step for step in steps]
-        self.dates = [self.date_t0 + dt.timedelta(hours=term) for term in self.terms]
+        all_steps = list(range(-n_inputs + 1, n_preds + 1))
+        all_timesteps = [self.settings.step_duration * step for step in all_steps]
+        self.pred_timesteps = all_timesteps[-n_preds:]
+        self.all_dates = [self.date_t0 + dt.timedelta(hours=ts) for ts in all_timesteps]
 
     def __repr__(self):
-        return f"Date T0 {self.date}, terms {self.terms}"
+        return f"Date T0 {self.date_t0}, leadtimes {self.pred_timesteps}"
 
     def is_valid(self) -> bool:
         """Check that all the files necessary for this sample exist.
@@ -347,7 +373,7 @@ class Sample:
         Returns:
             Boolean: Whether the sample is available or not
         """
-        for date in self.dates:
+        for date in self.all_dates:
             for param in self.params:
                 if not param.exist(date, self.settings.file_format):
                     return False
@@ -382,19 +408,19 @@ class Sample:
 
             if param.kind == "input":
                 # forcing is taken for every predicted step
-                dates = self.dates[-self.settings.num_pred_steps :]
+                dates = self.all_dates[-self.settings.num_pred_steps :]
                 tensor = self.get_param_tensor(param, dates, no_standardize)
                 tmp_state = NamedTensor(tensor=tensor, **deepcopy(state_kwargs))
                 lforcings.append(tmp_state)
 
             elif param.kind == "output":
-                dates = self.dates[-self.settings.num_pred_steps :]
+                dates = self.all_dates[-self.settings.num_pred_steps :]
                 tensor = self.get_param_tensor(param, dates, no_standardize)
                 tmp_state = NamedTensor(tensor=tensor, **deepcopy(state_kwargs))
                 loutputs.append(tmp_state)
 
             else:  # input_output
-                tensor = self.get_param_tensor(param, self.dates, no_standardize)
+                tensor = self.get_param_tensor(param, self.all_dates, no_standardize)
                 state_kwargs["names"][0] = "timestep"
                 tmp_state = NamedTensor(
                     tensor=tensor[-self.settings.num_pred_steps :],
@@ -411,13 +437,15 @@ class Sample:
 
         time_forcing = NamedTensor(  # doy : day_of_year
             feature_names=["cos_hour", "sin_hour", "cos_doy", "sin_doy"],
-            tensor=get_year_hour_forcing(self.date_t0, self.terms).type(torch.float32),
+            tensor=get_year_hour_forcing(self.date_t0, self.pred_timesteps).type(
+                torch.float32
+            ),
             names=["timestep", "features"],
         )
         solar_forcing = NamedTensor(
             feature_names=["toa_radiation"],
             tensor=generate_toa_radiation_forcing(
-                self.grid.lat, self.grid.lon, self.date_t0, self.terms
+                self.grid.lat, self.grid.lon, self.date_t0, self.pred_timesteps
             ).type(torch.float32),
             names=["timestep", "lat", "lon", "features"],
         )
@@ -446,7 +474,8 @@ class Sample:
         levels = sorted(list(set([param.level for param in self.params])))
         dict_params = {level: [] for level in levels}
         for param in self.params:
-            dict_params[param.level].append(param)
+            if param.parameter_short_names[0] in ntensor.feature_names:
+                dict_params[param.level].append(param)
 
         # Groups levels 0m, 2m and 10m on one "surf" level
         dict_params["surf"] = []
@@ -559,9 +588,9 @@ class TitanDataset(DatasetABC, Dataset):
             DatasetInfo: _description_
         """
         shortnames = {
-            "forcing": self.shortnames("forcing"),
+            "input": self.shortnames("input"),
             "input_output": self.shortnames("input_output"),
-            "diagnostic": self.shortnames("diagnostic"),
+            "output": self.shortnames("output"),
         }
         return DatasetInfo(
             name=str(self),
@@ -580,7 +609,9 @@ class TitanDataset(DatasetABC, Dataset):
     def write_list_valid_samples(self):
         print(f"Writing list of valid samples for {self.period.name} set...")
         with open(self.valid_samples_file, "w") as f:
-            for date in tqdm.tqdm(self.period.date_list, "Samples validation"):
+            for date in tqdm.tqdm(
+                self.period.date_list, f"{self.period.name} samples validation"
+            ):
                 sample = Sample(date, self.settings, self.params, self.stats, self.grid)
                 if sample.is_valid():
                     f.write(f"{date.strftime('%Y-%m-%d_%Hh%M')}\n")
@@ -748,7 +779,7 @@ class TitanDataset(DatasetABC, Dataset):
         """
         names = []
         for param in self.params:
-            if param.kind in kind:
+            if param.kind == kind:
                 names += param.parameter_short_names
         return names
 
