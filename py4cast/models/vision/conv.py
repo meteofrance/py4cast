@@ -2,6 +2,7 @@
 Convolutional neural network models
 for pn-ia.
 """
+
 from collections import OrderedDict
 from dataclasses import dataclass
 from functools import reduce

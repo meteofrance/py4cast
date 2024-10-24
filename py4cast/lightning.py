@@ -477,9 +477,11 @@ class AutoRegressiveLightning(pl.LightningModule):
 
             if scale_y:
                 step_diff_std, step_diff_mean = self._step_diffs(
-                    self.output_feature_names
-                    if inference
-                    else batch.outputs.feature_names,
+                    (
+                        self.output_feature_names
+                        if inference
+                        else batch.outputs.feature_names
+                    ),
                     prev_states.device,
                 )
 
