@@ -528,12 +528,6 @@ class StateErrorPlot(Plotter):
                         tensorboard.add_scalar(scalar_name, loss[t][k], t + 1)
                         loss_dict[self.shortnames[k]].append(loss[t][k].item())
 
-                # Save metrics in json file
-                with open(
-                    self.save_path / f"{label}_{name}_scores.json", "w"
-                ) as json_file:
-                    json.dump(loss_dict, json_file)
-
                 # Plot the score card
                 if not obj.trainer.sanity_checking:
                     fig = plot_error_map(
@@ -551,6 +545,13 @@ class StateErrorPlot(Plotter):
                         dest_file.parent.mkdir(exist_ok=True)
                         fig.savefig(dest_file)
                     plt.close(fig)
+
+                    if self.save_path is not None:
+                        # Save metrics in json file
+                        with open(
+                            self.save_path / f"{label}_{name}_scores.json", "w"
+                        ) as json_file:
+                            json.dump(loss_dict, json_file)
             # Free memory
             [self.losses[name].clear() for name in self.metrics]
 
