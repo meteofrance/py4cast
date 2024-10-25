@@ -27,7 +27,7 @@ from py4cast.datasets.titan.settings import METADATA
 
 
 def plot_scores(features: List[str], data: dict, max_timestep: int = 12) -> None:
-    """Plots one frame of the animation."""
+    """Plots one graph per feature comparing RMSE of multiple models."""
 
     lines = int(math.sqrt(len(features)))
     cols = len(features) // lines
@@ -66,7 +66,7 @@ def plot_scores(features: List[str], data: dict, max_timestep: int = 12) -> None
 
 
 if __name__ == "__main__":
-    parser = ArgumentParser("Plot animations")
+    parser = ArgumentParser("Plot RMSE")
     parser.add_argument(
         "--ckpt",
         type=Path,
