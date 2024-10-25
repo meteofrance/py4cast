@@ -1,3 +1,4 @@
+import json
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from copy import deepcopy
@@ -520,10 +521,18 @@ class StateErrorPlot(Plotter):
                 loss = torch.mean(loss_tensor, dim=0)
 
                 # Log metrics in tensorboard, with x axis as forecast timestep
+                loss_dict = {self.shortnames[k]: [] for k in range(loss.shape[1])}
                 for t in range(loss.shape[0]):
                     for k in range(loss.shape[1]):
                         scalar_name = f"{label}_{name}/timestep_{self.shortnames[k]}"
                         tensorboard.add_scalar(scalar_name, loss[t][k], t + 1)
+                        loss_dict[self.shortnames[k]].append(loss[t][k].item())
+
+                # Save metrics in json file
+                with open(
+                    self.save_path / f"{label}_{name}_scores.json", "w"
+                ) as json_file:
+                    json.dump(loss_dict, json_file)
 
                 # Plot the score card
                 if not obj.trainer.sanity_checking:
