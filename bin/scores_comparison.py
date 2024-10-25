@@ -42,8 +42,7 @@ def plot_scores(features: List[str], data: dict, max_timestep: int = 12) -> None
         figsize = (4 * cols, 5 * lines)
 
     fig = plt.figure(constrained_layout=True, figsize=figsize, dpi=200)
-    axes = fig.subplots(nrows=lines, ncols=cols)
-    axs = axes.flat
+    axs = fig.subplots(nrows=lines, ncols=cols).flat
 
     for i, feature in enumerate(features):
         max_rmse = 0
@@ -70,7 +69,7 @@ if __name__ == "__main__":
     parser = ArgumentParser("Plot animations")
     parser.add_argument(
         "--ckpt",
-        type=str,
+        type=Path,
         action="append",
         help="Paths to the AI model checkpoint",
         required=True,
@@ -86,10 +85,9 @@ if __name__ == "__main__":
     scores = {}
     models_names = []
     for ckpt in args.ckpt:
-        path = Path(ckpt)
-        with open(path.parent / "Test_rmse_scores.json", "r") as json_file:
+        with open(ckpt.parent / "Test_rmse_scores.json", "r") as json_file:
             loaded_data = json.load(json_file)
-        model_name = f"{path.parent.name}"
+        model_name = f"{ckpt.parent.name}"
         scores[model_name] = loaded_data
 
     plot_scores(
