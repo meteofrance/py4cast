@@ -1,3 +1,20 @@
+"""Plots graphs comparing RMSE of multiple models on 4 surface features.
+Warnings - For now this script only works with models trained with Titan dataset.
+         - You must have launched the test.py script on each model you want to compare
+
+usage: scores_comparison.py [-h] --ckpt CKPT [--num_pred_steps NUM_PRED_STEPS]
+
+options:
+  -h, --help            show this help message and exit
+  --ckpt CKPT           Paths to the model checkpoint
+  --num_pred_steps NUM_PRED_STEPS
+                        Number of auto-regressive prediction steps.
+
+example: python bin/scores_comparison.py --ckpt /.../logs/my_run0/epoch=247.ckpt
+                                         --ckpt /.../logs/my_run1/epoch=247.ckpt
+                                         --num_pred_steps 10
+"""
+
 import json
 import math
 from argparse import ArgumentParser
@@ -62,7 +79,7 @@ if __name__ == "__main__":
         "--num_pred_steps",
         type=int,
         default=12,
-        help="Number of auto-regressive steps/prediction steps.",
+        help="Number of auto-regressive prediction steps.",
     )
     args = parser.parse_args()
 
