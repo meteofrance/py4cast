@@ -4,7 +4,6 @@ Segformer inspired from https://github.com/lucidrains/segformer-pytorch
 and adapted to our needs (upsampler + extra settings)
 """
 
-
 from dataclasses import dataclass
 from functools import partial
 from math import sqrt
@@ -195,7 +194,7 @@ class MiT(nn.Module):
 
         layer_outputs = []
         i = 0
-        for (get_overlap_patches, overlap_embed, layers) in self.stages:
+        for get_overlap_patches, overlap_embed, layers in self.stages:
             x = get_overlap_patches(x)
 
             num_patches = x.shape[-1]
@@ -203,7 +202,7 @@ class MiT(nn.Module):
             x = rearrange(x, "b c (h w) -> b c h w", h=h // ratio)
 
             x = overlap_embed(x)
-            for (attn, ff) in layers:
+            for attn, ff in layers:
                 x = attn(x) + x
                 x = ff(x) + x
 

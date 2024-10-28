@@ -2,7 +2,6 @@
 A simple plugin example for py4cast model with a Identity model.
 """
 
-
 from dataclasses import dataclass
 
 import torch

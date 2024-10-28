@@ -4,7 +4,6 @@ import torch
 
 
 class RegisterDictMixin:
-
     """
     Register dictionnaries.
     Enable to recursively register dictionnary (or other object with a getitem method).

@@ -107,7 +107,7 @@ def mk_2d_graph(xy, nx, ny):
 
     # turn into directed graph
     dg = networkx.DiGraph(g)
-    for (u, v) in g.edges():
+    for u, v in g.edges():
         d = np.sqrt(np.sum((g.nodes[u]["pos"] - g.nodes[v]["pos"]) ** 2))
         dg.edges[u, v]["len"] = d
         dg.edges[u, v]["vdiff"] = g.nodes[u]["pos"] - g.nodes[v]["pos"]

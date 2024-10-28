@@ -5,7 +5,7 @@ from copy import deepcopy
 from dataclasses import asdict, dataclass
 from functools import cached_property
 from pathlib import Path
-from typing import List, Tuple, Union
+from typing import Dict, List, Tuple, Union
 
 import einops
 import matplotlib
@@ -16,12 +16,18 @@ from torch import nn
 from torchinfo import summary
 from transformers import get_cosine_schedule_with_warmup
 
-from py4cast.datasets.base import DatasetInfo, ItemBatch, NamedTensor
+from py4cast.datasets import get_datasets
+from py4cast.datasets.base import (
+    DatasetInfo,
+    ItemBatch,
+    NamedTensor,
+    TorchDataloaderSettings,
+)
 from py4cast.losses import ScaledLoss, WeightedLoss
 from py4cast.metrics import MetricACC, MetricPSDK, MetricPSDVar
 from py4cast.models import build_model_from_settings, get_model_kls_and_settings
 from py4cast.models.base import expand_to_batch
-from py4cast.observer import (
+from py4cast.plots import (
     PredictionEpochPlot,
     PredictionTimestepPlot,
     SpatialErrorPlot,
@@ -34,6 +40,58 @@ LR_SCHEDULER_PERIOD: int = 10
 
 # PNG plots period in epochs. Plots are made, logged and saved every nth epoch.
 PLOT_PERIOD: int = 10
+
+
+@dataclass
+class PlDataModule(pl.LightningDataModule):
+    """
+    DataModule to encapsulate data splits and data loading.
+    """
+
+    dataset: str
+    num_input_steps: int
+    num_pred_steps_train: int
+    num_pred_steps_val_test: int
+    dl_settings: TorchDataloaderSettings
+    dataset_conf: Union[Path, None] = None
+    config_override: Union[Dict, None] = (None,)
+
+    def __post_init__(self):
+        super().__init__()
+
+        # Get dataset in initialisation to have access to this attribute before method trainer.fit
+        self.train_ds, self.val_ds, self.test_ds = get_datasets(
+            self.dataset,
+            self.num_input_steps,
+            self.num_pred_steps_train,
+            self.num_pred_steps_val_test,
+            self.dataset_conf,
+            self.config_override,
+        )
+
+    @property
+    def len_train_dl(self):
+        return len(self.train_ds.torch_dataloader(self.dl_settings))
+
+    @property
+    def train_dataset_info(self):
+        return self.train_ds.dataset_info
+
+    @property
+    def infer_ds(self):
+        return self.test_ds
+
+    def train_dataloader(self):
+        return self.train_ds.torch_dataloader(self.dl_settings)
+
+    def val_dataloader(self):
+        return self.val_ds.torch_dataloader(self.dl_settings)
+
+    def test_dataloader(self):
+        return self.test_ds.torch_dataloader(self.dl_settings)
+
+    def predict_dataloader(self):
+        return self.test_ds.torch_dataloader(self.dl_settings)
 
 
 @dataclass
@@ -367,7 +425,7 @@ class AutoRegressiveLightning(pl.LightningModule):
             with torch.cuda.amp.autocast(dtype=self.dtype):
                 return self._common_step(batch, inference)
         else:
-            if "bf16" in self.trainer.precision:
+            if not inference and "bf16" in self.trainer.precision:
                 with torch.cpu.amp.autocast(dtype=self.dtype):
                     return self._common_step(batch, inference)
             else:
@@ -413,16 +471,17 @@ class AutoRegressiveLightning(pl.LightningModule):
 
         # Here we do the autoregressive prediction looping
         # for the desired number of ar steps.
-
         for i in range(batch.num_pred_steps):
             if not inference:
                 border_state = batch.outputs.select_dim("timestep", i)
 
             if scale_y:
                 step_diff_std, step_diff_mean = self._step_diffs(
-                    self.output_feature_names
-                    if inference
-                    else batch.outputs.feature_names,
+                    (
+                        self.output_feature_names
+                        if inference
+                        else batch.outputs.feature_names
+                    ),
                     prev_states.device,
                 )
 
@@ -589,7 +648,7 @@ class AutoRegressiveLightning(pl.LightningModule):
 
     def on_validation_start(self):
         """
-        Add some observers when starting validation
+        Add some plots when starting validation
         """
         if self.logging_enabled:
             l1_loss = ScaledLoss("L1Loss", reduction="none")

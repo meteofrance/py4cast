@@ -170,10 +170,25 @@ Our tests cover:
 - The NamedTensor class
 - The models, we make sure they can be instanciated and trained in a pure PyTorch training loop.
 
+## Linting/Reformating your code
+
+You can run the same linting checks the CI does :
+
+```
+runai exec ./lint.sh .
+```
+
+And also reformat your code (black, isort) :
+```
+runai exec ./reformat.sh .
+```
+
+For conda users remove the **runai exec** prefix.
+
 
 ### Continuous Integration
 
-We have a gitlab CI pipeline that runs linting (flake8, isort, black, bandit) and tests on every push to the repository. See the [gitlab-ci.yml](../.gitlab-ci.yml) file for more details.
+We have a github pipeline that runs linting (flake8, isort, black, bandit) and tests on every push to the repository. See the [github workflow](../.github/workflows/tests.yml) file for more details.
 
 Our CI also launches two runs of the full system (*bin/train.py*) with our **Dummy** dataset using **HiLam** and **HalfUnet32**.
 
