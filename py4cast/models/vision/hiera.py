@@ -434,7 +434,7 @@ class Hiera(nn.Module, PyTorchModelHubMixin):
                 output_channels=num_output_features,
                 input_shape=input_shape,
                 bottleneck_shape = self.bottleneck_shape, # (Patched image, embedding)
-                settings=HalfUNetSettings(),
+                settings=HalfUnetDecoderSettings(),
             )
         else:
             raise Exception(f"unknwon decoder: {settings.decoder}")
@@ -1102,7 +1102,7 @@ class _b:
 
 @dataclass_json
 @dataclass(slots=True)
-class HalfUNetSettings:
+class HalfUNetDecoderSettings:
     embed_dim: int = 96  # initial embed dim
     dilation: int = 1
     bias: bool = False
@@ -1150,7 +1150,7 @@ class GhostModule(nn.Module):
 
 
 class HalfUNetDecoder(nn.Module):
-    settings_kls = HalfUNetSettings
+    settings_kls = HalfUnetDecoderSettings
     onnx_supported = True
     input_dims: Tuple[str, ...] = ("batch", "height", "width", "features")
     output_dims: Tuple[str, ...] = ("batch", "height", "width", "features")
@@ -1160,7 +1160,7 @@ class HalfUNetDecoder(nn.Module):
         input_shape: Union[Sequence[int], int],
         output_channels: int,
         bottleneck_shape: Union[Sequence[int], int], # [Patched image, embedding]
-        settings = HalfUNetSettings,
+        settings = HalfUnetDecoderSettings,
         *args,
         **kwargs,
     ):
