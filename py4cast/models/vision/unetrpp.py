@@ -851,6 +851,3 @@ class UNETRPP(ModelABC, nn.Module):
         logits = features_second_to_last(logits)
 
         return logits
-        x = x.reshape(B, C, self.dim1, self.dim0)
-        # print("x final:", x.shape)
-        return x
