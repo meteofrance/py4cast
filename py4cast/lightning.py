@@ -9,7 +9,8 @@ from typing import Dict, List, Tuple, Union
 
 import einops
 import matplotlib
-import pytorch_lightning as pl
+# import pytorch_lightning as pl
+import lightning as pl
 import torch
 from lightning.pytorch.utilities import rank_zero_only
 from torch import nn
@@ -54,7 +55,7 @@ class PlDataModule(pl.LightningDataModule):
     num_pred_steps_val_test: int
     dl_settings: TorchDataloaderSettings
     dataset_conf: Union[Path, None] = None
-    config_override: Union[Dict, None] = (None,)
+    config_override: Union[Dict, None] = None
 
     def __post_init__(self):
         super().__init__()

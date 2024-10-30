@@ -369,7 +369,6 @@ if args.load_model_ckpt:
 else:
     lightning_module = AutoRegressiveLightning(hp)
 
-
 # Train model
 print("Starting training !")
 trainer.fit(

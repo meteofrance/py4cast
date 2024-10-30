@@ -1,0 +1,83 @@
+
+data:
+  dataset: "poesy"
+  num_input_steps: 2
+  num_pred_steps_train: 1
+  num_pred_steps_val_test: 5
+  dl_settings: 
+    batch_size: 4
+    num_workers: 10
+    prefetch_factor: null
+    pin_memory: False
+  dataset_conf: null
+  config_override: null
+    
+
+model:
+  hparams:
+    # dataset_info: DatasetInfo
+    dataset_name: "poesy"
+    dataset_conf: null
+    batch_size: 4
+    model_name: "halfunet"
+    model_conf: null
+    num_input_steps: 2
+    num_pred_steps_train: 1
+    num_pred_steps_val_test: 5
+    num_inter_steps: 1
+    lr: 1e-4
+    loss: "mse"
+    training_strategy: "diff_ar"
+    # len_train_loader: int = 1
+    # save_path: Path = None
+    use_lr_scheduler: False
+    precision: "32"
+    no_log: False
+    channels_last: False
+
+trainer:
+  # num_nodes=int(os.environ.get("SLURM_NNODES", 1)),
+  devices: "auto"
+  max_epochs: 200
+  deterministic: True
+  strategy: "ddp"
+  accumulate_grad_batches: 10
+  # accelerator=device_name,
+  # logger=logger,
+  # profiler=profiler,
+  log_every_n_steps: 1
+  callbacks:
+    - class_path: lightning.pytorch.callbacks.ModelCheckpoint
+      init_args:
+        # dirpath: save_path
+        filename: "{epoch:02d}-{val_mean_loss:.2f}"
+        monitor: "val_mean_loss"
+        mode: "min"
+        save_top_k: 1  # Save only the best model
+        save_last: True  # Also save the last model
+    - class_path: lightning.pytorch.callbacks.LearningRateMonitor
+      init_args:
+        logging_interval: "step"
+    - class_path: lightning.pytorch.callbacks.EarlyStopping
+      init_args:
+        monitor: "val_mean_loss"
+        mode: "min"
+        patience: 50
+  check_val_every_n_epoch: 1
+  precision: 32
+  limit_train_batches: null
+  limit_val_batches: null
+  limit_test_batches: null
+
+
+
+# extra_args:
+#   campaign_name: "camp0"
+#   run_name: "run"
+#   dev_mode: False
+#   seed: 42
+#   no_log: False
+#   profiler: "None"
+#   load_model_ckpt: null
+
+
