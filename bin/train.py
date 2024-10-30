@@ -28,6 +28,10 @@ from py4cast.lightning import (
 from py4cast.models import registry as model_registry
 from py4cast.settings import ROOTDIR
 
+import mlflow.tracking
+import mlflow.pytorch
+
+
 layout = {
     "Check Overfit": {
         "loss": ["Multiline", ["mean_loss_epoch/train", "mean_loss_epoch/validation"]],
@@ -375,9 +379,24 @@ if args.load_model_ckpt and not args.resume_from_ckpt:
 else:
     lightning_module = AutoRegressiveLightning(hp)
 
+def autolog(status):
+    if trainer.global_rank == 0:
+        if status == "on":
+            mlflow.pytorch.autolog(
+                log_models=False,
+                checkpoint_monitor='val_mean_loss',
+                checkpoint_save_freq=10
+            )
+        elif status == "off":
+            mlflow.pytorch.autolog(
+                disable=True
+            )
+
+autolog('on')
 # Train model
 print("Starting training !")
 trainer.fit(model=lightning_module, datamodule=dm, ckpt_path=args.resume_from_ckpt)
+autolog('off')
 
 if not args.no_log:
     # If we saved a model, we test it.
@@ -389,3 +408,13 @@ if not args.no_log:
         f"Testing using {'best' if best_checkpoint else 'last'} model at {model_to_test}"
     )
     trainer.test(ckpt_path=model_to_test, datamodule=dm)
+
+if trainer.global_rank == 0:
+
+    run_id = mlflow.last_active_run().info.run_id
+    mlflow.tracking.MlflowClient().set_tag(run_id, "mlflow.runName", subfolder)
+    with mlflow.start_run(run_id=run_id):
+        mlflow.pytorch.log_model(
+            pytorch_model=trainer.model,
+            artifact_path="model",
+        )
