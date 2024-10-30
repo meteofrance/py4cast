@@ -30,7 +30,7 @@ from py4cast.settings import ROOTDIR
 
 import mlflow.tracking
 import mlflow.pytorch
-
+from mlflow.models.signature import infer_signature
 
 layout = {
     "Check Overfit": {
@@ -387,13 +387,18 @@ def autolog(status):
                 checkpoint_monitor='val_mean_loss',
                 checkpoint_save_freq=10
             )
+            print("Mlflow autologing activated")
         elif status == "off":
             mlflow.pytorch.autolog(
                 disable=True
             )
+            print("Mlflow autologing deactivated")
+        else:
+            raise RuntimeError(f"Status {status} not supported.")
 
-autolog('on')
+
 # Train model
+autolog('on')
 print("Starting training !")
 trainer.fit(model=lightning_module, datamodule=dm, ckpt_path=args.resume_from_ckpt)
 autolog('off')
@@ -411,10 +416,22 @@ if not args.no_log:
 
 if trainer.global_rank == 0:
 
+    # Get random sample to infer the signature of the model
+    dataloader = dm.test_dataloader()
+    data = next(iter(dataloader))
+    signature = infer_signature(
+        data.inputs.tensor.detach().numpy(),
+        data.outputs.tensor.detach().numpy()
+    )
+
+    # Get the reference run and rename it to match the tensorboard name
     run_id = mlflow.last_active_run().info.run_id
     mlflow.tracking.MlflowClient().set_tag(run_id, "mlflow.runName", subfolder)
+
+    # Log the trained model in Mlflow with its signature
     with mlflow.start_run(run_id=run_id):
         mlflow.pytorch.log_model(
             pytorch_model=trainer.model,
             artifact_path="model",
+            signature=signature
         )
