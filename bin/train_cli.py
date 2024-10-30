@@ -16,6 +16,10 @@ from py4cast.settings import ROOTDIR
     
 #     def __init__(self, model_class, datamodule_class):
 #         super().__init__(model_class, datamodule_class)
+    
+#     def add_arguments_to_parser(self, parser):
+#         parser.link_arguments("data.train_dataset_info", "model.hparams.dataset_info", apply_on="instantiate")
+#         pass
 
 def cli_main():
     cli = LightningCLI(AutoRegressiveLightning, PlDataModule)
