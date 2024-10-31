@@ -98,11 +98,13 @@ When working at Météo-France, you can use either runai + Docker or Conda/Micro
 
 See the [runai repository](https://git.meteo.fr/dsm-labia/monorepo4ai) for installation instructions.
 
+For HPC, see the related doc (doc/install/install_MF.md) to get the right installation settings.
+
 ### Install with conda
 
 You can install a conda environment, including `py4cast` in editable mode, using
 ```sh
-conda env create --file env_conda.yaml
+conda env create --file env.yaml
 ```
 
 From an exixting conda environment, you can now install manually `py4cast` in development mode using
@@ -128,10 +130,158 @@ From an exixting micromamba environment, you can now install manually `py4cast` 
 pip install --editable .
 ```
 
+### Build docker image
+
+To build the docker image please use the `oci-image-build.sh` script.
+```sh
+bash ./oci-image-build.sh --runtime docker
+```
+By default, the `CUDA` and `pytorch` version are extracted from the `env.yaml` reference file. Nevertheless, for test purpose, you can set the **PY4CAST_CUDA_VERSION** and **PY4CAST_TORCH_VERSION** to override the default versions.
+
+### Build podman image
+
+As an alternative to docker, you can use podman to build the image.
+
+<details>
+<summary>Click to expand</summary>
+
+To build the podman image please use the `oci-image-build.sh` script.
+```sh
+bash ./oci-image-build.sh --runtime podman
+```
+By default, the `CUDA` and `pytorch` version are extracted from the `env.yaml` reference file. Nevertheless, for test purpose, you can set the **PY4CAST_CUDA_VERSION** and **PY4CAST_TORCH_VERSION** to override the default versions.
+
+</details>
+
+### Convert to Singularity image
+
+From a previously built docker or podman image, you can convert it to the singularity format.
+
+<details>
+<summary>Click to expand</summary>
+
+To convert the previously built image to a Singularity container, you have to first save the image as a `tar` file:
+```sh
+docker save py4cast:your_tag -o py4cast-your_tag.tar
+```
+or with podman:
+```sh
+podman save --format oci-archive py4cast:your_tag -o py4cast-your_tag.tar
+```
+
+Then, build the singularity image with:
+```sh
+singularity build py4cast-your_tag.sif docker-archive://py4cast-your_tag.tar
+```
+Please, be sure to get enough free disk space to store the .tar and .sif files.
+
+</details>
 
 ## Usage
 
-### Docker and runai
+### Docker
+
+From your `py4cast` source directory, to run an experiment using the docker image you need to mount in the container :
+- The dataset path
+- The py4cast sources
+- The PY4CAST_ROOTDIR path
+
+Here is an example of command to run a "dev_mode" training of the HiLam model with the TITAN dataset, using all the GPUs:
+```sh
+docker run \
+    --name hilam-titan \
+    --rm \
+    --gpus all \
+    -v ./${HOME} \
+    -v <path-to-datasets>/TITAN:/dataset/TITAN \
+    -v <your_py4cast_root_dir>:<your_py4cast_root_dir> \
+    -e PY4CAST_ROOTDIR=<your_py4cast_root_dir> \
+    -e PY4CAST_TITAN_PATH=/dataset/TITAN \
+    py4cast:<your_tag> \
+    bash -c " \
+        pip install -e . &&  \
+        python bin/train.py \
+            --dataset titan \
+            --model hilam \
+            --dataset_conf config/datasets/titan_full.json \
+            --dev_mode \
+            --no_log \
+            --num_pred_steps_val_test 1 \
+            --num_input_steps 1 \
+    "
+```
+
+### Podman
+
+<details>
+<summary>Click to expand</summary>
+
+From your `py4cast` source directory, to run an experiment using the podman image you need to mount in the container :
+- The dataset path
+- The py4cast sources
+- The PY4CAST_ROOTDIR path
+
+Here is an example of command to run a "dev_mode" training of the HiLam model with the TITAN dataset, using all the GPUs:
+```sh
+podman run \
+    --name hilam-titan \
+    --rm \
+    --device nvidia.com/gpu=all \
+    --ipc=host \
+    --network=host \
+    -v ./${HOME} \
+    -v <path-to-datasets>/TITAN:/dataset/TITAN \
+    -v <your_py4cast_root_dir>:<your_py4cast_root_dir> \
+    -e PY4CAST_ROOTDIR=<your_py4cast_root_dir> \
+    -e PY4CAST_TITAN_PATH=/dataset/TITAN \
+    py4cast:<your_tag> \
+    bash -c " \
+        pip install -e . &&  \
+        python bin/train.py \
+            --dataset titan \
+            --model hilam \
+            --dataset_conf config/datasets/titan_full.json \
+            --dev_mode \
+            --no_log \
+            --num_pred_steps_val_test 1 \
+            --num_input_steps 1 \
+    "
+```
+</details>
+
+### Singularity
+
+<details>
+<summary>Click to expand</summary>
+
+From your `py4cast` source directory, to run an experiment using a singularity container you need to mount in the container :
+- The dataset path
+- The PY4CAST_ROOTDIR path
+
+Here is an example of command to run a "dev_mode" training of the HiLam model with the TITAN dataset:
+```sh
+PY4CAST_TITAN_PATH=/dataset/TITAN \
+PY4CAST_ROOTDIR=<your_py4cast_root_dir> \
+singularity exec \
+    --nv \
+    --bind <path-to-datasets>/TITAN:/dataset/TITAN \
+    --bind <your_py4cast_root_dir>:<your_py4cast_root_dir> \
+    py4cast-<your_tag>.sif \
+    bash -c " \
+        pip install -e . &&  \
+        python bin/train.py \
+            --dataset titan \
+            --model hilam \
+            --dataset_conf config/datasets/titan_full.json \
+            --dev_mode \
+            --no_log \
+            --num_pred_steps_val_test 1 \
+            --num_input_steps 1 \
+    "
+```
+</details>
+
+### runai
 
 For now this works only for internal Météo-France users.
 
@@ -337,17 +487,23 @@ options:
   --date DATE
                         Date of the sample to infer on. Format:YYYYMMDDHH
   --dataset DATASET
-                        Name of the dataset config file to use
+                        Name of the dataset to use (typically the same as has been used for training)
+  --dataset_conf DATASET_CONF
+                        Name of the dataset config file (json, to change e.g dates, leadtimes, etc)
   --infer_steps INFER_STEPS
                         Number of auto-regressive steps/prediction steps during the inference
    --precision PRECISION
-                        floating point precision for the inference (default: 32) 
+                        floating point precision for the inference (default: 32)
+   --grib BOOL
+                        Whether the outputs should be saved as grib, needs saving conf.
+   --saving_conf SAVING_CONF
+                        Name of the config file for write settings (json)
 ```
 
 A simple example of inference is shown below:
 
 ```bash
- runai exec_gpu python bin/inference.py --model_path /scratch/shared/py4cast/logs/camp0/poesy/halfunet/sezn_run_dev_30 --date 2021061621 --dataset poesy_infer --infer_steps 2
+ runai exec_gpu python bin/inference.py --model_path /scratch/shared/py4cast/logs/camp0/poesy/halfunet/sezn_run_dev_12 --date 2021061621 --dataset poesy_infer --infer_steps 2
 ```
 
 ### Making animated plots comparing multiple models

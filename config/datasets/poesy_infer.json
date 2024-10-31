@@ -17,7 +17,7 @@
         }
     },
     "grid":{
-        "geometry":"EURW1S40", 
+        "geometry":"EURW1S40_gribcompat", 
         "border_size":10, 
         "domain":"france",
         "model":"arome",
@@ -46,19 +46,17 @@
                 12,
                 13,
                 14,
-                15,
-                16
+                15
             ],
             "term": {
                 "start": 0,
-                "end": 44,
+                "end": 2,
                 "timestep": 1
             },
             "var": {
-                "TEMPERATURE_2m": {"shortname":"t2m", "level": [1]},
-                "PRECIPITATIONS_DECUM":{"shortname":"rrdecum","level": [1]},
-                "WIND.U.PHYS":{"shortname":"u","level": [1]},
-                "WIND.V.PHYS":{"shortname":"v","level": [1]}
+                "TEMPERATURE_2m": {"shortname":"t2m", "filename": "t2m", "level": [2], "typeOfLevel" : "heightAboveGround", "unit" : "K"},
+                "PRECIPITATIONS_DECUM":{"shortname":"tirf", "filename": "rrdecum", "level": [0],"typeOfLevel" : "surface", "unit" : "kg * m **-2"},
+                "WIND.U.PHYS":{"shortname":"u10", "filename": "u","level": [10], "typeOfLevel" : "heightAboveGround", "unit" : "m * s**-1"}
                 }
             }
         }
