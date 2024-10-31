@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytorch_lightning as pl
 import torch
-from lightning.pytorch.loggers import TensorBoardLogger
+from lightning.pytorch.loggers import TensorBoardLogger, MLFlowLogger
 from lightning.pytorch.profilers import AdvancedProfiler, PyTorchProfiler
 from lightning_fabric.utilities import seed
 from pytorch_lightning.callbacks import LearningRateMonitor
@@ -305,19 +305,27 @@ hp = ArLightningHyperParam(
 # Logger & checkpoint callback
 callback_list = []
 if args.no_log:
-    logger = None
+    loggers = None
 else:
     print(
         "--> Model, checkpoints, and tensorboard artifacts "
         + f"will be saved in {save_path}."
     )
-    logger = TensorBoardLogger(
-        save_dir=log_dir,
-        name=folder,
-        version=subfolder,
-        default_hp_metric=False,
-    )
-    logger.experiment.add_custom_scalars(layout)
+    loggers = {
+        "TensorBoardLogger": TensorBoardLogger(
+            save_dir=log_dir,
+            name=folder,
+            version=subfolder,
+            default_hp_metric=False,
+        ),
+        "MLFlowLogger": MLFlowLogger(
+            experiment_name=os.getenv("MLFLOW_EXPERIMENT_NAME", str(folder)),
+            run_name=subfolder,
+            log_model=True,
+            save_dir=log_dir / 'mlflow'
+        )
+    }
+    loggers["TensorBoardLogger"].experiment.add_custom_scalars(layout)
     checkpoint_callback = pl.callbacks.ModelCheckpoint(
         dirpath=save_path,
         filename="{epoch:02d}-{val_mean_loss:.2f}",  # Custom filename pattern
@@ -361,7 +369,7 @@ trainer = pl.Trainer(
     strategy="ddp",
     accumulate_grad_batches=10,
     accelerator=device_name,
-    logger=logger,
+    logger=loggers.values(),
     profiler=profiler,
     log_every_n_steps=1,
     callbacks=callback_list,
@@ -379,29 +387,9 @@ if args.load_model_ckpt and not args.resume_from_ckpt:
 else:
     lightning_module = AutoRegressiveLightning(hp)
 
-def autolog(status):
-    if trainer.global_rank == 0:
-        if status == "on":
-            mlflow.pytorch.autolog(
-                log_models=False,
-                checkpoint_monitor='val_mean_loss',
-                checkpoint_save_freq=10
-            )
-            print("Mlflow autologing activated")
-        elif status == "off":
-            mlflow.pytorch.autolog(
-                disable=True
-            )
-            print("Mlflow autologing deactivated")
-        else:
-            raise RuntimeError(f"Status {status} not supported.")
-
-
 # Train model
-autolog('on')
 print("Starting training !")
 trainer.fit(model=lightning_module, datamodule=dm, ckpt_path=args.resume_from_ckpt)
-autolog('off')
 
 if not args.no_log:
     # If we saved a model, we test it.
@@ -415,7 +403,6 @@ if not args.no_log:
     trainer.test(ckpt_path=model_to_test, datamodule=dm)
 
 if trainer.global_rank == 0:
-
     # Get random sample to infer the signature of the model
     dataloader = dm.test_dataloader()
     data = next(iter(dataloader))
@@ -424,14 +411,15 @@ if trainer.global_rank == 0:
         data.outputs.tensor.detach().numpy()
     )
 
-    # Get the reference run and rename it to match the tensorboard name
-    run_id = mlflow.last_active_run().info.run_id
-    mlflow.tracking.MlflowClient().set_tag(run_id, "mlflow.runName", subfolder)
-
-    # Log the trained model in Mlflow with its signature
+    # Manually log the trained model in Mlflow style with its signature
+    run_id = loggers["MLFlowLogger"].version
     with mlflow.start_run(run_id=run_id):
         mlflow.pytorch.log_model(
             pytorch_model=trainer.model,
             artifact_path="model",
             signature=signature
+        )
+        mlflow.log_artifacts(
+            local_dir=save_path / "epoch_evol_per_param",
+            artifact_path="epoch_evol_per_param"
         )
