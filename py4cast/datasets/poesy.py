@@ -282,7 +282,6 @@ class Sample:
         """
 
         for param in param_list:
-
             if not param.exist(self.date):
                 return False
 
@@ -373,10 +372,8 @@ class PoesyDataset(DatasetABC, Dataset):
         for date in self.period.date_list:
             for member in self.settings.members:
                 for sample in range(0, sample_by_date):
-
                     input_terms = terms[
-                        sample
-                        * self.settings.num_total_steps : sample
+                        sample * self.settings.num_total_steps : sample
                         * self.settings.num_total_steps
                         + self.settings.num_input_steps
                     ]
@@ -396,7 +393,6 @@ class PoesyDataset(DatasetABC, Dataset):
                     )
 
                     if samp.is_valid(self.params):
-
                         samples.append(samp)
                         number += 1
         print("All samples are now defined")
@@ -462,7 +458,6 @@ class PoesyDataset(DatasetABC, Dataset):
         member: int = 1,
         inference_steps: int = 0,
     ) -> torch.tensor:
-
         if self.settings.standardize:
             names = param.parameter_short_name
             means = np.asarray([self.stats[name]["mean"] for name in names])
@@ -831,10 +826,8 @@ class InferPoesyDataset(PoesyDataset):
         for date in self.period.date_list:
             for member in self.settings.members:
                 for sample in range(0, sample_by_date):
-
                     input_terms = terms[
-                        sample
-                        * self.settings.num_total_steps : sample
+                        sample * self.settings.num_total_steps : sample
                         * self.settings.num_total_steps
                         + self.settings.num_input_steps
                     ]
@@ -918,7 +911,6 @@ class InferPoesyDataset(PoesyDataset):
 
 
 if __name__ == "__main__":
-
     path_config = "config/datasets/poesy.json"
 
     parser = ArgumentParser(description="Prepare Poesy dataset and test loading speed.")

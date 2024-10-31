@@ -53,6 +53,6 @@ RUN curl -fsSL https://code-server.dev/install.sh | sh
 RUN pip install timm
 RUN pip install timm --upgrade
 RUN pip install tqdm
-
-
-
+RUN pip install evaluate
+RUN pip install wget
+RUN pip install h5netcdf matplotlib wget pyyaml xarray scipy torch

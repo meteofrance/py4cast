@@ -2,6 +2,7 @@
 Abstract Base Class for all models
 Contains also a few functionnality used in various model.
 """
+
 from abc import ABC, abstractproperty
 from typing import Tuple
 

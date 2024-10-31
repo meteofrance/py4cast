@@ -8,7 +8,6 @@ from py4cast.datasets.base import TorchDataloaderSettings
 from py4cast.lightning import AutoRegressiveLightning
 
 if __name__ == "__main__":
-
     # Parse arguments: model_path, dataset name and config file and finally date for inference
     parser = argparse.ArgumentParser("py4cast Inference script")
     parser.add_argument("--model_path", type=str, help="Path to the model checkpoint")

@@ -3,6 +3,7 @@ A dummy dataset for documentation and testing purposes.
 Can be used as a starting point to implement your own dataset.
 inputs, outputs and forcing are filled with random tensors.
 """
+
 from dataclasses import dataclass
 from functools import cached_property
 from io import BytesIO

@@ -4,6 +4,7 @@ occur when doing  standardisation
 of Torch tensor on CPU.
 Using numpy seems to work fine.
 """
+
 import gc
 import json
 import os
@@ -168,7 +169,6 @@ def test5(samples: int, pmem: bool = True):
     print("Test5")
     lmem = []
     for i in range(loader.size):
-
         mem = current_memory_usage()
         lmem.append(mem)
         if pmem:

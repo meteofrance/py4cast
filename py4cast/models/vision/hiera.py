@@ -262,7 +262,8 @@ class HieraSettings:
     head_dropout: float = 0.0
     head_init_scale: float = 0.001
     sep_pos_embed: bool = False
-    decoder: str = "hiera"  # hiera, unetrpp, halfunet
+    mask_ratio = 0.5 # mask_ratio fraction are dropped
+    decoder: str = "unetrpp"  # hiera, unetrpp, halfunet
 
 
 class Hiera(nn.Module, PyTorchModelHubMixin):
@@ -284,6 +285,7 @@ class Hiera(nn.Module, PyTorchModelHubMixin):
         if (input_shape[0] % 32 != 0) or (input_shape[1] % 32 != 0):
             raise Exception("input shapes need to be multiples of 32")
         self.copy_embed_dim = settings.embed_dim
+        self.mask_ratio = settings.mask_ratio
         """
         ENCODER PART
         """
@@ -497,13 +499,18 @@ class Hiera(nn.Module, PyTorchModelHubMixin):
         self,
         x: torch.Tensor,
         mask: torch.Tensor = None,
+        train: bool = False,
         return_intermediates: bool = False,
     ) -> torch.Tensor:
         """
         mask should be a boolean tensor of shape [B, #MUt*#MUy*#MUx] where #MU are the number of mask units in that dim.
         Note: 1 in mask is *keep*, 0 is *remove*; mask.sum(dim=-1) should be the same across the batch.
         """
+        if train:
+            mask = self.get_random_mask(x, self.mask_ratio)  # [B, #MUs_all]
 
+        # print()
+        # print()
         # print("x in hiera forward before last to second", x.shape)
         x = features_last_to_second(x)
 
@@ -512,6 +519,9 @@ class Hiera(nn.Module, PyTorchModelHubMixin):
             x = x[0]
         intermediates = []
         # print("x in hiera forward after last to second", x.shape)
+        # print("mask spatial shape", self.mask_spatial_shape)
+
+
         x = self.patch_embed(
             x,
             mask=mask.view(
@@ -529,10 +539,10 @@ class Hiera(nn.Module, PyTorchModelHubMixin):
         # print("x in hiera forward after unroll", x.shape)
 
         # Discard masked tokens
-        if mask is not None:
-            x = x[mask[..., None].tile(1, self.mu_size, x.shape[2])].view(
-                x.shape[0], -1, x.shape[-1]
-            )
+        # if mask is not None:
+        #    x = x[mask[..., None].tile(1, self.mu_size, x.shape[2])].view(
+        #        x.shape[0], -1, x.shape[-1]
+        #    )
         # print("x in hiera forward after mask is not none", x.shape)
         skip_list = []
         for i, blk in enumerate(self.blocks):
@@ -550,8 +560,9 @@ class Hiera(nn.Module, PyTorchModelHubMixin):
         if return_intermediates:
             return x, intermediates
 
-        # print("x in hiera forward FINAL", x.shape)
+        # [print]("x in hiera forward FINAL", x.shape)
         return self.decoder(skip_list, x)
+
 
 
 def apply_fusion_head(head: nn.Module, x: torch.Tensor) -> torch.Tensor:
@@ -569,27 +580,26 @@ def apply_fusion_head(head: nn.Module, x: torch.Tensor) -> torch.Tensor:
     return x
 
 
-class MaskedAutoencoderHiera(Hiera):
+class MAEHiera(Hiera):
     """Masked Autoencoder with Hiera backbone"""
 
     def __init__(
         self,
-        in_chans: int = 3,
-        patch_stride: Tuple[int, ...] = (4, 4),
-        mlp_ratio: float = 4.0,
-        decoder_embed_dim: int = 512,
-        decoder_depth: int = 8,
-        decoder_num_heads: int = 16,
-        norm_layer: nn.Module = partial(nn.LayerNorm, eps=1e-6),
-        **kwdargs,
+        num_input_features: int = 21,  # RGB=3, titan=21
+        num_output_features: int = 21,  # number of classes
+        settings=HieraSettings,
+        input_shape: Tuple[int, ...] = (64, 64),  # nb_pixel x nb_pixel
     ):
         super().__init__(
-            in_chans=in_chans,
-            patch_stride=patch_stride,
-            mlp_ratio=mlp_ratio,
-            norm_layer=norm_layer,
-            **kwdargs,
+            num_input_features,
+            num_output_features,
+            settings,
+            input_shape,
         )
+        decoder_embed_dim: int = 512
+        decoder_depth: int = 8
+        decoder_num_heads: int = 16
+        norm_layer: nn.Module = partial(nn.LayerNorm, eps=1e-6)
 
         del self.norm, self.head
         encoder_dim_out = self.blocks[-1].dim_out
@@ -640,20 +650,20 @@ class MaskedAutoencoderHiera(Hiera):
                     dim_out=decoder_embed_dim,
                     heads=decoder_num_heads,
                     norm_layer=norm_layer,
-                    mlp_ratio=mlp_ratio,
+                    mlp_ratio=settings.mlp_ratio,
                 )
                 for i in range(decoder_depth)
             ]
         )
         self.decoder_norm = norm_layer(decoder_embed_dim)
 
-        self.pred_stride = patch_stride[-1] * (
+        self.pred_stride = settings.patch_stride[-1] * (
             self.q_stride[-1] ** self.q_pool
         )  # patch stride of prediction
 
         self.decoder_pred = nn.Linear(
             decoder_embed_dim,
-            (self.pred_stride ** min(2, len(self.q_stride))) * in_chans,
+            (self.pred_stride ** min(2, len(self.q_stride))) * num_input_features,
         )  # predictor
         # --------------------------------------------------------------------------
 
@@ -792,8 +802,8 @@ class MaskedAutoencoderHiera(Hiera):
         Note: in mask, 0 is *visible*, 1 is *masked*
 
         x: e.g. [B, 3, H, W]
-        pred: [B * num_pred_tokens, num_pixels_in_pred_patch * in_chans]
-        label: [B * num_pred_tokens, num_pixels_in_pred_patch * in_chans]
+        pred: [B * num_pred_tokens, num_pixels_in_pred_patch * num_input_features]
+        label: [B * num_pred_tokens, num_pixels_in_pred_patch * num_input_features]
         """
         if len(self.q_stride) == 2:
             label = self.get_pixel_label_2d(x, mask)
@@ -991,8 +1001,15 @@ class PatchEmbed(nn.Module):
     def forward(
         self, x: torch.Tensor, mask: Optional[torch.Tensor] = None
     ) -> torch.Tensor:
+        # print()
+        # print("x shape", x.shape)
+        # print("self.proj shape", self.proj)
+        # print("mask shape", mask)
         x = do_masked_conv(x, self.proj, mask)
+        # print("x shape before reshape", x.shape)
         x = x.reshape(x.shape[0], x.shape[1], -1).transpose(2, 1)
+        # print("x shape after reshape", x.shape)
+        # print()
         return x
 
 
@@ -1008,7 +1025,6 @@ class HieraDecoderSettings:
     linear_upsampling: bool = True
     kernel_size: Union[Sequence[int], int] = 3
     upsample_kernel_size: Union[Sequence[int], int] = 4
-    linear_upsampling: bool = True
 
 class HieraDecoder(nn.Module):
     def __init__(
@@ -1396,16 +1412,20 @@ class UnetrppDecoder(nn.Module):  # "=" UnetrUpBlock
             height, width = self.input_shape
             #skip connection
             x = skip_list[k] + x
+            # print(x.shape)
             #attention block
             x = torch.permute(x, (0, 2, 1))
             B, C, _ = x.shape
+            # print(B, C, height/(4*2**k), width/(4*2**k))
             x = x.reshape(B, C, int(height/(4*2**k)), int(width/(4*2**k)))
             x = self.stage_blocks[i](x)
+            # print(x.shape)
             #conv
             B, C, H, W = x.shape
             x = x.reshape(B, C, H*W)
             x = self.transp_conv[i](x)
             x = torch.permute(x, (0, 2, 1))
+            # print(x.shape)
         B, _, C = x.shape
         x = x.reshape(B, C, self.input_shape[0], self.input_shape[1])
         x = torch.permute(x, (0, 2, 3, 1))

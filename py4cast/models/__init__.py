@@ -8,7 +8,7 @@ from py4cast.models.base import ModelABC
 from .nlam.models import GraphLAM, HiLAM, HiLAMParallel
 from .vision.conv import HalfUnet, Unet
 from .vision.transformers import Segformer, SwinUNETR
-from .vision.hiera import Hiera
+from .vision.hiera import Hiera, MAEHiera
 from .vision.unetrpp import UNETRPP
 
 # Models MUST be added to the registry
@@ -24,6 +24,7 @@ for kls in (
     SwinUNETR,
     UNETRPP,
     Hiera,
+    MAEHiera,
 ):
     registry[kls.__name__.lower()] = kls
 

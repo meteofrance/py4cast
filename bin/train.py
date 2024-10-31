@@ -24,6 +24,7 @@ from py4cast.datasets.base import TorchDataloaderSettings
 from py4cast.lightning import ArLightningHyperParam, AutoRegressiveLightning
 from py4cast.models import registry as model_registry
 from py4cast.settings import ROOTDIR
+from py4cast.MAE_lightning import MAELightningHyperParam, MAELightningModule
 
 layout = {
     "Check Overfit": {
@@ -289,6 +290,25 @@ hp = ArLightningHyperParam(
     channels_last=args.channels_last,
 )
 
+hp = MAELightningHyperParam(
+    dataset_info=datasets[0].dataset_info,
+    dataset_name=args.dataset,
+    dataset_conf=args.dataset_conf,
+    batch_size=args.batch_size,
+    model_name=args.model,
+    model_conf=args.model_conf,
+    lr=args.lr,
+    loss=args.loss,
+    training_strategy=args.strategy,
+    len_train_loader=len_loader,
+    save_path=save_path,
+    use_lr_scheduler=args.use_lr_scheduler,
+    precision=args.precision,
+    no_log=args.no_log,
+    channels_last=args.channels_last,
+    dev_mode=True
+)
+
 # Logger & checkpoint callback
 callback_list = []
 if args.no_log:
@@ -305,6 +325,7 @@ else:
         default_hp_metric=False,
     )
     logger.experiment.add_custom_scalars(layout)
+
     checkpoint_callback = pl.callbacks.ModelCheckpoint(
         dirpath=save_path,
         filename="{epoch:02d}-{val_mean_loss:.2f}",  # Custom filename pattern
@@ -358,13 +379,20 @@ trainer = pl.Trainer(
     limit_val_batches=args.limit_train_batches,  # No reason to spend hours on validation if we limit the training.
     limit_test_batches=args.limit_train_batches,
 )
+'''
 if args.load_model_ckpt:
     lightning_module = AutoRegressiveLightning.load_from_checkpoint(
         args.load_model_ckpt, hparams=hp
     )
 else:
     lightning_module = AutoRegressiveLightning(hp)
-
+'''
+if args.load_model_ckpt:
+    lightning_module = MAELightningModule.load_from_checkpoint(
+        args.load_model_ckpt, hparams=hp
+    )
+else:
+    lightning_module = MAELightningModule(hp)
 
 # Train model
 print("Starting training !")

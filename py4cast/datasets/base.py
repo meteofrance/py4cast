@@ -2,6 +2,7 @@
 Base classes defining our software components
 and their interfaces
 """
+
 import warnings
 from abc import ABC, abstractclassmethod, abstractmethod, abstractproperty
 from copy import deepcopy
@@ -514,7 +515,6 @@ def collate_fn(items: List[Item]) -> ItemBatch:
 
     # Iterate over inputs, outputs and forcing fields
     for field_name in (f.name for f in fields(Item)):
-
         batched_tensor = collate_tensor_fn(
             [getattr(item, field_name).tensor for item in items]
         ).type(torch.float32)
@@ -612,7 +612,9 @@ class DatasetInfo:
     units: Dict[str, str]  # d[shortname] = unit (str)
     weather_dim: int
     forcing_dim: int
-    step_duration: float  # Duration (in hour) of one step in the dataset. 0.25 means 15 minutes.
+    step_duration: (
+        float  # Duration (in hour) of one step in the dataset. 0.25 means 15 minutes.
+    )
     statics: Statics  # A lot of static variable
     stats: Stats
     diff_stats: Stats
@@ -750,7 +752,6 @@ class DatasetABC(ABC):
             raise ValueError("Your dataset should not be standardized.")
         # When computing stat may force every body to be input/ouput
         for batch in tqdm(self.torch_dataloader(), desc="Computing stats"):
-
             # Here we assume that data are in 2 or 3 D
             inputs = batch.inputs.tensor
             outputs = batch.outputs.tensor
@@ -810,7 +811,6 @@ class DatasetABC(ABC):
             print("Otherwise consider standardizing your inputs.")
 
         for batch in tqdm(self.torch_dataloader()):
-
             # Here we assume that data are in 2 or 3 D
             inputs = batch.inputs.tensor
             outputs = batch.outputs.tensor
