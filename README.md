@@ -478,7 +478,7 @@ You can find more details about all the `num_X_steps` options [here](doc/num_ste
 Inference is done by running the `bin/inference.py` script. This script will load a model and run it on a dataset using the training parameters (dataset config, timestep options, ...).
 
 ```bash
-usage: py4cast Inference script [-h] [--model_path MODEL_PATH] [--dataset DATASET] [--infer_steps INFER_STEPS] [--date DATE]
+usage: python bin/inference.py [-h] [--model_path MODEL_PATH] [--dataset DATASET] [--infer_steps INFER_STEPS] [--date DATE]
 
 options:
   -h, --help            show this help message and exit
@@ -511,7 +511,7 @@ A simple example of inference is shown below:
 You can compare multiple trained models on specific case studies and visualize the forecasts on animated plots with the `bin/gif_comparison.py`. See example of GIF at the beginning of the README.
 
 Warnings:
- - For now this script only works with models trained with Titan dataset.
+- For now this script only works with models trained with Titan dataset.
 - If you want to use AROME as a model, you have to manually download the forecast before.
 
 ```bash
@@ -527,6 +527,22 @@ options:
 example: python bin/gif_comparison.py --ckpt AROME --ckpt /.../logs/my_run/epoch=247.ckpt
                                       --date 2023061812 --num_pred_steps 10
 ```
+
+### Scoring and comparing models
+
+The `bin/test.py` script will compute and save metrics on the validation set, on as many auto-regressive prediction steps as you want.
+
+```bash
+python bin/test.py PATH_TO_CHECKPOINT --num_pred_steps 24
+```
+
+Once you have executed the `test.py` script on all the models you want, you can compare them with `bin/scores_comparison.py`:
+
+```bash
+python bin/scores_comparison.py --ckpt PATH_TO_CKPT_0  --ckpt PATH_TO_CKPT_1
+```
+
+**Warning**: For now `bin/scores_comparison.py` only works with models trained with Titan dataset
 
 ## Adding features and contributing
 

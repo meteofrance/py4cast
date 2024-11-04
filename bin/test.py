@@ -60,6 +60,7 @@ model.eval()
 print(f"Changing number of val pred steps to {args.num_pred_steps}...")
 hparams = model.hparams["hparams"]
 hparams.num_pred_steps_val_test = args.num_pred_steps
+hparams.save_path = args.ckpt_path.parent
 
 log_dir, folder, subfolder = get_log_dirs(args.ckpt_path)
 logger = TensorBoardLogger(
