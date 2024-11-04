@@ -227,7 +227,7 @@ def write_storable_dataset(
         data2grib[:, latmax : latmin + 1, longmin : longmax + 1] = data
 
         receiver_ds.update(
-            {f: (dims, data2grib[idx]) for idx, f in enumerate(feature_names)}
+            {f: (dims, data2grib[idx, :, :]) for idx, f in enumerate(feature_names)}
         )
         receiver_ds[name] = receiver_ds[name].assign_attrs(**template_ds[name].attrs)
 
