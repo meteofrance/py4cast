@@ -85,7 +85,7 @@ def save_named_tensors_to_grib(
         for c in grib_groups.keys()
     }
 
-    for t_idx in range(predicted_time_steps)[:1]:
+    for t_idx in range(predicted_time_steps):
         for group in model_ds.keys():
             raw_data = pred.select_dim("timestep", t_idx, bare_tensor=False)
             storable = write_storable_dataset(
@@ -220,16 +220,14 @@ def write_storable_dataset(
     elif tol == group:
         # in this case, there might be several variables : basis for nanmask duplication
         dims = template_ds.dims
-        maybe_repeat = len(feature_idx) if len(feature_idx) > 1 else 0
-        if maybe_repeat:
-            data2grib = np.repeat(nanmask[np.newaxis], maybe_repeat, axis=0)
-            data2grib[:, latmax : latmin + 1, longmin : longmax + 1] = data
-        else:
-            data2grib = nanmask
-            data2grib[latmax : latmin + 1, longmin : longmax + 1] = data
+        maybe_repeat = len(feature_idx)
+        # Stack n nanmasks on a newaxis for n features
+        data2grib = np.repeat(nanmask[np.newaxis], maybe_repeat, axis=0)
+        # Write data among nan values
+        data2grib[:, latmax : latmin + 1, longmin : longmax + 1] = data
 
         receiver_ds.update(
-            {f: (dims, data2grib[pred.feature_names_to_idx[f]]) for f in feature_names}
+            {f: (dims, data2grib[idx]) for idx, f in enumerate(feature_names)}
         )
         receiver_ds[name] = receiver_ds[name].assign_attrs(**template_ds[name].attrs)
 
