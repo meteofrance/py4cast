@@ -56,7 +56,8 @@
             "var": {
                 "TEMPERATURE_2m": {"shortname":"t2m", "filename": "t2m", "level": [2], "typeOfLevel" : "heightAboveGround", "unit" : "K"},
                 "PRECIPITATIONS_DECUM":{"shortname":"tirf", "filename": "rrdecum", "level": [0],"typeOfLevel" : "surface", "unit" : "kg * m **-2"},
-                "WIND.U.PHYS":{"shortname":"u10", "filename": "u","level": [10], "typeOfLevel" : "heightAboveGround", "unit" : "m * s**-1"}
+                "WIND.U.PHYS":{"shortname":"u10", "filename": "u","level": [10], "typeOfLevel" : "heightAboveGround", "unit" : "m * s**-1"},
+                "WIND.V.PHYS":{"shortname":"v10", "filename": "v","level": [10], "typeOfLevel" : "heightAboveGround", "unit" : "m * s**-1"}
                 }
             }
         }
