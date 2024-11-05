@@ -266,7 +266,6 @@ class FakeSample:
 
 
 def test_write_template_dataset():
-
     # testing with only isobaric levels
     grib_features = pd.DataFrame(
         {
@@ -429,7 +428,6 @@ def test_write_template_dataset():
 
 
 def test_get_output_filename():
-
     saving_settings = out.GribSavingSettings(
         template_grib="fake_grib.grib",
         directory="fakedirectory",

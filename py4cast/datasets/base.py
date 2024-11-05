@@ -519,7 +519,6 @@ def collate_fn(items: List[Item]) -> ItemBatch:
 
     # Iterate over inputs, outputs and forcing fields
     for field_name in (f.name for f in fields(Item)):
-
         batched_tensor = collate_tensor_fn(
             [getattr(item, field_name).tensor for item in items]
         ).type(torch.float32)
@@ -815,7 +814,6 @@ class DatasetABC(ABC):
             raise ValueError("Your dataset should be standardized.")
 
         for batch in tqdm(self.torch_dataloader()):
-
             # Here we assume that data are in 2 or 3 D
             inputs = batch.inputs.tensor
             outputs = batch.outputs.tensor
