@@ -189,7 +189,6 @@ def write_storable_dataset(
             )
 
         except KeyError:
-
             maybe_repeat = len(feature_idx) if len(feature_idx) > 1 else 0
             if maybe_repeat:
                 # no suplementary dim but several variables
@@ -220,16 +219,14 @@ def write_storable_dataset(
     elif tol == group:
         # in this case, there might be several variables : basis for nanmask duplication
         dims = template_ds.dims
-        maybe_repeat = len(feature_idx) if len(feature_idx) > 1 else 0
-        if maybe_repeat:
-            data2grib = np.repeat(nanmask[np.newaxis], maybe_repeat, axis=0)
-            data2grib[:, latmax : latmin + 1, longmin : longmax + 1] = data
-        else:
-            data2grib = nanmask
-            data2grib[latmax : latmin + 1, longmin : longmax + 1] = data
+        maybe_repeat = len(feature_idx)
+        # Stack n nanmasks on a newaxis for n features
+        data2grib = np.repeat(nanmask[np.newaxis], maybe_repeat, axis=0)
+        # Write data among nan values
+        data2grib[:, latmax : latmin + 1, longmin : longmax + 1] = data
 
         receiver_ds.update(
-            {f: (dims, data2grib[pred.feature_names_to_idx[f]]) for f in feature_names}
+            {f: (dims, data2grib[idx, :, :]) for idx, f in enumerate(feature_names)}
         )
         receiver_ds[name] = receiver_ds[name].assign_attrs(**template_ds[name].attrs)
 
@@ -444,7 +441,6 @@ def make_nan_mask(
         )
 
     else:
-
         raise ValueError(
             f"Lat/Lon dims of the {infer_dataset} do not fit in template grid, cannot write grib."
         )
