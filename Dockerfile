@@ -4,7 +4,7 @@ ARG CUDA_VERS=12.1
 
 FROM ${DOCKER_REGISTRY}/pytorch/pytorch:${TORCH_VERS}-cuda${CUDA_VERS}-cudnn9-devel
 
-ARG INJECT_MF_CERT 
+ARG INJECT_MF_CERT
 
 COPY mf.crt /usr/local/share/ca-certificates/mf.crt
 
