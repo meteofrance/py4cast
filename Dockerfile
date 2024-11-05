@@ -4,7 +4,8 @@ ARG CUDA_VERS=12.1
 
 FROM ${DOCKER_REGISTRY}/pytorch/pytorch:${TORCH_VERS}-cuda${CUDA_VERS}-cudnn9-devel
 
-ARG INJECT_MF_CERT
+# Default value is for launching from Meteo-France
+ARG INJECT_MF_CERT=1 
 
 COPY mf.crt /usr/local/share/ca-certificates/mf.crt
 
@@ -20,8 +21,8 @@ RUN $MY_APT update && $MY_APT install -y curl gdal-bin libgdal-dev libgeos-dev g
 ENV CPLUS_INCLUDE_PATH=/usr/include/gdal
 ENV C_INCLUDE_PATH=/usr/include/gdal
 
-ARG REQUESTS_CA_BUNDLE
-ARG CURL_CA_BUNDLE
+ARG REQUESTS_CA_BUNDLE="/usr/local/share/ca-certificates/mf.crt"
+ARG CURL_CA_BUNDLE="/usr/local/share/ca-certificates/mf.crt"
 
 # Build eccodes, a recent version yields far better throughput according to our benchmarks
 ARG ECCODES_VER=2.35.0
