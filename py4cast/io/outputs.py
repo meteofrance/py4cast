@@ -85,7 +85,7 @@ def save_named_tensors_to_grib(
         for c in grib_groups.keys()
     }
 
-    for t_idx in range(predicted_time_steps)[:1]:
+    for t_idx in range(predicted_time_steps):
         for group in model_ds.keys():
             raw_data = pred.select_dim("timestep", t_idx, bare_tensor=False)
             storable = write_storable_dataset(
