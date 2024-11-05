@@ -241,9 +241,7 @@ class PoesySettings:
     term: dict
     num_input_steps: int  # = 2  # Number of input timesteps
     num_output_steps: int  # = 1  # Number of output timesteps (= 0 for inference)
-    num_inference_pred_steps: int = (
-        0  # 0 in training config ; else used to provide future information about forcings
-    )
+    num_inference_pred_steps: int = 0  # 0 in training config ; else used to provide future information about forcings
     standardize: bool = False
     members: Tuple[int] = (0,)
 
@@ -282,7 +280,6 @@ class Sample:
             Boolean:  Whether the sample exist or not
         """
         for param in param_list:
-
             if not param.exist(self.date):
                 return False
 
@@ -374,8 +371,7 @@ class PoesyDataset(DatasetABC, Dataset):
             for member in self.settings.members:
                 for sample in range(0, sample_by_date):
                     input_terms = terms[
-                        sample
-                        * self.settings.num_total_steps : sample
+                        sample * self.settings.num_total_steps : sample
                         * self.settings.num_total_steps
                         + self.settings.num_input_steps
                     ]
@@ -394,7 +390,6 @@ class PoesyDataset(DatasetABC, Dataset):
                     )
 
                     if samp.is_valid(self.params):
-
                         samples.append(samp)
                         number += 1
 
@@ -460,7 +455,6 @@ class PoesyDataset(DatasetABC, Dataset):
         member: int = 1,
         inference_steps: int = 0,
     ) -> torch.tensor:
-
         if self.settings.standardize:
             names = param.parameter_short_name
             means = np.asarray([self.stats[name]["mean"] for name in names])
@@ -807,10 +801,8 @@ class InferPoesyDataset(PoesyDataset):
         for date in self.period.date_list:
             for member in self.settings.members:
                 for sample in range(0, sample_by_date):
-
                     input_terms = terms[
-                        sample
-                        * self.settings.num_total_steps : sample
+                        sample * self.settings.num_total_steps : sample
                         * self.settings.num_total_steps
                         + self.settings.num_input_steps
                     ]
@@ -891,7 +883,6 @@ class InferPoesyDataset(PoesyDataset):
 
 
 if __name__ == "__main__":
-
     path_config = "config/datasets/poesy.json"
 
     parser = ArgumentParser(description="Prepare Poesy dataset and test loading speed.")

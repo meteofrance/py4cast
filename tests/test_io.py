@@ -266,7 +266,6 @@ class FakeSample:
 
 
 def test_write_template_dataset():
-
     # testing with only isobaric levels
     grib_features = pd.DataFrame(
         {
@@ -428,7 +427,6 @@ def test_write_template_dataset():
     assert receiver_ds.tirf.values.shape == (64, 64)
     assert np.isclose(np.nanmean(receiver_ds.tirf.values[0]), 3.1416).all()
 
-
     # testing with 'heightaboveground' variables
 
     grib_features = pd.DataFrame(
@@ -481,7 +479,6 @@ def test_write_template_dataset():
 
 
 def test_get_output_filename():
-
     saving_settings = out.GribSavingSettings(
         template_grib="fake_grib.grib",
         directory="fakedirectory",
