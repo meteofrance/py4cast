@@ -36,9 +36,6 @@ LATLON_FNAME = "latlon_crop.npy"
 # Shape of cropped poesy data (lon x lat x leadtimes x members)
 DATA_SHAPE = (600, 600, 45, 16)
 
-# Assuming no leap years in dataset (2024 is next)
-SECONDS_IN_YEAR = 365 * 24 * 60 * 60
-
 
 def poesy_forecast_namer(date: dt.datetime, var_file_name, **kwargs):
     """
