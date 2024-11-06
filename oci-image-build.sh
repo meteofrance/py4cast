@@ -52,5 +52,6 @@ ${RUNTIME} build \
     --build-arg USER_UID=$(id -u) \
     --build-arg USER_GUID=$(id -g) \
     --build-arg HOME_DIR=${HOME} \
+    --build-arg INJECT_MF_CERT=${INJECT_MF_CERT} \
     --tag py4cast:${TAG} \
     .

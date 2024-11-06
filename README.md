@@ -133,6 +133,11 @@ pip install --editable .
 ### Build docker image
 
 To build the docker image please use the `oci-image-build.sh` script.
+For Meteo-France user, you should export the variable `INJECT_MF_CERT` to use the Meteo-France certificate
+```sh
+export INJECT_MF_CERT=1
+```
+Then, build with the following command 
 ```sh
 bash ./oci-image-build.sh --runtime docker
 ```
