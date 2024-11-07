@@ -55,6 +55,7 @@ class InteractionNet(pyg.nn.MessagePassing):
         aggr_mlp_recipe = [2 * input_dim] + [hidden_dim] * (hidden_layers + 1)
 
         if edge_chunk_sizes is None:
+
             self.edge_mlp = make_mlp(edge_mlp_recipe, checkpoint=checkpoint)
         else:
             # Not test : split was never used during dev phase
