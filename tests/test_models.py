@@ -101,7 +101,6 @@ def test_torch_training_loop():
         "identity",
         "unetrpp",
         "hiera",
-        "maehiera",
     ):
         model_kls, model_settings = get_model_kls_and_settings(model_name)
 
@@ -248,7 +247,6 @@ def test_model_registry():
         "swinunetr",
         "unetrpp",
         "hiera",
-        "maehiera",
     }
 
     print("registry test DONE")

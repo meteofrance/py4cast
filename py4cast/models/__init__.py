@@ -24,7 +24,6 @@ for kls in (
     SwinUNETR,
     UNETRPP,
     Hiera,
-    MAEHiera,
 ):
     registry[kls.__name__.lower()] = kls
 
