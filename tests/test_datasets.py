@@ -251,6 +251,7 @@ def test_item():
 
     # Input and Output must have the same number of features
     with pytest.raises(ValueError):
+
         inputs = NamedTensor(
             tensor,
             names=["lat", "lon", "features"],
