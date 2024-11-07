@@ -994,11 +994,6 @@ class PatchEmbed(nn.Module):
 
 # ------------------------------------------------------------------------------#
 
-
-class _a:
-    a = 1
-
-
 @dataclass_json
 @dataclass
 class HieraDecoderSettings:
@@ -1105,11 +1100,6 @@ class HieraDecoder(nn.Module):
 
 
 # ------------------------------------------------------------------------------#
-
-
-class _b:
-    a = 1
-
 
 @dataclass_json
 @dataclass(slots=True)
@@ -1312,9 +1302,6 @@ class HalfUNetDecoder(nn.Module):
 
 
 # ------------------------------------------------------------------------------#
-class _c:
-    a = 1
-
 
 @dataclass_json
 @dataclass
