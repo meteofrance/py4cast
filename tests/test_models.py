@@ -86,22 +86,22 @@ def test_torch_training_loop():
     """
     Checks that our models are trainable on a toy problem (sum).
     """
-    GRID_WIDTH = 416
-    GRID_HEIGHT = 224
-    NUM_INPUTS = 21
-    NUM_OUTPUTS = 21
+    GRID_WIDTH = 64
+    GRID_HEIGHT = 64
+    NUM_INPUTS = 2
+    NUM_OUTPUTS = 1
 
     for model_name in (
-        # "swinunetr",
-        # "hilam",
-        # "graphlam",
-        # "halfunet",
-        # "unet",
-        # "segformer",
-        # "identity",
-        # "unetrpp",
+        "swinunetr",
+        "hilam",
+        "graphlam",
+        "halfunet",
+        "unet",
+        "segformer",
+        "identity",
+        "unetrpp",
         "hiera",
-        # "maehiera",
+        "maehiera",
     ):
         model_kls, model_settings = get_model_kls_and_settings(model_name)
 
