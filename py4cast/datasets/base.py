@@ -519,6 +519,7 @@ def collate_fn(items: List[Item]) -> ItemBatch:
 
     # Iterate over inputs, outputs and forcing fields
     for field_name in (f.name for f in fields(Item)):
+
         batched_tensor = collate_tensor_fn(
             [getattr(item, field_name).tensor for item in items]
         ).type(torch.float32)
@@ -703,19 +704,6 @@ class DatasetABC(ABC):
         """
         Builds a torch dataloader from self.
         """
-
-    # @abstractmethod
-    # def torch_dataloader_bis(
-    #     self,
-    #     batch_size: int = 1,
-    #     num_workers: int = 1,
-    #     pin_memory: bool = False,
-    #     prefetch_factor: Union[int, None] = None,
-    #     persistent_workers: bool = False,
-    # ) -> DataLoader:
-    #     """
-    #     Builds a torch dataloader from self.
-    #     """
 
     @abstractproperty
     def dataset_info(self) -> DatasetInfo:
