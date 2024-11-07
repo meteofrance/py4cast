@@ -66,6 +66,7 @@ class TrainingHyperParams:
 
 @dataclass
 class TitanHyperParams:
+
     path: Path = Path("/scratch/shared/Titan/")
     weather_params: Tuple[Union[str, WeatherParam]] = ("aro_t2m", "aro_r2")
     isobaric_levels: Tuple[int] = (1000, 850)  # hPa
@@ -127,6 +128,7 @@ class CLIArgs(MergeDataclassMixin, Split, Grid, TitanHyperParams, TrainingHyperP
 
 
 if __name__ == "__main__":
+
     from mfai.argparse_dataclass import MfaiArgumentParser
 
     print("MISSING : ", MISSING)

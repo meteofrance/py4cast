@@ -189,6 +189,7 @@ def write_storable_dataset(
             )
 
         except KeyError:
+
             maybe_repeat = len(feature_idx) if len(feature_idx) > 1 else 0
             if maybe_repeat:
                 # no suplementary dim but several variables
@@ -443,6 +444,7 @@ def make_nan_mask(
         )
 
     else:
+
         raise ValueError(
             f"Lat/Lon dims of the {infer_dataset} do not fit in template grid, cannot write grib."
         )

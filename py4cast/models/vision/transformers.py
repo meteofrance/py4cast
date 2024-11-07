@@ -31,6 +31,7 @@ def cast_tuple(val, depth):
 @dataclass_json
 @dataclass(slots=True)
 class SegformerSettings:
+
     dims: Tuple[int, ...] = (32, 64, 160, 256)
     heads: Tuple[int, ...] = (1, 2, 5, 8)
     ff_expansion: Tuple[int, ...] = (8, 8, 4, 4)
@@ -304,6 +305,7 @@ class Segformer(ModelABC, nn.Module):
         )
 
     def forward(self, x):
+
         x = self.downsampler(features_last_to_second(x))
 
         layer_outputs = self.mit(x, return_layer_outputs=True)
@@ -356,6 +358,7 @@ class UpsampleBlock(nn.Module):
         )
 
     def forward(self, inp: torch.Tensor, skip: torch.Tensor) -> torch.Tensor:
+
         out = self.upsampler(inp)
         # concat along the channels/features dimension
         out = torch.cat((out, skip), dim=1)
