@@ -253,7 +253,7 @@ class SmeagolSettings:
     num_output_steps: int  # = 1  # Number of output timesteps (= 0 for inference)
     num_inference_pred_steps: int = (
         0  # 0 in training config ; else used to provide future information about forcings
-    )    
+    )
     num_inference_pred_steps: int = 0  # 0 in training config ; else used to provide future information about forcings
     standardize: bool = True  # Do we need to standardize our data ?
     members: Tuple[int] = (
