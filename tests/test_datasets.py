@@ -267,6 +267,7 @@ def test_item():
 
     # Input and Output must have the same feature names
     with pytest.raises(ValueError):
+
         inputs = NamedTensor(
             tensor,
             names=["lat", "lon", "features"],
@@ -282,6 +283,7 @@ def test_item():
 
     # Input and Output must have the same dim names
     with pytest.raises(ValueError):
+
         inputs = NamedTensor(
             tensor,
             names=["lat", "lon", "features"],
