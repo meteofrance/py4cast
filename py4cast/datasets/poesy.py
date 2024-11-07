@@ -460,8 +460,8 @@ class PoesyDataset(DatasetABC, Dataset):
         member: int = 1,
         inference_steps: int = 0,
     ) -> torch.tensor:
-        if self.settings.standardize:
 
+        if self.settings.standardize:
             names = param.parameter_short_name
             means = np.asarray([self.stats[name]["mean"] for name in names])
             std = np.asarray([self.stats[name]["std"] for name in names])
