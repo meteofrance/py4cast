@@ -10,7 +10,7 @@ from py4cast.lightning import AutoRegressiveLightning, PlDataModule
 default_config_root = Path(__file__).parents[1] / "config/IO/"
 
 if __name__ == "__main__":
-    
+
     # Parse arguments: model_path, dataset name and config file and finally date for inference
     parser = argparse.ArgumentParser("py4cast Inference script")
     parser.add_argument("--model_path", type=str, help="Path to the model checkpoint")
