@@ -815,6 +815,7 @@ class DatasetABC(ABC):
             raise ValueError("Your dataset should be standardized.")
 
         for batch in tqdm(self.torch_dataloader()):
+
             # Here we assume that data are in 2 or 3 D
             inputs = batch.inputs.tensor
             outputs = batch.outputs.tensor
