@@ -123,6 +123,7 @@ class MetricPSDK(Metric):
 
         # Compute the PSD for each channel of x.
         for c in range(channels):
+
             psd = power_spectral_density(
                 x[:, c : c + 1, :, :, pred_step].cpu().numpy()
             ).squeeze()
@@ -189,6 +190,7 @@ class MetricPSDVar(Metric):
 
         # Compute the RMSE for each channel of x.
         for c in range(channels):
+
             # Compute PSD
             psd_target = power_spectral_density(
                 y_true[:, c : c + 1, :, :, self.pred_step].cpu().numpy()
