@@ -1,99 +1,151 @@
-from dataclasses import asdict
-
 import lightning.pytorch as pl
 import torch
 import torch.nn as nn
 import torchmetrics as tm
-from torch import optim
-
 from copy import deepcopy
-from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import List, Union
-
-import pytorch_lightning as pl
-import torch
+from typing import Union, Dict
 from lightning.pytorch.utilities import rank_zero_only
-from torch import nn
-from torchinfo import summary
 from transformers import get_cosine_schedule_with_warmup
 
-
-from py4cast.datasets.base import DatasetInfo
+from py4cast.datasets.base import TorchDataloaderSettings
 from py4cast.models import build_model_from_settings
-from py4cast.utils import str_to_dtype
+from py4cast.datasets import get_datasets
+from py4cast.settings import HIERA_MASKED_DIR
 
 # learning rate scheduling period in steps (update every nth step)
 LR_SCHEDULER_PERIOD: int = 10
 
-@dataclass
-class MAELightningHyperParam:
+class PlDataModule(pl.LightningDataModule):
     """
-    Settings and hyperparameters for the lightning AR model.
+    DataModule to encapsulate data splits and data loading.
     """
 
-    dataset_info: DatasetInfo
-    dataset_name: str
-    dataset_conf: Path
-    batch_size: int
+    def __init__(
+        self,
+        dataset_name: str,
+        dataset_conf: Union[Path, None],
+        config_override: Union[Dict, None] = None,
+        num_input_steps: int = 1,
+        num_pred_steps_train: int = 1,
+        num_pred_steps_val_test: int = 1,
+    ):
+        super().__init__()
+        self.dataset_name = dataset_name
+        self.dl_settings = TorchDataloaderSettings()
+        self.dataset_conf = dataset_conf
+        self.config_override = config_override
+        self.num_input_steps = num_input_steps
+        self.num_pred_steps_train = num_pred_steps_train
+        self.num_pred_steps_val_test = num_pred_steps_val_test
 
-    model_conf: Union[Path, None] = None
-    model_name: str = "halfunet"
-
-    lr: float = 0.1
-    loss: str = "mse"
-
-    num_input_steps: int = 2
-    num_pred_steps_train: int = 2
-    num_inter_steps: int = 1  # Number of intermediary steps (without any data)
-
-    num_pred_steps_val_test: int = 2
-    num_samples_to_plot: int = 1
-
-    training_strategy: str = "diff_ar"
-
-    len_train_loader: int = 1
-    save_path: Path = None
-    use_lr_scheduler: bool = False
-    precision: str = "bf16"
-    no_log: bool = False
-    channels_last: bool = False
-    dev_mode: bool = False
-
-    def __post_init__(self):
-        """
-        Check the configuration
-
-        Raises:
-            AttributeError: raise an exception if the set of attribute is not well designed.
-        """
-        if self.num_inter_steps > 1 and self.num_input_steps > 1:
-            raise AttributeError(
-                "It is not possible to have multiple input steps when num_inter_steps > 1."
-                f"Get num_input_steps :{self.num_input_steps} and num_inter_steps: {self.num_inter_steps}"
-            )
-        ALLOWED_STRATEGIES = ("diff_ar", "scaled_ar")
-        if self.training_strategy not in ALLOWED_STRATEGIES:
-            raise AttributeError(
-                f"Unknown strategy {self.training_strategy}, allowed strategies are {ALLOWED_STRATEGIES}"
-            )
-
-    def summary(self):
-        self.dataset_info.summary()
-        print(f"Number of input_steps : {self.num_input_steps}")
-        print(f"Number of pred_steps (training) : {self.num_pred_steps_train}")
-        print(f"Number of pred_steps (test/val) : {self.num_pred_steps_val_test}")
-        print(f"Number of intermediary steps :{self.num_inter_steps}")
-        print(f"Training strategy :{self.training_strategy}")
-        print(
-            f"Model step duration : {self.dataset_info.step_duration /self.num_inter_steps}"
+        # Get dataset in initialisation to have access to this attribute before method trainer.fit
+        self.train_ds, self.val_ds, self.test_ds = get_datasets(
+            self.dataset_name,
+            self.num_input_steps,
+            self.num_pred_steps_train,
+            self.num_pred_steps_val_test,
+            self.dataset_conf,
+            self.config_override,
         )
-        print(f"Model conf {self.model_conf}")
-        print("---------------------")
-        print(f"Loss {self.loss}")
-        print(f"Batch size {self.batch_size}")
-        print(f"Learning rate {self.lr}")
-        print("---------------------------")
+
+    @property
+    def len_train_dl(self):
+        return len(self.train_ds.torch_dataloader(self.dl_settings))
+
+    @property
+    def train_dataset_info(self):
+        return self.train_ds.dataset_info
+
+    @property
+    def infer_ds(self):
+        return self.test_ds
+
+    def train_dataloader(self):
+        return self.train_ds.torch_dataloader(self.dl_settings)
+
+    def val_dataloader(self):
+        return self.val_ds.torch_dataloader(self.dl_settings)
+
+    def test_dataloader(self):
+        return self.test_ds.torch_dataloader(self.dl_settings)
+
+    def predict_dataloader(self):
+        return self.test_ds.torch_dataloader(self.dl_settings)
+
+
+# class PlDataModule(pl.LightningDataModule):
+#     """
+#     DataModule to encapsulate data splits and data loading.
+#     """
+#     def __init__(
+#             self,
+#             dataset_name: str,
+#             dataset_conf: Union[Path, None],
+#             config_override: Union[Dict, None] = None,
+#             batch_size: int = 1,
+#             num_workers: int = 1,
+#             pin_memory: bool = False,
+#             prefetch_factor: Union[int, None] = None,
+#             persistent_workers: bool = False,
+#             num_input_steps: int = 1,
+#             num_pred_steps_train: int = 1,
+#             num_pred_steps_val_test: int = 1,
+#     ):
+#         super().__init__()
+#         self.dataset_name = dataset_name
+#         self.batch_size = batch_size
+#         self.num_workers = num_workers
+#         self.pin_memory = pin_memory
+#         self.prefetch_factor = prefetch_factor
+#         self.persistent_workers = persistent_workers
+#         self.dataset_conf = dataset_conf
+#         self.config_override = config_override
+#         self.num_input_steps = num_input_steps
+#         self.num_pred_steps_train = num_pred_steps_train
+#         self.num_pred_steps_val_test = num_pred_steps_val_test
+
+#         # Get dataset in initialisation to have access to this attribute before method trainer.fit
+#         self.train_ds, self.val_ds, self.test_ds = get_datasets(
+#             self.dataset_name,
+#             self.num_input_steps,
+#             self.num_pred_steps_train,
+#             self.num_pred_steps_val_test,
+#             self.dataset_conf,
+#             self.config_override,
+#         )
+
+#     @property
+#     def len_train_dl(self):
+#         return len(
+#             self.train_ds.torch_dataloader_bis(
+#                 self.batch_size,
+#                 self.num_workers,
+#                 self.pin_memory,
+#                 self.prefetch_factor,
+#                 self.persistent_workers
+#             )
+#         )
+
+#     @property
+#     def train_dataset_info(self):
+#         return self.train_ds.dataset_info
+
+#     @property
+#     def infer_ds(self):
+#         return self.test_ds
+
+#     def train_dataloader(self):
+#         return self.train_ds.torch_dataloader_bis(self.batch_size, self.num_workers, self.pin_memory, self.prefetch_factor, self.persistent_workers)
+
+#     def val_dataloader(self):
+#         return self.val_ds.torch_dataloader_bis(self.batch_size, self.num_workers, self.pin_memory, self.prefetch_factor, self.persistent_workers)
+
+#     def test_dataloader(self):
+#         return self.test_ds.torch_dataloader_bis(self.batch_size, self.num_workers, self.pin_memory, self.prefetch_factor, self.persistent_workers)
+
+#     def predict_dataloader(self):
+#         return self.test_ds.torch_dataloader_bis(self.batch_size, self.num_workers, self.pin_memory, self.prefetch_factor, self.persistent_workers)
 
 
 @rank_zero_only
@@ -102,111 +154,87 @@ def rank_zero_init(model_kls, model_settings, statics):
         model_kls.rank_zero_setup(model_settings, statics)
 
 
-@rank_zero_only
-def exp_summary(hparams: MAELightningHyperParam, model: nn.Module):
-    hparams.summary()
-    summary(model)
-
-
-
-
-
 class MAELightningModule(pl.LightningModule):
     """A lightning module adapted for MAE.
     Computes metrics and manages logging in tensorboard."""
 
-    @classmethod
-    def from_hyperparams(cls, hparams: MAELightningHyperParam):
-        """Builds the lightning instance using hyper-parameters."""
-        if hparams.load_from_checkpoint is None:
-            model = cls(hparams)
-        else:
-            model = cls.load_from_checkpoint(hparams.load_from_checkpoint)
-        return model
-
-
-
-
-    def __init__(self, hparams: MAELightningHyperParam):
+    def __init__(
+        self,
+        dataset_name: str,
+        model_conf: Union[Path, None] = None,
+        model_name: str = "hiera",
+        lr: float = 0.1,
+        loss_name: str = "mse",
+        num_input_steps: int = 1,
+        num_pred_steps_train: int = 1,
+        num_inter_steps: int = 0,  # Number of intermediary steps (without any data)
+        num_pred_steps_val_test: int = 1,
+        len_train_loader: int = 1,
+        save_path: Path = None,
+        use_lr_scheduler: bool = False,
+    ):
         super().__init__()
-
-        self.statics = deepcopy(hparams.dataset_info.statics)
-        self.hyparams = hparams
-
-        if self.hyparams.channels_last:
-            self.model = self.model.to(memory_format=torch.channels_last)
+        self.dataset_name = dataset_name
+        self.model_conf = model_conf
+        self.model_name = model_name
+        self.lr = lr
+        self.loss_name = loss_name
+        self.num_input_steps = num_input_steps
+        self.num_pred_steps_train = num_pred_steps_train
+        self.num_inter_steps = num_inter_steps
+        self.num_pred_steps_val_test = num_pred_steps_val_test
+        self.len_train_loader = len_train_loader
+        self.save_path = save_path
+        self.use_lr_scheduler = use_lr_scheduler
 
         # For making restoring of optimizer state optional (slight hack)
         self.opt_state = None
-
-
         self.metrics = self.get_metrics()
-
-        # class variables to log metrics during training
         self.training_step_outputs = []
         self.validation_step_outputs = []
         self.test_metrics = {}
-        '''
-        # log model hparams, needed for 'load_from_checkpoint'
-        if hparams.profiler == "pytorch":
-            self.save_hyperparameters(ignore=["loss"])
-        else:
-            self.save_hyperparameters()
-        '''
-        self.save_hyperparameters()
-  
-        if hparams.loss == "mse":
+        if self.loss_name == "mse":
             self.loss = nn.MSELoss(reduction="none")
-        else:
-            raise TypeError(f"Unknown loss function: {hparams.loss}")
-
-        # Set model input/output grid features based on dataset tensor shapes
-        num_grid_static_features = self.statics.grid_static_features.dim_size("features")
-        # Compute the number of input features for the neural network
-        # Should be directly supplied by datasetinfo ?
-        self.num_input_features = hparams.dataset_info.weather_dim
-        
-        self.num_output_features = hparams.dataset_info.weather_dim
-
-        self.model, self.hyparams.model_settings = self.create_model()
-
+        if dataset_name == "titan":
+            self.num_input_features = 21
+            self.num_output_features = 21
+            self.grid_shape = (512, 640)
+        else:  # to change
+            self.num_input_features = 3
+            self.num_output_features = 3
+            self.grid_shape = (64, 64)
+        self.model, self.model_settings = self.create_model()
 
     def create_model(self):
         """Creates a model with the config file (.json) if available."""
         model, model_settings = build_model_from_settings(
-            self.hyparams.model_name,
+            self.model_name,
             self.num_input_features,
             self.num_output_features,
-            self.hyparams.model_conf,
-            self.statics.grid_shape,
+            self.model_conf,
+            self.grid_shape,
         )
         return model, model_settings
 
     def get_metrics(self):
         """Defines the metrics that will be computed during valid and test steps."""
-
         metrics_dict = torch.nn.ModuleDict(
-                {
-                    "rmse": tm.MeanSquaredError(squared=False),
-                    "mae": tm.MeanAbsoluteError(),
-                    "mape": tm.MeanAbsolutePercentageError(),
-                }
-            )
+            {
+                "rmse": tm.MeanSquaredError(squared=False),
+                "mae": tm.MeanAbsoluteError(),
+                "mape": tm.MeanAbsolutePercentageError(),
+            }
+        )
         return metrics_dict
 
     def forward(self, inputs):
         """Runs data through the model. Separate from training step."""
-        if self.hyparams.channels_last:
-            inputs = inputs.to(memory_format=torch.channels_last)
         y_hat = self.model(inputs)
         return y_hat
 
     def _shared_forward_step(self, x, y, train=False):
         """Computes forward pass and loss for a batch.
         Step shared by training, validation and test steps"""
-        if self.hyparams.channels_last:
-            x = x.to(memory_format=torch.channels_last)
-            y = y.to(memory_format=torch.channels_last)
         y_hat = self.model(x, train=train)
         loss = self.loss(y_hat.float(), y).mean()
         return y_hat, loss
@@ -216,7 +244,6 @@ class MAELightningModule(pl.LightningModule):
         Step shared by validation and test steps."""
         batch_dict = {"loss": loss}
         for metric_name, metric in self.metrics.items():
-            
             metric.update(y_hat.reshape(-1), y.int().reshape(-1))
             batch_dict[metric_name] = metric.compute()
             metric.reset()
@@ -235,7 +262,10 @@ class MAELightningModule(pl.LightningModule):
                 tb.add_scalar(f"metrics/{label}_{metric}", avg_m, self.current_epoch)
 
     def training_step(self, batch, batch_idx):
-        x, y = torch.squeeze(batch.inputs.tensor[:, 0, :, :, :], dim=1), torch.squeeze(batch.outputs.tensor[:, 0, :, :, :], dim=1)
+        x, y = (
+            torch.squeeze(batch.inputs.tensor[:, 0, :, :, :], dim=1),
+            torch.squeeze(batch.outputs.tensor[:, 0, :, :, :], dim=1),
+        )
         _, loss = self._shared_forward_step(x, y, train=True)
         batch_dict = {"loss": loss}
         self.log(
@@ -249,24 +279,42 @@ class MAELightningModule(pl.LightningModule):
         self._shared_epoch_end(outputs, "train")
         self.training_step_outputs.clear()  # free memory
 
+    def on_train_end(self):
+        best_model_state = deepcopy(self.model.state_dict())
+        torch.save(best_model_state, HIERA_MASKED_DIR)
+
     def val_plot_step(self, batch_idx, y, y_hat):
         """Plots images on first batch of validation and log them in tensorboard."""
         if batch_idx == 0:
             tb = self.logger.experiment
             step = self.current_epoch
-            dformat = "CHW"
+            # dformat = "CHW"
             if step == 0:
-                tb.add_image("val_plots/true_image", y[0], dataformats=dformat)
-            tb.add_image("val_plots/test_image", y_hat[0], step, dataformats=dformat)
+                image = y.permute(0, 3, 1, 2)[0]
+                for i in range(image.shape[0]):
+                    field_image = image[i]
+                    tb.add_image(
+                        f"val_plots/true_image_field_{i}", field_image, dataformats="HW"
+                    )
+                # tb.add_image("val_plots/true_image", y.permute(0, 3, 1, 2)[0], dataformats=dformat)
+            image = y.permute(0, 3, 1, 2)[0]
+            for i in range(image.shape[0]):
+                field_image = image[i]
+                tb.add_image(
+                    f"val_plots/test_image_field_{i}", field_image, dataformats="HW"
+                )
+            # tb.add_image("val_plots/test_image", y_hat.permute(0, 3, 1, 2)[0], step, dataformats=dformat)
 
     def validation_step(self, batch, batch_idx):
-        x, y = torch.squeeze(batch.inputs.tensor[:, 0, :, :, :], dim=1), torch.squeeze(batch.outputs.tensor[:, 0, :, :, :], dim=1)
+        x, y = (
+            torch.squeeze(batch.inputs.tensor[:, 0, :, :, :], dim=1),
+            torch.squeeze(batch.outputs.tensor[:, 0, :, :, :], dim=1),
+        )
         y_hat, loss = self._shared_forward_step(x, y)
         batch_dict = self._shared_metrics_step(loss, x, y, y_hat, "validation")
         self.log("val_mean_loss", loss, on_epoch=True, prog_bar=True, sync_dist=True)
         self.validation_step_outputs.append(batch_dict)
-        if not self.hyparams.dev_mode:
-            self.val_plot_step(batch_idx, y, y_hat)
+        self.val_plot_step(batch_idx, y, y_hat)
         return loss
 
     def on_validation_epoch_end(self):
@@ -276,7 +324,10 @@ class MAELightningModule(pl.LightningModule):
 
     def test_step(self, batch, batch_idx):
         """Computes metrics for each sample, at the end of the run."""
-        x, y, name = torch.squeeze(batch.inputs.tensor[:, 0, :, :, :], dim=1), torch.squeeze(batch.outputs.tensor[:, 0, :, :, :], dim=1)
+        x, y, name = (
+            torch.squeeze(batch.inputs.tensor[:, 0, :, :, :], dim=1),
+            torch.squeeze(batch.outputs.tensor[:, 0, :, :, :], dim=1),
+        )
         y_hat, loss = self._shared_forward_step(x, y)
         batch_dict = self._shared_metrics_step(loss, x, y, y_hat, "test")
         self.test_metrics[name[0]] = batch_dict
@@ -290,47 +341,15 @@ class MAELightningModule(pl.LightningModule):
             for metrics_dict in self.test_metrics.values():
                 data.append(metrics_dict[metric_name])
             metrics[metric_name] = torch.stack(data).mean().item()
-        hparams = asdict(self.hyparams)
-        hparams["loss"] = str(hparams["loss"])
-        self.logger.log_hyperparams(hparams, metrics=metrics)
+        self.logger.log_hyperparams(metrics=metrics)
 
-    def use_lr_scheduler(self, optimizer):
-        lr = self.hyparams.learning_rate
-        if self.hyparams.reduce_lr_plateau:
-            lr_scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, "min")
-            return {
-                "optimizer": optimizer,
-                "lr_scheduler": {
-                    "scheduler": lr_scheduler,
-                    "monitor": "val_mean_loss",
-                },
-            }
-        elif self.hyparams.cyclic_lr:
-            lr_scheduler = optim.lr_scheduler.CyclicLR(
-                optimizer, base_lr=lr, max_lr=10 * lr, cycle_momentum=False
-            )
-            return {
-                "optimizer": optimizer,
-                "lr_scheduler": {"scheduler": lr_scheduler},
-            }
-        else:
-            return None
-
-    def configure_optimizers(self):
-        optimizer = optim.Adam(self.parameters(), lr=self.hyparams.learning_rate)
-        if self.hyparams.reduce_lr_plateau or self.hyparams.cyclic_lr:
-            return self.use_lr_scheduler(optimizer)
-        else:
-            return optimizer
-        
     def configure_optimizers(self) -> torch.optim.Optimizer:
-        lr = self.hparams["hparams"].lr
-        opt = torch.optim.AdamW(self.parameters(), lr=lr, betas=(0.9, 0.95))
+        opt = torch.optim.AdamW(self.parameters(), lr=self.lr, betas=(0.9, 0.95))
         if self.opt_state:
             opt.load_state_dict(self.opt_state)
 
-        if self.hparams["hparams"].use_lr_scheduler:
-            len_loader = self.hparams["hparams"].len_train_loader // LR_SCHEDULER_PERIOD
+        if self.use_lr_scheduler:
+            len_loader = self.len_train_loader // LR_SCHEDULER_PERIOD
             epochs = self.trainer.max_epochs
             lr_scheduler = get_cosine_schedule_with_warmup(
                 opt, 1000 // LR_SCHEDULER_PERIOD, len_loader * epochs

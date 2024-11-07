@@ -1,5 +1,5 @@
 from lightning.pytorch.cli import LightningCLI, ArgsType
-from py4cast.MAE_2_lightning import MAELightningModule, PlDataModule
+from py4cast.MAE_lightning import MAELightningModule, PlDataModule
 
 
 def cli_main(args: ArgsType = None):
