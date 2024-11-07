@@ -738,8 +738,7 @@ class TitanDataset(DatasetABC, Dataset):
         return f"titan_{self.grid.name}"
 
     def torch_dataloader(
-        self,
-        tl_settings: TorchDataloaderSettings = TorchDataloaderSettings(),
+        self, tl_settings: TorchDataloaderSettings = TorchDataloaderSettings()
     ) -> DataLoader:
         return DataLoader(
             self,
