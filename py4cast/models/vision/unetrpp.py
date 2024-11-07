@@ -434,14 +434,7 @@ class UnetrPPEncoder(nn.Module):
 
     def forward_features(self, x):
         hidden_states = []
-
-        # UTILE ?
-        x = self.downsample_layers[0](x)
-        x = self.stages[0](x)
-
-        hidden_states.append(x)
-
-        for i in range(1, 4):
+        for i in range(0, 4):
             x = self.downsample_layers[i](x)
             x = self.stages[i](x)
             if i == 3:  # Reshape the output of the last stage
@@ -452,7 +445,6 @@ class UnetrPPEncoder(nn.Module):
             hidden_states.append(x)
         return x, hidden_states
 
-    # UTILE ?
     def forward(self, x):
         x, hidden_states = self.forward_features(x)
         return x, hidden_states

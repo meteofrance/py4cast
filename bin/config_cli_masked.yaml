@@ -1,0 +1,18 @@
+seed_everything: "True"
+model:
+  dataset_name: "titan"
+  model_conf:
+  model_name: "hiera"
+  lr: 0.1
+  loss_name: "mse"
+  num_input_steps: 1
+  num_pred_steps_train: 1
+  num_inter_steps: 0
+  num_pred_steps_val_test: 1
+  len_train_loader: 1
+  save_path: ~
+  use_lr_scheduler: "False"
+data:
+  dataset_name: "titan"
+  dataset_conf: "config/datasets/titan_full.json"
+  config_override: ~

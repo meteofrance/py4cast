@@ -250,9 +250,7 @@ class SmeagolSettings:
     term: dict  # Terms used in this configuration. Should be present in nc files.
     num_input_steps: int  # = 2  # Number of input timesteps
     num_output_steps: int  # = 1  # Number of output timesteps (= 0 for inference)
-    num_inference_pred_steps: int = (
-        0  # 0 in training config ; else used to provide future information about forcings
-    )
+    num_inference_pred_steps: int = 0  # 0 in training config ; else used to provide future information about forcings
     standardize: bool = True  # Do we need to standardize our data ?
     members: Tuple[int] = (
         0,
@@ -569,7 +567,6 @@ class SmeagolDataset(DatasetABC, Dataset):
 
                 # Read outputs.
                 if param.kind == "ouput":
-
                     tmp_out = ds[param.name].sel(step=sample.output_terms).values
                     if len(tmp_out.shape) != 4:
                         tmp_out = np.expand_dims(tmp_out, axis=1)
@@ -832,10 +829,8 @@ class InferSmeagolDataset(SmeagolDataset):
         for date in self.period.date_list:
             for member in self.settings.members:
                 for sample in range(0, sample_by_date):
-
                     input_terms = terms[
-                        sample
-                        * self.settings.num_total_steps : sample
+                        sample * self.settings.num_total_steps : sample
                         * self.settings.num_total_steps
                         + self.settings.num_input_steps
                     ]
@@ -853,7 +848,6 @@ class InferSmeagolDataset(SmeagolDataset):
                     )
 
                     if samp.is_valid(self.params):
-
                         samples.append(samp)
                         number += 1
         print("All samples are now defined")

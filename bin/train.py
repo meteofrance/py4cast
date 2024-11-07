@@ -294,7 +294,7 @@ hp = ArLightningHyperParam(
 )
 
 hp = MAELightningHyperParam(
-    dataset_info=datasets[0].dataset_info,
+    dataset_info=dataset_info,
     dataset_name=args.dataset,
     dataset_conf=args.dataset_conf,
     batch_size=args.batch_size,
@@ -309,7 +309,7 @@ hp = MAELightningHyperParam(
     precision=args.precision,
     no_log=args.no_log,
     channels_last=args.channels_last,
-    dev_mode=True
+    dev_mode=True,
 )
 
 # Logger & checkpoint callback
@@ -382,20 +382,20 @@ trainer = pl.Trainer(
     limit_val_batches=args.limit_train_batches,  # No reason to spend hours on validation if we limit the training.
     limit_test_batches=args.limit_train_batches,
 )
-'''
-if args.load_model_ckpt:
-    lightning_module = AutoRegressiveLightning.load_from_checkpoint(
-        args.load_model_ckpt, hparams=hp
-    )
+if False:
+    if args.load_model_ckpt:
+        lightning_module = AutoRegressiveLightning.load_from_checkpoint(
+            args.load_model_ckpt, hparams=hp
+        )
+    else:
+        lightning_module = AutoRegressiveLightning(hp)
 else:
-    lightning_module = AutoRegressiveLightning(hp)
-'''
-if args.load_model_ckpt:
-    lightning_module = MAELightningModule.load_from_checkpoint(
-        args.load_model_ckpt, hparams=hp
-    )
-else:
-    lightning_module = MAELightningModule(hp)
+    if args.load_model_ckpt:
+        lightning_module = MAELightningModule.load_from_checkpoint(
+            args.load_model_ckpt, hparams=hp
+        )
+    else:
+        lightning_module = MAELightningModule(hp)
 
 # Train model
 print("Starting training !")

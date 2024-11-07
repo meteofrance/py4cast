@@ -704,6 +704,19 @@ class DatasetABC(ABC):
         Builds a torch dataloader from self.
         """
 
+    # @abstractmethod
+    # def torch_dataloader_bis(
+    #     self,
+    #     batch_size: int = 1,
+    #     num_workers: int = 1,
+    #     pin_memory: bool = False,
+    #     prefetch_factor: Union[int, None] = None,
+    #     persistent_workers: bool = False,
+    # ) -> DataLoader:
+    #     """
+    #     Builds a torch dataloader from self.
+    #     """
+
     @abstractproperty
     def dataset_info(self) -> DatasetInfo:
         """

@@ -138,9 +138,6 @@ def test_torch_training_loop():
             # Make predictions for this batch
             outputs = model(inputs)
 
-            # print("output shape", outputs.shape)
-            # print("target shape", targets.shape)
-
             # Compute the loss and its gradients
             loss = loss_fn(outputs, targets)
             loss.backward()

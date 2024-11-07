@@ -241,9 +241,7 @@ class PoesySettings:
     term: dict
     num_input_steps: int  # = 2  # Number of input timesteps
     num_output_steps: int  # = 1  # Number of output timesteps (= 0 for inference)
-    num_inference_pred_steps: int = (
-        0  # 0 in training config ; else used to provide future information about forcings
-    )
+    num_inference_pred_steps: int = 0  # 0 in training config ; else used to provide future information about forcings
     standardize: bool = False
     members: Tuple[int] = (0,)
 

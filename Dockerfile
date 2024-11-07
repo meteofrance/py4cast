@@ -1,5 +1,5 @@
 ARG DOCKER_REGISTRY=docker.io
-ARG TORCH_VERS=2.2.2
+ARG TORCH_VERS=2.4.1
 ARG CUDA_VERS=12.1
 
 FROM ${DOCKER_REGISTRY}/pytorch/pytorch:${TORCH_VERS}-cuda${CUDA_VERS}-cudnn9-devel
@@ -52,9 +52,3 @@ RUN set -eux && groupadd --gid $USER_GUID $GROUPNAME \
 
 WORKDIR $HOME_DIR
 RUN curl -fsSL https://code-server.dev/install.sh | sh
-RUN pip install timm
-RUN pip install timm --upgrade
-RUN pip install tqdm
-RUN pip install evaluate
-RUN pip install wget
-RUN pip install h5netcdf matplotlib wget pyyaml xarray scipy torch

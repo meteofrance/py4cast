@@ -6,7 +6,7 @@ import torch.nn.functional as F
 from functools import partial
 from dataclasses import dataclass
 from dataclasses_json import dataclass_json
-from timm.models.layers import DropPath, Mlp
+from timm.layers import DropPath, Mlp
 from huggingface_hub import PyTorchModelHubMixin
 from monai.networks.blocks.dynunet_block import (
     get_output_padding,
@@ -14,12 +14,13 @@ from monai.networks.blocks.dynunet_block import (
 )
 from py4cast.models.vision.utils import features_last_to_second
 
-#HalfUNet imports
+# HalfUNet imports
 from collections import OrderedDict
 from functools import reduce
 
-#Unetrpp imports
+# Unetrpp imports
 from py4cast.models.vision.unetrpp import TransformerBlock
+
 
 def conv_nd(n: int) -> Type[nn.Module]:
     """
@@ -262,7 +263,7 @@ class HieraSettings:
     head_dropout: float = 0.0
     head_init_scale: float = 0.001
     sep_pos_embed: bool = False
-    mask_ratio = 0.5 # mask_ratio fraction are dropped
+    mask_ratio = 0.5  # mask_ratio fraction are dropped
     decoder: str = "unetrpp"  # hiera, unetrpp, halfunet
 
 
@@ -278,7 +279,10 @@ class Hiera(nn.Module, PyTorchModelHubMixin):
         num_input_features: int = 21,  # RGB=3, titan=21
         num_output_features: int = 21,  # number of classes
         settings=HieraSettings,
-        input_shape: Tuple[int, ...] = (64, 64),  # nb_pixel x nb_pixel
+        input_shape: Tuple[int, ...] = (
+            512,
+            640,
+        ),  # nb_pixel x nb_pixel  titan=(512,640)
     ) -> None:
         super().__init__()
 
@@ -418,25 +422,25 @@ class Hiera(nn.Module, PyTorchModelHubMixin):
 
         if settings.decoder == "hiera":
             self.decoder = HieraDecoder(
-                output_channels = num_output_features,
-                input_shape = input_shape,                
-                bottleneck_shape = self.bottleneck_shape, # (Patched image, embedding)
-                settings = UnetrppDecoderSettings,
+                output_channels=num_output_features,
+                input_shape=input_shape,
+                bottleneck_shape=self.bottleneck_shape,  # (Patched image, embedding)
+                settings=UnetrppDecoderSettings,
             )
         elif settings.decoder == "unetrpp":
             self.decoder = UnetrppDecoder(
-                output_channels = num_output_features,
-                input_shape = input_shape,                
-                bottleneck_shape = self.bottleneck_shape, # (Patched image, embedding)
-                settings = UnetrppDecoderSettings,
+                output_channels=num_output_features,
+                input_shape=input_shape,
+                bottleneck_shape=self.bottleneck_shape,  # (Patched image, embedding)
+                settings=UnetrppDecoderSettings,
             )
 
         elif settings.decoder == "halfunet":
             self.decoder = HalfUNetDecoder(
                 output_channels=num_output_features,
                 input_shape=input_shape,
-                bottleneck_shape = self.bottleneck_shape, # (Patched image, embedding)
-                settings=HalfUnetDecoderSettings(),
+                bottleneck_shape=self.bottleneck_shape,  # (Patched image, embedding)
+                settings=HalfUNetDecoderSettings(),
             )
         else:
             raise Exception(f"unknwon decoder: {settings.decoder}")
@@ -508,19 +512,12 @@ class Hiera(nn.Module, PyTorchModelHubMixin):
         """
         if train:
             mask = self.get_random_mask(x, self.mask_ratio)  # [B, #MUs_all]
-
-        # print()
-        # print()
-        # print("x in hiera forward before last to second", x.shape)
         x = features_last_to_second(x)
 
         # Slowfast training passes in a list
         if isinstance(x, list):
             x = x[0]
         intermediates = []
-        # print("x in hiera forward after last to second", x.shape)
-        # print("mask spatial shape", self.mask_spatial_shape)
-
 
         x = self.patch_embed(
             x,
@@ -530,20 +527,13 @@ class Hiera(nn.Module, PyTorchModelHubMixin):
             if mask is not None
             else None,
         )
-        # print("x in hiera forward after patch embed", x.shape)
-
         x = x + self.get_pos_embed()
-        # print("x in hiera forward after get pos embed", x.shape)
-
         x = self.unroll(x)
-        # print("x in hiera forward after unroll", x.shape)
-
         # Discard masked tokens
         # if mask is not None:
         #    x = x[mask[..., None].tile(1, self.mu_size, x.shape[2])].view(
         #        x.shape[0], -1, x.shape[-1]
         #    )
-        # print("x in hiera forward after mask is not none", x.shape)
         skip_list = []
         for i, blk in enumerate(self.blocks):
             if i in self.stage_ends:
@@ -551,8 +541,6 @@ class Hiera(nn.Module, PyTorchModelHubMixin):
             x = blk(x)
             if return_intermediates and i in self.stage_ends:
                 intermediates.append(self.reroll(x, i, mask=mask))
-            # print("x in hiera forward after blk=",i, x.shape)
-
         # x may not always be in spatial order here.
         # e.g. if q_pool = 2, mask_unit_size = (8, 8), and
         # q_stride = (2, 2), not all unrolls were consumed,
@@ -560,9 +548,7 @@ class Hiera(nn.Module, PyTorchModelHubMixin):
         if return_intermediates:
             return x, intermediates
 
-        # [print]("x in hiera forward FINAL", x.shape)
         return self.decoder(skip_list, x)
-
 
 
 def apply_fusion_head(head: nn.Module, x: torch.Tensor) -> torch.Tensor:
@@ -588,7 +574,7 @@ class MAEHiera(Hiera):
         num_input_features: int = 21,  # RGB=3, titan=21
         num_output_features: int = 21,  # number of classes
         settings=HieraSettings,
-        input_shape: Tuple[int, ...] = (64, 64),  # nb_pixel x nb_pixel
+        input_shape: Tuple[int, ...] = (512, 640),  # nb_pixel x nb_pixel
     ):
         super().__init__(
             num_input_features,
@@ -1001,22 +987,16 @@ class PatchEmbed(nn.Module):
     def forward(
         self, x: torch.Tensor, mask: Optional[torch.Tensor] = None
     ) -> torch.Tensor:
-        # print()
-        # print("x shape", x.shape)
-        # print("self.proj shape", self.proj)
-        # print("mask shape", mask)
         x = do_masked_conv(x, self.proj, mask)
-        # print("x shape before reshape", x.shape)
         x = x.reshape(x.shape[0], x.shape[1], -1).transpose(2, 1)
-        # print("x shape after reshape", x.shape)
-        # print()
         return x
 
 
 # ------------------------------------------------------------------------------#
 
+
 class _a:
-    a=1
+    a = 1
 
 
 @dataclass_json
@@ -1026,13 +1006,14 @@ class HieraDecoderSettings:
     kernel_size: Union[Sequence[int], int] = 3
     upsample_kernel_size: Union[Sequence[int], int] = 4
 
+
 class HieraDecoder(nn.Module):
     def __init__(
         self,
         input_shape: Union[Sequence[int], int],
         output_channels: int,
-        bottleneck_shape: Union[Sequence[int], int], # (Patched image, embedding)
-        settings = HieraSettings,
+        bottleneck_shape: Union[Sequence[int], int],  # (Patched image, embedding)
+        settings=HieraSettings,
     ) -> None:
         super().__init__()
 
@@ -1040,7 +1021,9 @@ class HieraDecoder(nn.Module):
         self.stage_blocks = nn.ModuleList()
         self.transp_conv = nn.ModuleList()
         self.input_shape = input_shape
-        padding = get_padding(settings.upsample_kernel_size, settings.upsample_kernel_size)
+        padding = get_padding(
+            settings.upsample_kernel_size, settings.upsample_kernel_size
+        )
 
         # UPSAMPLING + CONV
         for i in range(len(settings.stages) - 1):
@@ -1066,7 +1049,9 @@ class HieraDecoder(nn.Module):
                         stride=settings.upsample_kernel_size,
                         padding=padding,
                         output_padding=get_output_padding(
-                            settings.upsample_kernel_size, settings.upsample_kernel_size, padding
+                            settings.upsample_kernel_size,
+                            settings.upsample_kernel_size,
+                            padding,
                         ),
                         dilation=1,
                     )
@@ -1075,8 +1060,16 @@ class HieraDecoder(nn.Module):
 
         self.transp_conv.append(
             nn.Sequential(
-                nn.Upsample(scale_factor=settings.upsample_kernel_size * settings.upsample_kernel_size),
-                nn.Conv1d(input_embed, output_channels, kernel_size=settings.kernel_size, padding=1),
+                nn.Upsample(
+                    scale_factor=settings.upsample_kernel_size
+                    * settings.upsample_kernel_size
+                ),
+                nn.Conv1d(
+                    input_embed,
+                    output_channels,
+                    kernel_size=settings.kernel_size,
+                    padding=1,
+                ),
             )
         )
 
@@ -1113,8 +1106,10 @@ class HieraDecoder(nn.Module):
 
 # ------------------------------------------------------------------------------#
 
+
 class _b:
-    a=1
+    a = 1
+
 
 @dataclass_json
 @dataclass(slots=True)
@@ -1166,7 +1161,7 @@ class GhostModule(nn.Module):
 
 
 class HalfUNetDecoder(nn.Module):
-    settings_kls = HalfUnetDecoderSettings
+    settings_kls = HalfUNetDecoderSettings
     onnx_supported = True
     input_dims: Tuple[str, ...] = ("batch", "height", "width", "features")
     output_dims: Tuple[str, ...] = ("batch", "height", "width", "features")
@@ -1175,8 +1170,8 @@ class HalfUNetDecoder(nn.Module):
         self,
         input_shape: Union[Sequence[int], int],
         output_channels: int,
-        bottleneck_shape: Union[Sequence[int], int], # [Patched image, embedding]
-        settings = HalfUnetDecoderSettings,
+        bottleneck_shape: Union[Sequence[int], int],  # [Patched image, embedding]
+        settings=HalfUNetDecoderSettings,
         *args,
         **kwargs,
     ):
@@ -1318,7 +1313,8 @@ class HalfUNetDecoder(nn.Module):
 
 # ------------------------------------------------------------------------------#
 class _c:
-    a=1
+    a = 1
+
 
 @dataclass_json
 @dataclass
@@ -1338,18 +1334,19 @@ class UnetrppDecoder(nn.Module):  # "=" UnetrUpBlock
         self,
         input_shape: Union[Sequence[int], int],
         output_channels: int,
-        bottleneck_shape: Union[Sequence[int], int], # (Patched image, embedding)
-        settings = UnetrppDecoderSettings,
+        bottleneck_shape: Union[Sequence[int], int],  # (Patched image, embedding)
+        settings=UnetrppDecoderSettings,
     ) -> None:
         super().__init__()
-        
+
         input_patch = bottleneck_shape[0]
         input_embed = bottleneck_shape[1]
         self.stage_blocks = nn.ModuleList()
         self.transp_conv = nn.ModuleList()
         self.input_shape = input_shape
-        padding = get_padding(settings.upsample_kernel_size, settings.upsample_kernel_size)
-
+        padding = get_padding(
+            settings.upsample_kernel_size, settings.upsample_kernel_size
+        )
 
         # UPSAMPLING + CONV
         for i in range(len(settings.stages) - 1):
@@ -1375,7 +1372,9 @@ class UnetrppDecoder(nn.Module):  # "=" UnetrUpBlock
                         stride=settings.upsample_kernel_size,
                         padding=padding,
                         output_padding=get_output_padding(
-                            settings.upsample_kernel_size, settings.upsample_kernel_size, padding
+                            settings.upsample_kernel_size,
+                            settings.upsample_kernel_size,
+                            padding,
                         ),
                         dilation=1,
                     )
@@ -1384,8 +1383,16 @@ class UnetrppDecoder(nn.Module):  # "=" UnetrUpBlock
 
         self.transp_conv.append(
             nn.Sequential(
-                nn.Upsample(scale_factor=settings.upsample_kernel_size * settings.upsample_kernel_size),
-                nn.Conv1d(input_embed, output_channels, kernel_size=settings.kernel_size, padding=1),
+                nn.Upsample(
+                    scale_factor=settings.upsample_kernel_size
+                    * settings.upsample_kernel_size
+                ),
+                nn.Conv1d(
+                    input_embed,
+                    output_channels,
+                    kernel_size=settings.kernel_size,
+                    padding=1,
+                ),
             )
         )
 
@@ -1410,22 +1417,18 @@ class UnetrppDecoder(nn.Module):  # "=" UnetrUpBlock
         for i in range(len(skip_list)):
             k = len(skip_list) - i - 1
             height, width = self.input_shape
-            #skip connection
+            # skip connection
             x = skip_list[k] + x
-            # print(x.shape)
-            #attention block
+            # attention block
             x = torch.permute(x, (0, 2, 1))
             B, C, _ = x.shape
-            # print(B, C, height/(4*2**k), width/(4*2**k))
-            x = x.reshape(B, C, int(height/(4*2**k)), int(width/(4*2**k)))
+            x = x.reshape(B, C, int(height / (4 * 2**k)), int(width / (4 * 2**k)))
             x = self.stage_blocks[i](x)
-            # print(x.shape)
-            #conv
+            # conv
             B, C, H, W = x.shape
-            x = x.reshape(B, C, H*W)
+            x = x.reshape(B, C, H * W)
             x = self.transp_conv[i](x)
             x = torch.permute(x, (0, 2, 1))
-            # print(x.shape)
         B, _, C = x.shape
         x = x.reshape(B, C, self.input_shape[0], self.input_shape[1])
         x = torch.permute(x, (0, 2, 3, 1))
