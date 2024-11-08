@@ -1,5 +1,5 @@
 ARG DOCKER_REGISTRY=docker.io
-ARG TORCH_VERS=2.2.2
+ARG TORCH_VERS=2.4.1
 ARG CUDA_VERS=12.1
 
 FROM ${DOCKER_REGISTRY}/pytorch/pytorch:${TORCH_VERS}-cuda${CUDA_VERS}-cudnn9-devel
@@ -20,8 +20,8 @@ RUN $MY_APT update && $MY_APT install -y curl gdal-bin libgdal-dev libgeos-dev g
 ENV CPLUS_INCLUDE_PATH=/usr/include/gdal
 ENV C_INCLUDE_PATH=/usr/include/gdal
 
-ARG REQUESTS_CA_BUNDLE
-ARG CURL_CA_BUNDLE
+ARG REQUESTS_CA_BUNDLE="/usr/local/share/ca-certificates/mf.crt"
+ARG CURL_CA_BUNDLE="/usr/local/share/ca-certificates/mf.crt"
 
 # Build eccodes, a recent version yields far better throughput according to our benchmarks
 ARG ECCODES_VER=2.35.0

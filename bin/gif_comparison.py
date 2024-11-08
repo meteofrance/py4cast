@@ -288,7 +288,8 @@ def make_gif(
             models_names,
         )
         frames.append(frame)
-    gif.save(frames, f"{date}_{feature}.gif", duration=500)
+    filename = f"{date.strftime('%Y-%m-%d_%Hh%M')}_{feature}.gif"
+    gif.save(frames, filename, duration=500)
 
 
 if __name__ == "__main__":

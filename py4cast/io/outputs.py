@@ -323,7 +323,7 @@ def get_grib_groups(grib_features: pd.DataFrame) -> dict[str:dict]:
     Returns:
         dict[str : dict]: mapping of group identifiers to grib-style key filtering
     """
-    if "surface" in grib_features["typeOfLevel"]:
+    if "surface" in grib_features["typeOfLevel"].values:
         grib_groups = {
             "surface": {
                 "cfVarName": grib_features["name"]
