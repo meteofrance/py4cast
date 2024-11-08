@@ -2,7 +2,7 @@ import getpass
 import shutil
 import subprocess
 from copy import deepcopy
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from functools import cached_property
 from pathlib import Path
 from typing import Dict, List, Tuple, Union
@@ -102,7 +102,7 @@ class ArLightningHyperParam:
     Settings and hyperparameters for the lightning AR model.
     """
 
-    dataset_info: DatasetInfo
+    # dataset_info: DatasetInfo
     dataset_name: str
     dataset_conf: Path
     batch_size: int
@@ -182,19 +182,20 @@ class AutoRegressiveLightning(pl.LightningModule):
     Auto-regressive lightning module for predicting meteorological fields.
     """
 
-    def __init__(self, hparams: ArLightningHyperParam, *args, **kwargs):
+    def __init__(self, hparams: ArLightningHyperParam, dataset_info, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
+        self.dataset_info = dataset_info
         self.save_hyperparameters()  # write hparams.yaml in save folder
 
         # Load static features for grid/data
         # We do not want to change dataset statics inplace
         # Otherwise their is some problem with transform_statics and parameters_saving
         # when relaoding from checkpoint
-        statics = deepcopy(hparams.dataset_info.statics)
+        statics = deepcopy(dataset_info.statics)
         # Init object of register_dict
-        self.diff_stats = hparams.dataset_info.diff_stats
-        self.stats = hparams.dataset_info.stats
+        self.diff_stats = dataset_info.diff_stats
+        self.stats = dataset_info.stats
 
         # Keeping track of grid shape
         self.grid_shape = statics.grid_shape
@@ -219,12 +220,12 @@ class AutoRegressiveLightning(pl.LightningModule):
         # Should be directly supplied by datasetinfo ?
 
         num_input_features = (
-            hparams.num_input_steps * hparams.dataset_info.weather_dim
+            hparams.num_input_steps * dataset_info.weather_dim
             + num_grid_static_features
-            + hparams.dataset_info.forcing_dim
+            + dataset_info.forcing_dim
         )
 
-        num_output_features = hparams.dataset_info.weather_dim
+        num_output_features = dataset_info.weather_dim
 
         model_kls, model_settings = get_model_kls_and_settings(
             hparams.model_name, hparams.model_conf
@@ -274,21 +275,21 @@ class AutoRegressiveLightning(pl.LightningModule):
         else:
             raise TypeError(f"Unknown loss function: {hparams.loss}")
 
-        self.loss.prepare(self, statics.interior_mask, hparams.dataset_info)
+        self.loss.prepare(self, statics.interior_mask, dataset_info)
 
-        save_path = self.hparams["hparams"].save_path
-        max_pred_step = self.hparams["hparams"].num_pred_steps_val_test - 1
+        save_path = hparams.save_path
+        max_pred_step = hparams.num_pred_steps_val_test - 1
         if self.logging_enabled:
             self.rmse_psd_plot_metric = MetricPSDVar(pred_step=max_pred_step)
             self.psd_plot_metric = MetricPSDK(save_path, pred_step=max_pred_step)
-            self.acc_metric = MetricACC(self.hparams["hparams"].dataset_info)
+            self.acc_metric = MetricACC(dataset_info)
 
     @property
     def dtype(self):
         """
         Return the appropriate torch dtype for the desired precision in hparams.
         """
-        return str_to_dtype[self.hparams["hparams"].precision]
+        return str_to_dtype[self.hparams["hparams"]["precision"]]
 
     @rank_zero_only
     def inspect_tensors(self):
@@ -308,20 +309,20 @@ class AutoRegressiveLightning(pl.LightningModule):
         if self.logging_enabled and self.logger:
             hparams = self.hparams["hparams"]
             # Log hparams in tensorboard hparams window
-            dict_log = asdict(hparams)
+            dict_log = hparams
             dict_log["username"] = getpass.getuser()
             self.logger.log_hyperparams(dict_log, metrics={"val_mean_loss": 0.0})
             # Save model & dataset conf as files
-            if hparams.dataset_conf is not None:
+            if hparams["dataset_conf"] is not None:
                 shutil.copyfile(
-                    hparams.dataset_conf, hparams.save_path / "dataset_conf.json"
+                    hparams["dataset_conf"], hparams["save_path"] / "dataset_conf.json"
                 )
-            if hparams.model_conf is not None:
+            if hparams["model_conf"] is not None:
                 shutil.copyfile(
-                    hparams.model_conf, hparams.save_path / "model_conf.json"
+                    hparams["model_conf"], hparams["save_path"] / "model_conf.json"
                 )
             # Write commit and state of git repo in log file
-            dest_git_log = hparams.save_path / "git_log.txt"
+            dest_git_log = hparams["save_path"] / "git_log.txt"
             out_log = (
                 subprocess.check_output(["git", "log", "-n", "1"])
                 .strip()
@@ -338,13 +339,13 @@ class AutoRegressiveLightning(pl.LightningModule):
         self.log_hparams_tb()
 
     def configure_optimizers(self) -> torch.optim.Optimizer:
-        lr = self.hparams["hparams"].lr
+        lr = self.hparams["hparams"]["lr"]
         opt = torch.optim.AdamW(self.parameters(), lr=lr, betas=(0.9, 0.95))
         if self.opt_state:
             opt.load_state_dict(self.opt_state)
 
-        if self.hparams["hparams"].use_lr_scheduler:
-            len_loader = self.hparams["hparams"].len_train_loader // LR_SCHEDULER_PERIOD
+        if self.hparams["hparams"]["use_lr_scheduler"]:
+            len_loader = self.hparams["hparams"]["len_train_loader"] // LR_SCHEDULER_PERIOD
             epochs = self.trainer.max_epochs
             lr_scheduler = get_cosine_schedule_with_warmup(
                 opt, 1000 // LR_SCHEDULER_PERIOD, len_loader * epochs
@@ -403,19 +404,19 @@ class AutoRegressiveLightning(pl.LightningModule):
         - num_inter_steps
         """
         force_border: bool = (
-            True if self.hparams["hparams"].training_strategy == "scaled_ar" else False
+            True if self.hparams["hparams"]["training_strategy"] == "scaled_ar" else False
         )
         scale_y: bool = (
-            True if self.hparams["hparams"].training_strategy == "scaled_ar" else False
+            True if self.hparams["hparams"]["training_strategy"] == "scaled_ar" else False
         )
         # raise if mismatch between strategy and num_inter_steps
-        if self.hparams["hparams"].training_strategy == "diff_ar":
-            if self.hparams["hparams"].num_inter_steps != 1:
+        if self.hparams["hparams"]["training_strategy"] == "diff_ar":
+            if self.hparams["hparams"]["num_inter_steps"] != 1:
                 raise ValueError(
                     "Diff AR strategy requires exactly 1 intermediary step."
                 )
 
-        return force_border, scale_y, self.hparams["hparams"].num_inter_steps
+        return force_border, scale_y, self.hparams["hparams"]["num_inter_steps"]
 
     def common_step(
         self, batch: ItemBatch, inference: bool = False
@@ -492,7 +493,7 @@ class AutoRegressiveLightning(pl.LightningModule):
             for k in range(num_inter_steps):
                 x = self._next_x(batch, prev_states, i)
                 # Graph (B, N_grid, d_f) or Conv (B, N_lat,N_lon d_f)
-                if self.hparams["hparams"].channels_last:
+                if self.hparams["hparams"]["channels_last"]:
                     x = x.to(memory_format=torch.channels_last)
                 y = self.model(x)
 
@@ -604,7 +605,7 @@ class AutoRegressiveLightning(pl.LightningModule):
         """
         Check if logging is enabled
         """
-        return not self.hparams["hparams"].no_log
+        return not self.hparams["hparams"]["no_log"]
 
     def on_save_checkpoint(self, checkpoint):
         """
@@ -655,10 +656,10 @@ class AutoRegressiveLightning(pl.LightningModule):
         if self.logging_enabled:
             l1_loss = ScaledLoss("L1Loss", reduction="none")
             l1_loss.prepare(
-                self, self.interior_mask, self.hparams["hparams"].dataset_info
+                self, self.interior_mask, self.dataset_info
             )
             metrics = {"mae": l1_loss}
-            save_path = self.hparams["hparams"].save_path
+            save_path = self.hparams["hparams"]["save_path"]
             self.valid_plotters = [
                 StateErrorPlot(metrics, prefix="Validation"),
                 PredictionTimestepPlot(
@@ -766,17 +767,17 @@ class AutoRegressiveLightning(pl.LightningModule):
             for torch_loss, alias in ("L1Loss", "mae"), ("MSELoss", "rmse"):
                 loss = ScaledLoss(torch_loss, reduction="none")
                 loss.prepare(
-                    self, self.interior_mask, self.hparams["hparams"].dataset_info
+                    self, self.interior_mask, self.dataset_info
                 )
                 metrics[alias] = loss
 
-            save_path = self.hparams["hparams"].save_path
+            save_path = self.hparams["hparams"]["save_path"]
 
             self.test_plotters = [
                 StateErrorPlot(metrics, save_path=save_path),
                 SpatialErrorPlot(),
                 PredictionTimestepPlot(
-                    num_samples_to_plot=self.hparams["hparams"].num_samples_to_plot,
+                    num_samples_to_plot=self.hparams["hparams"]["num_samples_to_plot"],
                     num_features_to_plot=4,
                     prefix="Test",
                     save_path=save_path,

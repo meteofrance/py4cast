@@ -16,7 +16,7 @@ model:
   hparams:
     # dataset_info: DatasetInfo
     dataset_name: "poesy"
-    dataset_conf: null
+    dataset_conf: "./"
     batch_size: 4
     model_name: "halfunet"
     model_conf: null
