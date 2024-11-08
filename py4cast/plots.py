@@ -399,6 +399,9 @@ class PredictionTimestepPlot(MapPlot):
                     dest_file.parent.mkdir(exist_ok=True)
                     fig.savefig(dest_file)
 
+                run_id = obj.loggers[1].version
+                obj.loggers[1].experiment.log_figure(run_id=run_id, figure=fig, artifact_file=f"{fig_name}_{t_i}.png")
+
                 plt.close(fig)
 
         for var_name, paths in paths_dict.items():
