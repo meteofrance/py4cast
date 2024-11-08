@@ -596,7 +596,7 @@ class SpatialErrorPlot(Plotter):
                 plot_spatial_error(
                     loss_map,
                     obj.interior_2d[:, :, 0],
-                    title=f"{self.prefix} loss, t={t_i} ({obj.hparams['hparams'].dataset_info.step_duration*t_i} h)",
+                    title=f"{self.prefix} loss, t={t_i} ({obj.dataset_info.step_duration*t_i} h)",
                     domain_info=obj.dataset_info.domain_info,
                 )
                 for t_i, loss_map in enumerate(mean_spatial_loss)

@@ -5,8 +5,6 @@ from py4cast.lightning import (
     PlDataModule,
 )
 
-
-# install : pip install -U 'jsonargparse[signatures]>=4.27.7'
 # Launch : python bin/train_cli.py fit --config config/CLI/test.yaml 
 
 class LCli(LightningCLI):
