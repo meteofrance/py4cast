@@ -372,9 +372,7 @@ else:
 # Train model
 print("Starting training !")
 trainer.fit(
-    model=lightning_module,
-    datamodule=dm,
-    ckpt_path=args.load_model_ckpt
+    model=lightning_module, datamodule=dm, ckpt_path=args.load_model_ckpt
 )
 
 if not args.no_log:
