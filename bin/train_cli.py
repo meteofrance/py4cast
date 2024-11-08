@@ -14,13 +14,23 @@ class MyCLI(LightningCLI):
         super().__init__(model_class, datamodule_class, save_config_kwargs={"overwrite": True})
 
     def add_arguments_to_parser(self, parser):
-        # parser.add_argument("--save_config_kwargs", type=dict, default={"overwrite": True})
         parser.link_arguments(
             "data.train_dataset_info",
             "model.dataset_info",
             apply_on="instantiate",
         )
-    
+        
+        parser.link_arguments(
+            "data.dataset_conf",
+            "model.dataset_conf",
+            apply_on="instantiate",
+        )
+
+        parser.link_arguments(
+            "data.len_train_dl",
+            "model.hparams.len_train_loader",
+            apply_on="instantiate",
+        )
 
 def cli_main():
     MyCLI(AutoRegressiveLightning, PlDataModule)

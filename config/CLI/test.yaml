@@ -14,12 +14,10 @@ data:
 
 model:
   hparams:
-    # dataset_info: DatasetInfo
     dataset_name: "poesy"
-    dataset_conf: "./"
     batch_size: 4
     model_name: "halfunet"
-    model_conf: null
+    # model_conf: null
     num_input_steps: 2
     num_pred_steps_train: 1
     num_pred_steps_val_test: 5
@@ -35,10 +33,10 @@ model:
     channels_last: False
 
 trainer:
-  fast_dev_run: false
+  fast_dev_run: 3
   num_nodes: 1
   devices: "auto"
-  max_epochs: 200
+  max_epochs: 10
   deterministic: True
   strategy: "ddp"
   accumulate_grad_batches: 10

@@ -55,7 +55,7 @@ class PlDataModule(pl.LightningDataModule):
     num_pred_steps_train: int
     num_pred_steps_val_test: int
     dl_settings: TorchDataloaderSettings
-    dataset_conf: Union[Path, None] = None
+    dataset_conf: Union[str, None] = None
     config_override: Union[Dict, None] = None
 
     def __post_init__(self):
@@ -104,10 +104,10 @@ class ArLightningHyperParam:
 
     # dataset_info: DatasetInfo
     dataset_name: str
-    dataset_conf: Path
+    # dataset_conf: str
     batch_size: int
 
-    model_conf: Union[Path, None] = None
+    model_conf: Union[str, None] = None
     model_name: str = "halfunet"
 
     lr: float = 0.1
@@ -123,7 +123,7 @@ class ArLightningHyperParam:
     training_strategy: str = "diff_ar"
 
     len_train_loader: int = 1
-    save_path: Path = None
+    save_path: str = None
     use_lr_scheduler: bool = False
     precision: str = "bf16"
     no_log: bool = False
@@ -182,10 +182,11 @@ class AutoRegressiveLightning(pl.LightningModule):
     Auto-regressive lightning module for predicting meteorological fields.
     """
 
-    def __init__(self, hparams: ArLightningHyperParam, dataset_info, *args, **kwargs):
+    def __init__(self, hparams: ArLightningHyperParam, dataset_info, dataset_conf, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
         self.dataset_info = dataset_info
+        self.dataset_conf = dataset_conf
         self.save_hyperparameters()  # write hparams.yaml in save folder
 
         # Load static features for grid/data
@@ -313,16 +314,16 @@ class AutoRegressiveLightning(pl.LightningModule):
             dict_log["username"] = getpass.getuser()
             self.logger.log_hyperparams(dict_log, metrics={"val_mean_loss": 0.0})
             # Save model & dataset conf as files
-            if hparams["dataset_conf"] is not None:
+            if self.dataset_conf is not None:
                 shutil.copyfile(
-                    hparams["dataset_conf"], hparams["save_path"] / "dataset_conf.json"
+                    self.dataset_conf, Path(hparams["save_path"]) / "dataset_conf.json"
                 )
             if hparams["model_conf"] is not None:
                 shutil.copyfile(
-                    hparams["model_conf"], hparams["save_path"] / "model_conf.json"
+                    hparams["model_conf"], Path(hparams["save_path"]) / "model_conf.json"
                 )
             # Write commit and state of git repo in log file
-            dest_git_log = hparams["save_path"] / "git_log.txt"
+            dest_git_log = Path(hparams["save_path"]) / "git_log.txt"
             out_log = (
                 subprocess.check_output(["git", "log", "-n", "1"])
                 .strip()

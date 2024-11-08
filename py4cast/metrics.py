@@ -15,9 +15,9 @@ class MetricPSDK(Metric):
     Compute the PSD as a function of the wave number for each channels/features
     """
 
-    def __init__(self, save_path: Path, pred_step: int = 0):
+    def __init__(self, save_path: str, pred_step: int = 0):
         super().__init__()
-        self.save_path = save_path
+        self.save_path = Path(save_path)
         self.pred_step = pred_step  # timestep of pred where we compute psd
 
         # Declaration of state, states are reset when self.reset() is called
