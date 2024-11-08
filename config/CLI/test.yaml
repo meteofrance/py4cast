@@ -22,7 +22,6 @@ model:
     lr: 1e-4
     loss: "mse"
     training_strategy: "diff_ar"
-    # len_train_loader: int = 1
     save_path: "/scratch/shared/py4cast/logs/test_cli"
     use_lr_scheduler: False
     precision: "32"

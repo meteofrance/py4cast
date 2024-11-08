@@ -68,8 +68,8 @@ class PlDataModule(pl.LightningDataModule):
         self.dl_settings = TorchDataloaderSettings(
                                     self.batch_size,
                                     self.num_workers,
-                                    self.prefetch_factor,
                                     self.pin_memory,
+                                    self.prefetch_factor,
                                     self.persistent_workers
                                     )
 
