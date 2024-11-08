@@ -15,6 +15,7 @@ data:
   config_override: null
 
 model:
+  save_path: "/scratch/shared/py4cast/logs/test_cli"
   hparams:
     model_name: "halfunet"
     # model_conf: null
@@ -22,10 +23,9 @@ model:
     lr: 1e-4
     loss: "mse"
     training_strategy: "diff_ar"
-    save_path: "/scratch/shared/py4cast/logs/test_cli"
     use_lr_scheduler: False
     precision: "32"
-    no_log: False # trainer.logger
+    no_log: False # doublon avec trainer.logger
     channels_last: False
 
 trainer:
@@ -40,7 +40,7 @@ trainer:
   logger: 
     class_path: lightning.pytorch.loggers.TensorBoardLogger
     init_args:
-      save_dir: "/scratch/shared/py4cast/logs/test_cli"
+      # save_dir: "/scratch/shared/py4cast/logs/test_cli"
       name: "folder_logger"
       version: "beta"
       default_hp_metric: False
@@ -49,7 +49,7 @@ trainer:
   callbacks:
     - class_path: lightning.pytorch.callbacks.ModelCheckpoint
       init_args:
-        dirpath: "/scratch/shared/py4cast/logs/test_cli"
+        # dirpath: "/scratch/shared/py4cast/logs/test_cli"
         filename: "{epoch:02d}-{val_mean_loss:.2f}"
         monitor: "val_mean_loss"
         mode: "min"

@@ -9,7 +9,7 @@ from py4cast.lightning import (
 # install : pip install -U 'jsonargparse[signatures]>=4.27.7'
 # Launch : python bin/train_cli.py fit --config config/CLI/test.yaml 
 
-class MyCLI(LightningCLI):
+class LCli(LightningCLI):
     def __init__(self, model_class, datamodule_class):
         super().__init__(model_class, datamodule_class, save_config_kwargs={"overwrite": True})
 
@@ -20,7 +20,7 @@ class MyCLI(LightningCLI):
             "model.hparams.dataset_name",
             apply_on="instantiate",
         )
-        
+
         parser.link_arguments(
             "data.batch_size",
             "model.hparams.batch_size",
@@ -35,7 +35,7 @@ class MyCLI(LightningCLI):
         
         parser.link_arguments(
             "data.dataset_conf",
-            "model.dataset_conf",
+            "model.hparams.dataset_conf",
             apply_on="instantiate",
         )
 
@@ -62,11 +62,22 @@ class MyCLI(LightningCLI):
             "model.hparams.num_pred_steps_val_test",
             apply_on="instantiate",
         )
+        
+        parser.link_arguments(
+            "model.save_path",
+            "trainer.logger.init_args.save_dir",
+            apply_on="instantiate",
+        )
+                
+        parser.link_arguments(
+            "model.save_path",
+            "trainer.callbacks.init_args.dirpath",
+            apply_on="instantiate",
+        )        
 
 
 def cli_main():
-    MyCLI(AutoRegressiveLightning, PlDataModule)
-
+    LCli(AutoRegressiveLightning, PlDataModule)
 
 if __name__ == "__main__":
     cli_main()
