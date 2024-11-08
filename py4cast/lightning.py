@@ -54,12 +54,24 @@ class PlDataModule(pl.LightningDataModule):
     num_input_steps: int
     num_pred_steps_train: int
     num_pred_steps_val_test: int
-    dl_settings: TorchDataloaderSettings
+    batch_size: int
+    num_workers: int
+    prefetch_factor: Union[int, None]
+    pin_memory: bool
+    persistent_workers: bool
+
     dataset_conf: Union[str, None] = None
     config_override: Union[Dict, None] = None
 
     def __post_init__(self):
         super().__init__()
+        self.dl_settings = TorchDataloaderSettings(
+                                    self.batch_size,
+                                    self.num_workers,
+                                    self.prefetch_factor,
+                                    self.pin_memory,
+                                    self.persistent_workers
+                                    )
 
         # Get dataset in initialisation to have access to this attribute before method trainer.fit
         self.train_ds, self.val_ds, self.test_ds = get_datasets(
@@ -115,9 +127,9 @@ class ArLightningHyperParam:
 
     num_input_steps: int = 2
     num_pred_steps_train: int = 2
+    num_pred_steps_val_test: int = 2
     num_inter_steps: int = 1  # Number of intermediary steps (without any data)
 
-    num_pred_steps_val_test: int = 2
     num_samples_to_plot: int = 1
 
     training_strategy: str = "diff_ar"

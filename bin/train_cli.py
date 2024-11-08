@@ -14,6 +14,19 @@ class MyCLI(LightningCLI):
         super().__init__(model_class, datamodule_class, save_config_kwargs={"overwrite": True})
 
     def add_arguments_to_parser(self, parser):
+
+        parser.link_arguments(
+            "data.dataset",
+            "model.hparams.dataset_name",
+            apply_on="instantiate",
+        )
+        
+        parser.link_arguments(
+            "data.batch_size",
+            "model.hparams.batch_size",
+            apply_on="instantiate",
+        )
+        
         parser.link_arguments(
             "data.train_dataset_info",
             "model.dataset_info",
@@ -31,6 +44,25 @@ class MyCLI(LightningCLI):
             "model.hparams.len_train_loader",
             apply_on="instantiate",
         )
+
+        parser.link_arguments(
+            "data.num_input_steps",
+            "model.hparams.num_input_steps",
+            apply_on="instantiate",
+        )
+
+        parser.link_arguments(
+            "data.num_pred_steps_train",
+            "model.hparams.num_pred_steps_train",
+            apply_on="instantiate",
+        )
+
+        parser.link_arguments(
+            "data.num_pred_steps_val_test",
+            "model.hparams.num_pred_steps_val_test",
+            apply_on="instantiate",
+        )
+
 
 def cli_main():
     MyCLI(AutoRegressiveLightning, PlDataModule)

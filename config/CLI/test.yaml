@@ -4,23 +4,20 @@ data:
   num_input_steps: 2
   num_pred_steps_train: 1
   num_pred_steps_val_test: 5
-  dl_settings: 
-    batch_size: 4
-    num_workers: 10
-    prefetch_factor: null
-    pin_memory: False
+
+  batch_size: 4
+  num_workers: 10
+  prefetch_factor: null
+  pin_memory: False
+  persistent_workers: False
+  
   dataset_conf: null
   config_override: null
 
 model:
   hparams:
-    dataset_name: "poesy"
-    batch_size: 4
     model_name: "halfunet"
     # model_conf: null
-    num_input_steps: 2
-    num_pred_steps_train: 1
-    num_pred_steps_val_test: 5
     num_inter_steps: 1
     lr: 1e-4
     loss: "mse"
