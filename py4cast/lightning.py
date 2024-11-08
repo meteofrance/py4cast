@@ -712,11 +712,11 @@ class AutoRegressiveLightning(pl.LightningModule):
             if self.current_epoch % PLOT_PERIOD == 0:
                 for plotter in self.valid_plotters:
                     plotter.update(self, prediction=prediction, target=target)
-                self.psd_plot_metric.update(prediction, target, self.original_shape)
-                self.rmse_psd_plot_metric.update(
-                    prediction, target, self.original_shape
-                )
-                self.acc_metric.update(prediction, target)
+            self.psd_plot_metric.update(prediction, target, self.original_shape)
+            self.rmse_psd_plot_metric.update(
+                prediction, target, self.original_shape
+            )
+            self.acc_metric.update(prediction, target)
 
     def on_validation_epoch_end(self):
         """
