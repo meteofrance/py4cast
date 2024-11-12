@@ -16,7 +16,7 @@ data:
 
 model:
   model_name: "halfunet"
-  # model_conf: null
+  model_conf: null
   num_inter_steps: 1
   lr: 1e-4
   loss: "mse"
