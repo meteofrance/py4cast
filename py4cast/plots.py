@@ -370,10 +370,7 @@ class PredictionTimestepPlot(MapPlot):
         for t_i, (pred_t, target_t) in enumerate(zip(prediction, target), start=1):
             # Create one figure per variable at this time step
             # This generate a matplotlib warning as more than 20 figures are plotted.
-            units = [
-                obj.hparams.dataset_info.units[name]
-                for name in feature_names
-            ]
+            units = [obj.hparams.dataset_info.units[name] for name in feature_names]
             var_figs = [
                 plot_prediction(
                     pred_t[:, :, var_i],
@@ -442,10 +439,7 @@ class PredictionEpochPlot(MapPlot):
             for var_i, (var_name, var_unit, var_vrange) in enumerate(
                 zip(
                     feature_names,
-                    [
-                        obj.hparams.dataset_info.units[name]
-                        for name in feature_names
-                    ],
+                    [obj.hparams.dataset_info.units[name] for name in feature_names],
                     var_vranges,
                 )
             )

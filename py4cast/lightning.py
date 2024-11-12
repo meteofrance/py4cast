@@ -8,10 +8,10 @@ from pathlib import Path
 from typing import Dict, List, Tuple, Union
 
 import einops
-import matplotlib
 
 # import pytorch_lightning as pl
 import lightning as pl
+import matplotlib
 import torch
 from lightning.pytorch.utilities import rank_zero_only
 from torch import nn
@@ -66,12 +66,12 @@ class PlDataModule(pl.LightningDataModule):
     def __post_init__(self):
         super().__init__()
         self.dl_settings = TorchDataloaderSettings(
-                                    self.batch_size,
-                                    self.num_workers,
-                                    self.pin_memory,
-                                    self.prefetch_factor,
-                                    self.persistent_workers
-                                    )
+            self.batch_size,
+            self.num_workers,
+            self.pin_memory,
+            self.prefetch_factor,
+            self.persistent_workers,
+        )
 
         # Get dataset in initialisation to have access to this attribute before method trainer.fit
         self.train_ds, self.val_ds, self.test_ds = get_datasets(
@@ -190,37 +190,38 @@ def rank_zero_init(model_kls, model_settings, statics):
 @rank_zero_only
 def exp_summary(hparams: ArLightningHyperParam, model: nn.Module):
     hparams.summary()
-    summary(model)     
-    
+    summary(model)
+
 
 class AutoRegressiveLightning(pl.LightningModule):
     """
     Auto-regressive lightning module for predicting meteorological fields.
     """
 
-    def __init__(self, 
-                dataset_name: str,
-                dataset_conf: str,
-                model_name: str, 
-                # model_conf: str, # ici, 
-                batch_size: int,
-                num_input_steps: int,
-                num_pred_steps_train: int,
-                num_pred_steps_val_test: int,
-                num_inter_steps: int,
-                lr: float,
-                loss: str,
-                training_strategy: str,
-                use_lr_scheduler: bool,
-                precision: str,
-                no_log: bool, # doublon avec trainer.logger
-                channels_last: bool,
-                len_train_loader: int,
-                dataset_info,
-                save_path: str,
-                *args,
-                **kwargs):
-        
+    def __init__(
+        self,
+        dataset_name: str,
+        dataset_conf: str,
+        model_name: str,
+        # model_conf: str, # ici,
+        batch_size: int,
+        num_input_steps: int,
+        num_pred_steps_train: int,
+        num_pred_steps_val_test: int,
+        num_inter_steps: int,
+        lr: float,
+        loss: str,
+        training_strategy: str,
+        use_lr_scheduler: bool,
+        precision: str,
+        no_log: bool,  # doublon avec trainer.logger
+        channels_last: bool,
+        len_train_loader: int,
+        dataset_info,
+        save_path: str,
+        *args,
+        **kwargs,
+    ):
         super().__init__(*args, **kwargs)
 
         hparams = ArLightningHyperParam(
@@ -243,7 +244,6 @@ class AutoRegressiveLightning(pl.LightningModule):
         )
 
         self.save_hyperparameters(hparams.__dict__)  # write hparams.yaml in save folder
-
         self.save_path = self.hparams.save_path
 
         # Load static features for grid/data
@@ -320,7 +320,9 @@ class AutoRegressiveLightning(pl.LightningModule):
 
         self.register_buffer(
             "grid_static_features",
-            expand_to_batch(statics.grid_static_features.tensor, self.hparams.batch_size),
+            expand_to_batch(
+                statics.grid_static_features.tensor, self.hparams.batch_size
+            ),
             persistent=False,
         )
         # We need to instantiate the loss after statics had been transformed.
@@ -370,7 +372,7 @@ class AutoRegressiveLightning(pl.LightningModule):
             dict_log["username"] = getpass.getuser()
             self.logger.log_hyperparams(dict_log, metrics={"val_mean_loss": 0.0})
             # Save model & dataset conf as files
-            if  self.hparams["dataset_conf"] is not None:
+            if self.hparams["dataset_conf"] is not None:
                 shutil.copyfile(
                     self.hparams["dataset_conf"], self.save_path / "dataset_conf.json"
                 )
@@ -712,9 +714,7 @@ class AutoRegressiveLightning(pl.LightningModule):
         """
         if self.logging_enabled:
             l1_loss = ScaledLoss("L1Loss", reduction="none")
-            l1_loss.prepare(
-                self, self.interior_mask, self.hparams.dataset_info
-            )
+            l1_loss.prepare(self, self.interior_mask, self.hparams.dataset_info)
             metrics = {"mae": l1_loss}
 
             self.valid_plotters = [
@@ -823,9 +823,7 @@ class AutoRegressiveLightning(pl.LightningModule):
             metrics = {}
             for torch_loss, alias in ("L1Loss", "mae"), ("MSELoss", "rmse"):
                 loss = ScaledLoss(torch_loss, reduction="none")
-                loss.prepare(
-                    self, self.interior_mask, self.hparams.dataset_info
-                )
+                loss.prepare(self, self.interior_mask, self.hparams.dataset_info)
                 metrics[alias] = loss
 
             self.test_plotters = [
