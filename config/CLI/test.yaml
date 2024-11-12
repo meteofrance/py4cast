@@ -29,7 +29,7 @@ model:
   save_path: "/scratch/shared/py4cast/logs/test_cli"
 
 trainer:
-  fast_dev_run: 3
+  fast_dev_run: False
   num_nodes: 1
   devices: "auto"
   max_epochs: 10
@@ -65,7 +65,7 @@ trainer:
         patience: 50
   check_val_every_n_epoch: 1
   precision: 32
-  limit_train_batches: null
-  limit_val_batches: null
-  limit_test_batches: null
+  limit_train_batches: 5
+  limit_val_batches: 5
+  limit_test_batches: 5
 
