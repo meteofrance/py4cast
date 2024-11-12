@@ -2,8 +2,8 @@
 data:
   dataset: "poesy"
   num_input_steps: 2
-  num_pred_steps_train: 1
-  num_pred_steps_val_test: 5
+  num_pred_steps_train: 4
+  num_pred_steps_val_test: 8
 
   batch_size: 4
   num_workers: 10
@@ -15,18 +15,18 @@ data:
   config_override: null
 
 model:
+  model_name: "halfunet"
+  # model_conf: null
+  num_inter_steps: 1
+  lr: 1e-4
+  loss: "mse"
+  training_strategy: "diff_ar"
+  use_lr_scheduler: False
+  precision: "32"
+
+  no_log: False # doublon avec trainer.logger
+  channels_last: False
   save_path: "/scratch/shared/py4cast/logs/test_cli"
-  hparams:
-    model_name: "halfunet"
-    # model_conf: null
-    num_inter_steps: 1
-    lr: 1e-4
-    loss: "mse"
-    training_strategy: "diff_ar"
-    use_lr_scheduler: False
-    precision: "32"
-    no_log: False # doublon avec trainer.logger
-    channels_last: False
 
 trainer:
   fast_dev_run: 3

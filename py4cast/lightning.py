@@ -114,7 +114,7 @@ class ArLightningHyperParam:
     Settings and hyperparameters for the lightning AR model.
     """
 
-    # dataset_info: DatasetInfo
+    dataset_info: DatasetInfo
     dataset_name: str
     dataset_conf: str
     batch_size: int
@@ -135,7 +135,7 @@ class ArLightningHyperParam:
     training_strategy: str = "diff_ar"
 
     len_train_loader: int = 1
-    # save_path: str = None
+    save_path: str = None
     use_lr_scheduler: bool = False
     precision: str = "bf16"
     no_log: bool = False
@@ -144,10 +144,14 @@ class ArLightningHyperParam:
     def __post_init__(self):
         """
         Check the configuration
-
+        Cast save_path into Path
         Raises:
             AttributeError: raise an exception if the set of attribute is not well designed.
         """
+
+        if self.save_path:
+            self.save_path = Path(self.save_path)
+
         if self.num_inter_steps > 1 and self.num_input_steps > 1:
             raise AttributeError(
                 "It is not possible to have multiple input steps when num_inter_steps > 1."
@@ -186,30 +190,70 @@ def rank_zero_init(model_kls, model_settings, statics):
 @rank_zero_only
 def exp_summary(hparams: ArLightningHyperParam, model: nn.Module):
     hparams.summary()
-    summary(model)
-
+    summary(model)     
+    
 
 class AutoRegressiveLightning(pl.LightningModule):
     """
     Auto-regressive lightning module for predicting meteorological fields.
     """
 
-    def __init__(self, hparams: ArLightningHyperParam, dataset_info, save_path, *args, **kwargs):
+    def __init__(self, 
+                dataset_name: str,
+                dataset_conf: str,
+                model_name: str, 
+                # model_conf: str, # ici, 
+                batch_size: int,
+                num_input_steps: int,
+                num_pred_steps_train: int,
+                num_pred_steps_val_test: int,
+                num_inter_steps: int,
+                lr: float,
+                loss: str,
+                training_strategy: str,
+                use_lr_scheduler: bool,
+                precision: str,
+                no_log: bool, # doublon avec trainer.logger
+                channels_last: bool,
+                len_train_loader: int,
+                dataset_info,
+                save_path: str,
+                *args,
+                **kwargs):
+        
         super().__init__(*args, **kwargs)
 
-        self.dataset_info = dataset_info
-        self.dataset_conf = hparams.dataset_conf
-        self.save_path = Path(save_path)
-        self.save_hyperparameters()  # write hparams.yaml in save folder
+        hparams = ArLightningHyperParam(
+            dataset_info=dataset_info,
+            dataset_name=dataset_name,
+            dataset_conf=dataset_conf,
+            batch_size=batch_size,
+            model_name=model_name,
+            num_input_steps=num_input_steps,
+            num_pred_steps_train=num_pred_steps_train,
+            num_pred_steps_val_test=num_pred_steps_val_test,
+            num_inter_steps=num_inter_steps,
+            training_strategy=training_strategy,
+            len_train_loader=len_train_loader,
+            save_path=save_path,
+            use_lr_scheduler=use_lr_scheduler,
+            precision=precision,
+            no_log=no_log,
+            channels_last=channels_last,
+        )
+
+        self.save_hyperparameters(hparams.__dict__)  # write hparams.yaml in save folder
+
+        self.save_path = self.hparams.save_path
 
         # Load static features for grid/data
         # We do not want to change dataset statics inplace
         # Otherwise their is some problem with transform_statics and parameters_saving
         # when relaoding from checkpoint
-        statics = deepcopy(dataset_info.statics)
+        statics = deepcopy(self.hparams.dataset_info.statics)
         # Init object of register_dict
-        self.diff_stats = dataset_info.diff_stats
-        self.stats = dataset_info.stats
+        self.diff_stats = self.hparams.dataset_info.diff_stats
+        self.stats = self.hparams.dataset_info.stats
 
         # Keeping track of grid shape
         self.grid_shape = statics.grid_shape
@@ -234,15 +278,15 @@ class AutoRegressiveLightning(pl.LightningModule):
         # Should be directly supplied by datasetinfo ?
 
         num_input_features = (
-            hparams.num_input_steps * dataset_info.weather_dim
+            self.hparams.num_input_steps * self.hparams.dataset_info.weather_dim
             + num_grid_static_features
-            + dataset_info.forcing_dim
+            + self.hparams.dataset_info.forcing_dim
         )
 
-        num_output_features = dataset_info.weather_dim
+        num_output_features = self.hparams.dataset_info.weather_dim
 
         model_kls, model_settings = get_model_kls_and_settings(
-            hparams.model_name, hparams.model_conf
+            self.hparams.model_name, self.hparams.model_conf
         )
 
         # All processes should wait until rank zero
@@ -250,13 +294,13 @@ class AutoRegressiveLightning(pl.LightningModule):
         rank_zero_init(model_kls, model_settings, statics)
 
         self.model, model_settings = build_model_from_settings(
-            hparams.model_name,
+            self.hparams.model_name,
             num_input_features,
             num_output_features,
-            hparams.model_conf,
+            self.hparams.model_conf,
             statics.grid_shape,
         )
-        if hparams.channels_last:
+        if self.hparams.channels_last:
             self.model = self.model.to(memory_format=torch.channels_last)
 
         exp_summary(hparams, self.model)
@@ -276,33 +320,33 @@ class AutoRegressiveLightning(pl.LightningModule):
 
         self.register_buffer(
             "grid_static_features",
-            expand_to_batch(statics.grid_static_features.tensor, hparams.batch_size),
+            expand_to_batch(statics.grid_static_features.tensor, self.hparams.batch_size),
             persistent=False,
         )
         # We need to instantiate the loss after statics had been transformed.
         # Indeed, the statics used should be in the right dimensions.
         # MSE loss, need to do reduction ourselves to get proper weighting
-        if hparams.loss == "mse":
+        if self.hparams.loss == "mse":
             self.loss = WeightedLoss("MSELoss", reduction="none")
-        elif hparams.loss == "mae":
+        elif self.hparams.loss == "mae":
             self.loss = WeightedLoss("L1Loss", reduction="none")
         else:
-            raise TypeError(f"Unknown loss function: {hparams.loss}")
+            raise TypeError(f"Unknown loss function: {self.hparams.loss}")
 
-        self.loss.prepare(self, statics.interior_mask, dataset_info)
+        self.loss.prepare(self, statics.interior_mask, hparams.dataset_info)
 
-        max_pred_step = hparams.num_pred_steps_val_test - 1
+        max_pred_step = self.hparams.num_pred_steps_val_test - 1
         if self.logging_enabled:
             self.rmse_psd_plot_metric = MetricPSDVar(pred_step=max_pred_step)
             self.psd_plot_metric = MetricPSDK(self.save_path, pred_step=max_pred_step)
-            self.acc_metric = MetricACC(dataset_info)
+            self.acc_metric = MetricACC(self.hparams.dataset_info)
 
     @property
     def dtype(self):
         """
         Return the appropriate torch dtype for the desired precision in hparams.
         """
-        return str_to_dtype[self.hparams["hparams"]["precision"]]
+        return str_to_dtype[self.hparams["precision"]]
 
     @rank_zero_only
     def inspect_tensors(self):
@@ -320,15 +364,15 @@ class AutoRegressiveLightning(pl.LightningModule):
     @rank_zero_only
     def log_hparams_tb(self):
         if self.logging_enabled and self.logger:
-            hparams = self.hparams["hparams"]
+            hparams = self.hparams
             # Log hparams in tensorboard hparams window
             dict_log = hparams
             dict_log["username"] = getpass.getuser()
             self.logger.log_hyperparams(dict_log, metrics={"val_mean_loss": 0.0})
             # Save model & dataset conf as files
-            if self.dataset_conf is not None:
+            if  self.hparams["dataset_conf"] is not None:
                 shutil.copyfile(
-                    self.dataset_conf, self.save_path / "dataset_conf.json"
+                    self.hparams["dataset_conf"], self.save_path / "dataset_conf.json"
                 )
             if hparams["model_conf"] is not None:
                 shutil.copyfile(
@@ -352,13 +396,13 @@ class AutoRegressiveLightning(pl.LightningModule):
         self.log_hparams_tb()
 
     def configure_optimizers(self) -> torch.optim.Optimizer:
-        lr = self.hparams["hparams"]["lr"]
+        lr = self.hparams["lr"]
         opt = torch.optim.AdamW(self.parameters(), lr=lr, betas=(0.9, 0.95))
         if self.opt_state:
             opt.load_state_dict(self.opt_state)
 
-        if self.hparams["hparams"]["use_lr_scheduler"]:
-            len_loader = self.hparams["hparams"]["len_train_loader"] // LR_SCHEDULER_PERIOD
+        if self.hparams["use_lr_scheduler"]:
+            len_loader = self.hparams["len_train_loader"] // LR_SCHEDULER_PERIOD
             epochs = self.trainer.max_epochs
             lr_scheduler = get_cosine_schedule_with_warmup(
                 opt, 1000 // LR_SCHEDULER_PERIOD, len_loader * epochs
@@ -417,19 +461,19 @@ class AutoRegressiveLightning(pl.LightningModule):
         - num_inter_steps
         """
         force_border: bool = (
-            True if self.hparams["hparams"]["training_strategy"] == "scaled_ar" else False
+            True if self.hparams["training_strategy"] == "scaled_ar" else False
         )
         scale_y: bool = (
-            True if self.hparams["hparams"]["training_strategy"] == "scaled_ar" else False
+            True if self.hparams["training_strategy"] == "scaled_ar" else False
         )
         # raise if mismatch between strategy and num_inter_steps
-        if self.hparams["hparams"]["training_strategy"] == "diff_ar":
-            if self.hparams["hparams"]["num_inter_steps"] != 1:
+        if self.hparams["training_strategy"] == "diff_ar":
+            if self.hparams["num_inter_steps"] != 1:
                 raise ValueError(
                     "Diff AR strategy requires exactly 1 intermediary step."
                 )
 
-        return force_border, scale_y, self.hparams["hparams"]["num_inter_steps"]
+        return force_border, scale_y, self.hparams["num_inter_steps"]
 
     def common_step(
         self, batch: ItemBatch, inference: bool = False
@@ -506,7 +550,7 @@ class AutoRegressiveLightning(pl.LightningModule):
             for k in range(num_inter_steps):
                 x = self._next_x(batch, prev_states, i)
                 # Graph (B, N_grid, d_f) or Conv (B, N_lat,N_lon d_f)
-                if self.hparams["hparams"]["channels_last"]:
+                if self.hparams["channels_last"]:
                     x = x.to(memory_format=torch.channels_last)
                 y = self.model(x)
 
@@ -618,7 +662,7 @@ class AutoRegressiveLightning(pl.LightningModule):
         """
         Check if logging is enabled
         """
-        return not self.hparams["hparams"]["no_log"]
+        return not self.hparams["no_log"]
 
     def on_save_checkpoint(self, checkpoint):
         """
@@ -669,7 +713,7 @@ class AutoRegressiveLightning(pl.LightningModule):
         if self.logging_enabled:
             l1_loss = ScaledLoss("L1Loss", reduction="none")
             l1_loss.prepare(
-                self, self.interior_mask, self.dataset_info
+                self, self.interior_mask, self.hparams.dataset_info
             )
             metrics = {"mae": l1_loss}
 
@@ -780,7 +824,7 @@ class AutoRegressiveLightning(pl.LightningModule):
             for torch_loss, alias in ("L1Loss", "mae"), ("MSELoss", "rmse"):
                 loss = ScaledLoss(torch_loss, reduction="none")
                 loss.prepare(
-                    self, self.interior_mask, self.dataset_info
+                    self, self.interior_mask, self.hparams.dataset_info
                 )
                 metrics[alias] = loss
 
@@ -788,7 +832,7 @@ class AutoRegressiveLightning(pl.LightningModule):
                 StateErrorPlot(metrics, save_path=self.save_path),
                 SpatialErrorPlot(),
                 PredictionTimestepPlot(
-                    num_samples_to_plot=self.hparams["hparams"]["num_samples_to_plot"],
+                    num_samples_to_plot=self.hparams["num_samples_to_plot"],
                     num_features_to_plot=4,
                     prefix="Test",
                     save_path=self.save_path,
