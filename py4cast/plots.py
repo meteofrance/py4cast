@@ -246,13 +246,13 @@ class MapPlot(Plotter):
         num_samples_to_plot: int,
         num_features_to_plot: Union[None, int] = None,
         prefix: str = "Test",
-        save_path: str = None,
+        save_path: Path = None,
     ):
         self.num_samples_to_plot = num_samples_to_plot
         self.plotted_examples = 0
         self.prefix = prefix
         self.num_features_to_plot = num_features_to_plot
-        self.save_path = Path(save_path)
+        self.save_path = save_path
 
     def update(
         self,
