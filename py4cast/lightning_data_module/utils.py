@@ -1,9 +1,14 @@
 import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import numpy as np
+import math
+from typing import Optional
+from PIL import Image
+import io
+
 from py4cast.models import build_model_from_settings
 
-from PIL import Image
-import numpy as np
-import io
 
 ###--------------------- INIT MODEL ---------------------###
 
@@ -16,17 +21,6 @@ class InitModelLightningModule:
     ):
         self.model_name = model_name
         self.model_conf = model_conf
-
-    def create_model(self):
-        """Creates a model with the config file (.json) if available."""
-        model, model_settings = build_model_from_settings(
-            network_name=self.model_name,
-            num_input_features=self.num_input_features,
-            num_output_features=self.num_output_features,
-            settings_path=self.model_conf,
-            input_shape=self.input_shape,
-        )
-        return model, model_settings
 
     def setup(self, stage=None):
         """
@@ -47,7 +41,15 @@ class InitModelLightningModule:
         self.num_input_features = 21  # à modifier pour coller au format du datamodule
         self.num_output_features = self.num_input_features
 
-        return self.create_model()
+        """Creates a model with the config file (.json) if available."""
+        model, model_settings = build_model_from_settings(
+            network_name=self.model_name,
+            num_input_features=self.num_input_features,
+            num_output_features=self.num_output_features,
+            settings_path=self.model_conf,
+            input_shape=self.input_shape,
+        )
+        return model, model_settings
 
 
 ###--------------------- PLOT ---------------------###
@@ -164,3 +166,29 @@ class PlotLightningModule:
             0,
             dataformats="HW",
         )
+
+
+###--------------------- MASK ---------------------###
+
+
+class MaskLightningModule:
+    def __init__(self):
+        pass
+
+    def create_mask_per_channel(x: torch.Tensor, mask_ratio: float) -> torch.Tensor:
+        """
+        Creates a random binary mask with masking ratio applied per channel.
+        Args:
+            x: The input tensor (shape: B, C, H, W).
+            mask_ratio: The fraction of elements to mask (between 0 and 1).
+        Returns:
+            A binary mask tensor of the same size as x, with 0s and 1s.
+        """
+        B, C, H, W = x.shape
+        num_mask_per_channel = int(mask_ratio * H * W) #number of elements to mask per channel
+        mask = torch.ones_like(x, dtype=torch.bool) #empty mask with the same shape as x
+        for b in range(B):
+            for c in range(C):
+                mask_indices = torch.randperm(H * W)[:num_mask_per_channel] #random indices for the current channel
+                mask[b, c].view(-1)[mask_indices] = False  # Set to False for masking
+        return mask
