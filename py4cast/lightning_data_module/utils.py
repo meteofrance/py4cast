@@ -1,0 +1,166 @@
+import torch
+from py4cast.models import build_model_from_settings
+
+from PIL import Image
+import numpy as np
+import io
+
+###--------------------- INIT MODEL ---------------------###
+
+
+class InitModelLightningModule:
+    def __init__(
+        self,
+        model_name,
+        model_conf,
+    ):
+        self.model_name = model_name
+        self.model_conf = model_conf
+
+    def create_model(self):
+        """Creates a model with the config file (.json) if available."""
+        model, model_settings = build_model_from_settings(
+            network_name=self.model_name,
+            num_input_features=self.num_input_features,
+            num_output_features=self.num_output_features,
+            settings_path=self.model_conf,
+            input_shape=self.input_shape,
+        )
+        return model, model_settings
+
+    def setup(self, stage=None):
+        """
+        Called at the beginning of fit (train + validate), validate, test, or predict.
+        This is a good hook when you need to build models dynamically or adjust something about them.
+        This hook is called on every process when using DDP.
+        """
+
+        """
+        #accès aux données via self.trainer.datamodule
+        dataset = self.trainer.datamodule.train_dataset
+        self.input_shape = (dataset[0][0].shape[2], dataset[0][0].shape[3]) #à modifier pour coller au format du datamodule
+        self.num_input_features = dataset[0][0].shape[1] #à modifier pour coller au format du datamodule
+        self.num_output_features = self.num_input_features
+        """
+
+        self.input_shape = (512, 640)  # à modifier pour coller au format du datamodule
+        self.num_input_features = 21  # à modifier pour coller au format du datamodule
+        self.num_output_features = self.num_input_features
+
+        return self.create_model()
+
+
+###--------------------- PLOT ---------------------###
+
+
+class PlotLightningModule:
+    def __init__(self):
+        pass
+
+    def log_loss(self, tb, metrics_loss_dict, label):
+        """Logs loss to TensorBoard.
+        Args:
+            label: The current label (train, val, test).
+            loss: The loss value.
+        """
+        step = self.current_epoch if label != "train" else self.global_step
+        avg_loss = torch.stack([x["loss"] for x in metrics_loss_dict]).mean()
+        tb.add_scalar(f"loss/{label}", avg_loss, step)
+
+    def log_metrics(self, tb, metrics_loss_dict, label):
+        """Logs metrics to TensorBoard.
+        Args:
+            label: The current label (train, val, test).
+            metrics: A dictionary of metrics.
+        """
+        step = self.current_epoch if label != "train" else self.global_step
+        for metric in self.metrics:
+            avg_m = torch.stack([x[metric] for x in metrics_loss_dict]).mean()
+            tb.add_scalar(f"metrics/{label}_{metric}", avg_m, step)
+
+    def log_images(self, tb, label, y, y_hat, num_channels=3, channel_indices=None):
+        """Logs images to TensorBoard.
+        Args:
+            label: The current label (train, val, test).
+            y: The ground truth image tensor.
+            y_hat: The predicted image tensor.
+            num_channels: The number of channels to plot (default: 3).
+            channel_indices: A list of channel indices to plot (optional).
+                            If None, the first num_channels will be plotted.
+        """
+        step = self.current_epoch if label != "train" else self.global_step
+
+        # Process and log the ground truth image (y)
+        if channel_indices is None:
+            channels_to_plot = y[:num_channels]
+        else:
+            channels_to_plot = y[channel_indices]
+        image_to_plot = channels_to_plot.permute(1, 2, 0)
+        tb.add_image(f"{label}/ground_truth", image_to_plot, step, dataformats="HW")
+
+        # Process and log the predicted image (y_hat)
+        if channel_indices is None:
+            channels_to_plot = y_hat[:num_channels]
+        else:
+            channels_to_plot = y_hat[channel_indices]
+        image_to_plot = channels_to_plot.permute(1, 2, 0)
+        tb.add_image(f"{label}/prediction", image_to_plot, step, dataformats="HW")
+
+    def log_gif(self, tb, label, y, y_hat, number_of_steps, channel_indices=0):
+        """Logs a GIF to TensorBoard showing the temporal evolution of a specific channel.
+
+        Args:
+            label: The current label (train, val, test).
+            y: The ground truth image tensor (size=B,C,H,W).
+            y_hat: The predicted image tensor (size=B,C,H,W).
+            number_of_steps: The number of steps (batches) to include in the GIF.
+            channel_indices: The index of the channel to display (default: 1).
+        """
+
+        # Select the specified channel for both ground truth and prediction
+        y_channel = y[:number_of_steps, channel_indices, :, :]
+        y_hat_channel = y_hat[:number_of_steps, channel_indices, :, :]
+
+        # Create lists to store frames for the GIF
+        y_frames = []
+        y_hat_frames = []
+
+        for i in range(number_of_steps):
+            # Convert tensors to PIL images
+            y_image = Image.fromarray(
+                y_channel[i].cpu().numpy(), mode="F"
+            )  # Assuming 'F' mode for single-channel data
+            y_hat_image = Image.fromarray(y_hat_channel[i].cpu().numpy(), mode="F")
+
+            # Add frames to the lists
+            y_frames.append(y_image)
+            y_hat_frames.append(y_hat_image)
+
+        # Save GIFs to bytes buffers
+        y_buffer = io.BytesIO()
+        y_frames[0].save(
+            y_buffer, format="GIF", append_images=y_frames[1:], save_all=True, loop=0
+        )
+
+        y_hat_buffer = io.BytesIO()
+        y_hat_frames[0].save(
+            y_hat_buffer,
+            format="GIF",
+            append_images=y_hat_frames[1:],
+            save_all=True,
+            loop=0,
+        )
+
+        # Log GIFs to TensorBoard
+        tb.add_image(
+            f"{label}/ground_truth_gif",
+            np.array(Image.open(y_buffer)),
+            0,
+            dataformats="HW",
+        )
+        tb.add_image(
+            f"{label}/prediction_gif",
+            np.array(Image.open(y_hat_buffer)),
+            0,
+            dataformats="HW",
+        )
