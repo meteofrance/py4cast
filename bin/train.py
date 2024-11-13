@@ -176,6 +176,12 @@ parser.add_argument(
     help="Path to load model parameters from (default: None)",
 )
 parser.add_argument(
+    "--resume_from_ckpt",
+    type=str,
+    default=None,
+    help="Path to load the whole training parameters from (default: None)",
+)
+parser.add_argument(
     "--strategy",
     type=str,
     default="diff_ar",
@@ -362,20 +368,16 @@ trainer = pl.Trainer(
     limit_test_batches=args.limit_train_batches,
 )
 
-if args.load_model_ckpt:
+if args.load_model_ckpt and not args.resume_from_ckpt:
     lightning_module = AutoRegressiveLightning.load_from_checkpoint(
         args.load_model_ckpt, hparams=hp
     )
 else:
     lightning_module = AutoRegressiveLightning(hp)
 
-
 # Train model
 print("Starting training !")
-trainer.fit(
-    model=lightning_module,
-    datamodule=dm,
-)
+trainer.fit(model=lightning_module, datamodule=dm, ckpt_path=args.resume_from_ckpt)
 
 if not args.no_log:
     # If we saved a model, we test it.
