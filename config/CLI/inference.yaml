@@ -63,6 +63,12 @@ trainer:
         monitor: "val_mean_loss"
         mode: "min"
         patience: 50
+    - class_path: py4cast.cli.CustomWriter
+      init_args:
+        write_interval: 'epoch'
+        output_dir: "/scratch/shared/py4cast/gribs_writing/test_callback"
+
+
   check_val_every_n_epoch: 1
   precision: 32
   limit_train_batches: 5
