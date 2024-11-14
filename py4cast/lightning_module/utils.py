@@ -77,7 +77,7 @@ class PlotLightningModule:
             tb.add_scalar(f"metrics/{label}_{metric}", avg_m, step)
 
     def log_images(self, tb, label, y, y_hat, num_channels=3, channel_indices=None):
-        """Logs images to TensorBoard.
+        """Logs images to TensorBoard. Batching is supposedly done on chronologically adjacent samples. (B=0 <=> t=i), (B=1 <=> t=i+1), etc.
         Args:
             label: The current label (train, val, test).
             y: The ground truth image tensor.
@@ -171,7 +171,7 @@ class MaskLightningModule:
     def __init__(self):
         pass
 
-    def create_mask(x: torch.Tensor, mask_ratio: float) -> torch.Tensor:
+    def create_mask(self, x: torch.Tensor, mask_ratio: float) -> torch.Tensor:
         """
         Creates a random binary mask with masking ratio applied per channel.
         Args:
@@ -181,10 +181,16 @@ class MaskLightningModule:
             A binary mask tensor of the same size as x, with 0s and 1s.
         """
         B, C, H, W = x.shape
-        num_mask_per_channel = int(mask_ratio * H * W) #number of elements to mask per channel
-        mask = torch.ones_like(x, dtype=torch.bool) #empty mask with the same shape as x
+        num_mask_per_channel = int(
+            mask_ratio * H * W
+        )  # number of elements to mask per channel
+        mask = torch.ones_like(
+            x, dtype=torch.bool
+        )  # empty mask with the same shape as x
         for b in range(B):
             for c in range(C):
-                mask_indices = torch.randperm(H * W)[:num_mask_per_channel] #random indices for the current channel
+                mask_indices = torch.randperm(H * W)[
+                    :num_mask_per_channel
+                ]  # random indices for the current channel
                 mask[b, c].view(-1)[mask_indices] = False  # Set to False for masking
         return mask

@@ -1,5 +1,6 @@
 from lightning.pytorch.cli import LightningCLI, ArgsType
-from py4cast.lightning_data_module.dummy import DummyDataModule, DummyLightningModule
+from py4cast.lightning_module.dummy import DummyLightningModule
+from py4cast.data_module.dummy import DummyDataModule
 
 
 def cli_main(args: ArgsType = None):
@@ -14,4 +15,9 @@ def cli_main(args: ArgsType = None):
 
 
 if __name__ == "__main__":
-    cli_main(["--config=config/lightning_cli/config_cli_test.yaml", "--trainer.fast_dev_run=False"])
+    cli_main(
+        [
+            "--config=config/lightning_cli/config_cli_test.yaml",
+            "--trainer.fast_dev_run=False",
+        ]
+    )

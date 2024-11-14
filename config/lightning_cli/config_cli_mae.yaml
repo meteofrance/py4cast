@@ -1,0 +1,13 @@
+seed_everything: "True"
+model:
+  model_conf:
+  model_name: "unetrpp"
+  lr: 0.1
+  loss_name: "mse"
+  save_path: ~
+  use_lr_scheduler: "False"
+  mask_ratio: 0.3
+data:
+  dataset_name: "titan"
+  dataset_conf: "config/datasets/titan_full.json"
+  config_override: ~

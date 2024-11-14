@@ -3,15 +3,15 @@ import torch
 import torch.nn as nn
 import torchmetrics as tm
 from pathlib import Path
-from typing import Union, Dict
+from typing import Union
 
 # A GARDER
-from py4cast.datasets import get_datasets
 from py4cast.settings import HIERA_MASKED_DIR
-from py4cast.lightning_data_module.utils import InitModelLightningModule, PlotLightningModule
-
-# A SUPPRIMER
-from py4cast.datasets.base import TorchDataloaderSettings
+from py4cast.lightning_module.utils import (
+    InitModelLightningModule,
+    PlotLightningModule,
+    MaskLightningModule,
+)
 
 # PAS CLAIR
 from copy import deepcopy
@@ -22,79 +22,25 @@ from transformers import get_cosine_schedule_with_warmup
 LR_SCHEDULER_PERIOD: int = 10
 
 
-class DummyDataModule(pl.LightningDataModule):
-    """
-    DataModule to encapsulate data splits and data loading.
-    """
-
-    def __init__(
-        self,
-        dataset_name: str,
-        dataset_conf: Union[Path, None],
-        config_override: Union[Dict, None] = None,
-        num_input_steps: int = 1,
-        num_pred_steps_train: int = 1,
-        num_pred_steps_val_test: int = 1,
-    ):
-        super().__init__()
-        self.dl_settings = TorchDataloaderSettings()
-        self.dataset_name = dataset_name
-        self.dataset_conf = dataset_conf
-        self.config_override = config_override
-        self.num_input_steps = num_input_steps
-        self.num_pred_steps_train = num_pred_steps_train
-        self.num_pred_steps_val_test = num_pred_steps_val_test
-
-        # Get dataset in initialisation to have access to this attribute before method trainer.fit
-        self.train_ds, self.val_ds, self.test_ds = get_datasets(
-            self.dataset_name,
-            self.num_input_steps,
-            self.num_pred_steps_train,
-            self.num_pred_steps_val_test,
-            self.dataset_conf,
-            self.config_override,
-        )
-
-    @property
-    def len_train_dl(self):
-        return len(self.train_ds.torch_dataloader(self.dl_settings))
-
-    @property
-    def train_dataset_info(self):
-        return self.train_ds.dataset_info
-
-    @property
-    def infer_ds(self):
-        return self.test_ds
-
-    def train_dataloader(self):
-        return self.train_ds.torch_dataloader(self.dl_settings)
-
-    def val_dataloader(self):
-        return self.val_ds.torch_dataloader(self.dl_settings)
-
-    def test_dataloader(self):
-        return self.test_ds.torch_dataloader(self.dl_settings)
-
-    def predict_dataloader(self):
-        return self.test_ds.torch_dataloader(self.dl_settings)
-
-
-class DummyLightningModule(
-    InitModelLightningModule, PlotLightningModule, pl.LightningModule
+class MAELightningModule(
+    InitModelLightningModule,
+    PlotLightningModule,
+    MaskLightningModule,
+    pl.LightningModule,
 ):
-    """A lightning module adapted for test.
+    """A lightning module adapted for MAE (masked auto-encoder).
     Computes metrics and manages logging in tensorboard."""
 
     def __init__(
         self,
         model_conf: Union[Path, None] = None,
-        model_name: str = "hiera",
+        model_name: str = "unetrpp",
         lr: float = 0.1,
         loss_name: str = "mse",
         len_train_loader: int = 1,
         save_path: Path = None,
         use_lr_scheduler: bool = False,
+        mask_ratio: float = 0.3,
     ):
         super().__init__(
             model_name=model_name, model_conf=model_conf
@@ -104,6 +50,9 @@ class DummyLightningModule(
         ).__init__()  # Initialize PlotLightningModule
         super(
             PlotLightningModule, self
+        ).__init__()  # Initialize InitModelLightningModule
+        super(
+            MaskLightningModule, self
         ).__init__()  # Initialize InitModelLightningModule
 
         # init model
@@ -125,6 +74,9 @@ class DummyLightningModule(
         self.opt_state = None
         self.loss = nn.MSELoss(reduction="none")
         self.metrics = self.get_metrics()
+
+        # Specific to this model
+        self.mask_ratio = mask_ratio
 
     ###--------------------- MISCELLANEOUS ---------------------###
 
@@ -185,7 +137,9 @@ class DummyLightningModule(
             torch.squeeze(batch.inputs.tensor[:, 0, :, :, :], dim=1),
             torch.squeeze(batch.outputs.tensor[:, 0, :, :, :], dim=1),
         )
-        y_hat = self.model(x)
+        mask = self.create_mask(x, self.mask_ratio)
+        x_masked = x * mask  # element-wise product
+        y_hat = self.model(x_masked)
         loss = self.loss(y_hat.float(), y).mean()
         batch_dict = self.shared_metrics_loss_step(loss, y, y_hat)
         self.training_step_metrics_loss.append(batch_dict)
