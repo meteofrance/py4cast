@@ -171,7 +171,7 @@ class MaskLightningModule:
     def __init__(self):
         pass
 
-    def create_mask_per_channel(x: torch.Tensor, mask_ratio: float) -> torch.Tensor:
+    def create_mask(x: torch.Tensor, mask_ratio: float) -> torch.Tensor:
         """
         Creates a random binary mask with masking ratio applied per channel.
         Args:
