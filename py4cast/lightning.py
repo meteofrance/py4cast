@@ -197,9 +197,6 @@ class AutoRegressiveLightning(pl.LightningModule):
         # Keeping track of grid shape
         self.grid_shape = statics.grid_shape
 
-        # For making restoring of optimizer state optional (slight hack)
-        self.opt_state = None
-
         # For example plotting
         self.plotted_examples = 0
 
@@ -338,9 +335,6 @@ class AutoRegressiveLightning(pl.LightningModule):
     def configure_optimizers(self) -> torch.optim.Optimizer:
         lr = self.hparams["hparams"].lr
         opt = torch.optim.AdamW(self.parameters(), lr=lr, betas=(0.9, 0.95))
-        if self.opt_state:
-            opt.load_state_dict(self.opt_state)
-
         if self.hparams["hparams"].use_lr_scheduler:
             len_loader = self.hparams["hparams"].len_train_loader // LR_SCHEDULER_PERIOD
             epochs = self.trainer.max_epochs
@@ -712,11 +706,9 @@ class AutoRegressiveLightning(pl.LightningModule):
             if self.current_epoch % PLOT_PERIOD == 0:
                 for plotter in self.valid_plotters:
                     plotter.update(self, prediction=prediction, target=target)
-                self.psd_plot_metric.update(prediction, target, self.original_shape)
-                self.rmse_psd_plot_metric.update(
-                    prediction, target, self.original_shape
-                )
-                self.acc_metric.update(prediction, target)
+            self.psd_plot_metric.update(prediction, target, self.original_shape)
+            self.rmse_psd_plot_metric.update(prediction, target, self.original_shape)
+            self.acc_metric.update(prediction, target)
 
     def on_validation_epoch_end(self):
         """
