@@ -6,7 +6,6 @@ from lightning.pytorch.cli import LightningCLI
 from py4cast.lightning import AutoRegressiveLightning, PlDataModule
 from lightning.pytorch.callbacks import BasePredictionWriter
 
-
 from py4cast.io.outputs import GribSavingSettings, save_named_tensors_to_grib
 default_config_root = Path(__file__).parents[1] / "config/IO/"
 
