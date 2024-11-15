@@ -1,26 +1,46 @@
 import torch
 import os
+from pathlib import Path
 from lightning.pytorch.cli import LightningCLI
 
 from py4cast.lightning import AutoRegressiveLightning, PlDataModule
 from lightning.pytorch.callbacks import BasePredictionWriter
 
-class CustomWriter(BasePredictionWriter):
+
+from py4cast.io.outputs import GribSavingSettings, save_named_tensors_to_grib
+default_config_root = Path(__file__).parents[1] / "config/IO/"
+
+class GribWriter(BasePredictionWriter):
 
     def __init__(self, output_dir, write_interval):
         super().__init__(write_interval)
         self.output_dir = output_dir
 
+    def setup(self, trainer, pl_module, stage):
+        self.stage = stage
+        pass
+
     def write_on_epoch_end(self, trainer, pl_module, predictions, batch_indices):
-        # this will create N (num processes) files in `output_dir` each containing
-        # the predictions of it's respective rank
-        torch.save(predictions, os.path.join(self.output_dir, f"predictions_{trainer.global_rank}.pt"))
 
-        # optionally, you can also save `batch_indices` to get the information about the data index
-        # from your prediction data
-        torch.save(batch_indices, os.path.join(self.output_dir, f"batch_indices_{trainer.global_rank}.pt"))
+        if self.stage == 'predict':
+            model_ds = trainer.datamodule.infer_ds
 
-# pred_writer = CustomWriter(output_dir="./", write_interval="epoch")
+            with open(default_config_root / "poesy_grib_settings.json", "r") as f:
+                save_settings = GribSavingSettings.schema().loads((f.read()))
+                ph = len(save_settings.output_fmt.split("{}")) - 1
+                kw = len(save_settings.output_kwargs)
+                fi = len(save_settings.sample_identifiers)
+                try:
+                    assert ph == (fi + kw)
+                except AssertionError:
+                    raise ValueError(
+                        f"Filename fmt has {ph} placeholders,\
+                        but {kw} output_kwargs and {fi} sample identifiers."
+                    )
+
+            for sample, pred in zip(model_ds.sample_list, predictions):
+                save_named_tensors_to_grib(pred, model_ds, sample, save_settings)
+
 
 class LCli(LightningCLI):
     def __init__(self, model_class, datamodule_class):

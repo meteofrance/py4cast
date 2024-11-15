@@ -696,6 +696,10 @@ class AutoRegressiveLightning(pl.LightningModule):
                     f"Input Feature names mismatch between training and inference. "
                     f"Training: {self.input_feature_names}, Inference: {batch.inputs.feature_names}"
                 )
+            
+        # trainer.datamodule definiir un predict_dataseet
+        # save grib
+        
         return self.forward(batch)
 
     def forward(self, x: ItemBatch) -> NamedTensor:
