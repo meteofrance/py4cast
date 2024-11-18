@@ -85,6 +85,7 @@ class PlDataModule(pl.LightningDataModule):
 
     @property
     def len_train_dl(self):
+        # used to compute the total number of training step to get a warm up for lr
         return len(self.train_ds.torch_dataloader(self.dl_settings))
 
     @property
@@ -398,8 +399,8 @@ class AutoRegressiveLightning(pl.LightningModule):
     def configure_optimizers(self) -> torch.optim.Optimizer:
         lr = self.hparams["lr"]
         opt = torch.optim.AdamW(self.parameters(), lr=lr, betas=(0.9, 0.95))
-        if self.opt_state:
-            opt.load_state_dict(self.opt_state)
+        # if self.opt_state:
+        #     opt.load_state_dict(self.opt_state)
 
         if self.hparams["use_lr_scheduler"]:
             len_loader = self.hparams["len_train_loader"] // LR_SCHEDULER_PERIOD
@@ -532,6 +533,7 @@ class AutoRegressiveLightning(pl.LightningModule):
         # Here we do the autoregressive prediction looping
         # for the desired number of ar steps.
         for i in range(batch.num_pred_steps):
+
             if not inference:
                 border_state = batch.outputs.select_dim("timestep", i)
 
