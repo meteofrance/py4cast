@@ -376,6 +376,57 @@ def test_write_template_dataset():
     assert np.isclose(np.nanmean(receiver_ds.tirf.values[0]), 3.1416).all()
     assert np.isclose(np.nanmean(receiver_ds.mpsl.values[1]), 6.2832).all()
 
+    # Testing with 1 surface variable
+
+    grib_features = pd.DataFrame(
+        {
+            "feature_name": [
+                "tirf",
+            ],
+            "level": [0.0],
+            "name": ["tirf"],
+            "typeOfLevel": [
+                "surface",
+            ],
+        },
+        index=[
+            "tirf",
+        ],
+    )
+
+    levels = 0.0
+    variables = {"tirf": "tirf"}
+    dummy_template = FakeSurfaceDs(lat[::-1], lon, levels, variables)
+    validtime = 1.0
+    leadtime = 1.0
+    sample = FakeSample("1911-10-30", "first solvay congress")
+    _, _, dummy_ds = DummyDataset.from_json("fakepath.json", 1, 2, 4)
+    pred = NamedTensor(
+        torch.ones((1, 5, 1, 64, 64), dtype=torch.float32) * 3.14160000,
+        names=["batch", "timestep", "features", "lat", "lon"],
+        feature_names=["tirf"],
+    )
+
+    pred.tensor[0, :, 0] = torch.tensor(3.1416, dtype=torch.float32)
+    raw_data = pred.select_dim("timestep", 0, bare_tensor=False)
+
+    receiver_ds = out.write_storable_dataset(
+        pred,
+        dummy_ds,
+        dummy_template.template_ds,
+        "surface",
+        sample,
+        validtime,
+        leadtime,
+        raw_data,
+        grib_features,
+    )
+
+    assert set(receiver_ds.keys()) == {"tirf"}
+    assert receiver_ds.tirf.dims == ("latitude", "longitude")
+    assert receiver_ds.tirf.values.shape == (64, 64)
+    assert np.isclose(np.nanmean(receiver_ds.tirf.values[0]), 3.1416).all()
+
     # testing with 'heightaboveground' variables
 
     grib_features = pd.DataFrame(
