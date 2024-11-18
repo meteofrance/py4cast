@@ -9,6 +9,8 @@ import os
 from argparse import ArgumentParser, BooleanOptionalAction
 from datetime import datetime
 from pathlib import Path
+import mlflow.pytorch
+from mlflow.models.signature import infer_signature
 
 import pytorch_lightning as pl
 import torch
@@ -27,10 +29,6 @@ from py4cast.lightning import (
 )
 from py4cast.models import registry as model_registry
 from py4cast.settings import ROOTDIR
-
-import mlflow.tracking
-import mlflow.pytorch
-from mlflow.models.signature import infer_signature
 
 layout = {
     "Check Overfit": {
@@ -402,6 +400,7 @@ if not args.no_log:
     )
     trainer.test(ckpt_path=model_to_test, datamodule=dm)
 
+# Finally log the model in a MLFlow fashion
 if trainer.global_rank == 0:
     # Get random sample to infer the signature of the model
     dataloader = dm.test_dataloader()
