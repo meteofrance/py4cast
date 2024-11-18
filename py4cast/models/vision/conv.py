@@ -19,7 +19,6 @@ from py4cast.models.vision.utils import features_last_to_second, features_second
 @dataclass_json
 @dataclass(slots=True)
 class HalfUnetSettings:
-
     num_filters: int = 64
     dilation: int = 1
     bias: bool = False
@@ -211,7 +210,6 @@ class _HalfUnet(ModelABC, nn.Module):
                 )
             )
         else:
-
             return nn.Sequential(
                 OrderedDict(
                     [
@@ -259,7 +257,6 @@ class HalfUnet(_HalfUnet):
 @dataclass_json
 @dataclass(slots=True)
 class UnetSettings:
-
     init_features: int = 64
 
 

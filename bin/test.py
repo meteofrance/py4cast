@@ -86,7 +86,7 @@ trainer = pl.Trainer(
 )
 
 # Initializing data loader
-dl_settings = TorchDataloaderSettings(batch_size=2, num_workers=5, prefetch_factor=2)
+dl_settings = TorchDataloaderSettings(batch_size=1, num_workers=5, prefetch_factor=2)
 _, val_ds, _ = get_datasets(
     hparams.dataset_name,
     hparams.num_input_steps,

@@ -169,7 +169,6 @@ def test5(samples: int, pmem: bool = True):
     print("Test5")
     lmem = []
     for i in range(loader.size):
-
         mem = current_memory_usage()
         lmem.append(mem)
         if pmem:
