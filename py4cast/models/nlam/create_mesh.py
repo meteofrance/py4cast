@@ -160,7 +160,6 @@ def hierarchical_mesh(G, mesh_levels, plot, cache_dir_path):
         G[:-1],
         first_index_level[: mesh_levels - 1],
     ):
-
         # start out from graph at from level
         G_down = G_from.copy()
         G_down.clear_edges()
@@ -432,7 +431,6 @@ def grid2mesh(G_bottom_mesh, all_mesh_nodes, xy, plot, cache_dir_path):
 
 
 def mesh2grid(G_g2m, vm, vm_xy, vg_list, plot, cache_dir_path):
-
     G_m2g = G_g2m.copy()
     G_m2g.clear_edges()
 
