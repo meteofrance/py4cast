@@ -99,7 +99,9 @@ def save_named_tensors_to_grib(
                 raw_data,
                 grib_features,
             )
-            filename = get_output_filename(saving_settings, sample, sample.output_terms[t_idx])
+            filename = get_output_filename(
+                saving_settings, sample, sample.output_terms[t_idx]
+            )
             option = (
                 "wb"
                 if not os.path.exists(f"{saving_settings.directory}/{filename}")
