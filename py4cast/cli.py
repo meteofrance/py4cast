@@ -1,6 +1,3 @@
-import torch
-import os
-from pathlib import Path
 from lightning.pytorch.cli import LightningCLI
 
 from py4cast.lightning import AutoRegressiveLightning, PlDataModule
@@ -8,37 +5,43 @@ from lightning.pytorch.callbacks import BasePredictionWriter
 
 from py4cast.io.outputs import GribSavingSettings, save_named_tensors_to_grib
 
-default_config_root = Path(__file__).parents[1] / "config/IO/"
-
 
 class GribWriter(BasePredictionWriter):
-    def __init__(self, output_dir, write_interval):
+    def __init__(
+        self,
+        output_dir,
+        write_interval,
+        template_grib,
+        output_kwargs,
+        sample_identifiers,
+        output_fmt,
+    ):
         super().__init__(write_interval)
-        self.output_dir = output_dir
 
-    def setup(self, trainer, pl_module, stage):
-        self.stage = stage
-        pass
+        self.save_settings = GribSavingSettings(
+            template_grib=template_grib,
+            output_dir=output_dir,
+            output_kwargs=output_kwargs,
+            sample_identifiers=sample_identifiers,
+            output_fmt=output_fmt,
+        )
+
+        ph = len(self.save_settings.output_fmt.split("{}")) - 1
+        kw = len(self.save_settings.output_kwargs)
+        fi = len(self.save_settings.sample_identifiers)
+        try:
+            assert ph == (fi + kw)
+        except AssertionError:
+            raise ValueError(
+                f"Filename fmt has {ph} placeholders,\
+                but {kw} output_kwargs and {fi} sample identifiers."
+            )
 
     def write_on_epoch_end(self, trainer, pl_module, predictions, batch_indices):
-        if self.stage == "predict":
-            model_ds = trainer.datamodule.infer_ds
+        model_ds = trainer.datamodule.infer_ds
 
-            with open(default_config_root / "poesy_grib_settings.json", "r") as f:
-                save_settings = GribSavingSettings.schema().loads((f.read()))
-                ph = len(save_settings.output_fmt.split("{}")) - 1
-                kw = len(save_settings.output_kwargs)
-                fi = len(save_settings.sample_identifiers)
-                try:
-                    assert ph == (fi + kw)
-                except AssertionError:
-                    raise ValueError(
-                        f"Filename fmt has {ph} placeholders,\
-                        but {kw} output_kwargs and {fi} sample identifiers."
-                    )
-
-            for sample, pred in zip(model_ds.sample_list, predictions):
-                save_named_tensors_to_grib(pred, model_ds, sample, save_settings)
+        for sample, pred in zip(model_ds.sample_list, predictions):
+            save_named_tensors_to_grib(pred, model_ds, sample, self.save_settings)
 
 
 class LCli(LightningCLI):
