@@ -6,8 +6,9 @@ Training with fit and infer with predict
 
 from py4cast.cli import cli_main
 
-# Train : python bin/launcher.py fit --config config/CLI/exp_alpha.yaml
+# python bin/launcher.py fit --config config/CLI/trainer.yaml --config config/CLI/poesy.yaml --config config/CLI/halfunet.yaml
 
-# Inference : python -m pdb bin/launcher.py predict --config config/CLI/exp_alpha.yaml --ckpt_path /scratch/shared/py4cast/logs/test_cli/last.ckpt
+# python -m pdb bin/launcher.py predict --ckpt_path /scratch/shared/py4cast/logs/test_cli/ --config config/CLI/trainer.yaml --config config/CLI/poesy.yaml --config config/CLI/halfunet.yaml
+
 if __name__ == "__main__":
     cli_main()

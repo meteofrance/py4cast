@@ -10,12 +10,14 @@ class GribWriter(BasePredictionWriter):
     """
     Callback class implementing how predictions are stored after the inference.
     Args:
+        active: (bool) Use this callback or not
         write_interval (str): When to write
         others : used to instantiate GribSavingSettings
 
     """
     def __init__(
         self,
+        active,
         write_interval,
         output_dir,
         template_grib,
@@ -24,7 +26,7 @@ class GribWriter(BasePredictionWriter):
         output_fmt,
     ):
         super().__init__(write_interval)
-
+        self.active = active
         self.save_settings = GribSavingSettings(
             template_grib=template_grib,
             output_dir=output_dir,
@@ -48,10 +50,11 @@ class GribWriter(BasePredictionWriter):
         """
         Write at the end of the inference, the predictions into gribs
         """
-        model_ds = trainer.datamodule.infer_ds
+        if self.active:
+            model_ds = trainer.datamodule.infer_ds
 
-        for sample, pred in zip(model_ds.sample_list, predictions):
-            save_named_tensors_to_grib(pred, model_ds, sample, self.save_settings)
+            for sample, pred in zip(model_ds.sample_list, predictions):
+                save_named_tensors_to_grib(pred, model_ds, sample, self.save_settings)
 
 
 class LCli(LightningCLI):
@@ -61,6 +64,8 @@ class LCli(LightningCLI):
     Args:
         A model which inherits from LightningModule
         A datamodule which inherits from LightningDataModule
+        save_config_kwargs define if checkpoint should be store even if one is already 
+        present in the folder, useful for development.
     """
 
     def __init__(self, model_class, datamodule_class):
@@ -69,6 +74,7 @@ class LCli(LightningCLI):
         )
 
     def add_arguments_to_parser(self, parser):
+        
         parser.link_arguments(
             "data.dataset",
             "model.dataset_name",

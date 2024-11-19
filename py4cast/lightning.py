@@ -236,6 +236,8 @@ class AutoRegressiveLightning(pl.LightningModule):
             num_pred_steps_train=num_pred_steps_train,
             num_pred_steps_val_test=num_pred_steps_val_test,
             num_inter_steps=num_inter_steps,
+            lr= lr,
+            loss= loss,
             training_strategy=training_strategy,
             len_train_loader=len_train_loader,
             save_path=save_path,

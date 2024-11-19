@@ -1,8 +1,9 @@
 trainer:
   fast_dev_run: False
+  # default_root_dir: "/scratch/shared/py4cast/logs/test_cli"
   num_nodes: 1
   devices: "auto"
-  max_epochs: 2
+  max_epochs: 4
   deterministic: True
   strategy: "ddp"
   accumulate_grad_batches: 10
@@ -18,7 +19,6 @@ trainer:
   callbacks:
     - class_path: lightning.pytorch.callbacks.ModelCheckpoint
       init_args:
-        # dirpath: "/scratch/shared/py4cast/logs/test_cli"
         filename: "{epoch:02d}-{val_mean_loss:.2f}"
         monitor: "val_mean_loss"
         mode: "min"
@@ -34,6 +34,7 @@ trainer:
         patience: 50
     - class_path: py4cast.cli.GribWriter
       init_args:
+        active: False
         write_interval: 'epoch'
         output_dir: "/scratch/shared/py4cast/gribs_writing/exp_beta"
         template_grib: /scratch/shared/py4cast/gribs_writing/template/grid.arome-forecast.eurw1s40+0001:00.grib
