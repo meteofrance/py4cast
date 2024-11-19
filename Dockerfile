@@ -4,8 +4,7 @@ ARG CUDA_VERS=12.1
 
 FROM ${DOCKER_REGISTRY}/pytorch/pytorch:${TORCH_VERS}-cuda${CUDA_VERS}-cudnn9-devel
 
-# Default value is for launching from Meteo-France
-ARG INJECT_MF_CERT=1 
+ARG INJECT_MF_CERT
 
 COPY mf.crt /usr/local/share/ca-certificates/mf.crt
 
