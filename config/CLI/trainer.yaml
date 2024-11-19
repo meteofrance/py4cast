@@ -1,0 +1,48 @@
+trainer:
+  fast_dev_run: False
+  num_nodes: 1
+  devices: "auto"
+  max_epochs: 2
+  deterministic: True
+  strategy: "ddp"
+  accumulate_grad_batches: 10
+  accelerator: "auto"
+  logger: 
+    class_path: lightning.pytorch.loggers.TensorBoardLogger
+    init_args:
+      name: "folder_logger"
+      version: "alpha"
+      default_hp_metric: False
+  profiler: null
+  log_every_n_steps: 1
+  callbacks:
+    - class_path: lightning.pytorch.callbacks.ModelCheckpoint
+      init_args:
+        # dirpath: "/scratch/shared/py4cast/logs/test_cli"
+        filename: "{epoch:02d}-{val_mean_loss:.2f}"
+        monitor: "val_mean_loss"
+        mode: "min"
+        save_top_k: 1  # Save only the best model
+        save_last: True  # Also save the last model
+    - class_path: lightning.pytorch.callbacks.LearningRateMonitor
+      init_args:
+        logging_interval: "step"
+    - class_path: lightning.pytorch.callbacks.EarlyStopping
+      init_args:
+        monitor: "val_mean_loss"
+        mode: "min"
+        patience: 50
+    - class_path: py4cast.cli.GribWriter
+      init_args:
+        write_interval: 'epoch'
+        output_dir: "/scratch/shared/py4cast/gribs_writing/exp_beta"
+        template_grib: /scratch/shared/py4cast/gribs_writing/template/grid.arome-forecast.eurw1s40+0001:00.grib
+        output_kwargs: ["poesy_eurw1s40"]
+        sample_identifiers : ["member", "date", "leadtime"]
+        output_fmt: "grid.emul_aro_ai_dataset_{}_member_{}_date_{}_ech_{}.grib"
+
+  check_val_every_n_epoch: 1
+  precision: 32
+  limit_train_batches: 100
+  limit_val_batches: 100
+  limit_test_batches: 100

@@ -7,10 +7,17 @@ from py4cast.io.outputs import GribSavingSettings, save_named_tensors_to_grib
 
 
 class GribWriter(BasePredictionWriter):
+    """
+    Callback class implementing how predictions are stored after the inference.
+    Args:
+        write_interval (str): When to write
+        others : used to instantiate GribSavingSettings
+
+    """
     def __init__(
         self,
-        output_dir,
         write_interval,
+        output_dir,
         template_grib,
         output_kwargs,
         sample_identifiers,
@@ -38,6 +45,9 @@ class GribWriter(BasePredictionWriter):
             )
 
     def write_on_epoch_end(self, trainer, pl_module, predictions, batch_indices):
+        """
+        Write at the end of the inference, the predictions into gribs
+        """
         model_ds = trainer.datamodule.infer_ds
 
         for sample, pred in zip(model_ds.sample_list, predictions):
@@ -45,6 +55,14 @@ class GribWriter(BasePredictionWriter):
 
 
 class LCli(LightningCLI):
+    """
+    CLI - Command Line Interface from lightning
+
+    Args:
+        A model which inherits from LightningModule
+        A datamodule which inherits from LightningDataModule
+    """
+
     def __init__(self, model_class, datamodule_class):
         super().__init__(
             model_class, datamodule_class, save_config_kwargs={"overwrite": True}

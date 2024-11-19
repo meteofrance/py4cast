@@ -1,3 +1,9 @@
+
+"""
+Main script to use the model with lightning CLI
+Training with fit and infer with predict
+"""
+
 from py4cast.cli import cli_main
 
 # Train : python bin/launcher.py fit --config config/CLI/exp_alpha.yaml
