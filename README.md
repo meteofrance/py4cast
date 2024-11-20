@@ -300,14 +300,14 @@ For now this works only for internal Météo-France users.
 ```bash
 runai gpu_play 4
 runai build
-runai exec_gpu python bin/train.py --dataset titan --model hilam
+runai exec_gpu python bin/launcher.py fit --config config/CLI/trainer.yaml --config config/CLI/poesy.yaml --config config/CLI/halfunet.yaml
 ```
 
 2. Train using sbatch single node multi-GPUs
 
 ```bash
 export RUNAI_GRES="gpu:v100:4"
-runai sbatch python bin/train.py --dataset titan --model hilam
+runai sbatch python bin/launcher.py fit --config config/CLI/trainer.yaml --config config/CLI/poesy.yaml --config config/CLI/halfunet.yaml
 ```
 
 3. Train using sbatch multi nodes multi GPUs
@@ -317,7 +317,7 @@ Here we use 2 nodes with 4 GPUs each.
 ```bash
 export RUNAI_SLURM_NNODES=2
 export RUNAI_GRES="gpu:v100:4"
-runai sbatch_multi_node python bin/train.py --dataset titan --model hilam
+runai sbatch_multi_node python bin/launcher.py fit --config config/CLI/trainer.yaml --config config/CLI/poesy.yaml --config config/CLI/halfunet.yaml
 ```
 
 For the rest of the documentation, you must preprend each python command with `runai exec_gpu`.
@@ -332,7 +332,7 @@ Once your micromamba environment is setup, you should :
 
 A very simple training can be launch (on your current node)
 ```sh
-python bin/train.py  --dataset dummy --model halfunet --epochs 2
+python bin/launcher.py fit --config config/CLI/trainer.yaml --config config/CLI/dummy.yaml --config config/CLI/halfunet.yaml
 ```
 
 #### Example of script  to launch on gpu
@@ -354,7 +354,7 @@ source ~/.bashrc  # Be sure that all your environment variables are set
 conda activate py4cast # Activate your environment (installed by micromamba or conda)
 cd $PY4CAST_PATH # Go to Py4CAST (you can either add an environment variable or hard code it here).
 # Launch your favorite command.
-srun python bin/train.py --model halfunet --dataset dummy --epochs 2
+srun python bin/launcher.py fit --config config/CLI/trainer.yaml --config config/CLI/poesy.yaml --config config/CLI/halfunet.yaml
 ```
 
 
@@ -382,7 +382,7 @@ python py4cast/datasets/titan/__init__.py
 To train on a dataset with its default settings just pass the name of the dataset (all lowercase) :
 
 ```bash
-python bin/train.py --dataset titan --model halfunet
+python bin/launcher.py fit --config config/CLI/trainer.yaml --config config/CLI/poesy.yaml --config config/CLI/halfunet.yaml
 ```
 
 You can override the dataset default configuration file:

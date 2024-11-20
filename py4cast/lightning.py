@@ -236,8 +236,8 @@ class AutoRegressiveLightning(pl.LightningModule):
             num_pred_steps_train=num_pred_steps_train,
             num_pred_steps_val_test=num_pred_steps_val_test,
             num_inter_steps=num_inter_steps,
-            lr= lr,
-            loss= loss,
+            lr=lr,
+            loss=loss,
             training_strategy=training_strategy,
             len_train_loader=len_train_loader,
             save_path=save_path,
@@ -401,9 +401,6 @@ class AutoRegressiveLightning(pl.LightningModule):
     def configure_optimizers(self) -> torch.optim.Optimizer:
         lr = self.hparams["lr"]
         opt = torch.optim.AdamW(self.parameters(), lr=lr, betas=(0.9, 0.95))
-        # if self.opt_state:
-        #     opt.load_state_dict(self.opt_state)
-
         if self.hparams["use_lr_scheduler"]:
             len_loader = self.hparams["len_train_loader"] // LR_SCHEDULER_PERIOD
             epochs = self.trainer.max_epochs

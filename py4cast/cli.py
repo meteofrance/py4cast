@@ -15,6 +15,7 @@ class GribWriter(BasePredictionWriter):
         others : used to instantiate GribSavingSettings
 
     """
+
     def __init__(
         self,
         active,
@@ -48,7 +49,7 @@ class GribWriter(BasePredictionWriter):
 
     def write_on_epoch_end(self, trainer, pl_module, predictions, batch_indices):
         """
-        Write at the end of the inference, the predictions into gribs
+        Write at the end, of the inference, the predictions into gribs
         """
         if self.active:
             model_ds = trainer.datamodule.infer_ds
@@ -64,7 +65,7 @@ class LCli(LightningCLI):
     Args:
         A model which inherits from LightningModule
         A datamodule which inherits from LightningDataModule
-        save_config_kwargs define if checkpoint should be store even if one is already 
+        save_config_kwargs define if checkpoint should be store even if one is already
         present in the folder, useful for development.
     """
 
@@ -74,7 +75,6 @@ class LCli(LightningCLI):
         )
 
     def add_arguments_to_parser(self, parser):
-        
         parser.link_arguments(
             "data.dataset",
             "model.dataset_name",

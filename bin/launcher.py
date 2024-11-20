@@ -1,4 +1,3 @@
-
 """
 Main script to use the model with lightning CLI
 Training with fit and infer with predict

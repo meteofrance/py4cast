@@ -1,0 +1,20 @@
+data:
+  dataset: "titan"
+  num_input_steps: 2
+  num_pred_steps_train: 2
+  num_pred_steps_val_test: 3
+
+  batch_size: 1
+  num_workers: 10
+  prefetch_factor: null
+  pin_memory: False
+  persistent_workers: False
+  
+  dataset_conf: null
+  config_override: 
+      num_inference_pred_steps: 6
+      periods: 
+        test: 
+          start: 2021061621 
+          end: 2021061621 
+          step: 1
