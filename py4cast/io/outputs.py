@@ -58,8 +58,6 @@ def save_named_tensors_to_grib(
     grib_features = get_grib_param_dataframe(pred, params)
     grib_groups = get_grib_groups(grib_features)
     validtimes = compute_hours_of_day(sample.date, sample.output_terms)
-    init_term = compute_hours_of_day(sample.date, [sample.input_terms[-1]])[0]
-    # leadtimes = validtimes - init_term
     predicted_time_steps = len(sample.output_terms)
 
     model_ds = {
