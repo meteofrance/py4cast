@@ -723,9 +723,18 @@ class AutoRegressiveLightning(pl.LightningModule):
             dict_metrics.update(self.acc_metric.compute())
             for name, elmnt in dict_metrics.items():
                 if isinstance(elmnt, matplotlib.figure.Figure):
+                    # Tensorboard logger
                     self.logger.experiment.add_figure(
                         f"{name}", elmnt, self.current_epoch
                     )
+                    # If MLFlowLogger activated
+                    if len(self.loggers) > 1:
+                        run_id = self.loggers[1].version
+                        self.loggers[1].experiment.log_figure(
+                            run_id=run_id,
+                            figure=elmnt,
+                            artifact_file=f"figures/{name}.png"
+                        )
                 elif isinstance(elmnt, torch.Tensor):
                     self.log_dict(
                         {name: elmnt},
@@ -806,6 +815,15 @@ class AutoRegressiveLightning(pl.LightningModule):
         """
         if self.logging_enabled:
             self.psd_plot_metric.compute()
+            # If MLFlowLogger activated, retroactively log the images of self.psd_plot_metric.compute()
+            if len(self.loggers) > 1:
+                save_path = self.hparams["hparams"].save_path
+                run_id = self.loggers[1].version
+                self.loggers[1].experiment.log_artifact(
+                    run_id=run_id,
+                    local_path=save_path / "mean_psd_k",
+                    artifact_path="figures"
+                )
             self.rmse_psd_plot_metric.compute()
             self.acc_metric.compute()
 

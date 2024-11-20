@@ -160,6 +160,12 @@ parser.add_argument(
     help="When activated, log are not stored and models are not saved. Use in dev mode.",
 )
 parser.add_argument(
+    "--mlflow_log",
+    action=BooleanOptionalAction,
+    default=False,
+    help="When activated, the MLFlowLogger is used and the model is saved in the MLFlow style.",
+)
+parser.add_argument(
     "--dev_mode",
     action=BooleanOptionalAction,
     default=False,
@@ -305,24 +311,29 @@ callback_list = []
 if args.no_log:
     loggers = None
 else:
-    print(
-        "--> Model, checkpoints, and tensorboard artifacts "
-        + f"will be saved in {save_path}."
-    )
     loggers = {
         "TensorBoardLogger": TensorBoardLogger(
             save_dir=log_dir,
             name=folder,
             version=subfolder,
-            default_hp_metric=False,
+            default_hp_metric=False
         ),
-        "MLFlowLogger": MLFlowLogger(
+    }
+
+    if args.mlflow_log:
+        mlflow_logger = {"MLFlowLogger": MLFlowLogger(
             experiment_name=os.getenv("MLFLOW_EXPERIMENT_NAME", str(folder)),
             run_name=subfolder,
             log_model=True,
             save_dir=log_dir / 'mlflow'
-        )
-    }
+        )}
+        loggers.update(mlflow_logger)
+
+    print(
+        "--> Model, checkpoints, and tensorboard artifacts "
+        + f"will be saved in {save_path}."
+    )
+
     loggers["TensorBoardLogger"].experiment.add_custom_scalars(layout)
     checkpoint_callback = pl.callbacks.ModelCheckpoint(
         dirpath=save_path,
@@ -401,7 +412,7 @@ if not args.no_log:
     trainer.test(ckpt_path=model_to_test, datamodule=dm)
 
 # Finally log the model in a MLFlow fashion
-if trainer.global_rank == 0:
+if trainer.is_global_zero and args.mlflow_log:
     # Get random sample to infer the signature of the model
     dataloader = dm.test_dataloader()
     data = next(iter(dataloader))
@@ -417,8 +428,4 @@ if trainer.global_rank == 0:
             pytorch_model=trainer.model,
             artifact_path="model",
             signature=signature
-        )
-        mlflow.log_artifacts(
-            local_dir=save_path / "epoch_evol_per_param",
-            artifact_path="epoch_evol_per_param"
         )
