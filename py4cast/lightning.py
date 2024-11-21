@@ -9,7 +9,6 @@ from typing import Dict, List, Tuple, Union
 
 import einops
 
-# import pytorch_lightning as pl
 import lightning as pl
 import matplotlib
 import torch
@@ -65,6 +64,8 @@ class PlDataModule(pl.LightningDataModule):
 
     def __post_init__(self):
         super().__init__()
+
+        # Instantiate dataloader settings 
         self.dl_settings = TorchDataloaderSettings(
             self.batch_size,
             self.num_workers,
@@ -165,15 +166,15 @@ class ArLightningHyperParam:
             )
 
     def summary(self):
-        # self.dataset_info.summary()
+        self.dataset_info.summary()
         print(f"Number of input_steps : {self.num_input_steps}")
         print(f"Number of pred_steps (training) : {self.num_pred_steps_train}")
         print(f"Number of pred_steps (test/val) : {self.num_pred_steps_val_test}")
         print(f"Number of intermediary steps :{self.num_inter_steps}")
         print(f"Training strategy :{self.training_strategy}")
-        # print(
-        #     f"Model step duration : {self.dataset_info.step_duration /self.num_inter_steps}"
-        # )
+        print(
+            f"Model step duration : {self.dataset_info.step_duration /self.num_inter_steps}"
+        )
         print(f"Model conf {self.model_conf}")
         print("---------------------")
         print(f"Loss {self.loss}")
@@ -225,6 +226,7 @@ class AutoRegressiveLightning(pl.LightningModule):
     ):
         super().__init__(*args, **kwargs)
 
+        # Gather hyperparameters in a class
         hparams = ArLightningHyperParam(
             dataset_info=dataset_info,
             dataset_name=dataset_name,
@@ -247,7 +249,8 @@ class AutoRegressiveLightning(pl.LightningModule):
             channels_last=channels_last,
         )
 
-        self.save_hyperparameters(hparams.__dict__)  # write hparams.yaml in save folder
+        # write hparams.yaml in save folder
+        self.save_hyperparameters(hparams.__dict__)  
         self.save_path = self.hparams.save_path
 
         # Load static features for grid/data
@@ -341,7 +344,7 @@ class AutoRegressiveLightning(pl.LightningModule):
         max_pred_step = self.hparams.num_pred_steps_val_test - 1
         if self.logging_enabled:
             self.rmse_psd_plot_metric = MetricPSDVar(pred_step=max_pred_step)
-            self.psd_plot_metric = MetricPSDK(self.save_path, pred_step=max_pred_step)
+            self.psd_plot_metric = MetricPSDK(self.hparams.save_path, pred_step=max_pred_step)
             self.acc_metric = MetricACC(self.hparams.dataset_info)
 
     @property
@@ -375,14 +378,14 @@ class AutoRegressiveLightning(pl.LightningModule):
             # Save model & dataset conf as files
             if self.hparams["dataset_conf"] is not None:
                 shutil.copyfile(
-                    self.hparams["dataset_conf"], self.save_path / "dataset_conf.json"
+                    self.hparams["dataset_conf"], self.hparams.save_path / "dataset_conf.json"
                 )
             if hparams["model_conf"] is not None:
                 shutil.copyfile(
-                    hparams["model_conf"], self.save_path / "model_conf.json"
+                    hparams["model_conf"], self.hparams.save_path / "model_conf.json"
                 )
             # Write commit and state of git repo in log file
-            dest_git_log = self.save_path / "git_log.txt"
+            dest_git_log = self.hparams.save_path / "git_log.txt"
             out_log = (
                 subprocess.check_output(["git", "log", "-n", "1"])
                 .strip()
@@ -722,13 +725,13 @@ class AutoRegressiveLightning(pl.LightningModule):
                     num_samples_to_plot=1,
                     num_features_to_plot=4,
                     prefix="Validation",
-                    save_path=self.save_path,
+                    save_path=self.hparams.save_path,
                 ),
                 PredictionEpochPlot(
                     num_samples_to_plot=1,
                     num_features_to_plot=4,
                     prefix="Validation",
-                    save_path=self.save_path,
+                    save_path=self.hparams.save_path,
                 ),
             ]
 
@@ -824,13 +827,13 @@ class AutoRegressiveLightning(pl.LightningModule):
                 metrics[alias] = loss
 
             self.test_plotters = [
-                StateErrorPlot(metrics, save_path=self.save_path),
+                StateErrorPlot(metrics, save_path=self.hparams.save_path),
                 SpatialErrorPlot(),
                 PredictionTimestepPlot(
                     num_samples_to_plot=self.hparams["num_samples_to_plot"],
                     num_features_to_plot=4,
                     prefix="Test",
-                    save_path=self.save_path,
+                    save_path=self.hparams.save_path,
                 ),
             ]
 
