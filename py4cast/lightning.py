@@ -814,18 +814,33 @@ class AutoRegressiveLightning(pl.LightningModule):
         Compute test metrics and make plots at the end of test epoch.
         """
         if self.logging_enabled:
-            self.psd_plot_metric.compute()
-            # If MLFlowLogger activated, retroactively log the images of self.psd_plot_metric.compute()
-            if len(self.loggers) > 1:
-                save_path = self.hparams["hparams"].save_path
-                run_id = self.loggers[1].version
-                self.loggers[1].experiment.log_artifact(
-                    run_id=run_id,
-                    local_path=save_path / "mean_psd_k",
-                    artifact_path="figures"
-                )
-            self.rmse_psd_plot_metric.compute()
-            self.acc_metric.compute()
+            dict_metrics = {}
+            dict_metrics.update(self.psd_plot_metric.compute(prefix="test"))
+            dict_metrics.update(self.rmse_psd_plot_metric.compute(prefix="test"))
+            dict_metrics.update(self.acc_metric.compute(prefix="test"))
+
+            for name, elmnt in dict_metrics.items():
+                if isinstance(elmnt, matplotlib.figure.Figure):
+                    # Tensorboard logger
+                    self.logger.experiment.add_figure(
+                        f"{name}", elmnt, self.current_epoch
+                    )
+                    # If MLFlowLogger activated
+                    if len(self.loggers) > 1:
+                        run_id = self.loggers[1].version
+                        self.loggers[1].experiment.log_figure(
+                            run_id=run_id,
+                            figure=elmnt,
+                            artifact_file=f"figures/{name}.png"
+                        )
+                elif isinstance(elmnt, torch.Tensor):
+                    self.log_dict(
+                        {name: elmnt},
+                        prog_bar=False,
+                        on_step=False,
+                        on_epoch=True,
+                        sync_dist=True,
+                    )
 
             # Notify plotters that the test epoch end
             for plotter in self.test_plotters:
