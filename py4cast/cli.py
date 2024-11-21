@@ -1,5 +1,6 @@
 from lightning.pytorch.cli import LightningCLI
 
+from pathlib import Path
 from py4cast.lightning import AutoRegressiveLightning, PlDataModule
 from lightning.pytorch.callbacks import BasePredictionWriter
 
@@ -18,16 +19,17 @@ class GribWriter(BasePredictionWriter):
 
     def __init__(
         self,
-        active,
-        write_interval,
-        output_dir,
-        template_grib,
-        output_kwargs,
-        sample_identifiers,
-        output_fmt,
+        active: bool,
+        write_interval: str,
+        output_dir: str,
+        template_grib: str,
+        output_kwargs: list,
+        sample_identifiers:list,
+        output_fmt: str,
     ):
         super().__init__(write_interval)
         self.active = active
+        output_dir = Path(output_dir)
         self.save_settings = GribSavingSettings(
             template_grib=template_grib,
             output_dir=output_dir,

@@ -34,7 +34,7 @@ trainer:
         patience: 50
     - class_path: py4cast.cli.GribWriter
       init_args:
-        active: False
+        active: True
         write_interval: 'epoch'
         output_dir: "/scratch/shared/py4cast/gribs_writing/test/"
         template_grib: /scratch/shared/py4cast/gribs_writing/template/grid.arome-forecast.eurw1s40+0001:00.grib

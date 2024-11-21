@@ -14,7 +14,6 @@ from py4cast.datasets.base import DatasetABC, NamedTensor
 from py4cast.forcingutils import compute_hours_of_day
 
 
-# @dataclass_json
 @dataclass
 class GribSavingSettings:
     """
@@ -27,7 +26,7 @@ class GribSavingSettings:
     """
 
     template_grib: str
-    output_dir: str
+    output_dir: Path
     output_kwargs: tuple[str, ...] = ()
     sample_identifiers: tuple[str, ...] = ("date", "leadtime")
     output_fmt: str = "grid.forecast_ai_date_{}_ech_{}.json"
@@ -83,9 +82,8 @@ def save_named_tensors_to_grib(
     }
 
     # Create output directory if not already exist
-    if not os.path.exists(f"{saving_settings.output_dir}"):
-        os.makedirs(saving_settings.output_dir)
-
+    output_dir.mkdir(exists_ok=True)
+    
     for t_idx in range(predicted_time_steps):
         for group in model_ds.keys():
             raw_data = pred.select_dim("timestep", t_idx, bare_tensor=False)
