@@ -733,7 +733,7 @@ class AutoRegressiveLightning(pl.LightningModule):
                         self.loggers[1].experiment.log_figure(
                             run_id=run_id,
                             figure=elmnt,
-                            artifact_file=f"figures/{name}.png"
+                            artifact_file=f"figures/{name}.png",
                         )
                 elif isinstance(elmnt, torch.Tensor):
                     self.log_dict(
@@ -831,7 +831,7 @@ class AutoRegressiveLightning(pl.LightningModule):
                         self.loggers[1].experiment.log_figure(
                             run_id=run_id,
                             figure=elmnt,
-                            artifact_file=f"figures/{name}.png"
+                            artifact_file=f"figures/{name}.png",
                         )
                 elif isinstance(elmnt, torch.Tensor):
                     self.log_dict(

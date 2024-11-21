@@ -9,14 +9,14 @@ import os
 from argparse import ArgumentParser, BooleanOptionalAction
 from datetime import datetime
 from pathlib import Path
-import mlflow.pytorch
-from mlflow.models.signature import infer_signature
 
+import mlflow.pytorch
 import pytorch_lightning as pl
 import torch
-from lightning.pytorch.loggers import TensorBoardLogger, MLFlowLogger
+from lightning.pytorch.loggers import MLFlowLogger, TensorBoardLogger
 from lightning.pytorch.profilers import AdvancedProfiler, PyTorchProfiler
 from lightning_fabric.utilities import seed
+from mlflow.models.signature import infer_signature
 from pytorch_lightning.callbacks import LearningRateMonitor
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 
@@ -313,20 +313,19 @@ if args.no_log:
 else:
     loggers = {
         "TensorBoardLogger": TensorBoardLogger(
-            save_dir=log_dir,
-            name=folder,
-            version=subfolder,
-            default_hp_metric=False
+            save_dir=log_dir, name=folder, version=subfolder, default_hp_metric=False
         ),
     }
 
     if args.mlflow_log:
-        mlflow_logger = {"MLFlowLogger": MLFlowLogger(
-            experiment_name=os.getenv("MLFLOW_EXPERIMENT_NAME", str(folder)),
-            run_name=subfolder,
-            log_model=True,
-            save_dir=log_dir / 'mlflow'
-        )}
+        mlflow_logger = {
+            "MLFlowLogger": MLFlowLogger(
+                experiment_name=os.getenv("MLFLOW_EXPERIMENT_NAME", str(folder)),
+                run_name=subfolder,
+                log_model=True,
+                save_dir=log_dir / "mlflow",
+            )
+        }
         loggers.update(mlflow_logger)
 
     print(
@@ -417,15 +416,12 @@ if trainer.is_global_zero and args.mlflow_log:
     dataloader = dm.test_dataloader()
     data = next(iter(dataloader))
     signature = infer_signature(
-        data.inputs.tensor.detach().numpy(),
-        data.outputs.tensor.detach().numpy()
+        data.inputs.tensor.detach().numpy(), data.outputs.tensor.detach().numpy()
     )
 
     # Manually log the trained model in Mlflow style with its signature
     run_id = loggers["MLFlowLogger"].version
     with mlflow.start_run(run_id=run_id):
         mlflow.pytorch.log_model(
-            pytorch_model=trainer.model,
-            artifact_path="model",
-            signature=signature
+            pytorch_model=trainer.model, artifact_path="model", signature=signature
         )

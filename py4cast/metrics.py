@@ -74,7 +74,7 @@ class MetricPSDK(Metric):
             preds.flatten_("ngrid", 2, 3)
             targets.flatten_("ngrid", 2, 3)
 
-    def compute(self, prefix : str = "val") -> dict:
+    def compute(self, prefix: str = "val") -> dict:
         """
         Compute PSD mean for each channels/features, plot the figure, return a dict.
         Should be called at each epoch's end
@@ -102,7 +102,8 @@ class MetricPSDK(Metric):
             )
             dict_psd_metric[f"{prefix}_mean_psd_k/{features_name[c]}"] = fig
             dest_file = (
-                self.save_path / f"{prefix}_mean_psd_k/{features_name[c]}_{self.pred_step+1}.png"
+                self.save_path
+                / f"{prefix}_mean_psd_k/{features_name[c]}_{self.pred_step+1}.png"
             )
             if self.save_path.exists():
                 dest_file.parent.mkdir(exist_ok=True)
@@ -217,7 +218,7 @@ class MetricPSDVar(Metric):
             preds.flatten_("ngrid", 2, 3)
             targets.flatten_("ngrid", 2, 3)
 
-    def compute(self, prefix : str = "val") -> dict:
+    def compute(self, prefix: str = "val") -> dict:
         """
         Compute PSD mean for each channels/features, return a dict.
         Should be called at each epoch's end
@@ -415,7 +416,7 @@ class MetricACC(Metric):
         # Increment step_count
         self.step_count += 1
 
-    def compute(self, prefix : str = "val") -> dict:
+    def compute(self, prefix: str = "val") -> dict:
         """
         Compute ACC mean for each channels/features, return a dict.
         Should be called at each epoch's end

@@ -406,7 +406,7 @@ class PredictionTimestepPlot(MapPlot):
                     obj.loggers[1].experiment.log_figure(
                         run_id=run_id,
                         figure=fig,
-                        artifact_file=f"figures/{fig_full_name}"
+                        artifact_file=f"figures/{fig_full_name}",
                     )
 
                 plt.close(fig)
@@ -477,9 +477,7 @@ class PredictionEpochPlot(MapPlot):
             if len(obj.loggers) > 1:
                 run_id = obj.loggers[1].version
                 obj.loggers[1].experiment.log_figure(
-                    run_id=run_id,
-                    figure=fig,
-                    artifact_file=f"figures/{fig_full_name}"
+                    run_id=run_id, figure=fig, artifact_file=f"figures/{fig_full_name}"
                 )
 
         plt.close("all")  # Close all figs for this time step, saves memory
@@ -571,7 +569,7 @@ class StateErrorPlot(Plotter):
                         obj.loggers[1].experiment.log_figure(
                             run_id=run_id,
                             figure=fig,
-                            artifact_file=f"figures/{fig_full_name}"
+                            artifact_file=f"figures/{fig_full_name}",
                         )
                     plt.close(fig)
 
@@ -633,16 +631,14 @@ class SpatialErrorPlot(Plotter):
             tensorboard = obj.logger.experiment
             for t_i, fig in enumerate(loss_map_figs):
                 fig_full_name = f"spatial_error_{label}/{self.prefix}_loss"
-                tensorboard.add_figure(
-                    fig_full_name, fig, t_i
-                )
+                tensorboard.add_figure(fig_full_name, fig, t_i)
                 # Suppose the obj.loggers[1] is the MLFlowLogger
                 if len(obj.loggers) > 1:
                     run_id = obj.loggers[1].version
                     obj.loggers[1].experiment.log_figure(
                         run_id=run_id,
                         figure=fig,
-                        artifact_file=f"figures/{fig_full_name}.png"
+                        artifact_file=f"figures/{fig_full_name}.png",
                     )
             plt.close()
 
