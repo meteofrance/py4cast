@@ -18,16 +18,26 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
-    - name: Set up Python 3.10
+
+    - name: Get python version from env.yaml
+      id: python_version
+      run: echo PYTHON_VERS=$(cat env.yaml | grep python= | sed 's/.*python=\([0-9]\.[0-9]*\.[0-9]*\).*/\1/') >> $GITHUB_OUTPUT
+
+    - name: Set up Python ${{ steps.python_version.outputs.PYTHON_VERS }}
       uses: actions/setup-python@v3
       with:
-        python-version: "3.10"
+        python-version: "${{ steps.python_version.outputs.PYTHON_VERS }}"
+
+    - name: Get pytorch version from env.yaml
+      id: pytorch_version
+      run: echo PYTORCH_VERS=$(cat env.yaml | grep torch== | sed 's/.*torch==\(.*\)/\1/') >> $GITHUB_OUTPUT
+
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install -r requirements.txt
+        pip install -r requirements.txt \
+                    torch==${{ steps.pytorch_version.outputs.PYTORCH_VERS }}
         pip install -r requirements_lint.txt
-        pip install --timeout 1000 pyg-lib==0.4.0 torch-scatter==2.1.2 torch-sparse==0.6.18 torch-cluster==1.6.2 torch-geometric==2.3.1 -f https://data.pyg.org/whl/torch-2.1.2+cpu.html
         pip install --editable .
 
     - name: Lint

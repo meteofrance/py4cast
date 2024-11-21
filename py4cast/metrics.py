@@ -123,7 +123,6 @@ class MetricPSDK(Metric):
 
         # Compute the PSD for each channel of x.
         for c in range(channels):
-
             psd = power_spectral_density(
                 x[:, c : c + 1, :, :, pred_step].cpu().numpy()
             ).squeeze()
@@ -190,7 +189,6 @@ class MetricPSDVar(Metric):
 
         # Compute the RMSE for each channel of x.
         for c in range(channels):
-
             # Compute PSD
             psd_target = power_spectral_density(
                 y_true[:, c : c + 1, :, :, self.pred_step].cpu().numpy()
@@ -359,8 +357,7 @@ class MetricACC(Metric):
             may be very different from those outputted by this metric."
         )
         names = (
-            dataset_info.shortnames["input_output"]
-            + dataset_info.shortnames["diagnostic"]
+            dataset_info.shortnames["input_output"] + dataset_info.shortnames["output"]
         )
         self.climate_means = dataset_info.stats.to_list("mean", names).to(self.device)
 

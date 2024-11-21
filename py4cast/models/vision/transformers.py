@@ -4,7 +4,6 @@ Segformer inspired from https://github.com/lucidrains/segformer-pytorch
 and adapted to our needs (upsampler + extra settings)
 """
 
-
 from dataclasses import dataclass
 from functools import partial
 from math import sqrt
@@ -32,7 +31,6 @@ def cast_tuple(val, depth):
 @dataclass_json
 @dataclass(slots=True)
 class SegformerSettings:
-
     dims: Tuple[int, ...] = (32, 64, 160, 256)
     heads: Tuple[int, ...] = (1, 2, 5, 8)
     ff_expansion: Tuple[int, ...] = (8, 8, 4, 4)
@@ -195,7 +193,7 @@ class MiT(nn.Module):
 
         layer_outputs = []
         i = 0
-        for (get_overlap_patches, overlap_embed, layers) in self.stages:
+        for get_overlap_patches, overlap_embed, layers in self.stages:
             x = get_overlap_patches(x)
 
             num_patches = x.shape[-1]
@@ -203,7 +201,7 @@ class MiT(nn.Module):
             x = rearrange(x, "b c (h w) -> b c h w", h=h // ratio)
 
             x = overlap_embed(x)
-            for (attn, ff) in layers:
+            for attn, ff in layers:
                 x = attn(x) + x
                 x = ff(x) + x
 
@@ -306,7 +304,6 @@ class Segformer(ModelABC, nn.Module):
         )
 
     def forward(self, x):
-
         x = self.downsampler(features_last_to_second(x))
 
         layer_outputs = self.mit(x, return_layer_outputs=True)
@@ -359,7 +356,6 @@ class UpsampleBlock(nn.Module):
         )
 
     def forward(self, inp: torch.Tensor, skip: torch.Tensor) -> torch.Tensor:
-
         out = self.upsampler(inp)
         # concat along the channels/features dimension
         out = torch.cat((out, skip), dim=1)

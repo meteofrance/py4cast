@@ -60,6 +60,7 @@ model.eval()
 print(f"Changing number of val pred steps to {args.num_pred_steps}...")
 hparams = model.hparams["hparams"]
 hparams.num_pred_steps_val_test = args.num_pred_steps
+hparams.save_path = args.ckpt_path.parent
 
 log_dir, folder, subfolder = get_log_dirs(args.ckpt_path)
 logger = TensorBoardLogger(
@@ -85,7 +86,7 @@ trainer = pl.Trainer(
 )
 
 # Initializing data loader
-dl_settings = TorchDataloaderSettings(batch_size=2, num_workers=5, prefetch_factor=2)
+dl_settings = TorchDataloaderSettings(batch_size=1, num_workers=5, prefetch_factor=2)
 _, val_ds, _ = get_datasets(
     hparams.dataset_name,
     hparams.num_input_steps,

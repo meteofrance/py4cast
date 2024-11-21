@@ -107,7 +107,7 @@ def mk_2d_graph(xy, nx, ny):
 
     # turn into directed graph
     dg = networkx.DiGraph(g)
-    for (u, v) in g.edges():
+    for u, v in g.edges():
         d = np.sqrt(np.sum((g.nodes[u]["pos"] - g.nodes[v]["pos"]) ** 2))
         dg.edges[u, v]["len"] = d
         dg.edges[u, v]["vdiff"] = g.nodes[u]["pos"] - g.nodes[v]["pos"]
@@ -160,7 +160,6 @@ def hierarchical_mesh(G, mesh_levels, plot, cache_dir_path):
         G[:-1],
         first_index_level[: mesh_levels - 1],
     ):
-
         # start out from graph at from level
         G_down = G_from.copy()
         G_down.clear_edges()
@@ -432,7 +431,6 @@ def grid2mesh(G_bottom_mesh, all_mesh_nodes, xy, plot, cache_dir_path):
 
 
 def mesh2grid(G_g2m, vm, vm_xy, vg_list, plot, cache_dir_path):
-
     G_m2g = G_g2m.copy()
     G_m2g.clear_edges()
 

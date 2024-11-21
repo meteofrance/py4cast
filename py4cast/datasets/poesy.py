@@ -40,20 +40,22 @@ DATA_SHAPE = (600, 600, 45, 16)
 SECONDS_IN_YEAR = 365 * 24 * 60 * 60
 
 
-def poesy_forecast_namer(date: dt.datetime, shortname, **kwargs):
+def poesy_forecast_namer(date: dt.datetime, var_file_name, **kwargs):
     """
     use to find local files
     """
-    return f"{date.strftime('%Y-%m-%dT%H:%M:%SZ')}_{shortname}_lt1-45_crop.npy"
+    return f"{date.strftime('%Y-%m-%dT%H:%M:%SZ')}_{var_file_name}_lt1-45_crop.npy"
 
 
-def get_weight(level: int, kind: str):
-    if kind == "hPa":
-        return 1 + (level) / (90)
-    elif kind == "m":
-        return 2
+def get_weight(level: float, level_type: str) -> float:
+    if level_type == "isobaricInHpa":
+        return 1.0 + (level) / (90)
+    elif level_type == "heightAboveGround":
+        return 2.0
+    elif level_type == "surface":
+        return 1.0
     else:
-        raise Exception(f"unknown kind:{kind}, must be hPa or m right now")
+        raise Exception(f"unknown level_type:{level_type}")
 
 
 @dataclass(slots=True)
@@ -106,9 +108,11 @@ class Grid:
         filename = SCRATCH_PATH / LATLON_FNAME
         with open(filename, "rb") as f:
             lonlat = np.load(f)
-        return lonlat[
-            0, self.subgrid[0] : self.subgrid[1], self.subgrid[2] : self.subgrid[3]
-        ]
+        return np.transpose(
+            lonlat[
+                1, self.subgrid[0] : self.subgrid[1], self.subgrid[2] : self.subgrid[3]
+            ]
+        )
 
     @cached_property
     def lon(self) -> np.array:
@@ -116,7 +120,7 @@ class Grid:
         with open(filename, "rb") as f:
             lonlat = np.load(f)
         return lonlat[
-            1, self.subgrid[0] : self.subgrid[1], self.subgrid[2] : self.subgrid[3]
+            0, self.subgrid[0] : self.subgrid[1], self.subgrid[2] : self.subgrid[3]
         ]
 
     @cached_property
@@ -172,13 +176,11 @@ class Grid:
 class Param:
     name: str
     shortname: str
-    levels: Tuple[int]
+    levels: Tuple[float, ...]
     grid: Grid  # Parameter grid.
-    # It is not necessarly the same as the model grid.
-    # Function which can return the filenames.
-    # It should accept member and date as argument (as well as term).
-    fnamer: Callable[[], [str]]  # VSCode doesn't like this, is it ok ?
-    level_type: str = "hPa"  # To be read in nc file ?
+    fnamer: Callable[[], [str]]
+    filenameref: str  # string to retrieve the datafile corresponding to Param
+    level_type: str = "isobaricInHpa"  # To be read in nc file ?
     kind: Literal["input", "output", "input_output"] = "input_output"
     unit: str = "FakeUnit"  # To be read in nc FIle  ?
     ndims: int = 2
@@ -186,7 +188,7 @@ class Param:
     @property
     def number(self) -> int:
         """
-        Get the number of parameters.
+        Get the number of levels for the given parameters.
         """
         return len(self.levels)
 
@@ -214,8 +216,7 @@ class Param:
         """
         Return the filename.
         """
-
-        return SCRATCH_PATH / self.fnamer(date=date, shortname=self.shortname)
+        return SCRATCH_PATH / self.fnamer(date=date, var_file_name=self.filenameref)
 
     def load_data(self, date: dt.datetime, term: List, member: int) -> np.array:
         """
@@ -223,7 +224,6 @@ class Param:
         term : Position of leadtimes in file.
         """
         data_array = np.load(self.filename(date=date), mmap_mode="r")
-
         return data_array[
             self.grid.subgrid[0] : self.grid.subgrid[1],
             self.grid.subgrid[2] : self.grid.subgrid[3],
@@ -241,7 +241,9 @@ class PoesySettings:
     term: dict
     num_input_steps: int  # = 2  # Number of input timesteps
     num_output_steps: int  # = 1  # Number of output timesteps (= 0 for inference)
-    num_inference_pred_steps: int = 0  # 0 in training config ; else used to provide future information about forcings
+    num_inference_pred_steps: int = (
+        0  # 0 in training config ; else used to provide future information about forcings
+    )
     standardize: bool = False
     members: Tuple[int] = (0,)
 
@@ -259,7 +261,6 @@ class PoesySettings:
 class Sample:
     # Describe a sample
     member: int
-    settings: PoesySettings
     date: dt.datetime
     input_terms: Tuple[float]
     output_terms: Tuple[float]
@@ -279,9 +280,7 @@ class Sample:
         Returns:
             Boolean:  Whether the sample exist or not
         """
-
         for param in param_list:
-
             if not param.exist(self.date):
                 return False
 
@@ -331,9 +330,9 @@ class PoesyDataset(DatasetABC, Dataset):
         """
 
         shortnames = {
-            "forcing": self.shortnames("forcing"),
+            "input": self.shortnames("input"),
             "input_output": self.shortnames("input_output"),
-            "diagnostic": self.shortnames("diagnostic"),
+            "output": self.shortnames("output"),
         }
 
         return DatasetInfo(
@@ -372,7 +371,6 @@ class PoesyDataset(DatasetABC, Dataset):
         for date in self.period.date_list:
             for member in self.settings.members:
                 for sample in range(0, sample_by_date):
-
                     input_terms = terms[
                         sample
                         * self.settings.num_total_steps : sample
@@ -387,7 +385,6 @@ class PoesyDataset(DatasetABC, Dataset):
                         + self.settings.num_output_steps
                     ]
                     samp = Sample(
-                        settings=self.settings,
                         date=date,
                         member=member,
                         input_terms=input_terms,
@@ -395,11 +392,10 @@ class PoesyDataset(DatasetABC, Dataset):
                     )
 
                     if samp.is_valid(self.params):
-
                         samples.append(samp)
                         number += 1
-        print("All samples are now defined")
 
+        print("All samples are now defined")
         return samples
 
     @cached_property
@@ -461,7 +457,6 @@ class PoesyDataset(DatasetABC, Dataset):
         member: int = 1,
         inference_steps: int = 0,
     ) -> torch.tensor:
-
         if self.settings.standardize:
             names = param.parameter_short_name
             means = np.asarray([self.stats[name]["mean"] for name in names])
@@ -579,8 +574,14 @@ class PoesyDataset(DatasetABC, Dataset):
         num_pred_steps_val_test: int,
         config_override: Union[Dict, None] = None,
     ) -> Tuple["PoesyDataset", "PoesyDataset", "PoesyDataset"]:
+        """
+        Return 3 PoesyDataset.
+        Override configuration file if needed.
+        """
         with open(fname, "r") as fp:
             conf = json.load(fp)
+            if config_override is not None:
+                conf = merge_dicts(conf, config_override)
 
         grid = Grid(**conf["grid"])
         param_list = []
@@ -591,17 +592,14 @@ class PoesyDataset(DatasetABC, Dataset):
             for var in data["var"]:
                 vard = data["var"][var]
                 # Change grid definition
-                if "level" in vard:
-                    level_type = "hPa"
-                else:
-                    level_type = "m"
                 param = Param(
                     name=var,
                     shortname=vard.pop("shortname", "t2m"),
-                    levels=vard.pop("level", [0]),
+                    levels=vard.pop("level", [2]),
                     grid=grid,
-                    level_type=level_type,
                     fnamer=poesy_forecast_namer,
+                    filenameref=vard.pop("filename", "t2m"),
+                    level_type=vard.pop("typeOfLevel", "heightAboveGround"),
                     **vard,
                 )
                 param_list.append(param)
@@ -648,7 +646,7 @@ class PoesyDataset(DatasetABC, Dataset):
     ) -> DataLoader:
         return DataLoader(
             self,
-            tl_settings.batch_size,
+            batch_size=tl_settings.batch_size,
             num_workers=tl_settings.num_workers,
             shuffle=self.shuffle,
             prefetch_factor=tl_settings.prefetch_factor,
@@ -688,31 +686,6 @@ class PoesyDataset(DatasetABC, Dataset):
     def split(self) -> Literal["train", "valid", "test"]:
         return self.period.name
 
-    def __get_params_attr(
-        self,
-        attribute: str,
-        kind: Literal[
-            "all", "input", "output", "forcing", "diagnostic", "input_output"
-        ] = "all",
-    ) -> List[str]:
-        out_list = []
-        valid_params = (
-            ("output", ("output", "input_output")),
-            ("forcing", ("input",)),
-            ("input", ("input", "input_output")),
-            ("diagnostic", ("output",)),
-            ("input_output", ("input_output",)),
-            ("all", ("input", "input_output", "output")),
-        )
-        if kind not in [k for k, pk in valid_params]:
-            raise NotImplementedError(
-                f"{kind} is not known. Possibilites are {[k for k,pk in valid_params]}"
-            )
-        for param in self.params:
-            if any(kind == k and param.kind in pk for k, pk in valid_params):
-                out_list += getattr(param, attribute)
-        return out_list
-
     @cached_property
     def units(self) -> Dict[str, int]:
         """
@@ -741,7 +714,7 @@ class PoesyDataset(DatasetABC, Dataset):
         """
         names = []
         for param in self.params:
-            if param.kind in kind:
+            if param.kind == kind:
                 names += param.parameter_short_name
         return names
 
@@ -813,7 +786,7 @@ class InferPoesyDataset(PoesyDataset):
     def sample_list(self):
         """
         Create a list of sample from information.
-        Outputs terms are computed from the number of prediction steps wanted by the user.
+        Outputs terms are computed from the number of prediction steps in argument.
         """
         print("Start forming samples")
         terms = list(
@@ -830,7 +803,6 @@ class InferPoesyDataset(PoesyDataset):
         for date in self.period.date_list:
             for member in self.settings.members:
                 for sample in range(0, sample_by_date):
-
                     input_terms = terms[
                         sample
                         * self.settings.num_total_steps : sample
@@ -844,7 +816,6 @@ class InferPoesyDataset(PoesyDataset):
                     ]
 
                     samp = InferSample(
-                        settings=self.settings,
                         date=date,
                         member=member,
                         input_terms=input_terms,
@@ -875,6 +846,7 @@ class InferPoesyDataset(PoesyDataset):
             conf = json.load(fp)
             if config_override is not None:
                 conf = merge_dicts(conf, config_override)
+                print(conf["periods"]["test"])
 
         grid = Grid(**conf["grid"])
         param_list = []
@@ -884,23 +856,19 @@ class InferPoesyDataset(PoesyDataset):
             term = conf["dataset"][data_source]["term"]
             for var in data["var"]:
                 vard = data["var"][var]
-                # Change grid definition
-                if "level" in vard:
-                    level_type = "hPa"
-                else:
-                    level_type = "m"
                 param = Param(
                     name=var,
                     shortname=vard.pop("shortname", "t2m"),
-                    levels=vard.pop("level", [0]),
+                    levels=vard.pop("level", [2]),
                     grid=grid,
-                    level_type=level_type,
                     fnamer=poesy_forecast_namer,
+                    filenameref=vard.pop("filename", "t2m"),
+                    level_type=vard.pop("typeOfLevel", "heightAboveGround"),
                     **vard,
                 )
                 param_list.append(param)
-
         inference_period = Period(**conf["periods"]["test"], name="infer")
+
         ds = InferPoesyDataset(
             grid,
             inference_period,
@@ -910,14 +878,14 @@ class InferPoesyDataset(PoesyDataset):
                 term=term,
                 num_input_steps=num_input_steps,
                 num_output_steps=0,
-                num_inference_pred_steps=config_override["num_inference_pred_steps"],
+                num_inference_pred_steps=conf["num_inference_pred_steps"],
             ),
         )
+
         return None, None, ds
 
 
 if __name__ == "__main__":
-
     path_config = "config/datasets/poesy.json"
 
     parser = ArgumentParser(description="Prepare Poesy dataset and test loading speed.")
@@ -935,7 +903,7 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    # PoesyDataset.prepare(args.path_config)
+    PoesyDataset.prepare(args.path_config)
 
     print("Dataset info : ")
     train_ds, _, _ = PoesyDataset.from_json(args.path_config, 2, 3, 3)

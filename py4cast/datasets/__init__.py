@@ -25,6 +25,16 @@ try:
 except ImportError:
     warnings.warn(f"Could not import SmeagolDataset. {traceback.format_exc()}")
 
+try:
+    from .smeagol import InferSmeagolDataset
+
+    registry["smeagol_infer"] = (
+        InferSmeagolDataset,
+        default_config_root / "smeagol.json",
+    )
+except ImportError:
+    warnings.warn(f"Could not import SmeagolDataset. {traceback.format_exc()}")
+
 
 try:
     from .titan import TitanDataset
@@ -63,7 +73,7 @@ def get_datasets(
     num_input_steps: int,
     num_pred_steps_train: int,
     num_pred_steps_val_test: int,
-    config_file: Union[Path, None] = None,
+    config_file: Union[str, None] = None,
     config_override: Union[Dict, None] = None,
 ) -> Tuple[DatasetABC, DatasetABC, DatasetABC]:
     """
@@ -79,7 +89,7 @@ def get_datasets(
             f"Dataset {name} not found in registry, available datasets are :{registry.keys()}"
         ) from ke
 
-    config_file = default_config if config_file is None else config_file
+    config_file = default_config if config_file is None else Path(config_file)
 
     return dataset_kls.from_json(
         config_file,
