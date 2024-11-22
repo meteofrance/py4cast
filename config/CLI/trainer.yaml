@@ -44,6 +44,6 @@ trainer:
 
   check_val_every_n_epoch: 1
   precision: 32
-  limit_train_batches: 20
-  limit_val_batches: 20
-  limit_test_batches: 20
+  limit_train_batches: null
+  limit_val_batches: null
+  limit_test_batches: null
