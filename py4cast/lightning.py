@@ -352,7 +352,7 @@ class AutoRegressiveLightning(pl.LightningModule):
         """
         Return the appropriate torch dtype for the desired precision in hparams.
         """
-        return str_to_dtype[self.hparams["precision"]]
+        return str_to_dtype[self.hparams.precision]
 
     @rank_zero_only
     def inspect_tensors(self):
@@ -376,13 +376,13 @@ class AutoRegressiveLightning(pl.LightningModule):
             dict_log["username"] = getpass.getuser()
             self.logger.log_hyperparams(dict_log, metrics={"val_mean_loss": 0.0})
             # Save model & dataset conf as files
-            if self.hparams["dataset_conf"] is not None:
+            if self.hparams.dataset_conf is not None:
                 shutil.copyfile(
-                    self.hparams["dataset_conf"], self.hparams.save_path / "dataset_conf.json"
+                    self.hparams.dataset_conf, self.hparams.save_path / "dataset_conf.json"
                 )
             if hparams["model_conf"] is not None:
                 shutil.copyfile(
-                    hparams["model_conf"], self.hparams.save_path / "model_conf.json"
+                    hparams.model_conf, self.hparams.save_path / "model_conf.json"
                 )
             # Write commit and state of git repo in log file
             dest_git_log = self.hparams.save_path / "git_log.txt"
@@ -402,10 +402,10 @@ class AutoRegressiveLightning(pl.LightningModule):
         self.log_hparams_tb()
 
     def configure_optimizers(self) -> torch.optim.Optimizer:
-        lr = self.hparams["lr"]
+        lr = self.hparams.lr
         opt = torch.optim.AdamW(self.parameters(), lr=lr, betas=(0.9, 0.95))
-        if self.hparams["use_lr_scheduler"]:
-            len_loader = self.hparams["len_train_loader"] // LR_SCHEDULER_PERIOD
+        if self.hparams.use_lr_scheduler:
+            len_loader = self.hparams.len_train_loader // LR_SCHEDULER_PERIOD
             epochs = self.trainer.max_epochs
             lr_scheduler = get_cosine_schedule_with_warmup(
                 opt, 1000 // LR_SCHEDULER_PERIOD, len_loader * epochs
@@ -464,19 +464,19 @@ class AutoRegressiveLightning(pl.LightningModule):
         - num_inter_steps
         """
         force_border: bool = (
-            True if self.hparams["training_strategy"] == "scaled_ar" else False
+            True if self.hparams.training_strategy == "scaled_ar" else False
         )
         scale_y: bool = (
-            True if self.hparams["training_strategy"] == "scaled_ar" else False
+            True if self.hparams.training_strategy == "scaled_ar" else False
         )
         # raise if mismatch between strategy and num_inter_steps
-        if self.hparams["training_strategy"] == "diff_ar":
-            if self.hparams["num_inter_steps"] != 1:
+        if self.hparams.training_strategy == "diff_ar":
+            if self.hparams.num_inter_steps != 1:
                 raise ValueError(
                     "Diff AR strategy requires exactly 1 intermediary step."
                 )
 
-        return force_border, scale_y, self.hparams["num_inter_steps"]
+        return force_border, scale_y, self.hparams.num_inter_steps
 
     def common_step(
         self, batch: ItemBatch, inference: bool = False
@@ -553,7 +553,7 @@ class AutoRegressiveLightning(pl.LightningModule):
             for k in range(num_inter_steps):
                 x = self._next_x(batch, prev_states, i)
                 # Graph (B, N_grid, d_f) or Conv (B, N_lat,N_lon d_f)
-                if self.hparams["channels_last"]:
+                if self.hparams.channels_last:
                     x = x.to(memory_format=torch.channels_last)
                 y = self.model(x)
 
@@ -665,7 +665,7 @@ class AutoRegressiveLightning(pl.LightningModule):
         """
         Check if logging is enabled
         """
-        return not self.hparams["no_log"]
+        return not self.hparams.no_log
 
     def on_save_checkpoint(self, checkpoint):
         """
@@ -830,7 +830,7 @@ class AutoRegressiveLightning(pl.LightningModule):
                 StateErrorPlot(metrics, save_path=self.hparams.save_path),
                 SpatialErrorPlot(),
                 PredictionTimestepPlot(
-                    num_samples_to_plot=self.hparams["num_samples_to_plot"],
+                    num_samples_to_plot=self.hparams.num_samples_to_plot,
                     num_features_to_plot=4,
                     prefix="Test",
                     save_path=self.hparams.save_path,

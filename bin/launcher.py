@@ -96,7 +96,5 @@ def cli_main():
     LCli(AutoRegressiveLightning, PlDataModule)
 
 
-
-
 if __name__ == "__main__":
     cli_main()
