@@ -19,8 +19,11 @@ from torch.utils.data import DataLoader, Dataset
 from py4cast.datasets.base import (
     DatasetABC,
     DatasetInfo,
+    Grid,
+    GridConfig,
     Item,
     NamedTensor,
+    Period,
     TorchDataloaderSettings,
     collate_fn,
 )
@@ -58,118 +61,17 @@ def get_weight(level: float, level_type: str) -> float:
         raise Exception(f"unknown level_type:{level_type}")
 
 
-@dataclass(slots=True)
-class Period:
-    start: dt.datetime
-    end: dt.datetime
-    step: int  # In hours
-    name: str
-
-    def __init__(self, start: int, end: int, step: int, name: str):
-        self.start = dt.datetime.strptime(str(start), "%Y%m%d%H")
-        self.end = dt.datetime.strptime(str(end), "%Y%m%d%H")
-        self.step = step
-        self.name = name
-
-    @property
-    def date_list(self):
-        return pd.date_range(
-            start=self.start, end=self.end, freq=f"{self.step}H"
-        ).to_pydatetime()
-
-
 # Define static attributes to add -> see Grid class in smeagol.py
-@dataclass
-class Grid:
-    domain: str
-    model: str
-    geometry: str = "EURW1S40"
-    border_size: int = 0
-    # Subgrid selection. If (0,0,0,0) the whole grid is kept.
-    subgrid: Tuple[int] = (0, 0, 0, 0)
-    x: int = field(init=False)  # X dimension
-    y: int = field(init=False)  # Y dimension
 
-    def __post_init__(self):
-        ds = np.load(self.grid_filepath)
-        x, y = ds.shape
-        # Setting correct subgrid if no subgrid is selected.
-        if self.subgrid == (0, 0, 0, 0):
-            self.subgrid = (0, x, 0, y)
-        self.x = self.subgrid[1] - self.subgrid[0]
-        self.y = self.subgrid[3] - self.subgrid[2]
 
-    @property
-    def grid_filepath(self):
-        return SCRATCH_PATH / OROGRAPHY_FNAME
-
-    @cached_property
-    def lat(self) -> np.array:
-        filename = SCRATCH_PATH / LATLON_FNAME
-        with open(filename, "rb") as f:
-            lonlat = np.load(f)
-        return np.transpose(
-            lonlat[
-                1, self.subgrid[0] : self.subgrid[1], self.subgrid[2] : self.subgrid[3]
-            ]
-        )
-
-    @cached_property
-    def lon(self) -> np.array:
-        filename = SCRATCH_PATH / LATLON_FNAME
-        with open(filename, "rb") as f:
-            lonlat = np.load(f)
-        return lonlat[
-            0, self.subgrid[0] : self.subgrid[1], self.subgrid[2] : self.subgrid[3]
-        ]
-
-    @cached_property
-    def meshgrid(self) -> np.array:
-        """
-        Build a meshgrid from coordinates position.
-        """
-        return np.asarray([self.lat, self.lon])
-
-    @property
-    def geopotential(self) -> np.array:
-        ds = np.load(self.grid_filepath)
-        return ds[self.subgrid[0] : self.subgrid[1], self.subgrid[2] : self.subgrid[3]]
-
-    @property
-    def landsea_mask(self) -> np.array:
-        # TO DO : add landsea mask instead of orography
-        ds = np.load(self.grid_filepath)
-        return ds[self.subgrid[0] : self.subgrid[1], self.subgrid[2] : self.subgrid[3]]
-
-    @property
-    def border_mask(self) -> np.array:
-        if self.border_size > 0:
-            border_mask = np.ones((self.x, self.y)).astype(bool)
-            size = self.border_size
-            border_mask[size:-size, size:-size] *= False
-        elif self.border_size == 0:
-            border_mask = np.ones((self.x, self.y)).astype(bool) * False
-        else:
-            raise ValueError(f"Bordersize should be positive. Get {self.border_size}")
-        return border_mask
-
-    @property
-    def N_grid(self) -> int:
-        return self.x * self.y
-
-    @cached_property
-    def grid_limits(self):
-        return [  # In projection
-            self.lon[0, 0],  # min x
-            self.lon[-1, -1],  # max x
-            self.lat[0, 0],  # min y
-            self.lat[-1, -1],  # max y
-        ]
-
-    @cached_property
-    def projection(self):
-        # Create projection
-        return cartopy.crs.LambertConformal(central_longitude=2, central_latitude=46.7)
+def load_poesy_grid_info(grid: Grid) -> GridConfig:
+    geopotential = np.load(SCRATCH_PATH / OROGRAPHY_FNAME)
+    latlon = np.load(SCRATCH_PATH / LATLON_FNAME)
+    full_size = geopotential.shape
+    latitude = latlon[1]
+    longitude = latlon[0]
+    landsea_mask = np.where(geopotential > 0, 1.0, 0.0).astype(np.float32)
+    return GridConfig(full_size, latitude, longitude, geopotential, landsea_mask)
 
 
 @dataclass(slots=True)
@@ -241,9 +143,7 @@ class PoesySettings:
     term: dict
     num_input_steps: int  # = 2  # Number of input timesteps
     num_output_steps: int  # = 1  # Number of output timesteps (= 0 for inference)
-    num_inference_pred_steps: int = (
-        0  # 0 in training config ; else used to provide future information about forcings
-    )
+    num_inference_pred_steps: int = 0  # 0 in training config ; else used to provide future information about forcings
     standardize: bool = False
     members: Tuple[int] = (0,)
 
