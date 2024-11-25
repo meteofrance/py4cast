@@ -3,6 +3,7 @@ Base classes defining our software components
 and their interfaces
 """
 
+import datetime as dt
 import warnings
 from abc import ABC, abstractclassmethod, abstractmethod, abstractproperty
 from collections import namedtuple
@@ -11,8 +12,9 @@ from dataclasses import dataclass, field, fields
 from functools import cached_property
 from itertools import chain
 from pathlib import Path
-from typing import TYPE_CHECKING, Dict, List, Literal, Tuple, Union
+from typing import TYPE_CHECKING, Callable, Dict, List, Literal, Tuple, Union
 
+import cartopy
 import einops
 import numpy as np
 import torch
@@ -709,9 +711,8 @@ class Grid:
     name: str
     border_size: int = 10
     load_grid_info_func: Callable[
-        [Grid], GridConfig
+        [Any], GridConfig
     ]  # function to load grid data (customizable)
-    grid_config: xr.Dataset  # object storing general grid information
     # subdomain selection: If (0,0,0,0) the whole domain is kept.
     subdomain: Tuple[int] = (0, 0, 0, 0)
     # Note : training won't work with the full domain on some NN because the size
@@ -722,10 +723,8 @@ class Grid:
     projection: str = "PlateCarree"
     projection_kwargs: dict = {}
 
-    def __post_init__(
-        self,
-    ):
-        self.grid_config = self.load_grid_info(self)
+    def __post_init__(self):
+        self.grid_config = self.get_grid_info()
         # Setting correct subdomain if no subdomain is selected.
         if sum(self.subdomain) == 0:
             self.subdomain = (
@@ -736,6 +735,9 @@ class Grid:
             )
         self.x = self.subdomain[1] - self.subdomain[0]
         self.y = self.subdomain[3] - self.subdomain[2]
+
+    def get_grid_info(self) -> GridConfig:
+        return self.load_grid_info_func(self)
 
     @cached_property
     def lat(self) -> np.array:
