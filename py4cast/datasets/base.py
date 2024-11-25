@@ -802,7 +802,7 @@ class Grid:
 
     @cached_property
     def projection(self):
-        func = getattr(cartopy.crs, self.projection)
+        func = getattr(self.projection,cartopy.crs)
         return func(**self.projection_kwargs)
 
 
