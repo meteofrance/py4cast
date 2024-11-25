@@ -640,6 +640,8 @@ class DatasetInfo:
         print(f"Features shortnames {self.shortnames}")
         for p in ["input", "input_output", "output"]:
             names = self.shortnames[p]
+            print(names)
+            print(self.stats)
             mean = self.stats.to_list("mean", names)
             std = self.stats.to_list("std", names)
             mini = self.stats.to_list("min", names)
@@ -710,10 +712,11 @@ GridConfig = namedtuple(
 @dataclass
 class Grid:
     name: str
-    border_size: int = 10
     load_grid_info_func: Callable[
         [Any], GridConfig
     ]  # function to load grid data (customizable)
+    border_size: int = 10
+
     # subdomain selection: If (0,0,0,0) the whole domain is kept.
     subdomain: Tuple[int] = (0, 0, 0, 0)
     # Note : training won't work with the full domain on some NN because the size
@@ -785,10 +788,10 @@ class Grid:
     @cached_property
     def grid_limits(self):
         grid_limits = [  # In projection (llon, ulon, llat, ulat)
-            float(self.grid_config.longitude[self.subdomain[2]].values),  # min y
-            float(self.grid_config.longitude[self.subdomain[3] - 1].values),  # max y
-            float(self.grid_config.latitude[self.subdomain[1] - 1].values),  # max x
-            float(self.grid_config.latitude[self.subdomain[0]].values),  # min x
+            float(self.grid_config.longitude[self.subdomain[2]]),  # min y
+            float(self.grid_config.longitude[self.subdomain[3] - 1]),  # max y
+            float(self.grid_config.latitude[self.subdomain[1] - 1]),  # max x
+            float(self.grid_config.latitude[self.subdomain[0]]),  # min x
         ]
         return grid_limits
 

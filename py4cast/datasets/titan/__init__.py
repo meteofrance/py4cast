@@ -60,7 +60,7 @@ def load_Titan_grid_info(path: str, name: str) -> GridConfig:
     grid_info = METADATA["GRIDS"][name]
     full_size = grid_info["size"]
     grid_conf = GridConfig(
-        full_size, conf_ds.latitude, conf_ds.longitude, conf_ds.h.values
+        full_size, conf_ds.latitude.values, conf_ds.longitude.values, conf_ds.h.values
     )
     return grid_conf
 

@@ -66,8 +66,8 @@ def load_poesy_grid_info(grid: Grid) -> GridConfig:
     geopotential = np.load(SCRATCH_PATH / OROGRAPHY_FNAME)
     latlon = np.load(SCRATCH_PATH / LATLON_FNAME)
     full_size = geopotential.shape
-    latitude = latlon[1]
-    longitude = latlon[0]
+    latitude = latlon[1, :, 0]
+    longitude = latlon[0, 0]
     landsea_mask = np.where(geopotential > 0, 1.0, 0.0).astype(np.float32)
     return GridConfig(full_size, latitude, longitude, geopotential, landsea_mask)
 
@@ -125,8 +125,8 @@ class Param:
         """
         data_array = np.load(self.filename(date=date), mmap_mode="r")
         return data_array[
-            self.grid.subgrid[0] : self.grid.subgrid[1],
-            self.grid.subgrid[2] : self.grid.subgrid[3],
+            self.grid.subdomain[0] : self.grid.subdomain[1],
+            self.grid.subdomain[2] : self.grid.subdomain[3],
             term,
             member,
         ]
@@ -213,7 +213,7 @@ class PoesyDataset(DatasetABC, Dataset):
         return self._cache_dir
 
     def __str__(self) -> str:
-        return f"Poesy_{self.grid.geometry}"
+        return f"Poesy_{self.grid.name}"
 
     def __len__(self):
         return len(self.sample_list)
@@ -481,7 +481,8 @@ class PoesyDataset(DatasetABC, Dataset):
             conf = json.load(fp)
             if config_override is not None:
                 conf = merge_dicts(conf, config_override)
-
+        conf["grid"]["load_grid_info_func"] = load_poesy_grid_info
+        conf["grid"]
         grid = Grid(**conf["grid"])
         param_list = []
         for data_source in conf["dataset"]:
