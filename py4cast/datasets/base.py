@@ -721,8 +721,8 @@ class Grid:
     x: int = field(init=False)  # X dimension of the grid (longitudes)
     y: int = field(init=False)  # Y dimension of the grid (latitudes)
     # projection information (e.g for plotting)
-    projection: str = "PlateCarree"
-    projection_kwargs: dict = {}
+    proj_name: str = "PlateCarree"
+    projection_kwargs: dict = field(default_factory={})
 
     def __post_init__(self):
         self.grid_config = self.get_grid_info()
@@ -802,7 +802,7 @@ class Grid:
 
     @cached_property
     def projection(self):
-        func = getattr(self.projection,cartopy.crs)
+        func = getattr(cartopy.crs, self.proj_name)
         return func(**self.projection_kwargs)
 
 
