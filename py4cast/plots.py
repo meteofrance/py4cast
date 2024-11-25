@@ -391,11 +391,8 @@ class PredictionTimestepPlot(MapPlot):
             ]
             # TODO : don't create all figs at once to avoid matplotlib warning
             tensorboard = obj.logger.experiment
-            mlflow_logger_idx = [
-                i for i, l in enumerate(obj.loggers) if isinstance(l, MLFlowLogger)
-            ]
-            mlflow_logger = (
-                obj.loggers[mlflow_logger_idx[0]] if mlflow_logger_idx else None
+            mlflow_logger = next(
+                iter([o for o in obj.loggers if isinstance(o, MLFlowLogger)]), None
             )
             for var_name, fig in zip(feature_names, var_figs):
                 fig_name = f"timestep_evol_per_param/{var_name}_example_{self.plotted_examples}"
@@ -468,10 +465,9 @@ class PredictionEpochPlot(MapPlot):
         ]
 
         tensorboard = obj.logger.experiment
-        mlflow_logger_idx = [
-            i for i, l in enumerate(obj.loggers) if isinstance(l, MLFlowLogger)
-        ]
-        mlflow_logger = obj.loggers[mlflow_logger_idx[0]] if mlflow_logger_idx else None
+        mlflow_logger = next(
+            iter([o for o in obj.loggers if isinstance(o, MLFlowLogger)]), None
+        )
         for var_name, fig in zip(feature_names, var_figs):
             fig_name = (
                 f"epoch_evol_per_param/{var_name}_example_{self.plotted_examples}"
@@ -542,10 +538,9 @@ class StateErrorPlot(Plotter):
         Make the summary figure
         """
         tensorboard = obj.logger.experiment
-        mlflow_logger_idx = [
-            i for i, l in enumerate(obj.loggers) if isinstance(l, MLFlowLogger)
-        ]
-        mlflow_logger = obj.loggers[mlflow_logger_idx[0]] if mlflow_logger_idx else None
+        mlflow_logger = next(
+            iter([o for o in obj.loggers if isinstance(o, MLFlowLogger)]), None
+        )
         if obj.trainer.is_global_zero:
             for name in self.metrics:
                 loss_tensor = torch.cat(self.losses[name], dim=0)
@@ -642,11 +637,8 @@ class SpatialErrorPlot(Plotter):
                 for t_i, loss_map in enumerate(mean_spatial_loss)
             ]
             tensorboard = obj.logger.experiment
-            mlflow_logger_idx = [
-                i for i, l in enumerate(obj.loggers) if isinstance(l, MLFlowLogger)
-            ]
-            mlflow_logger = (
-                obj.loggers[mlflow_logger_idx[0]] if mlflow_logger_idx else None
+            mlflow_logger = next(
+                iter([o for o in obj.loggers if isinstance(o, MLFlowLogger)]), None
             )
 
             for t_i, fig in enumerate(loss_map_figs):

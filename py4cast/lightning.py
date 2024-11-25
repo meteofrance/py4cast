@@ -828,11 +828,8 @@ class AutoRegressiveLightning(pl.LightningModule):
             dict_metrics.update(self.rmse_psd_plot_metric.compute(prefix="test"))
             dict_metrics.update(self.acc_metric.compute(prefix="test"))
 
-            mlflow_logger_idx = [
-                i for i, l in enumerate(self.loggers) if isinstance(l, MLFlowLogger)
-            ]
-            mlflow_logger = (
-                self.loggers[mlflow_logger_idx[0]] if mlflow_logger_idx else None
+            mlflow_logger = next(
+                iter([o for o in self.loggers if isinstance(o, MLFlowLogger)]), None
             )
 
             for name, elmnt in dict_metrics.items():
