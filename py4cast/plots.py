@@ -12,7 +12,6 @@ import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
-from lightning.pytorch.loggers import MLFlowLogger
 from PIL import Image
 from tueplots import bundles, figsizes
 
@@ -391,9 +390,6 @@ class PredictionTimestepPlot(MapPlot):
             ]
             # TODO : don't create all figs at once to avoid matplotlib warning
             tensorboard = obj.logger.experiment
-            mlflow_logger = next(
-                iter([o for o in obj.loggers if isinstance(o, MLFlowLogger)]), None
-            )
             for var_name, fig in zip(feature_names, var_figs):
                 fig_name = f"timestep_evol_per_param/{var_name}_example_{self.plotted_examples}"
                 tensorboard.add_figure(fig_name, fig, t_i)
@@ -404,9 +400,9 @@ class PredictionTimestepPlot(MapPlot):
                     dest_file.parent.mkdir(exist_ok=True)
                     fig.savefig(dest_file)
 
-                if mlflow_logger:
-                    run_id = mlflow_logger.version
-                    mlflow_logger.experiment.log_figure(
+                if obj.mlflow_logger:
+                    run_id = obj.mlflow_logger.version
+                    obj.mlflow_logger.experiment.log_figure(
                         run_id=run_id,
                         figure=fig,
                         artifact_file=f"figures/{fig_full_name}",
@@ -465,9 +461,6 @@ class PredictionEpochPlot(MapPlot):
         ]
 
         tensorboard = obj.logger.experiment
-        mlflow_logger = next(
-            iter([o for o in obj.loggers if isinstance(o, MLFlowLogger)]), None
-        )
         for var_name, fig in zip(feature_names, var_figs):
             fig_name = (
                 f"epoch_evol_per_param/{var_name}_example_{self.plotted_examples}"
@@ -479,9 +472,9 @@ class PredictionEpochPlot(MapPlot):
                 dest_file.parent.mkdir(exist_ok=True)
                 fig.savefig(dest_file)
 
-            if mlflow_logger:
-                run_id = mlflow_logger.version
-                mlflow_logger.experiment.log_figure(
+            if obj.mlflow_logger:
+                run_id = obj.mlflow_logger.version
+                obj.mlflow_logger.experiment.log_figure(
                     run_id=run_id, figure=fig, artifact_file=f"figures/{fig_full_name}"
                 )
 
@@ -538,9 +531,6 @@ class StateErrorPlot(Plotter):
         Make the summary figure
         """
         tensorboard = obj.logger.experiment
-        mlflow_logger = next(
-            iter([o for o in obj.loggers if isinstance(o, MLFlowLogger)]), None
-        )
         if obj.trainer.is_global_zero:
             for name in self.metrics:
                 loss_tensor = torch.cat(self.losses[name], dim=0)
@@ -572,9 +562,9 @@ class StateErrorPlot(Plotter):
                         dest_file.parent.mkdir(exist_ok=True)
                         fig.savefig(dest_file)
 
-                    if mlflow_logger:
-                        run_id = mlflow_logger.version
-                        mlflow_logger.experiment.log_figure(
+                    if obj.mlflow_logger:
+                        run_id = obj.mlflow_logger.version
+                        obj.mlflow_logger.experiment.log_figure(
                             run_id=run_id,
                             figure=fig,
                             artifact_file=f"figures/{fig_full_name}",
@@ -637,17 +627,14 @@ class SpatialErrorPlot(Plotter):
                 for t_i, loss_map in enumerate(mean_spatial_loss)
             ]
             tensorboard = obj.logger.experiment
-            mlflow_logger = next(
-                iter([o for o in obj.loggers if isinstance(o, MLFlowLogger)]), None
-            )
 
             for t_i, fig in enumerate(loss_map_figs):
                 fig_full_name = f"spatial_error_{label}/{self.prefix}_loss"
                 tensorboard.add_figure(fig_full_name, fig, t_i)
 
-                if mlflow_logger:
-                    run_id = mlflow_logger.version
-                    mlflow_logger.experiment.log_figure(
+                if obj.mlflow_logger:
+                    run_id = obj.mlflow_logger.version
+                    obj.mlflow_logger.experiment.log_figure(
                         run_id=run_id,
                         figure=fig,
                         artifact_file=f"figures/{fig_full_name}.png",

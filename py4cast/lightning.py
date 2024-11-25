@@ -722,14 +722,6 @@ class AutoRegressiveLightning(pl.LightningModule):
             dict_metrics.update(self.psd_plot_metric.compute())
             dict_metrics.update(self.rmse_psd_plot_metric.compute())
             dict_metrics.update(self.acc_metric.compute())
-
-            mlflow_logger_idx = [
-                i for i, l in enumerate(self.loggers) if isinstance(l, MLFlowLogger)
-            ]
-            mlflow_logger = (
-                self.loggers[mlflow_logger_idx[0]] if mlflow_logger_idx else None
-            )
-
             for name, elmnt in dict_metrics.items():
                 if isinstance(elmnt, matplotlib.figure.Figure):
                     # Tensorboard logger
@@ -737,9 +729,9 @@ class AutoRegressiveLightning(pl.LightningModule):
                         f"{name}", elmnt, self.current_epoch
                     )
                     # If MLFlowLogger activated
-                    if mlflow_logger:
-                        run_id = mlflow_logger.version
-                        mlflow_logger.experiment.log_figure(
+                    if self.mlflow_logger:
+                        run_id = self.mlflow_logger.version
+                        self.mlflow_logger.experiment.log_figure(
                             run_id=run_id,
                             figure=elmnt,
                             artifact_file=f"figures/{name}.png",
@@ -828,10 +820,6 @@ class AutoRegressiveLightning(pl.LightningModule):
             dict_metrics.update(self.rmse_psd_plot_metric.compute(prefix="test"))
             dict_metrics.update(self.acc_metric.compute(prefix="test"))
 
-            mlflow_logger = next(
-                iter([o for o in self.loggers if isinstance(o, MLFlowLogger)]), None
-            )
-
             for name, elmnt in dict_metrics.items():
                 if isinstance(elmnt, matplotlib.figure.Figure):
                     # Tensorboard logger
@@ -839,9 +827,9 @@ class AutoRegressiveLightning(pl.LightningModule):
                         f"{name}", elmnt, self.current_epoch
                     )
                     # If MLFlowLogger activated
-                    if mlflow_logger:
-                        run_id = mlflow_logger.version
-                        mlflow_logger.experiment.log_figure(
+                    if self.mlflow_logger:
+                        run_id = self.mlflow_logger.version
+                        self.mlflow_logger.experiment.log_figure(
                             run_id=run_id,
                             figure=elmnt,
                             artifact_file=f"figures/{name}.png",
@@ -858,3 +846,12 @@ class AutoRegressiveLightning(pl.LightningModule):
             # Notify plotters that the test epoch end
             for plotter in self.test_plotters:
                 plotter.on_step_end(self, label="Test")
+
+    @cached_property
+    def mlflow_logger(self) -> Union[MLFlowLogger, None]:
+        """
+        Get the MLFlowLogger if it has been set.
+        """
+        return next(
+            iter([o for o in self.loggers if isinstance(o, MLFlowLogger)]), None
+        )
