@@ -9,9 +9,7 @@ from functools import cached_property
 from pathlib import Path
 from typing import Dict, List, Literal, Tuple, Union
 
-import cartopy
 import numpy as np
-import pandas as pd
 import torch
 import tqdm
 from torch.utils.data import DataLoader, Dataset

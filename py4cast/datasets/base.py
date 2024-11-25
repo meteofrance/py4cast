@@ -12,11 +12,12 @@ from dataclasses import dataclass, field, fields
 from functools import cached_property
 from itertools import chain
 from pathlib import Path
-from typing import TYPE_CHECKING, Callable, Dict, List, Literal, Tuple, Union
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Literal, Tuple, Union
 
 import cartopy
 import einops
 import numpy as np
+import pandas as pd
 import torch
 from tabulate import tabulate
 from torch.utils.data import DataLoader
@@ -759,7 +760,7 @@ class Grid:
     @property
     def landsea_mask(self) -> np.array:
         if self.grid_config.landsea_mask is not None:
-            return grid_config.landsea_mask[
+            return self.grid_config.landsea_mask[
                 self.subdomain[0] : self.subdomain[1],
                 self.subdomain[2] : self.subdomain[3],
             ]
