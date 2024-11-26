@@ -58,50 +58,10 @@ def get_weight(level: float, level_type: str) -> float:
         raise Exception(f"unknown level_type:{level_type}")
 
 
-def browse_poesy(period, settings):
-    """
-    Create a list of arguments used to instantiate Sample. 
-    This function indicates how to run through / browse the Poesy.    
-    """
-    
-    list_args_all_samples = []
+#############################################################
+#                            PERIOD                         #
+#############################################################
 
-    # Create all datetimes
-    date_list = pd.date_range(
-            start=period.start, end=period.end, freq=f"{period.step}H"
-        ).to_pydatetime()
-
-    # Get the number of sample for 1 run
-    terms = list(
-            np.arange(
-                settings.term["start"],
-                settings.term["end"],
-                settings.term["timestep"],
-            )
-        )
-    n_sample_by_datetime = len(terms) // settings.num_total_steps
-
-    # Create a dict of args for each datetime, member and for all sample
-    for date in date_list:
-        for member in settings.members:
-            for sample in range(0, n_sample_by_datetime):
-                input_terms = terms[
-                    sample
-                    * settings.num_total_steps : sample
-                    * settings.num_total_steps
-                    + settings.num_input_steps
-                ]
-                output_terms = terms[
-                    sample * settings.num_total_steps
-                    + settings.num_input_steps : sample
-                    * settings.num_total_steps
-                    + settings.num_input_steps
-                    + settings.num_output_steps
-                ]
-                dict_sample_args = {"date": date, "member": member, "input_terms": input_terms, "output_terms": output_terms}
-                list_args_all_samples.append(dict_sample_args)
-
-    return list_args_all_samples
 
 @dataclass(slots=True)
 class Period:
@@ -115,6 +75,11 @@ class Period:
         self.end = dt.datetime.strptime(str(end), "%Y%m%d%H")
         self.step = step
         self.name = name
+
+
+#############################################################
+#                            GRID                           #
+#############################################################
 
 
 # Define static attributes to add -> see Grid class in smeagol.py
@@ -211,6 +176,11 @@ class Grid:
         return cartopy.crs.LambertConformal(central_longitude=2, central_latitude=46.7)
 
 
+#############################################################
+#                            PARAM                          #
+#############################################################
+
+
 @dataclass(slots=True)
 class Param:
     name: str
@@ -275,6 +245,11 @@ class Param:
         return flist.exists()
 
 
+#############################################################
+#                            SETTINGS                       #
+#############################################################
+
+
 @dataclass(slots=True)
 class PoesySettings:
     term: dict
@@ -294,6 +269,62 @@ class PoesySettings:
         """
         # Nb of step in one sample
         return self.num_input_steps + self.num_output_steps
+
+
+#############################################################
+#                      BROWSE DATASET                       #
+#############################################################
+
+
+def browse_poesy(period: Period, settings: PoesySettings):
+    """
+    Create a list of arguments used to instantiate Sample. 
+    This function indicates how to run through / browse the Poesy.    
+    """
+    
+    list_args_all_samples = []
+
+    # Create all datetimes
+    date_list = pd.date_range(
+            start=period.start, end=period.end, freq=f"{period.step}H"
+        ).to_pydatetime()
+
+    # Get the number of sample for 1 run
+    terms = list(
+            np.arange(
+                settings.term["start"],
+                settings.term["end"],
+                settings.term["timestep"],
+            )
+        )
+    n_sample_by_datetime = len(terms) // settings.num_total_steps
+
+    # Create a dict of args for each datetime, member and for all sample
+    for date in date_list:
+        for member in settings.members:
+            for sample in range(0, n_sample_by_datetime):
+                input_terms = terms[
+                    sample
+                    * settings.num_total_steps : sample
+                    * settings.num_total_steps
+                    + settings.num_input_steps
+                ]
+                output_terms = terms[
+                    sample * settings.num_total_steps
+                    + settings.num_input_steps : sample
+                    * settings.num_total_steps
+                    + settings.num_input_steps
+                    + settings.num_output_steps
+                ]
+                dict_sample_args = {"date": date, "member": member, "input_terms": input_terms, "output_terms": output_terms}
+                list_args_all_samples.append(dict_sample_args)
+
+    return list_args_all_samples
+
+
+#############################################################
+#                            SAMPLE                         #
+#############################################################
 
 
 @dataclass(slots=True)
@@ -334,6 +365,11 @@ class InferSample(Sample):
 
     def __post_init__(self):
         self.terms = self.input_terms
+
+
+#############################################################
+#                            DATASET                        #
+#############################################################
 
 
 class PoesyDataset(DatasetABC, Dataset):
@@ -404,14 +440,14 @@ class PoesyDataset(DatasetABC, Dataset):
         list_args_sample = self.browse_dataset(self.period, self.settings)
 
         for dict_args in list_args_sample:
-
+            
             samp = Sample(
-                dict_args["date"],
-                dict_args["member"],
-                dict_args["input_terms"],
-                dict_args["output_terms"],
+                date = dict_args["date"],
+                member = dict_args["member"],
+                input_terms = dict_args["input_terms"],
+                output_terms = dict_args["output_terms"],
                 )
-
+            
             if samp.is_valid(self.params):
                 samples.append(samp)
                 n_samples += 1

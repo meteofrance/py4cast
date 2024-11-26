@@ -47,20 +47,6 @@ def get_weight_per_lvl(level: int, kind: Literal["hPa", "m"]):
     else:
         return 2
 
-def browse_titan(date_list):
-    """
-    Create a list of arguments used to instantiate Sample. This function indicates how to 
-    run through / browse Titan.    
-    """
-    
-    list_args_all_samples = []
-    for date in date_list:
-        dict_sample_args = {"date": date}
-        list_args_all_samples.append(dict_sample_args)
-
-    return list_args_all_samples
-
-
 #############################################################
 #                            PERIOD                         #
 #############################################################
@@ -342,6 +328,24 @@ class TitanSettings:
     step_duration: float  # duration in hour
     standardize: bool = True
     file_format: Literal["npy", "grib"] = "grib"
+
+
+#############################################################
+#                      BROWSE DATASET                       #
+#############################################################
+
+
+def browse_titan(period: Period):
+    """
+    Create a list of arguments used to instantiate Sample. This function indicates how to 
+    run through / browse Titan.    
+    """
+    list_args_all_samples = []
+    for date in period.date_list:
+        dict_sample_args = {"date": date}
+        list_args_all_samples.append(dict_sample_args)
+
+    return list_args_all_samples
 
 
 #############################################################
@@ -651,7 +655,7 @@ class TitanDataset(DatasetABC, Dataset):
                 f"Valid samples file {self.valid_samples_file} does not exist. Computing samples list..."
             )
             samples = []
-            list_args_sample = self.browse_dataset(self.period.date_list)
+            list_args_sample = self.browse_dataset(self.period)
             for dict_args in tqdm.tqdm(list_args_sample):
                 sample = Sample(dict_args["date"], self.settings, self.params, stats, self.grid)
                 if sample.is_valid():
