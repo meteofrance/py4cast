@@ -17,7 +17,6 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, List, Literal, Tuple, Uni
 import cartopy
 import einops
 import numpy as np
-import pandas as pd
 import torch
 from tabulate import tabulate
 from torch.utils.data import DataLoader
@@ -699,9 +698,9 @@ class Period:
 
     @property
     def date_list(self):
-        return pd.date_range(
-            start=self.start, end=self.end, freq=f"{self.step}H"
-        ).to_pydatetime()
+        return np.arange(
+            self.start, self.end, np.timedelta64(self.step, "h"), dtype="datetime64[s]"
+        ).tolist()
 
 
 GridConfig = namedtuple(
