@@ -58,7 +58,7 @@ def get_weight(level: float, level_type: str) -> float:
         raise Exception(f"unknown level_type:{level_type}")
 
 
-def browse_dataset(period, settings):
+def browse_poesy(period, settings):
     """
     Create a list of arguments used to instantiate Sample. This function indicates how to 
     run through / browse the dataset.    
@@ -348,6 +348,7 @@ class PoesyDataset(DatasetABC, Dataset):
         self.shuffle = self.split == "train"
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self.step_duration = self.settings.term["timestep"]
+        self.browse_dataset = browse_poesy
 
     @cached_property
     def cache_dir(self):
@@ -400,7 +401,7 @@ class PoesyDataset(DatasetABC, Dataset):
         n_samples = 0
 
         # Run through the dataset and get a list of sample's args.
-        list_args_sample = browse_dataset(self.period, self.settings)
+        list_args_sample = self.browse_dataset(self.period, self.settings)
 
         for dict_args in list_args_sample:
 
