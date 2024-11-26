@@ -3,50 +3,6 @@ import numpy as np
 from PIL import Image
 import io
 
-from py4cast.models import build_model_from_settings
-
-
-###--------------------- INIT MODEL ---------------------###
-
-
-class InitModelLightningModule:
-    def __init__(
-        self,
-        model_name,
-        model_conf,
-    ):
-        self.model_name = model_name
-        self.model_conf = model_conf
-
-    def setup(self, stage=None):
-        """
-        Called at the beginning of fit (train + validate), validate, test, or predict.
-        This is a good hook when you need to build models dynamically or adjust something about them.
-        This hook is called on every process when using DDP.
-        """
-
-        """
-        #accès aux données via self.trainer.datamodule
-        dataset = self.trainer.datamodule.train_dataset
-        self.input_shape = (dataset[0][0].shape[2], dataset[0][0].shape[3]) #à modifier pour coller au format du datamodule
-        self.num_input_features = dataset[0][0].shape[1] #à modifier pour coller au format du datamodule
-        self.num_output_features = self.num_input_features
-        """
-
-        self.input_shape = (512, 640)  # à modifier pour coller au format du datamodule
-        self.num_input_features = 21  # à modifier pour coller au format du datamodule
-        self.num_output_features = self.num_input_features
-
-        """Creates a model with the config file (.json) if available."""
-        model, model_settings = build_model_from_settings(
-            network_name=self.model_name,
-            num_input_features=self.num_input_features,
-            num_output_features=self.num_output_features,
-            settings_path=self.model_conf,
-            input_shape=self.input_shape,
-        )
-        return model, model_settings
-
 
 ###--------------------- PLOT ---------------------###
 
@@ -162,7 +118,6 @@ class PlotLightningModule:
             0,
             dataformats="HW",
         )
-
 
 ###--------------------- MASK ---------------------###
 

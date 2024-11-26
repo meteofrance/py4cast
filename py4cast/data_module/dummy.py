@@ -65,3 +65,11 @@ class DummyDataModule(pl.LightningDataModule):
 
     def predict_dataloader(self):
         return self.test_ds.torch_dataloader(self.dl_settings)
+
+    @property
+    def batch_shape(self):
+        """Returns the shape of a batch from the train dataloader."""
+        item_batch = next(iter(self.train_dataloader()))
+        return (
+            item_batch.inputs.tensor.shape
+        )  # Assuming ItemBatch has 'input' attribute
