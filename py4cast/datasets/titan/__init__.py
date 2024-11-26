@@ -338,7 +338,7 @@ def get_param_tensor(
         names = param.parameter_short_names
         means = np.asarray([stats[name]["mean"] for name in names])
         std = np.asarray([stats[name]["std"] for name in names])
-    arrays = [param.load_data(date, self.settings.file_format) for date in dates]
+    arrays = [param.load_data(date, settings.file_format) for date in dates]
     arr = np.stack(arrays)
     # Extend dimension to match 3D (level dimension)
     if len(arr.shape) != 4:
