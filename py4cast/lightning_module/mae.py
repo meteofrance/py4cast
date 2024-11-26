@@ -23,7 +23,6 @@ LR_SCHEDULER_PERIOD: int = 10
 
 
 class MAELightningModule(
-    InitModelLightningModule,
     PlotLightningModule,
     MaskLightningModule,
     pl.LightningModule,
@@ -45,9 +44,6 @@ class MAELightningModule(
         super().__init__(
             model_name=model_name, model_conf=model_conf
         )  # Initialize InitModelLightningModule
-        super(
-            InitModelLightningModule, self
-        ).__init__()  # Initialize PlotLightningModule
         super(
             PlotLightningModule, self
         ).__init__()  # Initialize InitModelLightningModule

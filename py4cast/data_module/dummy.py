@@ -2,10 +2,7 @@ from typing import Union, Dict
 from pathlib import Path
 import lightning.pytorch as pl
 
-# A GARDER
 from py4cast.datasets import get_datasets
-
-# A SUPPRIMER
 from py4cast.datasets.base import TorchDataloaderSettings
 
 
