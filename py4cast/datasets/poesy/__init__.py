@@ -21,7 +21,10 @@ from py4cast.datasets.base import (
     GridConfig,
     Item,
     NamedTensor,
+    Param,
+    ParamConfig,
     Period,
+    Settings,
     TorchDataloaderSettings,
     collate_fn,
 )
@@ -55,7 +58,7 @@ def get_weight(level: float, level_type: str) -> float:
 #                            GRID                           #
 #############################################################
 
-def load_poesy_grid_info(grid: Grid) -> GridConfig:
+def load_grid_info(grid: Grid) -> GridConfig:
     geopotential = np.load(SCRATCH_PATH / OROGRAPHY_FNAME)
     latlon = np.load(SCRATCH_PATH / LATLON_FNAME)
     full_size = geopotential.shape
@@ -69,91 +72,34 @@ def load_poesy_grid_info(grid: Grid) -> GridConfig:
 #                            PARAMS                         #
 #############################################################
 
-def get_poesy_filepath(param: Param, date: dt.datetime) -> str:
+def get_filepath(param: Param, date: dt.datetime) -> str:
         """
         Return the filename.
         """
         var_file_name = POESY_PARAMETER_NAMES[param.name]
         return SCRATCH_PATH / f"{date.strftime('%Y-%m-%dT%H:%M:%SZ')}_{var_file_name}_lt1-45_crop.npy"
 
-@dataclass(slots=True)
-class Param:
-    name: str
-    shortname: str
-    levels: Tuple[float, ...]
-    grid: Grid  # Parameter grid.
-    fnamer: Callable[[], [str]]
-    filenameref: str  # string to retrieve the datafile corresponding to Param
-    level_type: str = "isobaricInHpa"  # To be read in nc file ?
-    kind: Literal["input", "output", "input_output"] = "input_output"
-    unit: str = "FakeUnit"  # To be read in nc FIle  ?
-    ndims: int = 2
+def load_param_info(name: str) -> ParamConfig:
+    
 
-    @property
-    def number(self) -> int:
-        """
-        Get the number of levels for the given parameters.
-        """
-        return len(self.levels)
+    return pconf
 
-    @property
-    def state_weights(self) -> list:
-        return [get_weight(level, self.level_type) for level in self.levels]
+def load_data(param: Param, date: dt.datetime, term: List, member: int) -> np.array:
+    """
+    date : Date of file.
+    term : Position of leadtimes in file.
+    """
+    data_array = np.load(get_filepath(param,date), mmap_mode="r")
+    return data_array[
+        param.grid.subdomain[0] : param.grid.subdomain[1],
+        param.grid.subdomain[2] : param.grid.subdomain[3],
+        term,
+        member,
+    ]
 
-    @property
-    def parameter_name(self) -> list:
-        return [f"{self.name}_{level}" for level in self.levels]
-
-    @property
-    def parameter_short_name(self) -> list:
-        return [f"{self.shortname}_{level}" for level in self.levels]
-
-    @property
-    def units(self) -> list:
-        """
-        For a given variable, the unit is the
-        same accross all levels.
-        """
-        return [self.unit for _ in self.levels]
-
-    def load_data(self, date: dt.datetime, term: List, member: int) -> np.array:
-        """
-        date : Date of file.
-        term : Position of leadtimes in file.
-        """
-        data_array = np.load(self.filename(date=date), mmap_mode="r")
-        return data_array[
-            self.grid.subdomain[0] : self.grid.subdomain[1],
-            self.grid.subdomain[2] : self.grid.subdomain[3],
-            term,
-            member,
-        ]
-
-    def exist(self, date: dt.datetime) -> bool:
-        flist = self.filename(date=date)
-        return flist.exists()
-
-
-@dataclass(slots=True)
-class PoesySettings:
-    term: dict
-    num_input_steps: int  # = 2  # Number of input timesteps
-    num_output_steps: int  # = 1  # Number of output timesteps (= 0 for inference)
-    num_inference_pred_steps: int = (
-        0  # 0 in training config ; else used to provide future information about forcings
-    )
-    standardize: bool = False
-    members: Tuple[int] = (0,)
-
-    @property
-    def num_total_steps(self) -> int:
-        """
-        Total number of timesteps
-        for one sample.
-        """
-        # Nb of step in one sample
-        return self.num_input_steps + self.num_output_steps
-
+def exists(param, date: dt.datetime) -> bool:
+    flist = get_filepath(param,date)
+    return flist.exists()
 
 @dataclass(slots=True)
 class Sample:
@@ -197,7 +143,8 @@ class InferSample(Sample):
 
 class PoesyDataset(DatasetABC, Dataset):
     def __init__(
-        self, grid: Grid, period: Period, params: List[Param], settings: PoesySettings
+        self, grid: Grid, period: Period, params: List[Param],
+         settings: Settings
     ):
         self.grid = grid
         self.period = period
@@ -481,8 +428,7 @@ class PoesyDataset(DatasetABC, Dataset):
             conf = json.load(fp)
             if config_override is not None:
                 conf = merge_dicts(conf, config_override)
-        conf["grid"]["load_grid_info_func"] = load_poesy_grid_info
-        conf["grid"]
+        conf["grid"]["load_grid_info_func"] = load_grid_info
         grid = Grid(**conf["grid"])
         param_list = []
         for data_source in conf["dataset"]:
@@ -494,13 +440,11 @@ class PoesyDataset(DatasetABC, Dataset):
                 # Change grid definition
                 param = Param(
                     name=var,
-                    shortname=vard.pop("shortname", "t2m"),
-                    levels=vard.pop("level", [2]),
+                    level=vard.pop("level", 2),
                     grid=grid,
-                    fnamer=poesy_forecast_namer,
-                    filenameref=vard.pop("filename", "t2m"),
-                    level_type=vard.pop("typeOfLevel", "heightAboveGround"),
-                    **vard,
+                    load_param_info=load_param_info,
+                    kind="input_output",
+                    get_weight_per_level=get_weight
                 )
                 param_list.append(param)
         train_period = Period(**conf["periods"]["train"], name="train")
@@ -510,33 +454,33 @@ class PoesyDataset(DatasetABC, Dataset):
             grid,
             train_period,
             param_list,
-            PoesySettings(
-                members=members,
-                term=term,
-                num_output_steps=num_pred_steps_train,
+            Settings(
+                num_pred_steps=num_pred_steps_train,
                 num_input_steps=num_input_steps,
+                members=members,
+                **conf["settings"]
             ),
         )
         valid_ds = PoesyDataset(
             grid,
             valid_period,
             param_list,
-            PoesySettings(
-                members=members,
-                term=term,
-                num_output_steps=num_pred_steps_val_test,
+            Settings(
+                num_pred_steps=num_pred_steps_val_test,
                 num_input_steps=num_input_steps,
+                members=members,
+                **conf["settings"]
             ),
         )
         test_ds = PoesyDataset(
             grid,
             test_period,
             param_list,
-            PoesySettings(
-                members=members,
-                term=term,
-                num_output_steps=num_pred_steps_val_test,
+            Settings(
+                num_pred_steps=num_pred_steps_val_test,
                 num_input_steps=num_input_steps,
+                members=members,
+                **conf["settings"]
             ),
         )
         return train_ds, valid_ds, test_ds
@@ -758,13 +702,11 @@ class InferPoesyDataset(PoesyDataset):
                 vard = data["var"][var]
                 param = Param(
                     name=var,
-                    shortname=vard.pop("shortname", "t2m"),
-                    levels=vard.pop("level", [2]),
+                    level=vard.pop("level", 2),
                     grid=grid,
-                    fnamer=poesy_forecast_namer,
-                    filenameref=vard.pop("filename", "t2m"),
-                    level_type=vard.pop("typeOfLevel", "heightAboveGround"),
-                    **vard,
+                    load_param_info=load_param_info,
+                    kind="input_output",
+                    get_weight_per_level=get_weight
                 )
                 param_list.append(param)
         inference_period = Period(**conf["periods"]["test"], name="infer")
@@ -773,12 +715,11 @@ class InferPoesyDataset(PoesyDataset):
             grid,
             inference_period,
             param_list,
-            PoesySettings(
-                members=members,
-                term=term,
+            Settings(
+                num_pred_steps=0,
                 num_input_steps=num_input_steps,
-                num_output_steps=0,
-                num_inference_pred_steps=conf["num_inference_pred_steps"],
+                members=members,
+                **conf["settings"],
             ),
         )
 
