@@ -11,6 +11,7 @@ import einops
 import matplotlib
 import pytorch_lightning as pl
 import torch
+from lightning.pytorch.loggers import MLFlowLogger
 from lightning.pytorch.utilities import rank_zero_only
 from torch import nn
 from torchinfo import summary
@@ -723,9 +724,18 @@ class AutoRegressiveLightning(pl.LightningModule):
             dict_metrics.update(self.acc_metric.compute())
             for name, elmnt in dict_metrics.items():
                 if isinstance(elmnt, matplotlib.figure.Figure):
+                    # Tensorboard logger
                     self.logger.experiment.add_figure(
                         f"{name}", elmnt, self.current_epoch
                     )
+                    # If MLFlowLogger activated
+                    if self.mlflow_logger:
+                        run_id = self.mlflow_logger.version
+                        self.mlflow_logger.experiment.log_figure(
+                            run_id=run_id,
+                            figure=elmnt,
+                            artifact_file=f"figures/{name}.png",
+                        )
                 elif isinstance(elmnt, torch.Tensor):
                     self.log_dict(
                         {name: elmnt},
@@ -805,10 +815,43 @@ class AutoRegressiveLightning(pl.LightningModule):
         Compute test metrics and make plots at the end of test epoch.
         """
         if self.logging_enabled:
-            self.psd_plot_metric.compute()
-            self.rmse_psd_plot_metric.compute()
-            self.acc_metric.compute()
+            dict_metrics = {}
+            dict_metrics.update(self.psd_plot_metric.compute(prefix="test"))
+            dict_metrics.update(self.rmse_psd_plot_metric.compute(prefix="test"))
+            dict_metrics.update(self.acc_metric.compute(prefix="test"))
+
+            for name, elmnt in dict_metrics.items():
+                if isinstance(elmnt, matplotlib.figure.Figure):
+                    # Tensorboard logger
+                    self.logger.experiment.add_figure(
+                        f"{name}", elmnt, self.current_epoch
+                    )
+                    # If MLFlowLogger activated
+                    if self.mlflow_logger:
+                        run_id = self.mlflow_logger.version
+                        self.mlflow_logger.experiment.log_figure(
+                            run_id=run_id,
+                            figure=elmnt,
+                            artifact_file=f"figures/{name}.png",
+                        )
+                elif isinstance(elmnt, torch.Tensor):
+                    self.log_dict(
+                        {name: elmnt},
+                        prog_bar=False,
+                        on_step=False,
+                        on_epoch=True,
+                        sync_dist=True,
+                    )
 
             # Notify plotters that the test epoch end
             for plotter in self.test_plotters:
                 plotter.on_step_end(self, label="Test")
+
+    @cached_property
+    def mlflow_logger(self) -> Union[MLFlowLogger, None]:
+        """
+        Get the MLFlowLogger if it has been set.
+        """
+        return next(
+            iter([o for o in self.loggers if isinstance(o, MLFlowLogger)]), None
+        )
