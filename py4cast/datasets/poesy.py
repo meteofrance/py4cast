@@ -58,6 +58,44 @@ def get_weight(level: float, level_type: str) -> float:
         raise Exception(f"unknown level_type:{level_type}")
 
 
+def iter_args_sample(period, settings):
+    """
+    Generate arguments used to instantiate Sample. This function indicate how to 
+    run through the dataset.    
+    """
+    
+    date_list = pd.date_range(
+            start=period.start, end=period.end, freq=f"{period.step}H"
+        ).to_pydatetime()
+
+    terms = list(
+            np.arange(
+                settings.term["start"],
+                settings.term["end"],
+                settings.term["timestep"],
+            )
+        )
+    sample_by_date = len(terms) // settings.num_total_steps
+    
+    for date in date_list:
+        for member in settings.members:
+            for sample in range(0, sample_by_date):
+                input_terms = terms[
+                    sample
+                    * settings.num_total_steps : sample
+                    * settings.num_total_steps
+                    + settings.num_input_steps
+                ]
+                output_terms = terms[
+                    sample * settings.num_total_steps
+                    + settings.num_input_steps : sample
+                    * settings.num_total_steps
+                    + settings.num_input_steps
+                    + settings.num_output_steps
+                ]
+                yield (date, member, input_terms, output_terms)
+
+
 @dataclass(slots=True)
 class Period:
     start: dt.datetime
@@ -70,12 +108,6 @@ class Period:
         self.end = dt.datetime.strptime(str(end), "%Y%m%d%H")
         self.step = step
         self.name = name
-
-    @property
-    def date_list(self):
-        return pd.date_range(
-            start=self.start, end=self.end, freq=f"{self.step}H"
-        ).to_pydatetime()
 
 
 # Define static attributes to add -> see Grid class in smeagol.py
@@ -356,45 +388,22 @@ class PoesyDataset(DatasetABC, Dataset):
         Create a list of sample from information
         """
         print("Start forming samples")
-        terms = list(
-            np.arange(
-                self.settings.term["start"],
-                self.settings.term["end"],
-                self.settings.term["timestep"],
-            )
-        )
-
-        sample_by_date = len(terms) // self.settings.num_total_steps
 
         samples = []
         number = 0
 
-        for date in self.period.date_list:
-            for member in self.settings.members:
-                for sample in range(0, sample_by_date):
-                    input_terms = terms[
-                        sample
-                        * self.settings.num_total_steps : sample
-                        * self.settings.num_total_steps
-                        + self.settings.num_input_steps
-                    ]
-                    output_terms = terms[
-                        sample * self.settings.num_total_steps
-                        + self.settings.num_input_steps : sample
-                        * self.settings.num_total_steps
-                        + self.settings.num_input_steps
-                        + self.settings.num_output_steps
-                    ]
-                    samp = Sample(
-                        date=date,
-                        member=member,
-                        input_terms=input_terms,
-                        output_terms=output_terms,
-                    )
+        for date, member, input_terms, output_terms in iter_args_sample(self.period, self.settings):
 
-                    if samp.is_valid(self.params):
-                        samples.append(samp)
-                        number += 1
+            samp = Sample(
+                date=date,
+                member=member,
+                input_terms=input_terms,
+                output_terms=output_terms,
+            )
+
+            if samp.is_valid(self.params):
+                samples.append(samp)
+                number += 1
 
         print("All samples are now defined")
         return samples
