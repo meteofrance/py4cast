@@ -3,15 +3,18 @@ Base classes defining our software components
 and their interfaces
 """
 
+import datetime as dt
 import warnings
 from abc import ABC, abstractclassmethod, abstractmethod, abstractproperty
+from collections import namedtuple
 from copy import deepcopy
 from dataclasses import dataclass, field, fields
 from functools import cached_property
 from itertools import chain
 from pathlib import Path
-from typing import TYPE_CHECKING, Dict, List, Literal, Tuple, Union
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Literal, Tuple, Union
 
+import cartopy
 import einops
 import numpy as np
 import torch
@@ -519,7 +522,6 @@ def collate_fn(items: List[Item]) -> ItemBatch:
 
     # Iterate over inputs, outputs and forcing fields
     for field_name in (f.name for f in fields(Item)):
-
         batched_tensor = collate_tensor_fn(
             [getattr(item, field_name).tensor for item in items]
         ).type(torch.float32)
@@ -637,6 +639,8 @@ class DatasetInfo:
         print(f"Features shortnames {self.shortnames}")
         for p in ["input", "input_output", "output"]:
             names = self.shortnames[p]
+            print(names)
+            print(self.stats)
             mean = self.stats.to_list("mean", names)
             std = self.stats.to_list("std", names)
             mini = self.stats.to_list("min", names)
@@ -677,6 +681,131 @@ class DatasetInfo:
             if data:
                 print(p.upper())  # Print the kind of variable
                 print(table)  # Print the table
+
+
+@dataclass(slots=True)
+class Period:
+    start: dt.datetime
+    end: dt.datetime
+    step: int  # In hours, step btw the t0 of 2 samples
+    name: str
+
+    def __init__(self, start: int, end: int, step: int, name: str):
+        self.start = dt.datetime.strptime(str(start), "%Y%m%d%H")
+        self.end = dt.datetime.strptime(str(end), "%Y%m%d%H")
+        self.step = step
+        self.name = name
+
+    @property
+    def date_list(self):
+        return np.arange(
+            self.start, self.end, np.timedelta64(self.step, "h"), dtype="datetime64[s]"
+        ).tolist()
+
+
+GridConfig = namedtuple(
+    "GridConfig", "full_size latitude longitude geopotential landsea_mask"
+)
+
+
+@dataclass
+class Grid:
+    name: str
+    load_grid_info_func: Callable[
+        [Any], GridConfig
+    ]  # function to load grid data (customizable)
+    border_size: int = 10
+
+    # subdomain selection: If (0,0,0,0) the whole domain is kept.
+    subdomain: Tuple[int] = (0, 0, 0, 0)
+    # Note : training won't work with the full domain on some NN because the size
+    # can't be divided by 2. Minimal domain : [0,1776,0,2800]
+    x: int = field(init=False)  # X dimension of the grid (longitudes)
+    y: int = field(init=False)  # Y dimension of the grid (latitudes)
+    # projection information (e.g for plotting)
+    proj_name: str = "PlateCarree"
+    projection_kwargs: dict = field(default_factory={})
+
+    def __post_init__(self):
+        self.grid_config = self.get_grid_info()
+        # Setting correct subdomain if no subdomain is selected.
+        if sum(self.subdomain) == 0:
+            self.subdomain = (
+                0,
+                self.grid_config.full_size[0],
+                0,
+                self.grid_config.full_size[1],
+            )
+        self.x = self.subdomain[1] - self.subdomain[0]
+        self.y = self.subdomain[3] - self.subdomain[2]
+
+    def get_grid_info(self) -> GridConfig:
+        return self.load_grid_info_func(self)
+
+    @cached_property
+    def lat(self) -> np.array:
+        latitudes = self.grid_config.latitude[self.subdomain[0] : self.subdomain[1]]
+        return np.transpose(np.tile(latitudes, (self.y, 1)))
+
+    @cached_property
+    def lon(self) -> np.array:
+        longitudes = self.grid_config.longitude[self.subdomain[2] : self.subdomain[3]]
+        return np.tile(longitudes, (self.x, 1))
+
+    # TODO : from the grib, save a npy lat lon h mask for each grid
+    @property
+    def geopotential(self) -> np.array:
+        return self.grid_config.geopotential[
+            self.subdomain[0] : self.subdomain[1], self.subdomain[2] : self.subdomain[3]
+        ]
+
+    @property
+    def landsea_mask(self) -> np.array:
+        if self.grid_config.landsea_mask is not None:
+            return self.grid_config.landsea_mask[
+                self.subdomain[0] : self.subdomain[1],
+                self.subdomain[2] : self.subdomain[3],
+            ]
+        return np.zeros((self.x, self.y))  # TODO : add real mask
+
+    @property
+    def border_mask(self) -> np.array:
+        if self.border_size > 0:
+            border_mask = np.ones((self.x, self.y)).astype(bool)
+            size = self.border_size
+            border_mask[size:-size, size:-size] *= False
+        elif self.border_size == 0:
+            border_mask = np.ones((self.x, self.y)).astype(bool) * False
+        else:
+            raise ValueError(f"Bordersize should be positive. Get {self.border_size}")
+        return border_mask
+
+    @property
+    def N_grid(self) -> int:
+        return self.x * self.y
+
+    @cached_property
+    def grid_limits(self):
+        grid_limits = [  # In projection (llon, ulon, llat, ulat)
+            float(self.grid_config.longitude[self.subdomain[2]]),  # min y
+            float(self.grid_config.longitude[self.subdomain[3] - 1]),  # max y
+            float(self.grid_config.latitude[self.subdomain[1] - 1]),  # max x
+            float(self.grid_config.latitude[self.subdomain[0]]),  # min x
+        ]
+        return grid_limits
+
+    @cached_property
+    def meshgrid(self) -> np.array:
+        """Build a meshgrid from coordinates position."""
+        latitudes = self.grid_config.latitude[self.subdomain[0] : self.subdomain[1]]
+        longitudes = self.grid_config.longitude[self.subdomain[2] : self.subdomain[3]]
+        meshgrid = np.array(np.meshgrid(longitudes, latitudes))
+        return meshgrid  # shape (2, x, y)
+
+    @cached_property
+    def projection(self):
+        func = getattr(cartopy.crs, self.proj_name)
+        return func(**self.projection_kwargs)
 
 
 @dataclass(slots=True)
@@ -815,7 +944,6 @@ class DatasetABC(ABC):
             raise ValueError("Your dataset should be standardized.")
 
         for batch in tqdm(self.torch_dataloader()):
-
             # Here we assume that data are in 2 or 3 D
             inputs = batch.inputs.tensor
             outputs = batch.outputs.tensor
