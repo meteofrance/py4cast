@@ -404,12 +404,7 @@ class PoesyDataset(DatasetABC, Dataset):
 
         for dict_args in list_args_sample:
 
-            samp = Sample(
-                date=dict_args["date"],
-                member=dict_args["member"],
-                input_terms=dict_args["input_terms"],
-                output_terms=dict_args["output_terms"],
-            )
+            samp = Sample(**dict_args)
 
             if samp.is_valid(self.params):
                 samples.append(samp)
