@@ -70,7 +70,7 @@ class AutoRegressiveLightningModule(pl.LightningModule):
         self.channels_last = channels_last
         self.save_weights_path = save_weights_path
         # linked args
-        self.batch_shape = batch_shape
+        self.batch_shape = batch_shape # (Batch_size, Timestep, Height, Width, Channels)
         self.dataset_info = dataset_info
         self.dataset_name = dataset_name
 

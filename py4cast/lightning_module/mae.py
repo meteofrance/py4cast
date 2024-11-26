@@ -61,14 +61,14 @@ class MAELightningModule(
         self.use_lr_scheduler = use_lr_scheduler
         self.save_weights_path = save_weights_path
         # linked args
-        self.batch_shape = batch_shape
+        self.batch_shape = batch_shape # (Batch_size, Timestep, Height, Width, Channels)
         self.dataset_info = dataset_info
         self.dataset_name = dataset_name
 
         # Creates a model with the config file (.json) if available.
         self.input_shape = self.batch_shape[2:4]
-        self.num_output_features = self.batch_shape[4]  # = nombre de feature du dataset
-        self.num_input_features = self.batch_shape[4] # = nombre de feature du dataset
+        self.num_output_features = self.batch_shape[4]
+        self.num_input_features = self.batch_shape[4]
         self.model, self.model_settings = build_model_from_settings(
             network_name=self.model_name,
             num_input_features=self.num_input_features,
