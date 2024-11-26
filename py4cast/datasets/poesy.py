@@ -58,10 +58,10 @@ def get_weight(level: float, level_type: str) -> float:
         raise Exception(f"unknown level_type:{level_type}")
 
 
-def iter_args_sample(period, settings):
+def browse_dataset(period, settings):
     """
-    Generate arguments used to instantiate Sample. This function indicate how to 
-    run through the dataset.    
+    Create a list of arguments used to instantiate Sample. This function indicates how to 
+    run through / browse the dataset.    
     """
     
     date_list = pd.date_range(
@@ -76,7 +76,8 @@ def iter_args_sample(period, settings):
             )
         )
     sample_by_date = len(terms) // settings.num_total_steps
-    
+    list_args_all_samples = []
+
     for date in date_list:
         for member in settings.members:
             for sample in range(0, sample_by_date):
@@ -93,8 +94,10 @@ def iter_args_sample(period, settings):
                     + settings.num_input_steps
                     + settings.num_output_steps
                 ]
-                yield (date, member, input_terms, output_terms)
+                dict_sample_args = {"date": date, "member": member, "input_terms": input_terms, "output_terms": output_terms}
+                list_args_all_samples.append(dict_sample_args)
 
+    return list_args_all_samples
 
 @dataclass(slots=True)
 class Period:
@@ -392,7 +395,8 @@ class PoesyDataset(DatasetABC, Dataset):
         samples = []
         number = 0
 
-        for date, member, input_terms, output_terms in iter_args_sample(self.period, self.settings):
+        list_args_sample = browse_dataset(self.period, self.settings)
+        for date, member, input_terms, output_terms in list_args_sample:
 
             samp = Sample(
                 date=date,
