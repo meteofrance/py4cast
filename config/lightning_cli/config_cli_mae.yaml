@@ -1,4 +1,5 @@
 seed_everything: "True"
+
 model:
   model_conf:
   model_name: "unetrpp"
@@ -7,6 +8,8 @@ model:
   save_path: ~
   use_lr_scheduler: "False"
   mask_ratio: 0.3
+  save_weights_path: "/scratch/shared/py4cast/models/autoregressive_weights"
+
 data:
   dataset_name: "titan"
   dataset_conf: "config/datasets/titan_full.json"

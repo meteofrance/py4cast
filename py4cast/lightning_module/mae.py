@@ -4,18 +4,14 @@ import torch.nn as nn
 import torchmetrics as tm
 from pathlib import Path
 from typing import Union
+from copy import deepcopy
+from transformers import get_cosine_schedule_with_warmup
 
-# A GARDER
-from py4cast.settings import HIERA_MASKED_DIR
+from py4cast.models import build_model_from_settings
 from py4cast.lightning_module.utils import (
-    InitModelLightningModule,
     PlotLightningModule,
     MaskLightningModule,
 )
-
-# PAS CLAIR
-from copy import deepcopy
-from transformers import get_cosine_schedule_with_warmup
 
 
 # learning rate scheduling period in steps (update every nth step)
@@ -32,6 +28,11 @@ class MAELightningModule(
 
     def __init__(
         self,
+        # args linked from datamodule
+        batch_shape,
+        dataset_info,
+        dataset_name,
+        # args exclusive to lightningmodule
         model_conf: Union[Path, None] = None,
         model_name: str = "unetrpp",
         lr: float = 0.1,
@@ -40,19 +41,16 @@ class MAELightningModule(
         save_path: Path = None,
         use_lr_scheduler: bool = False,
         mask_ratio: float = 0.3,
+        save_weights_path: Path = None,
+
     ):
-        super().__init__(
-            model_name=model_name, model_conf=model_conf
-        )  # Initialize InitModelLightningModule
+        super().__init__()  # Initialize PlotLightningModule
         super(
             PlotLightningModule, self
-        ).__init__()  # Initialize InitModelLightningModule
+        ).__init__()  # Initialize MaskLightningModule
         super(
             MaskLightningModule, self
-        ).__init__()  # Initialize InitModelLightningModule
-
-        # init model
-        self.model, self.model_settings = self.setup("train")
+        ).__init__()  # Initialize pl.LightningModule
 
         self.model_conf = model_conf
         self.model_name = model_name
@@ -61,6 +59,24 @@ class MAELightningModule(
         self.len_train_loader = len_train_loader
         self.save_path = save_path
         self.use_lr_scheduler = use_lr_scheduler
+        self.save_weights_path = save_weights_path
+        # linked args
+        self.batch_shape = batch_shape
+        self.dataset_info = dataset_info
+        self.dataset_name = dataset_name
+
+        # Creates a model with the config file (.json) if available.
+        self.input_shape = self.batch_shape[2:4]
+        self.num_output_features = self.batch_shape[4]  # = nombre de feature du dataset
+        self.num_input_features = self.batch_shape[4] # = nombre de feature du dataset
+        self.model, self.model_settings = build_model_from_settings(
+            network_name=self.model_name,
+            num_input_features=self.num_input_features,
+            num_output_features=self.num_output_features,
+            settings_path=self.model_conf,
+            input_shape=self.input_shape,
+        )
+
 
         self.training_step_metrics_loss = []
         self.validation_step_metrics_loss = []
@@ -149,7 +165,7 @@ class MAELightningModule(
 
     def on_train_end(self):
         best_model_state = deepcopy(self.model.state_dict())
-        torch.save(best_model_state, HIERA_MASKED_DIR)
+        torch.save(best_model_state, self.save_weights_path)
 
     ###--------------------- VALIDATION ---------------------###
 

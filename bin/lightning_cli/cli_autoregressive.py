@@ -2,6 +2,7 @@ from lightning.pytorch.cli import LightningCLI, ArgsType
 from py4cast.lightning_module.autoregressive import AutoRegressiveLightningModule
 from py4cast.data_module.dummy import DummyDataModule
 
+
 class MyLightningCLI(LightningCLI):
     def add_arguments_to_parser(self, parser):
         parser.link_arguments(
