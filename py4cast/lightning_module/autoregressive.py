@@ -15,8 +15,7 @@ from py4cast.losses import WeightedLoss
 from py4cast.metrics import MetricACC, MetricPSDK, MetricPSDVar
 from py4cast.models.base import expand_to_batch
 from py4cast.utils import str_to_dtype
-from py4cast.datasets.base import ItemBatch, NamedTensor
-
+from py4cast.datasets.base import ItemBatch, NamedTensor, DatasetInfo
 
 # learning rate scheduling period in steps (update every nth step)
 LR_SCHEDULER_PERIOD: int = 10
@@ -29,9 +28,9 @@ class AutoRegressiveLightningModule(pl.LightningModule):
     def __init__(
         self,
         # args linked from datamodule
-        dataset_info,
-        dataset_name,
-        batch_shape,
+        dataset_info: DatasetInfo,
+        dataset_name: str,
+        batch_shape: Tuple[int, int, int, int, int],
         # args exclusive to lightningmodule
         batch_size: int,
         model_conf: Union[Path, None] = None,  # Path | None

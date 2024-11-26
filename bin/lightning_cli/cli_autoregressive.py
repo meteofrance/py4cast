@@ -1,14 +1,14 @@
 from lightning.pytorch.cli import LightningCLI, ArgsType
 from py4cast.lightning_module.autoregressive import AutoRegressiveLightningModule
-from py4cast.data_module.dummy import DummyDataModule
+from py4cast.data_module.Titan import TitanDataModule
 
 
 class MyLightningCLI(LightningCLI):
     def add_arguments_to_parser(self, parser):
+        parser.link_arguments("data.dataset_name", "model.dataset_name")
         parser.link_arguments(
             "data.train_dataset_info", "model.dataset_info", apply_on="instantiate"
         )
-        parser.link_arguments("data.dataset_name", "model.dataset_name")
         parser.link_arguments(
             "data.batch_shape", "model.batch_shape", apply_on="instantiate"
         )
@@ -17,7 +17,7 @@ class MyLightningCLI(LightningCLI):
 def cli_main(args: ArgsType = None):
     cli = MyLightningCLI(
         AutoRegressiveLightningModule,
-        DummyDataModule,
+        TitanDataModule,
         run=False,
         args=args,
     )

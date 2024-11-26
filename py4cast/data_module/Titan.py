@@ -6,9 +6,9 @@ from py4cast.datasets import get_datasets
 from py4cast.datasets.base import TorchDataloaderSettings
 
 
-class DummyDataModule(pl.LightningDataModule):
+class TitanDataModule(pl.LightningDataModule):
     """
-    DataModule to encapsulate data splits and data loading.
+    DataModule adapted to gridded inputs (Titan, Dummy)
     """
 
     def __init__(
@@ -65,8 +65,5 @@ class DummyDataModule(pl.LightningDataModule):
 
     @property
     def batch_shape(self):
-        """Returns the shape of a batch from the train dataloader."""
         item_batch = next(iter(self.train_dataloader()))
-        return (
-            item_batch.inputs.tensor.shape
-        )  # Assuming ItemBatch has 'input' attribute
+        return item_batch.inputs.tensor.shape
