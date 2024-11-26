@@ -19,6 +19,7 @@ from torch.utils.data import DataLoader, Dataset
 from py4cast.datasets.base import (
     DatasetABC,
     DatasetInfo,
+    Stats,
     Item,
     NamedTensor,
     TorchDataloaderSettings,
@@ -257,6 +258,40 @@ class PoesySettings:
         return self.num_input_steps + self.num_output_steps
 
 
+def get_param_tensor(
+    param: Param,
+    date: dt.datetime,
+    terms: List,
+    stats: Stats,
+    standardize: bool,
+    member: int = 1,
+    inference_steps: int = 0,
+    
+) -> torch.tensor:
+
+    if standardize:
+        names = param.parameter_short_name
+        means = np.asarray([stats[name]["mean"] for name in names])
+        std = np.asarray([stats[name]["std"] for name in names])
+
+    array = param.load_data(date, terms, member)
+
+    # Extend dimension to match 3D (level dimension)
+    if len(array.shape) != 4:
+        array = np.expand_dims(array, axis=-1)
+    array = np.transpose(array, axes=[2, 0, 1, 3])  # shape = (steps, lvl, x, y)
+
+    if standardize:
+        array = (array - means) / std
+
+    # Define which value is considered invalid
+    tensor_data = torch.from_numpy(array)
+
+    if inference_steps:
+        empty_data = torch.empty((inference_steps, *array.shape[1:]))
+        tensor_data = torch.cat((tensor_data, empty_data), dim=0)
+    return tensor_data
+
 @dataclass(slots=True)
 class Sample:
     # Describe a sample
@@ -265,6 +300,10 @@ class Sample:
     date: dt.datetime
     input_terms: Tuple[float]
     output_terms: Tuple[float]
+    settings: PoesySettings
+    stats: Stats
+    grid: Grid 
+    params: List[Param]
 
     # Term wrt to the date {date}. Gives validity
     terms: Tuple[float] = field(init=False)
@@ -286,6 +325,94 @@ class Sample:
                 return False
 
         return True
+
+    def load(self, get_param):
+        
+        # Datetime Forcing
+        datetime_forcing = get_year_hour_forcing(self.date, self.output_terms).type(
+            torch.float32
+        )
+
+        # Solar forcing, dim : [num_pred_steps, Lat, Lon, feature = 1]
+        solar_forcing = generate_toa_radiation_forcing(
+            self.grid.lat, self.grid.lon, self.date, self.output_terms
+        ).type(torch.float32)
+
+        lforcings = [
+            NamedTensor(
+                feature_names=[
+                    "cos_hour",
+                    "sin_hour",
+                ],  # doy : day_of_year
+                tensor=datetime_forcing[:, :2],
+                names=["timestep", "features"],
+            ),
+            NamedTensor(
+                feature_names=[
+                    "cos_doy",
+                    "sin_doy",
+                ],  # doy : day_of_year
+                tensor=datetime_forcing[:, 2:],
+                names=["timestep", "features"],
+            ),
+            NamedTensor(
+                feature_names=[
+                    "toa_radiation",
+                ],
+                tensor=solar_forcing,
+                names=["timestep", "lat", "lon", "features"],
+            ),
+        ]
+
+        linputs = []
+        loutputs = []
+
+        # Reading parameters from files
+        for param in self.params:
+            state_kwargs = {
+                "feature_names": param.parameter_short_name,
+                "names": ["timestep", "lat", "lon", "features"],
+            }
+            try:
+                if param.kind == "input_output":
+                    # Search data for date sample.date and terms sample.terms
+                    tensor = get_param(
+                        param,
+                        self.date,
+                        terms=self.terms,
+                        stats=self.stats,
+                        standardize=self.settings.standardize,
+                        member=self.member,
+                        inference_steps=self.settings.num_inference_pred_steps,
+                    )
+                    state_kwargs["names"][0] = "timestep"
+                    # Save outputs
+                    tmp_state = NamedTensor(
+                        tensor=tensor[self.settings.num_input_steps :],
+                        **deepcopy(state_kwargs),
+                    )
+                    loutputs.append(tmp_state)
+                    # Save inputs
+                    tmp_state = NamedTensor(
+                        tensor=tensor[: self.settings.num_input_steps],
+                        **deepcopy(state_kwargs),
+                    )
+                    linputs.append(tmp_state)
+
+            except KeyError as e:
+                print(f"Error for param {param}")
+                raise e
+
+        for lforcing in lforcings:
+            lforcing.unsqueeze_and_expand_from_(linputs[0])
+
+        return Item(
+            inputs=NamedTensor.concat(linputs),
+            outputs=NamedTensor.concat(loutputs),
+            forcing=NamedTensor.concat(lforcings),
+        )
+
+
 
 
 class InferSample(Sample):
@@ -390,6 +517,10 @@ class PoesyDataset(DatasetABC, Dataset):
                         member=member,
                         input_terms=input_terms,
                         output_terms=output_terms,
+                        settings=self.settings,
+                        stats=self.stats,
+                        grid=self.grid, 
+                        params=self.params
                     )
 
                     if samp.is_valid(self.params):
@@ -450,121 +581,11 @@ class PoesyDataset(DatasetABC, Dataset):
                 res += param.number
         return res
 
-    def get_param_tensor(
-        self,
-        param: Param,
-        date: dt.datetime,
-        terms: List,
-        member: int = 1,
-        inference_steps: int = 0,
-    ) -> torch.tensor:
-        if self.settings.standardize:
-            names = param.parameter_short_name
-            means = np.asarray([self.stats[name]["mean"] for name in names])
-            std = np.asarray([self.stats[name]["std"] for name in names])
-
-        array = param.load_data(date, terms, member)
-
-        # Extend dimension to match 3D (level dimension)
-        if len(array.shape) != 4:
-            array = np.expand_dims(array, axis=-1)
-        array = np.transpose(array, axes=[2, 0, 1, 3])  # shape = (steps, lvl, x, y)
-
-        if self.settings.standardize:
-            array = (array - means) / std
-
-        # Define which value is considered invalid
-        tensor_data = torch.from_numpy(array)
-
-        if inference_steps:
-            empty_data = torch.empty((inference_steps, *array.shape[1:]))
-            tensor_data = torch.cat((tensor_data, empty_data), dim=0)
-        return tensor_data
-
     def __getitem__(self, index):
         sample = self.sample_list[index]
-
-        # Datetime Forcing
-        datetime_forcing = get_year_hour_forcing(sample.date, sample.output_terms).type(
-            torch.float32
-        )
-
-        # Solar forcing, dim : [num_pred_steps, Lat, Lon, feature = 1]
-        solar_forcing = generate_toa_radiation_forcing(
-            self.grid.lat, self.grid.lon, sample.date, sample.output_terms
-        ).type(torch.float32)
-
-        lforcings = [
-            NamedTensor(
-                feature_names=[
-                    "cos_hour",
-                    "sin_hour",
-                ],  # doy : day_of_year
-                tensor=datetime_forcing[:, :2],
-                names=["timestep", "features"],
-            ),
-            NamedTensor(
-                feature_names=[
-                    "cos_doy",
-                    "sin_doy",
-                ],  # doy : day_of_year
-                tensor=datetime_forcing[:, 2:],
-                names=["timestep", "features"],
-            ),
-            NamedTensor(
-                feature_names=[
-                    "toa_radiation",
-                ],
-                tensor=solar_forcing,
-                names=["timestep", "lat", "lon", "features"],
-            ),
-        ]
-
-        linputs = []
-        loutputs = []
-
-        # Reading parameters from files
-        for param in self.params:
-            state_kwargs = {
-                "feature_names": param.parameter_short_name,
-                "names": ["timestep", "lat", "lon", "features"],
-            }
-            try:
-                if param.kind == "input_output":
-                    # Search data for date sample.date and terms sample.terms
-                    tensor = self.get_param_tensor(
-                        param,
-                        sample.date,
-                        terms=sample.terms,
-                        member=sample.member,
-                        inference_steps=self.settings.num_inference_pred_steps,
-                    )
-                    state_kwargs["names"][0] = "timestep"
-                    # Save outputs
-                    tmp_state = NamedTensor(
-                        tensor=tensor[self.settings.num_input_steps :],
-                        **deepcopy(state_kwargs),
-                    )
-                    loutputs.append(tmp_state)
-                    # Save inputs
-                    tmp_state = NamedTensor(
-                        tensor=tensor[: self.settings.num_input_steps],
-                        **deepcopy(state_kwargs),
-                    )
-                    linputs.append(tmp_state)
-
-            except KeyError as e:
-                print(f"Error for param {param}")
-                raise e
-
-        for lforcing in lforcings:
-            lforcing.unsqueeze_and_expand_from_(linputs[0])
-
-        return Item(
-            inputs=NamedTensor.concat(linputs),
-            outputs=NamedTensor.concat(loutputs),
-            forcing=NamedTensor.concat(lforcings),
-        )
+        item = sample.load(get_param=get_param_tensor)
+        return item
+        
 
     @classmethod
     def from_json(
