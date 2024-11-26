@@ -331,6 +331,23 @@ class TitanSettings:
     file_format: Literal["npy", "grib"] = "grib"
 
 
+def get_param_tensor(
+    param: Param, dates: List[dt.datetime], stats: Stats, settings: TitanSettings, no_standardize: bool = False
+) -> torch.tensor:
+    if settings.standardize and not no_standardize:
+        names = param.parameter_short_names
+        means = np.asarray([stats[name]["mean"] for name in names])
+        std = np.asarray([stats[name]["std"] for name in names])
+    arrays = [param.load_data(date, self.settings.file_format) for date in dates]
+    arr = np.stack(arrays)
+    # Extend dimension to match 3D (level dimension)
+    if len(arr.shape) != 4:
+        arr = np.expand_dims(arr, axis=1)
+    arr = np.transpose(arr, axes=[0, 2, 3, 1])  # shape = (steps, lvl, x, y)
+    if settings.standardize and not no_standardize:
+        arr = (arr - means) / std
+    return torch.from_numpy(arr)
+
 #############################################################
 #                            SAMPLE                         #
 #############################################################
@@ -379,23 +396,6 @@ class Sample:
                     return False
         return True
 
-    def get_param_tensor(
-        self, param: Param, dates: List[dt.datetime], no_standardize: bool = False
-    ) -> torch.tensor:
-        if self.settings.standardize and not no_standardize:
-            names = param.parameter_short_names
-            means = np.asarray([self.stats[name]["mean"] for name in names])
-            std = np.asarray([self.stats[name]["std"] for name in names])
-        arrays = [param.load_data(date, self.settings.file_format) for date in dates]
-        arr = np.stack(arrays)
-        # Extend dimension to match 3D (level dimension)
-        if len(arr.shape) != 4:
-            arr = np.expand_dims(arr, axis=1)
-        arr = np.transpose(arr, axes=[0, 2, 3, 1])  # shape = (steps, lvl, x, y)
-        if self.settings.standardize and not no_standardize:
-            arr = (arr - means) / std
-        return torch.from_numpy(arr)
-
     def load(self, no_standardize: bool = False) -> Item:
         linputs, loutputs, lforcings = [], [], []
 
@@ -409,18 +409,18 @@ class Sample:
             if param.kind == "input":
                 # forcing is taken for every predicted step
                 dates = self.all_dates[-self.settings.num_pred_steps :]
-                tensor = self.get_param_tensor(param, dates, no_standardize)
+                tensor = self.get_param_tensor(param, dates, self.stats, self.settings, no_standardize)
                 tmp_state = NamedTensor(tensor=tensor, **deepcopy(state_kwargs))
                 lforcings.append(tmp_state)
 
             elif param.kind == "output":
                 dates = self.all_dates[-self.settings.num_pred_steps :]
-                tensor = self.get_param_tensor(param, dates, no_standardize)
+                tensor = self.get_param_tensor(param, dates, self.stats, self.settings, no_standardize)
                 tmp_state = NamedTensor(tensor=tensor, **deepcopy(state_kwargs))
                 loutputs.append(tmp_state)
 
             else:  # input_output
-                tensor = self.get_param_tensor(param, self.all_dates, no_standardize)
+                tensor = self.get_param_tensor(param, self.all_dates, self.stats, self.settings, no_standardize)
                 state_kwargs["names"][0] = "timestep"
                 tmp_state = NamedTensor(
                     tensor=tensor[-self.settings.num_pred_steps :],

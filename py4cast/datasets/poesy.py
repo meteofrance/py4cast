@@ -268,7 +268,9 @@ def get_param_tensor(
     inference_steps: int = 0,
     
 ) -> torch.tensor:
-
+    """
+    This function load a specific parameter into a tensor
+    """
     if standardize:
         names = param.parameter_short_name
         means = np.asarray([stats[name]["mean"] for name in names])
