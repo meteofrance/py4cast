@@ -60,8 +60,8 @@ def get_weight(level: float, level_type: str) -> float:
 
 def browse_poesy(period, settings):
     """
-    Create a list of arguments used to instantiate Sample. This function indicates how to 
-    run through / browse the Poesy.    
+    Create a list of arguments used to instantiate Sample. 
+    This function indicates how to run through / browse the Poesy.    
     """
     
     list_args_all_samples = []

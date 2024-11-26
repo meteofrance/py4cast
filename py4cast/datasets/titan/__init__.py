@@ -47,7 +47,7 @@ def get_weight_per_lvl(level: int, kind: Literal["hPa", "m"]):
     else:
         return 2
 
-def browse_titan(datetime):
+def browse_titan(date_list):
     """
     Create a list of arguments used to instantiate Sample. This function indicates how to 
     run through / browse Titan.    
@@ -592,7 +592,6 @@ class TitanDataset(DatasetABC, Dataset):
         n_input, n_pred = self.settings.num_input_steps, self.settings.num_pred_steps
         filename = f"valid_samples_{self.period.name}_{n_input}_{n_pred}.txt"
         self.valid_samples_file = self.cache_dir / filename
-
         self.browse_dataset = browse_titan
 
     @cached_property
@@ -695,7 +694,7 @@ class TitanDataset(DatasetABC, Dataset):
             if param.kind == "input_output":
                 res += param.number
         return res
-
+    
     def __getitem__(self, index: int) -> Item:
         sample = self.sample_list[index]
         item = sample.load()
