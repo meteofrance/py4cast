@@ -30,16 +30,6 @@ from py4cast.plots import DomainInfo
 from py4cast.settings import CACHE_DIR
 from py4cast.utils import merge_dicts
 
-SCRATCH_PATH = Path("/scratch/shared/poesy/poesy_crop")
-OROGRAPHY_FNAME = "PEARO_EURW1S40_Orography_crop.npy"
-LATLON_FNAME = "latlon_crop.npy"
-
-# Shape of cropped poesy data (lon x lat x leadtimes x members)
-DATA_SHAPE = (600, 600, 45, 16)
-
-# Assuming no leap years in dataset (2024 is next)
-SECONDS_IN_YEAR = 365 * 24 * 60 * 60
-
 
 def poesy_forecast_namer(date: dt.datetime, var_file_name, **kwargs):
     """
@@ -61,6 +51,9 @@ def get_weight(level: float, level_type: str) -> float:
 
 # Define static attributes to add -> see Grid class in smeagol.py
 
+#############################################################
+#                            GRID                           #
+#############################################################
 
 def load_poesy_grid_info(grid: Grid) -> GridConfig:
     geopotential = np.load(SCRATCH_PATH / OROGRAPHY_FNAME)
@@ -71,6 +64,17 @@ def load_poesy_grid_info(grid: Grid) -> GridConfig:
     landsea_mask = np.where(geopotential > 0, 1.0, 0.0).astype(np.float32)
     return GridConfig(full_size, latitude, longitude, geopotential, landsea_mask)
 
+
+#############################################################
+#                            PARAMS                         #
+#############################################################
+
+def get_poesy_filepath(param: Param, date: dt.datetime) -> str:
+        """
+        Return the filename.
+        """
+        var_file_name = POESY_PARAMETER_NAMES[param.name]
+        return SCRATCH_PATH / f"{date.strftime('%Y-%m-%dT%H:%M:%SZ')}_{var_file_name}_lt1-45_crop.npy"
 
 @dataclass(slots=True)
 class Param:
@@ -111,12 +115,6 @@ class Param:
         same accross all levels.
         """
         return [self.unit for _ in self.levels]
-
-    def filename(self, date: dt.datetime) -> str:
-        """
-        Return the filename.
-        """
-        return SCRATCH_PATH / self.fnamer(date=date, var_file_name=self.filenameref)
 
     def load_data(self, date: dt.datetime, term: List, member: int) -> np.array:
         """

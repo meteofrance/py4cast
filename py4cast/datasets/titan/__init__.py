@@ -14,7 +14,6 @@ import torch
 import tqdm
 import typer
 import xarray as xr
-from skimage.transform import resize
 from torch.utils.data import DataLoader, Dataset
 
 from py4cast.datasets.base import (
@@ -24,6 +23,8 @@ from py4cast.datasets.base import (
     GridConfig,
     Item,
     NamedTensor,
+    Param,
+    ParamConfig,
     Period,
     Stats,
     TorchDataloaderSettings,
@@ -42,8 +43,8 @@ from py4cast.utils import merge_dicts
 app = typer.Typer()
 
 
-def get_weight_per_lvl(level: int, kind: Literal["hPa", "m"]):
-    if kind == "hPa":
+def get_weight_per_lvl(level: int, kind: Literal["isobaricInhPa", "heightAboveGround", "surface", "meanSea"]):
+    if kind == "isobaricInhPa":
         return 1 + (level) / (1000)
     else:
         return 2
@@ -73,130 +74,6 @@ def load_Titan_grid_info(path: str, name: str) -> GridConfig:
 @lru_cache(maxsize=50)
 def read_grib(path_grib: Path) -> xr.Dataset:
     return xr.load_dataset(path_grib, engine="cfgrib", backend_kwargs={"indexpath": ""})
-
-
-@dataclass(slots=True)
-class Param:
-    name: str
-    level: int
-    grid: Grid
-    # Parameter status :
-    # input = forcings, output = diagnostic, input_output = classical weather var
-    kind: Literal["input", "output", "input_output"]
-    level_type: str = field(init=False)
-    long_name: str = field(init=False)
-    unit: str = field(init=False)
-    native_grid: str = field(init=False)
-    grib_name: str = field(init=False)
-    grib_param: str = field(init=False)
-    npy_path: Path = None
-
-    def __post_init__(self):
-        param_info = METADATA["WEATHER_PARAMS"][self.name]
-        self.grib_name = param_info["grib"]
-        self.grib_param = param_info["param"]
-        self.unit = param_info["unit"]
-        if param_info["type_level"] in ["heightAboveGround", "meanSea", "surface"]:
-            self.level_type = "m"
-        else:
-            self.level_type = "hPa"
-        self.long_name = param_info["long_name"]
-        self.native_grid = param_info["grid"]
-        if self.native_grid not in ["PAAROME_1S100", "PAAROME_1S40", "PA_01D"]:
-            raise NotImplementedError(
-                "Parameter native grid must be in ['PAAROME_1S100', 'PAAROME_1S40', 'PA_01D']"
-            )
-
-    @property
-    def number(self) -> int:
-        """Get the number of parameters."""
-        return 1
-
-    @property  # Does not accept a cached property with slots=True
-    def ndims(self) -> str:
-        return 2
-
-    @property
-    def state_weights(self) -> list:
-        return [get_weight_per_lvl(self.level, self.level_type)]
-
-    @property
-    def parameter_name(self) -> list:
-        return [f"{self.long_name} {self.level}{self.level_type}"]
-
-    @property
-    def parameter_short_names(self) -> list:
-        return [f"{self.name}_{self.level}{self.level_type}"]
-
-    @property
-    def units(self) -> list:
-        """For a given variable, the unit is the same accross all levels."""
-        return [self.unit]
-
-    def get_filepath(
-        self, date: dt.datetime, file_format: Literal["npy", "grib"]
-    ) -> Path:
-        """
-        Returns the path of the file containing the parameter data.
-        - in grib format, data is grouped by level type.
-        - in npy format, data is saved as npy, rescaled to the wanted grid, and each
-        2D array is saved as one file to optimize IO during training."""
-        if file_format == "grib":
-            folder = SCRATCH_PATH / "grib" / date.strftime(FORMATSTR)
-            return folder / self.grib_name
-        else:
-            filename = f"{self.name}_{self.level}{self.level_type.lower()}.npy"
-            return self.npy_path / date.strftime(FORMATSTR) / filename
-
-    def fit_to_grid(
-        self, arr: np.ndarray, lons: np.ndarray, lats: np.ndarray
-    ) -> np.ndarray:
-        # already on good grid, nothing to do:
-        if self.grid.name == self.native_grid:
-            return arr
-
-        # crop arpege data to arome domain:
-        if self.native_grid == "PA_01D" and self.grid.name in [
-            "PAAROME_1S100",
-            "PAAROME_1S40",
-        ]:
-            grid_coords = METADATA["GRIDS"][self.grid.name]["extent"]
-            # Mask ARPEGE data to AROME bounding box
-            mask_lon = (lons >= grid_coords[2]) & (lons <= grid_coords[3])
-            mask_lat = (lats >= grid_coords[1]) & (lats <= grid_coords[0])
-            arr = arr[mask_lat, :][:, mask_lon]
-
-        anti_aliasing = self.grid.name == "PAAROME_1S40"  # True if downsampling
-        # upscale or downscale to grid resolution:
-        return resize(arr, self.grid.full_size, anti_aliasing=anti_aliasing)
-
-    def load_data_grib(self, date: dt.datetime) -> np.ndarray:
-        path_grib = self.get_filepath(date, "grib")
-        ds = read_grib(path_grib)
-        level_type = ds[self.grib_param].attrs["GRIB_typeOfLevel"]
-        lats = ds.latitude.values
-        lons = ds.longitude.values
-        if level_type != "isobaricInhPa":  # Only one level
-            arr = ds[self.grib_param].values
-        else:
-            arr = ds[self.grib_param].sel(isobaricInhPa=self.level).values
-        return arr, lons, lats
-
-    def load_data(
-        self, date: dt.datetime, file_format: Literal["npy", "grib"] = "grib"
-    ):
-        if file_format == "grib":
-            arr, lons, lats = self.load_data_grib(date)
-            arr = self.fit_to_grid(arr, lons, lats)
-            subdomain = self.grid.subdomain
-            arr = arr[subdomain[0] : subdomain[1], subdomain[2] : subdomain[3]]
-            return arr[::-1]  # invert latitude
-        else:
-            return np.load(self.get_filepath(date, file_format))
-
-    def exist(self, date: dt.datetime, file_format: Literal["npy", "grib"] = "grib"):
-        filepath = self.get_filepath(date, file_format)
-        return filepath.exists()
 
 
 def process_sample_dataset(date: dt.datetime, params: List[Param]):
@@ -229,6 +106,27 @@ class TitanSettings:
     standardize: bool = True
     file_format: Literal["npy", "grib"] = "grib"
 
+#############################################################
+#                              PARAMS                       #
+#############################################################
+
+def get_grid_coords() -> List[int]:
+    return METADATA["GRIDS"][param.grid.name]["extent"]
+
+def get_titan_filepath(
+    param: Param, date: dt.datetime, file_format: Literal["npy", "grib"]
+) -> Path:
+    """
+    Returns the path of the file containing the parameter data.
+    - in grib format, data is grouped by level type.
+    - in npy format, data is saved as npy, rescaled to the wanted grid, and each
+    2D array is saved as one file to optimize IO during training."""
+    if file_format == "grib":
+        folder = SCRATCH_PATH / "grib" / date.strftime(FORMATSTR)
+        return folder / param.grib_name
+    else:
+        filename = f"{param.name}_{param.level}{param.level_type.lower()}.npy"
+        return self.npy_path / date.strftime(FORMATSTR) / filename
 
 #############################################################
 #                            SAMPLE                         #

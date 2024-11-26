@@ -808,6 +808,56 @@ class Grid:
         return func(**self.projection_kwargs)
 
 
+ParamConfig = namedtuple("ParamConfig","unit level_type long_name native_grid grib grib_param")
+
+@dataclass(slots=True)
+class Param:
+    name: str
+    level: int
+    grid: Grid
+    load_param_info_func : Callable[[str], ParamConfig]
+    # Parameter status :
+    # input = forcings, output = diagnostic, input_output = classical weather var
+    kind: Literal["input", "output", "input_output"]
+    level_type: str = field(init=False)
+    long_name: str = field(init=False)
+    unit: str = field(init=False)
+    native_grid: str = field(init=False)
+    grib_name: str = field(init=False)
+    grib_param: str = field(init=False)
+    npy_path: Path = None
+
+    def __post_init__(self):
+        self.param_info = self.load_param_info_func(self.name)
+        self.unit = self.param_info.unit
+        if self.param_info.level_type in ["heightAboveGround", "meanSea", "surface"]:
+            self.level_type = self.param_info.level_type
+        else:
+            self.level_type = "isobaricInhPa"
+        self.long_name = self.param_info.long_name
+        self.native_grid = self.param_info.grid
+        if self.native_grid not in ["PAAROME_1S100", "PAAROME_1S40", "PA_01D"]:
+            raise NotImplementedError(
+                "Parameter native grid must be in ['PAAROME_1S100', 'PAAROME_1S40', 'PA_01D']"
+            )
+        
+        self.grib_name = self.param_info.grib_name
+        self.grib_param = self.param_info.grib_param
+
+    @property
+    def state_weights(self) -> float:
+        """ Weight to confer to the param in the loss function"""
+        return get_weight_per_lvl(self.level, self.level_type)
+
+    @property
+    def parameter_name(self) -> str:
+        return f"{self.long_name}_{self.level}_{self.level_type}"
+
+    @property
+    def parameter_short_name(self) -> str:
+        return f"{self.name}_{self.level}_{self.level_type}"
+
+
 @dataclass(slots=True)
 class TorchDataloaderSettings:
     """
