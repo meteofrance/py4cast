@@ -9,9 +9,7 @@ from functools import cached_property
 from pathlib import Path
 from typing import Dict, List, Literal, Tuple, Union
 
-import cartopy
 import numpy as np
-import pandas as pd
 import torch
 import tqdm
 from torch.utils.data import DataLoader, Dataset
@@ -19,8 +17,11 @@ from torch.utils.data import DataLoader, Dataset
 from py4cast.datasets.base import (
     DatasetABC,
     DatasetInfo,
+    Grid,
+    GridConfig,
     Item,
     NamedTensor,
+    Period,
     TorchDataloaderSettings,
     collate_fn,
 )
@@ -58,118 +59,17 @@ def get_weight(level: float, level_type: str) -> float:
         raise Exception(f"unknown level_type:{level_type}")
 
 
-@dataclass(slots=True)
-class Period:
-    start: dt.datetime
-    end: dt.datetime
-    step: int  # In hours
-    name: str
-
-    def __init__(self, start: int, end: int, step: int, name: str):
-        self.start = dt.datetime.strptime(str(start), "%Y%m%d%H")
-        self.end = dt.datetime.strptime(str(end), "%Y%m%d%H")
-        self.step = step
-        self.name = name
-
-    @property
-    def date_list(self):
-        return pd.date_range(
-            start=self.start, end=self.end, freq=f"{self.step}H"
-        ).to_pydatetime()
-
-
 # Define static attributes to add -> see Grid class in smeagol.py
-@dataclass
-class Grid:
-    domain: str
-    model: str
-    geometry: str = "EURW1S40"
-    border_size: int = 0
-    # Subgrid selection. If (0,0,0,0) the whole grid is kept.
-    subgrid: Tuple[int] = (0, 0, 0, 0)
-    x: int = field(init=False)  # X dimension
-    y: int = field(init=False)  # Y dimension
 
-    def __post_init__(self):
-        ds = np.load(self.grid_filepath)
-        x, y = ds.shape
-        # Setting correct subgrid if no subgrid is selected.
-        if self.subgrid == (0, 0, 0, 0):
-            self.subgrid = (0, x, 0, y)
-        self.x = self.subgrid[1] - self.subgrid[0]
-        self.y = self.subgrid[3] - self.subgrid[2]
 
-    @property
-    def grid_filepath(self):
-        return SCRATCH_PATH / OROGRAPHY_FNAME
-
-    @cached_property
-    def lat(self) -> np.array:
-        filename = SCRATCH_PATH / LATLON_FNAME
-        with open(filename, "rb") as f:
-            lonlat = np.load(f)
-        return np.transpose(
-            lonlat[
-                1, self.subgrid[0] : self.subgrid[1], self.subgrid[2] : self.subgrid[3]
-            ]
-        )
-
-    @cached_property
-    def lon(self) -> np.array:
-        filename = SCRATCH_PATH / LATLON_FNAME
-        with open(filename, "rb") as f:
-            lonlat = np.load(f)
-        return lonlat[
-            0, self.subgrid[0] : self.subgrid[1], self.subgrid[2] : self.subgrid[3]
-        ]
-
-    @cached_property
-    def meshgrid(self) -> np.array:
-        """
-        Build a meshgrid from coordinates position.
-        """
-        return np.asarray([self.lat, self.lon])
-
-    @property
-    def geopotential(self) -> np.array:
-        ds = np.load(self.grid_filepath)
-        return ds[self.subgrid[0] : self.subgrid[1], self.subgrid[2] : self.subgrid[3]]
-
-    @property
-    def landsea_mask(self) -> np.array:
-        # TO DO : add landsea mask instead of orography
-        ds = np.load(self.grid_filepath)
-        return ds[self.subgrid[0] : self.subgrid[1], self.subgrid[2] : self.subgrid[3]]
-
-    @property
-    def border_mask(self) -> np.array:
-        if self.border_size > 0:
-            border_mask = np.ones((self.x, self.y)).astype(bool)
-            size = self.border_size
-            border_mask[size:-size, size:-size] *= False
-        elif self.border_size == 0:
-            border_mask = np.ones((self.x, self.y)).astype(bool) * False
-        else:
-            raise ValueError(f"Bordersize should be positive. Get {self.border_size}")
-        return border_mask
-
-    @property
-    def N_grid(self) -> int:
-        return self.x * self.y
-
-    @cached_property
-    def grid_limits(self):
-        return [  # In projection
-            self.lon[0, 0],  # min x
-            self.lon[-1, -1],  # max x
-            self.lat[0, 0],  # min y
-            self.lat[-1, -1],  # max y
-        ]
-
-    @cached_property
-    def projection(self):
-        # Create projection
-        return cartopy.crs.LambertConformal(central_longitude=2, central_latitude=46.7)
+def load_poesy_grid_info(grid: Grid) -> GridConfig:
+    geopotential = np.load(SCRATCH_PATH / OROGRAPHY_FNAME)
+    latlon = np.load(SCRATCH_PATH / LATLON_FNAME)
+    full_size = geopotential.shape
+    latitude = latlon[1, :, 0]
+    longitude = latlon[0, 0]
+    landsea_mask = np.where(geopotential > 0, 1.0, 0.0).astype(np.float32)
+    return GridConfig(full_size, latitude, longitude, geopotential, landsea_mask)
 
 
 @dataclass(slots=True)
@@ -225,8 +125,8 @@ class Param:
         """
         data_array = np.load(self.filename(date=date), mmap_mode="r")
         return data_array[
-            self.grid.subgrid[0] : self.grid.subgrid[1],
-            self.grid.subgrid[2] : self.grid.subgrid[3],
+            self.grid.subdomain[0] : self.grid.subdomain[1],
+            self.grid.subdomain[2] : self.grid.subdomain[3],
             term,
             member,
         ]
@@ -282,7 +182,6 @@ class Sample:
             Boolean:  Whether the sample exist or not
         """
         for param in param_list:
-
             if not param.exist(self.date):
                 return False
 
@@ -316,7 +215,7 @@ class PoesyDataset(DatasetABC, Dataset):
         return self._cache_dir
 
     def __str__(self) -> str:
-        return f"Poesy_{self.grid.geometry}"
+        return f"Poesy_{self.grid.name}"
 
     def __len__(self):
         return len(self.sample_list)
@@ -394,7 +293,6 @@ class PoesyDataset(DatasetABC, Dataset):
                     )
 
                     if samp.is_valid(self.params):
-
                         samples.append(samp)
                         number += 1
 
@@ -460,7 +358,6 @@ class PoesyDataset(DatasetABC, Dataset):
         member: int = 1,
         inference_steps: int = 0,
     ) -> torch.tensor:
-
         if self.settings.standardize:
             names = param.parameter_short_name
             means = np.asarray([self.stats[name]["mean"] for name in names])
@@ -586,7 +483,8 @@ class PoesyDataset(DatasetABC, Dataset):
             conf = json.load(fp)
             if config_override is not None:
                 conf = merge_dicts(conf, config_override)
-
+        conf["grid"]["load_grid_info_func"] = load_poesy_grid_info
+        conf["grid"]
         grid = Grid(**conf["grid"])
         param_list = []
         for data_source in conf["dataset"]:
@@ -807,7 +705,6 @@ class InferPoesyDataset(PoesyDataset):
         for date in self.period.date_list:
             for member in self.settings.members:
                 for sample in range(0, sample_by_date):
-
                     input_terms = terms[
                         sample
                         * self.settings.num_total_steps : sample
@@ -891,7 +788,6 @@ class InferPoesyDataset(PoesyDataset):
 
 
 if __name__ == "__main__":
-
     path_config = "config/datasets/poesy.json"
 
     parser = ArgumentParser(description="Prepare Poesy dataset and test loading speed.")

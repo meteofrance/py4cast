@@ -74,7 +74,7 @@ class MetricPSDK(Metric):
             preds.flatten_("ngrid", 2, 3)
             targets.flatten_("ngrid", 2, 3)
 
-    def compute(self) -> dict:
+    def compute(self, prefix: str = "val") -> dict:
         """
         Compute PSD mean for each channels/features, plot the figure, return a dict.
         Should be called at each epoch's end
@@ -100,9 +100,10 @@ class MetricPSDK(Metric):
                 mean_psd_target[c].cpu().numpy(),
                 f"PSD for {features_name[c]} at +{self.pred_step+1}h",
             )
-            dict_psd_metric[f"mean_psd_k/{features_name[c]}"] = fig
+            dict_psd_metric[f"{prefix}_mean_psd_k/{features_name[c]}"] = fig
             dest_file = (
-                self.save_path / f"mean_psd_k/{features_name[c]}_{self.pred_step+1}.png"
+                self.save_path
+                / f"{prefix}_mean_psd_k/{features_name[c]}_{self.pred_step+1}.png"
             )
             if self.save_path.exists():
                 dest_file.parent.mkdir(exist_ok=True)
@@ -123,7 +124,6 @@ class MetricPSDK(Metric):
 
         # Compute the PSD for each channel of x.
         for c in range(channels):
-
             psd = power_spectral_density(
                 x[:, c : c + 1, :, :, pred_step].cpu().numpy()
             ).squeeze()
@@ -190,7 +190,6 @@ class MetricPSDVar(Metric):
 
         # Compute the RMSE for each channel of x.
         for c in range(channels):
-
             # Compute PSD
             psd_target = power_spectral_density(
                 y_true[:, c : c + 1, :, :, self.pred_step].cpu().numpy()
@@ -217,7 +216,7 @@ class MetricPSDVar(Metric):
             preds.flatten_("ngrid", 2, 3)
             targets.flatten_("ngrid", 2, 3)
 
-    def compute(self) -> dict:
+    def compute(self, prefix: str = "val") -> dict:
         """
         Compute PSD mean for each channels/features, return a dict.
         Should be called at each epoch's end
@@ -228,7 +227,7 @@ class MetricPSDVar(Metric):
 
         # dict {"feature_name" : RMSE mean}
         metric_log_dict = {
-            f"val_rmse_psd/{name}": mean_psd_rmse[i]
+            f"{prefix}_rmse_psd/{name}": mean_psd_rmse[i]
             for i, name in enumerate(feature_names)
         }
 
@@ -373,7 +372,7 @@ class MetricACC(Metric):
         # Step counter, needed to compute psd mean at each epoch.
         self.add_state("step_count", default=torch.tensor(0.0), dist_reduce_fx="sum")
 
-    def update(self, preds: NamedTensor, target: NamedTensor):
+    def update(self, preds: NamedTensor, target: NamedTensor, *args):
         """
         compute the ACC between target and pred.
         prediction/target: (B, pred_steps, N_grid, d_f) or (B, pred_steps, W, H, d_f)
@@ -415,7 +414,7 @@ class MetricACC(Metric):
         # Increment step_count
         self.step_count += 1
 
-    def compute(self) -> dict:
+    def compute(self, prefix: str = "val") -> dict:
         """
         Compute ACC mean for each channels/features, return a dict.
         Should be called at each epoch's end
@@ -426,7 +425,7 @@ class MetricACC(Metric):
 
         # dict {"feature_name" : RMSE mean}
         metric_log_dict = {
-            f"val_acc/{name}_step{j}": mean_acc[j, i]
+            f"{prefix}_acc/{name}_step{j}": mean_acc[j, i]
             for i, name in enumerate(feature_names)
             for j in range(self.pred_steps)
         }

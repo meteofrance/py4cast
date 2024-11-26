@@ -162,7 +162,6 @@ def plot_antilope(folder: Path):
 
 
 if __name__ == "__main__":
-
     parser = ArgumentParser()
     parser.add_argument(
         "--folder",

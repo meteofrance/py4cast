@@ -58,9 +58,7 @@ def save_named_tensors_to_grib(
     grib_features = get_grib_param_dataframe(pred, params)
     grib_groups = get_grib_groups(grib_features)
     validtimes = compute_hours_of_day(sample.date, sample.output_terms)
-    init_term = compute_hours_of_day(sample.date, [sample.input_terms[-1]])[0]
-    leadtimes = validtimes - init_term
-    predicted_time_steps = len(leadtimes)
+    predicted_time_steps = len(sample.output_terms)
 
     model_ds = {
         c: xr.open_dataset(
@@ -85,7 +83,7 @@ def save_named_tensors_to_grib(
         for c in grib_groups.keys()
     }
 
-    for t_idx in range(predicted_time_steps)[:1]:
+    for t_idx in range(predicted_time_steps):
         for group in model_ds.keys():
             raw_data = pred.select_dim("timestep", t_idx, bare_tensor=False)
             storable = write_storable_dataset(
@@ -95,11 +93,13 @@ def save_named_tensors_to_grib(
                 group,
                 sample,
                 validtimes[t_idx],
-                leadtimes[t_idx],
+                sample.output_terms[t_idx],
                 raw_data,
                 grib_features,
             )
-            filename = get_output_filename(saving_settings, sample, leadtimes[t_idx])
+            filename = get_output_filename(
+                saving_settings, sample, sample.output_terms[t_idx]
+            )
             option = (
                 "wb"
                 if not os.path.exists(f"{saving_settings.directory}/{filename}")
@@ -189,7 +189,6 @@ def write_storable_dataset(
             )
 
         except KeyError:
-
             maybe_repeat = len(feature_idx) if len(feature_idx) > 1 else 0
             if maybe_repeat:
                 # no suplementary dim but several variables
@@ -220,16 +219,14 @@ def write_storable_dataset(
     elif tol == group:
         # in this case, there might be several variables : basis for nanmask duplication
         dims = template_ds.dims
-        maybe_repeat = len(feature_idx) if len(feature_idx) > 1 else 0
-        if maybe_repeat:
-            data2grib = np.repeat(nanmask[np.newaxis], maybe_repeat, axis=0)
-            data2grib[:, latmax : latmin + 1, longmin : longmax + 1] = data
-        else:
-            data2grib = nanmask
-            data2grib[latmax : latmin + 1, longmin : longmax + 1] = data
+        maybe_repeat = len(feature_idx)
+        # Stack n nanmasks on a newaxis for n features
+        data2grib = np.repeat(nanmask[np.newaxis], maybe_repeat, axis=0)
+        # Write data among nan values
+        data2grib[:, latmax : latmin + 1, longmin : longmax + 1] = data
 
         receiver_ds.update(
-            {f: (dims, data2grib[pred.feature_names_to_idx[f]]) for f in feature_names}
+            {f: (dims, data2grib[idx, :, :]) for idx, f in enumerate(feature_names)}
         )
         receiver_ds[name] = receiver_ds[name].assign_attrs(**template_ds[name].attrs)
 
@@ -444,7 +441,6 @@ def make_nan_mask(
         )
 
     else:
-
         raise ValueError(
             f"Lat/Lon dims of the {infer_dataset} do not fit in template grid, cannot write grib."
         )
