@@ -61,7 +61,7 @@ def get_weight(level: float, level_type: str) -> float:
 def browse_poesy(period, settings):
     """
     Create a list of arguments used to instantiate Sample. This function indicates how to 
-    run through / browse the dataset.    
+    run through / browse the Poesy.    
     """
     
     list_args_all_samples = []
@@ -405,7 +405,12 @@ class PoesyDataset(DatasetABC, Dataset):
 
         for dict_args in list_args_sample:
 
-            samp = Sample(**dict_args)
+            samp = Sample(
+                dict_args["date"],
+                dict_args["member"],
+                dict_args["input_terms"],
+                dict_args["output_terms"],
+                )
 
             if samp.is_valid(self.params):
                 samples.append(samp)

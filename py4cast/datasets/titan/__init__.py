@@ -47,6 +47,19 @@ def get_weight_per_lvl(level: int, kind: Literal["hPa", "m"]):
     else:
         return 2
 
+def browse_titan(datetime):
+    """
+    Create a list of arguments used to instantiate Sample. This function indicates how to 
+    run through / browse Titan.    
+    """
+    
+    list_args_all_samples = []
+    for date in date_list:
+        dict_sample_args = {"date": date}
+        list_args_all_samples.append(dict_sample_args)
+
+    return list_args_all_samples
+
 
 #############################################################
 #                            PERIOD                         #
@@ -580,6 +593,8 @@ class TitanDataset(DatasetABC, Dataset):
         filename = f"valid_samples_{self.period.name}_{n_input}_{n_pred}.txt"
         self.valid_samples_file = self.cache_dir / filename
 
+        self.browse_dataset = browse_titan
+
     @cached_property
     def dataset_info(self) -> DatasetInfo:
         """Returns a DatasetInfo object describing the dataset.
@@ -637,10 +652,12 @@ class TitanDataset(DatasetABC, Dataset):
                 f"Valid samples file {self.valid_samples_file} does not exist. Computing samples list..."
             )
             samples = []
-            for date in tqdm.tqdm(self.period.date_list):
-                sample = Sample(date, self.settings, self.params, stats, self.grid)
+            list_args_sample = self.browse_dataset(self.period.date_list)
+            for dict_args in tqdm.tqdm(list_args_sample):
+                sample = Sample(dict_args["date"], self.settings, self.params, stats, self.grid)
                 if sample.is_valid():
                     samples.append(sample)
+
         print(f"--> All {len(samples)} {self.period.name} samples are now defined")
         return samples
 
