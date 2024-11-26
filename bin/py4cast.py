@@ -1,6 +1,6 @@
 from lightning.pytorch.cli import LightningCLI, ArgsType
-from py4cast.lightning_module.autoregressive import AutoRegressiveLightningModule
-from py4cast.data_module.Titan import TitanDataModule
+from py4cast.ARLightningModule import AutoRegressiveLightningModule
+from py4cast.TitanDataModule import TitanDataModule
 
 
 class MyLightningCLI(LightningCLI):
