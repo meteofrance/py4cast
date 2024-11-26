@@ -64,10 +64,14 @@ def browse_dataset(period, settings):
     run through / browse the dataset.    
     """
     
+    list_args_all_samples = []
+
+    # Create all datetimes
     date_list = pd.date_range(
             start=period.start, end=period.end, freq=f"{period.step}H"
         ).to_pydatetime()
 
+    # Get the number of sample for 1 run
     terms = list(
             np.arange(
                 settings.term["start"],
@@ -75,12 +79,12 @@ def browse_dataset(period, settings):
                 settings.term["timestep"],
             )
         )
-    sample_by_date = len(terms) // settings.num_total_steps
-    list_args_all_samples = []
+    n_sample_by_datetime = len(terms) // settings.num_total_steps
 
+    # Create a dict of args for each datetime, member and for all sample
     for date in date_list:
         for member in settings.members:
-            for sample in range(0, sample_by_date):
+            for sample in range(0, n_sample_by_datetime):
                 input_terms = terms[
                     sample
                     * settings.num_total_steps : sample
@@ -393,21 +397,23 @@ class PoesyDataset(DatasetABC, Dataset):
         print("Start forming samples")
 
         samples = []
-        number = 0
+        n_samples = 0
 
+        # Run through the dataset and get a list of sample's args.
         list_args_sample = browse_dataset(self.period, self.settings)
-        for date, member, input_terms, output_terms in list_args_sample:
+
+        for dict_args in list_args_sample:
 
             samp = Sample(
-                date=date,
-                member=member,
-                input_terms=input_terms,
-                output_terms=output_terms,
+                date=dict_args["date"],
+                member=dict_args["member"],
+                input_terms=dict_args["input_terms"],
+                output_terms=dict_args["output_terms"],
             )
 
             if samp.is_valid(self.params):
                 samples.append(samp)
-                number += 1
+                n_samples += 1
 
         print("All samples are now defined")
         return samples

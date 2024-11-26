@@ -22,7 +22,6 @@ def test_browse_dataset():
     )
 
     list_args_all_samples = browse_dataset(period, settings)
-    print(list_args_all_samples)
 
     # Test time * term * member
     assert len(list_args_all_samples) == 2*3*2
