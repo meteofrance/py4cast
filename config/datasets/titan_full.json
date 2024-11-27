@@ -19,7 +19,9 @@
     "grid":{
         "name": "PAAROME_1S40",
         "border_size": 0,
-        "subdomain": [100, 612, 240, 880]
+        "subdomain": [100, 612, 240, 880],
+        "proj_name": "PlateCarree",
+        "projection_kwargs": {}
     },
     "settings":{
         "step_duration": 1,

@@ -54,13 +54,14 @@ def get_weight_per_lvl(level: int, kind: Literal["hPa", "m"]):
 #############################################################
 
 
-def load_Titan_grid_info(path: str, name: str) -> GridConfig:
+def load_Titan_grid_info(name: str) -> GridConfig:
     path = SCRATCH_PATH / f"conf_{name}.grib"
     conf_ds = xr.open_dataset(path)
     grid_info = METADATA["GRIDS"][name]
     full_size = grid_info["size"]
+    landsea_mask = None
     grid_conf = GridConfig(
-        full_size, conf_ds.latitude.values, conf_ds.longitude.values, conf_ds.h.values
+        full_size, conf_ds.latitude.values, conf_ds.longitude.values, conf_ds.h.values, landsea_mask
     )
     return grid_conf
 

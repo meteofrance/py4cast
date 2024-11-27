@@ -62,7 +62,7 @@ def get_weight(level: float, level_type: str) -> float:
 # Define static attributes to add -> see Grid class in smeagol.py
 
 
-def load_poesy_grid_info(grid: Grid) -> GridConfig:
+def load_poesy_grid_info(name: str) -> GridConfig:
     geopotential = np.load(SCRATCH_PATH / OROGRAPHY_FNAME)
     latlon = np.load(SCRATCH_PATH / LATLON_FNAME)
     full_size = geopotential.shape
@@ -748,7 +748,7 @@ class InferPoesyDataset(PoesyDataset):
             if config_override is not None:
                 conf = merge_dicts(conf, config_override)
                 print(conf["periods"]["test"])
-
+        conf["grid"]["load_grid_info_func"] = load_poesy_grid_info
         grid = Grid(**conf["grid"])
         param_list = []
         for data_source in conf["dataset"]:
