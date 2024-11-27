@@ -297,12 +297,14 @@ def browser(period: Period, settings: PoesySettings)-> List[Dict[str, Any]]:
                 settings.term["timestep"],
             )
         )
-    n_sample_by_datetime = len(terms) // settings.num_total_steps
+    
+    # compute the number of samples to build from all the terms of 1 leadtime
+    n_sample_by_leadtime = len(terms) // settings.num_total_steps
 
     # Create a dict of args for each datetime, member and for all sample
     for date in date_list:
         for member in settings.members:
-            for sample in range(0, n_sample_by_datetime):
+            for sample in range(0, n_sample_by_leadtime):
                 input_terms = terms[
                     sample
                     * settings.num_total_steps : sample
