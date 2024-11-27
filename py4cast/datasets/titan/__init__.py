@@ -54,13 +54,18 @@ def get_weight_per_lvl(level: int, kind: Literal["hPa", "m"]):
 #############################################################
 
 
-def load_Titan_grid_info(path: str, name: str) -> GridConfig:
+def load_Titan_grid_info(name: str) -> GridConfig:
     path = SCRATCH_PATH / f"conf_{name}.grib"
     conf_ds = xr.open_dataset(path)
     grid_info = METADATA["GRIDS"][name]
     full_size = grid_info["size"]
+    landsea_mask = None
     grid_conf = GridConfig(
-        full_size, conf_ds.latitude.values, conf_ds.longitude.values, conf_ds.h.values
+        full_size,
+        conf_ds.latitude.values,
+        conf_ds.longitude.values,
+        conf_ds.h.values,
+        landsea_mask,
     )
     return grid_conf
 
@@ -592,6 +597,8 @@ class TitanDataset(DatasetABC, Dataset):
         num_pred_steps_train: int,
         num_pred_steps_val_test: int,
     ) -> Tuple["TitanDataset", "TitanDataset", "TitanDataset"]:
+
+        conf["grid"]["load_grid_info_func"] = load_Titan_grid_info
         grid = Grid(**conf["grid"])
         dataset_path = get_dataset_path(name, grid)
         param_list = get_param_list(conf, grid, dataset_path)

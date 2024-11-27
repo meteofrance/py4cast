@@ -117,6 +117,8 @@ or
 pip install --editable .
 ```
 
+In case the install fail because some dependencies are not found or are in conflict, please look at the [installation known issues](doc/known_issues.md#installation).
+
 
 ### Install with micromamba
 
