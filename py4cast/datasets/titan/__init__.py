@@ -241,8 +241,8 @@ class TitanSettings:
 
 def _run_through_timestamps(period: Period) -> List[Dict[str, Any]]:
     """
-    Create a list of arguments used to instantiate Sample. This function indicates how to 
-    run through / browse Titan.    
+    Create a list of arguments used to instantiate Sample. 
+    This function indicates how to run through the timestamps in Titan.      
     """
     list_args_all_samples = []
     for date in period.date_list:

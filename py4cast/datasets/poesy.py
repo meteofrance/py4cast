@@ -197,7 +197,7 @@ class PoesySettings:
 def _run_through_timestamps(period: Period, settings: PoesySettings)-> List[Dict[str, Any]]:
     """
     Create a list of arguments used to instantiate Sample. 
-    This function indicates how to run through / browse the Poesy.    
+    This function indicates how to run through the timestamps in Poesy.    
     """
     
     list_args_all_samples = []
