@@ -16,7 +16,7 @@ from PIL import Image
 from tueplots import bundles, figsizes
 
 if TYPE_CHECKING:
-    from py4cast.lightning import AutoRegressiveLightning
+    from py4cast.ARLightningModule import AutoRegressiveLightningModule
 
 from py4cast.datasets.base import NamedTensor
 from py4cast.losses import Py4CastLoss
@@ -219,7 +219,7 @@ class Plotter(ABC):
     @abstractmethod
     def update(
         self,
-        obj: "AutoRegressiveLightning",
+        obj: "AutoRegressiveLightningModule",
         prediction: NamedTensor,
         target: NamedTensor,
     ) -> None:
@@ -229,7 +229,9 @@ class Plotter(ABC):
         pass
 
     @abstractmethod
-    def on_step_end(self, obj: "AutoRegressiveLightning", label: str = "") -> None:
+    def on_step_end(
+        self, obj: "AutoRegressiveLightningModule", label: str = ""
+    ) -> None:
         """
         Do an action when "end" is trigger
         """
@@ -256,7 +258,7 @@ class MapPlot(Plotter):
 
     def update(
         self,
-        obj: "AutoRegressiveLightning",
+        obj: "AutoRegressiveLightningModule",
         prediction: NamedTensor,
         target: NamedTensor,
     ) -> None:
@@ -323,7 +325,7 @@ class MapPlot(Plotter):
     @abstractmethod
     def plot_map(
         self,
-        obj: "AutoRegressiveLightning",
+        obj: "AutoRegressiveLightningModule",
         prediction: torch.tensor,
         target: torch.tensor,
         feature_names: List[str],
@@ -331,7 +333,9 @@ class MapPlot(Plotter):
     ) -> None:
         pass
 
-    def on_step_end(self, obj: "AutoRegressiveLightning", label: str = "") -> None:
+    def on_step_end(
+        self, obj: "AutoRegressiveLightningModule", label: str = ""
+    ) -> None:
         """
         Do an action when "end" is trigger
         """
@@ -358,7 +362,7 @@ class PredictionTimestepPlot(MapPlot):
 
     def plot_map(
         self,
-        obj: "AutoRegressiveLightning",
+        obj: "AutoRegressiveLightningModule",
         prediction: torch.tensor,
         target: torch.tensor,
         feature_names: List[str],
@@ -425,7 +429,7 @@ class PredictionEpochPlot(MapPlot):
 
     def plot_map(
         self,
-        obj: "AutoRegressiveLightning",
+        obj: "AutoRegressiveLightningModule",
         prediction: torch.tensor,
         target: torch.tensor,
         feature_names: List[str],
@@ -505,7 +509,7 @@ class StateErrorPlot(Plotter):
 
     def update(
         self,
-        obj: "AutoRegressiveLightning",
+        obj: "AutoRegressiveLightningModule",
         prediction: NamedTensor,
         target: NamedTensor,
     ) -> None:
@@ -526,7 +530,9 @@ class StateErrorPlot(Plotter):
             ]
             self.initialized = True
 
-    def on_step_end(self, obj: "AutoRegressiveLightning", label: str = "") -> None:
+    def on_step_end(
+        self, obj: "AutoRegressiveLightningModule", label: str = ""
+    ) -> None:
         """
         Make the summary figure
         """
@@ -592,7 +598,7 @@ class SpatialErrorPlot(Plotter):
 
     def update(
         self,
-        obj: "AutoRegressiveLightning",
+        obj: "AutoRegressiveLightningModule",
         prediction: NamedTensor,
         target: NamedTensor,
     ) -> None:
@@ -606,7 +612,9 @@ class SpatialErrorPlot(Plotter):
             obj.trainer.strategy.reduce(spatial_loss, reduce_op="mean").cpu()
         )  # (B, N_log, N_lat, N_lon)
 
-    def on_step_end(self, obj: "AutoRegressiveLightning", label: str = "") -> None:
+    def on_step_end(
+        self, obj: "AutoRegressiveLightningModule", label: str = ""
+    ) -> None:
         """
         Make the summary figure
         """

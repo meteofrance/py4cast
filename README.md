@@ -205,14 +205,7 @@ docker run \
     py4cast:<your_tag> \
     bash -c " \
         pip install -e . &&  \
-        python bin/train.py \
-            --dataset titan \
-            --model hilam \
-            --dataset_conf config/datasets/titan_full.json \
-            --dev_mode \
-            --no_log \
-            --num_pred_steps_val_test 1 \
-            --num_input_steps 1 \
+        python bin/pyr4cast.py
     "
 ```
 
@@ -242,14 +235,7 @@ podman run \
     py4cast:<your_tag> \
     bash -c " \
         pip install -e . &&  \
-        python bin/train.py \
-            --dataset titan \
-            --model hilam \
-            --dataset_conf config/datasets/titan_full.json \
-            --dev_mode \
-            --no_log \
-            --num_pred_steps_val_test 1 \
-            --num_input_steps 1 \
+        python bin/py4cast.py
     "
 ```
 </details>
@@ -274,14 +260,7 @@ singularity exec \
     py4cast-<your_tag>.sif \
     bash -c " \
         pip install -e . &&  \
-        python bin/train.py \
-            --dataset titan \
-            --model hilam \
-            --dataset_conf config/datasets/titan_full.json \
-            --dev_mode \
-            --no_log \
-            --num_pred_steps_val_test 1 \
-            --num_input_steps 1 \
+        python bin/py4cast.py
     "
 ```
 </details>
@@ -300,14 +279,14 @@ For now this works only for internal Météo-France users.
 ```bash
 runai gpu_play 4
 runai build
-runai exec_gpu python bin/train.py --dataset titan --model hilam
+runai exec_gpu python bin/py4cast.py
 ```
 
 2. Train using sbatch single node multi-GPUs
 
 ```bash
 export RUNAI_GRES="gpu:v100:4"
-runai sbatch python bin/train.py --dataset titan --model hilam
+runai sbatch python bin/py4cast.py
 ```
 
 3. Train using sbatch multi nodes multi GPUs
@@ -317,7 +296,7 @@ Here we use 2 nodes with 4 GPUs each.
 ```bash
 export RUNAI_SLURM_NNODES=2
 export RUNAI_GRES="gpu:v100:4"
-runai sbatch_multi_node python bin/train.py --dataset titan --model hilam
+runai sbatch_multi_node python bin/py4cast.py
 ```
 
 For the rest of the documentation, you must preprend each python command with `runai exec_gpu`.
@@ -332,7 +311,7 @@ Once your micromamba environment is setup, you should :
 
 A very simple training can be launch (on your current node)
 ```sh
-python bin/train.py  --dataset dummy --model halfunet --epochs 2
+python bin/py4cast.py
 ```
 
 #### Example of script  to launch on gpu
@@ -354,7 +333,7 @@ source ~/.bashrc  # Be sure that all your environment variables are set
 conda activate py4cast # Activate your environment (installed by micromamba or conda)
 cd $PY4CAST_PATH # Go to Py4CAST (you can either add an environment variable or hard code it here).
 # Launch your favorite command.
-srun python bin/train.py --model halfunet --dataset dummy --epochs 2
+srun python bin/py4cast.py
 ```
 
 
@@ -369,7 +348,7 @@ sbatch my_tiny_script.sh
 ```
 with the proxy path depending on your machine.
 
-### Dataset configuration & simple training
+### Dataset initialization
 
 As in neural-lam, before training you must first compute the mean and std of each feature.
 
@@ -379,84 +358,73 @@ To compute the stats of the Titan dataset:
 python py4cast/datasets/titan/__init__.py
 ```
 
-To train on a dataset with its default settings just pass the name of the dataset (all lowercase) :
+### How to configure arguments with config.yaml
 
-```bash
-python bin/train.py --dataset titan --model halfunet
-```
+The LightningCLI use a config.yaml file to parse its arguments. Any argument can be specified in this file, provided that it is also an argument of the Trainer (specific to the CLI), the LightningModule, or the DataModule.
+- Any arg associated with the Trainer will be refered as trainer.arg
+- Any arg associated with the LightningModule will be refered as model.arg
+- Any arg associated with the DataModule will be refered as data.arg
+Config file path : "py4cast/config/config_cli_autoregressive.yaml"
+
+#### Dataset config 
 
 You can override the dataset default configuration file:
 
 ```bash
-python bin/train.py --dataset smeagol --model halfunet --dataset_conf config/smeagoldev.json
+data: 
+  dataset_name: "titan" # Replace with actual dataset name
+  dataset_conf: "config/datasets/titan_full.json" # Replace with actual config path
+  config_override: 
 ```
 
 [Details on available datasets.](doc/features.md/#available-datasets)
 
-### Training options
+#### Model config
 
-1. **Configuring the neural network**
-
-To train on a dataset using a network with its default settings just pass the name of the architecture (all lowercase) as shown below:
+You can override the model default configuration file (here we increase the number of filter to 128 and use ghost modules):
 
 ```bash
-python bin/train.py --dataset smeagol --model hilam
-
-python bin/train.py --dataset smeagol --model halfunet
-```
-
-You can override some settings of the model using a json config file (here we increase the number of filter to 128 and use ghost modules):
-
-```bash
-python bin/train.py --dataset smeagol --model halfunet --model_conf config/halfunet128_ghost.json
+model:
+  model_conf: config/halfunet128_ghost.json # Replace with actual config path
+  model_name: "halfunet" # Replace with actual model name
 ```
 
 [Details on available neural networks.](doc/features.md/#available-pytorchs-architecture)
 
 
-2. **Changing the training strategy**
-
-You can choose a training strategy using the **--strategy STRATEGY_NAME** cli argument:
-
-```bash
-python bin/train.py --dataset smeagol --model halfunet --strategy diff_ar
-```
-
-[Details on available training strategies.](doc/features.md/#available-training-strategies)
-
-
 3. **Other training options**:
 
-* `--seed SEED`           random seed (default: 42)
-* `--loss LOSS`           Loss function to use (default: mse)
-* `--lr LR`               learning rate (default: 0.001)
-* `--val_interval VAL_INTERVAL`
-                    Number of epochs training between each validation run (default: 1)
-* `--epochs EPOCHS`       upper epoch limit (default: 200)
-* `--profiler PROFILER`   Profiler required. Possibilities are ['simple', 'pytorch', 'None']
-* `--batch_size BATCH_SIZE`
-                    batch size
-* `--precision PRECISION`
-                    Numerical precision to use for model (32/16/bf16) (default: 32)
-* `--limit_train_batches LIMIT_TRAIN_BATCHES`
-                    Number of batches to use for training
-* `--num_pred_steps_train NUM_PRED_STEPS_TRAIN`
-                    Number of auto-regressive steps/prediction steps during training forward pass
-* `--num_pred_steps_val_test NUM_PRED_STEPS_VAL_TEST`
-                    Number of auto-regressive steps/prediction steps during validation and tests
-* `--num_input_steps NUM_INPUT_STEPS`
-                    Number of previous timesteps supplied as inputs to the model
-* `--num_inter_steps NUM_INTER_STEPS`
-                    Number of model steps between two samples
-* `--no_log`
-    When activated, logs are not stored and models are not saved. Use in dev mode. (default: False)
-* `--mlflow_log`
-    When activated, the MLFlowLogger is used and the model is saved in the MLFlow style (default: False)
-* `--dev_mode`
-    When activated, reduce number of epoch and steps. (default: False)
-* `--load_model_ckpt LOAD_MODEL_CKPT`
-    Path to load model parameters from (default: None)
-
+```bash
+[-h] [-c CONFIG] [--print_config[=flags]] [--seed_everything SEED_EVERYTHING] [--trainer CONFIG]
+                      [--trainer.accelerator.help CLASS_PATH_OR_NAME] [--trainer.accelerator ACCELERATOR] [--trainer.strategy.help CLASS_PATH_OR_NAME]
+                      [--trainer.strategy STRATEGY] [--trainer.devices DEVICES] [--trainer.num_nodes NUM_NODES] [--trainer.precision PRECISION]
+                      [--trainer.logger.help CLASS_PATH_OR_NAME] [--trainer.logger LOGGER] [--trainer.callbacks.help CLASS_PATH_OR_NAME]
+                      [--trainer.callbacks CALLBACKS] [--trainer.fast_dev_run FAST_DEV_RUN] [--trainer.max_epochs MAX_EPOCHS]
+                      [--trainer.min_epochs MIN_EPOCHS] [--trainer.max_steps MAX_STEPS] [--trainer.min_steps MIN_STEPS] [--trainer.max_time MAX_TIME]
+                      [--trainer.limit_train_batches LIMIT_TRAIN_BATCHES] [--trainer.limit_val_batches LIMIT_VAL_BATCHES]
+                      [--trainer.limit_test_batches LIMIT_TEST_BATCHES] [--trainer.limit_predict_batches LIMIT_PREDICT_BATCHES]
+                      [--trainer.overfit_batches OVERFIT_BATCHES] [--trainer.val_check_interval VAL_CHECK_INTERVAL]
+                      [--trainer.check_val_every_n_epoch CHECK_VAL_EVERY_N_EPOCH] [--trainer.num_sanity_val_steps NUM_SANITY_VAL_STEPS]
+                      [--trainer.log_every_n_steps LOG_EVERY_N_STEPS] [--trainer.enable_checkpointing {true,false,null}]
+                      [--trainer.enable_progress_bar {true,false,null}] [--trainer.enable_model_summary {true,false,null}]
+                      [--trainer.accumulate_grad_batches ACCUMULATE_GRAD_BATCHES] [--trainer.gradient_clip_val GRADIENT_CLIP_VAL]
+                      [--trainer.gradient_clip_algorithm GRADIENT_CLIP_ALGORITHM] [--trainer.deterministic DETERMINISTIC]
+                      [--trainer.benchmark {true,false,null}] [--trainer.inference_mode {true,false}] [--trainer.use_distributed_sampler {true,false}]
+                      [--trainer.profiler.help CLASS_PATH_OR_NAME] [--trainer.profiler PROFILER] [--trainer.detect_anomaly {true,false}]
+                      [--trainer.barebones {true,false}] [--trainer.plugins.help CLASS_PATH_OR_NAME] [--trainer.plugins PLUGINS]
+                      [--trainer.sync_batchnorm {true,false}] [--trainer.reload_dataloaders_every_n_epochs RELOAD_DATALOADERS_EVERY_N_EPOCHS]
+                      [--trainer.default_root_dir DEFAULT_ROOT_DIR] [--model CONFIG] --model.batch_size BATCH_SIZE [--model.model_conf MODEL_CONF]
+                      [--model.model_name MODEL_NAME] [--model.lr LR] [--model.loss_name LOSS_NAME] [--model.num_input_steps NUM_INPUT_STEPS]
+                      [--model.num_pred_steps_train NUM_PRED_STEPS_TRAIN] [--model.num_pred_steps_val_test NUM_PRED_STEPS_VAL_TEST]
+                      [--model.num_samples_to_plot NUM_SAMPLES_TO_PLOT] [--model.training_strategy TRAINING_STRATEGY]
+                      [--model.len_train_loader LEN_TRAIN_LOADER] [--model.save_path SAVE_PATH] [--model.use_lr_scheduler {true,false}]
+                      [--model.precision PRECISION] [--model.no_log {true,false}] [--model.channels_last {true,false}]
+                      [--model.save_weights_path SAVE_WEIGHTS_PATH] [--data CONFIG] --data.dataset_name DATASET_NAME
+                      [--data.dataset_conf DATASET_CONF] [--data.config_override CONFIG_OVERRIDE] [--data.num_input_steps NUM_INPUT_STEPS]
+                      [--data.num_pred_steps_train NUM_PRED_STEPS_TRAIN] [--data.num_pred_steps_val_test NUM_PRED_STEPS_VAL_TEST]
+                      [--optimizer.help CLASS_PATH_OR_NAME] [--optimizer CONFIG | CLASS_PATH_OR_NAME | .INIT_ARG_NAME VALUE]
+                      [--lr_scheduler.help CLASS_PATH_OR_NAME] [--lr_scheduler CONFIG | CLASS_PATH_OR_NAME | .INIT_ARG_NAME VALUE]
+```
 
 You can find more details about all the `num_X_steps` options [here](doc/num_steps.md).
 

@@ -28,7 +28,7 @@ class AutoRegressiveLightningModule(pl.LightningModule):
     def __init__(
         self,
         # args linked from datamodule
-        dataset_info: DatasetInfo,
+        dataset_info,
         dataset_name: str,
         batch_shape: Tuple[int, int, int, int, int],
         # args exclusive to lightningmodule
@@ -69,7 +69,9 @@ class AutoRegressiveLightningModule(pl.LightningModule):
         self.channels_last = channels_last
         self.save_weights_path = save_weights_path
         # linked args
-        self.batch_shape = batch_shape # (Batch_size, Timestep, Height, Width, Channels)
+        self.batch_shape = (
+            batch_shape  # (Batch_size, Timestep, Height, Width, Channels)
+        )
         self.dataset_info = dataset_info
         self.dataset_name = dataset_name
 
