@@ -640,13 +640,12 @@ class DatasetInfo:
         for p in ["input", "input_output", "output"]:
             names = self.shortnames[p]
             print(names)
-            print(self.stats)
             mean = self.stats.to_list("mean", names)
             std = self.stats.to_list("std", names)
             mini = self.stats.to_list("min", names)
             maxi = self.stats.to_list("max", names)
             units = [self.units[name] for name in names]
-            if p != "input":  # Forcing variables
+            if p != "input":
                 diff_mean = self.diff_stats.to_list("mean", names)
                 diff_std = self.diff_stats.to_list("std", names)
                 weight = [self.state_weights[name] for name in names]
@@ -807,8 +806,9 @@ class Grid:
         func = getattr(cartopy.crs, self.proj_name)
         return func(**self.projection_kwargs)
 
+
 @dataclass(slots=True)
-class Settings():
+class Settings:
     num_input_steps: int  # Number of input timesteps
     num_pred_steps: int  # Number of output timesteps
     step_duration: float  # duration in hour
@@ -816,18 +816,22 @@ class Settings():
     file_format: Literal["npy", "grib"] = "grib"
     members: Tuple[int] = (0,)
 
-ParamConfig = namedtuple("ParamConfig","unit level_type long_name grid grib_name grib_param")
+
+ParamConfig = namedtuple(
+    "ParamConfig", "unit level_type long_name grid grib_name grib_param"
+)
+
 
 @dataclass(slots=True)
 class Param:
     name: str
     level: int
     grid: Grid
-    load_param_info : Callable[[str], ParamConfig]
+    load_param_info: Callable[[str], ParamConfig]
     # Parameter status :
     # input = forcings, output = diagnostic, input_output = classical weather var
     kind: Literal["input", "output", "input_output"]
-    get_weight_per_level : Callable[[int,str],[float]]
+    get_weight_per_level: Callable[[int, str], [float]]
     level_type: str = field(init=False)
     long_name: str = field(init=False)
     unit: str = field(init=False)
@@ -836,20 +840,20 @@ class Param:
     grib_param: str = field(init=False)
 
     def __post_init__(self):
-        self.param_info = self.load_param_info_func(self.name)
-        self.unit = self.param_info.unit
-        if self.param_info.level_type in ["heightAboveGround", "meanSea", "surface"]:
-            self.level_type = self.param_info.level_type
+        param_info = self.load_param_info(self.name)
+        self.unit = param_info.unit
+        if param_info.level_type in ["heightAboveGround", "meanSea", "surface"]:
+            self.level_type = param_info.level_type
         else:
             self.level_type = "isobaricInhPa"
-        self.long_name = self.param_info.long_name
-        self.native_grid = self.param_info.grid       
-        self.grib_name = self.param_info.grib_name
-        self.grib_param = self.param_info.grib_param
+        self.long_name = param_info.long_name
+        self.native_grid = param_info.grid
+        self.grib_name = param_info.grib_name
+        self.grib_param = param_info.grib_param
 
     @property
     def state_weight(self) -> float:
-        """ Weight to confer to the param in the loss function"""
+        """Weight to confer to the param in the loss function"""
         return self.get_weight_per_level(self.level, self.level_type)
 
     @property
@@ -860,9 +864,13 @@ class Param:
     def parameter_short_name(self) -> str:
         return f"{self.name}_{self.level}_{self.level_type}"
 
-def get_param_list(conf: dict, 
+
+def get_param_list(
+    conf: dict,
     grid: Grid,
-    load_param_info : Callable[[str], ParamConfig]) -> List[Param]:
+    load_param_info: Callable[[str], ParamConfig],
+    get_weight_per_level: Callable[[str], float],
+) -> List[Param]:
     param_list = []
     for name, values in conf["params"].items():
         for lvl in values["levels"]:
@@ -872,9 +880,11 @@ def get_param_list(conf: dict,
                 grid=grid,
                 load_param_info=load_param_info,
                 kind=values["kind"],
+                get_weight_per_level=get_weight_per_level,
             )
             param_list.append(param)
     return param_list
+
 
 @dataclass(slots=True)
 class TorchDataloaderSettings:
@@ -887,6 +897,7 @@ class TorchDataloaderSettings:
     pin_memory: bool = False
     prefetch_factor: Union[int, None] = None
     persistent_workers: bool = False
+
 
 class DatasetABC(ABC):
     """

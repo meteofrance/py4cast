@@ -2,12 +2,11 @@ import datetime as dt
 import json
 import time
 from argparse import ArgumentParser
-from collections.abc import Callable
 from copy import deepcopy
 from dataclasses import dataclass, field
 from functools import cached_property
 from pathlib import Path
-from typing import Dict, List, Literal, Tuple, Union
+from typing import Callable, Dict, List, Literal, Tuple, Union
 
 import numpy as np
 import torch
@@ -19,7 +18,6 @@ from py4cast.datasets.base import (
     DatasetInfo,
     Grid,
     GridConfig,
-    get_param_list,
     Item,
     NamedTensor,
     Param,
@@ -28,14 +26,15 @@ from py4cast.datasets.base import (
     Settings,
     TorchDataloaderSettings,
     collate_fn,
+    get_param_list,
 )
 from py4cast.datasets.poesy.settings import (
     DEFAULT_CONFIG,
-    SECONDS_IN_YEAR,
-    OROGRAPHY_FNAME,
     LATLON_FNAME,
     METADATA,
+    OROGRAPHY_FNAME,
     SCRATCH_PATH,
+    SECONDS_IN_YEAR,
 )
 from py4cast.forcingutils import generate_toa_radiation_forcing, get_year_hour_forcing
 from py4cast.plots import DomainInfo
@@ -61,11 +60,10 @@ def get_weight(level: float, level_type: str) -> float:
         raise Exception(f"unknown level_type:{level_type}")
 
 
-# Define static attributes to add -> see Grid class in smeagol.py
-
 #############################################################
 #                            GRID                           #
 #############################################################
+
 
 def load_grid_info(grid: Grid) -> GridConfig:
     geopotential = np.load(SCRATCH_PATH / OROGRAPHY_FNAME)
@@ -81,12 +79,17 @@ def load_grid_info(grid: Grid) -> GridConfig:
 #                            PARAMS                         #
 #############################################################
 
+
 def get_filepath(param: Param, date: dt.datetime) -> str:
-        """
-        Return the filename.
-        """
-        var_file_name = METADATA["WEATHER_PARAMS"][param.name]["file_name"]
-        return SCRATCH_PATH / f"{date.strftime('%Y-%m-%dT%H:%M:%SZ')}_{var_file_name}_lt1-45_crop.npy"
+    """
+    Return the filename.
+    """
+    var_file_name = METADATA["WEATHER_PARAMS"][param.name]["file_name"]
+    return (
+        SCRATCH_PATH
+        / f"{date.strftime('%Y-%m-%dT%H:%M:%SZ')}_{var_file_name}_lt1-45_crop.npy"
+    )
+
 
 def load_param_info(name: str) -> ParamConfig:
     info = METADATA["WEATHER_PARAMS"][name]
@@ -96,14 +99,15 @@ def load_param_info(name: str) -> ParamConfig:
     level_type = info["level_type"]
     grib_name = None
     grib_param = None
-    return ParamConfig(unit,level_type,long_name,grid,grib_name,grib_param)
+    return ParamConfig(unit, level_type, long_name, grid, grib_name, grib_param)
+
 
 def load_data(param: Param, date: dt.datetime, term: List, member: int) -> np.array:
     """
     date : Date of file.
     term : Position of leadtimes in file.
     """
-    data_array = np.load(get_filepath(param,date), mmap_mode="r")
+    data_array = np.load(get_filepath(param, date), mmap_mode="r")
     return data_array[
         param.grid.subdomain[0] : param.grid.subdomain[1],
         param.grid.subdomain[2] : param.grid.subdomain[3],
@@ -111,9 +115,11 @@ def load_data(param: Param, date: dt.datetime, term: List, member: int) -> np.ar
         member,
     ]
 
-def exists(param, date: dt.datetime) -> bool:
-    flist = get_filepath(param,date)
+
+def exists(param: Param, date: dt.datetime) -> bool:
+    flist = get_filepath(param, date)
     return flist.exists()
+
 
 @dataclass(slots=True)
 class Sample:
@@ -137,10 +143,10 @@ class Sample:
         Args:
             param_list (List): List of parameters
         Returns:
-            Boolean:  Whether the sample exist or not
+            Boolean:  Whether the sample exists or not
         """
         for param in param_list:
-            if not param.exist(self.date):
+            if not exists(param, self.date):
                 return False
 
         return True
@@ -157,8 +163,7 @@ class InferSample(Sample):
 
 class PoesyDataset(DatasetABC, Dataset):
     def __init__(
-        self, grid: Grid, period: Period, params: List[Param],
-         settings: Settings
+        self, grid: Grid, period: Period, params: List[Param], settings: Settings
     ):
         self.grid = grid
         self.period = period
@@ -231,15 +236,12 @@ class PoesyDataset(DatasetABC, Dataset):
             for member in self.settings.members:
                 for sample in range(0, sample_by_date):
                     input_terms = terms[
-                        sample
-                        * num_total_steps : sample
-                        * num_total_steps
+                        sample * num_total_steps : sample * num_total_steps
                         + self.settings.num_input_steps
                     ]
                     output_terms = terms[
                         sample * num_total_steps
-                        + self.settings.num_input_steps : sample
-                        * num_total_steps
+                        + self.settings.num_input_steps : sample * num_total_steps
                         + self.settings.num_input_steps
                         + self.settings.num_pred_steps
                     ]
@@ -282,7 +284,7 @@ class PoesyDataset(DatasetABC, Dataset):
 
         for param in self.params:
             if param.kind == "input":
-                res += param.number
+                res += 1
         return res
 
     @cached_property
@@ -293,7 +295,7 @@ class PoesyDataset(DatasetABC, Dataset):
         res = 0
         for param in self.params:
             if param.kind == "input_output":
-                res += param.number
+                res += 1
         return res
 
     @cached_property
@@ -305,7 +307,7 @@ class PoesyDataset(DatasetABC, Dataset):
         res = 0
         for param in self.params:
             if param.kind == "output":
-                res += param.number
+                res += 1
         return res
 
     def get_param_tensor(
@@ -317,11 +319,11 @@ class PoesyDataset(DatasetABC, Dataset):
         inference_steps: int = 0,
     ) -> torch.tensor:
         if self.settings.standardize:
-            names = param.parameter_short_name
-            means = np.asarray([self.stats[name]["mean"] for name in names])
-            std = np.asarray([self.stats[name]["std"] for name in names])
+            name = param.parameter_short_name
+            means = np.asarray(self.stats[name]["mean"])
+            std = np.asarray(self.stats[name]["std"])
 
-        array = param.load_data(date, terms, member)
+        array = load_data(param, date, terms, member)
 
         # Extend dimension to match 3D (level dimension)
         if len(array.shape) != 4:
@@ -443,12 +445,12 @@ class PoesyDataset(DatasetABC, Dataset):
                 conf = merge_dicts(conf, config_override)
         conf["grid"]["load_grid_info_func"] = load_grid_info
         grid = Grid(**conf["grid"])
-        param_list = get_param_list(conf, grid, load_param_info)
-        
+        param_list = get_param_list(conf, grid, load_param_info, get_weight)
+
         train_period = Period(**conf["periods"]["train"], name="train")
         valid_period = Period(**conf["periods"]["valid"], name="valid")
         test_period = Period(**conf["periods"]["test"], name="test")
-        
+
         train_ds = PoesyDataset(
             grid,
             train_period,
@@ -457,7 +459,7 @@ class PoesyDataset(DatasetABC, Dataset):
                 num_pred_steps=num_pred_steps_train,
                 num_input_steps=num_input_steps,
                 members=conf["members"],
-                **conf["settings"]
+                **conf["settings"],
             ),
         )
         valid_ds = PoesyDataset(
@@ -468,7 +470,7 @@ class PoesyDataset(DatasetABC, Dataset):
                 num_pred_steps=num_pred_steps_val_test,
                 num_input_steps=num_input_steps,
                 members=conf["members"],
-                **conf["settings"]
+                **conf["settings"],
             ),
         )
         test_ds = PoesyDataset(
@@ -479,7 +481,7 @@ class PoesyDataset(DatasetABC, Dataset):
                 num_pred_steps=num_pred_steps_val_test,
                 num_input_steps=num_input_steps,
                 members=conf["members"],
-                **conf["settings"]
+                **conf["settings"],
             ),
         )
         return train_ds, valid_ds, test_ds
@@ -534,13 +536,7 @@ class PoesyDataset(DatasetABC, Dataset):
         """
         Return a dictionnary with name and units
         """
-        dout = {}
-        for param in self.params:
-            names = getattr(param, "parameter_short_name")
-            units = getattr(param, "units")
-            for name, unit in zip(names, units):
-                dout[name] = unit
-        return dout
+        return {p.parameter_short_name : p.unit for p in self.params}
 
     def shortnames(
         self,
@@ -555,26 +551,15 @@ class PoesyDataset(DatasetABC, Dataset):
         Does not include grid information (such as geopotentiel and LandSeaMask).
         Make the difference between inputs, outputs.
         """
-        names = []
-        for param in self.params:
-            if param.kind == kind:
-                names += param.parameter_short_name
-        return names
+        return [p.parameter_short_name for p in self.params if p.kind==kind]
 
     @cached_property
     def state_weights(self):
         """
         Weights used in the loss function.
         """
-        w_dict = {}
-        for param in self.params:
-            if param.kind in ["output", "input_output"]:
-                for name, weight in zip(
-                    param.parameter_short_name, param.state_weights
-                ):
-                    w_dict[name] = weight
-
-        return w_dict
+        kinds = ["output", "input_output"]
+        return {p.parameter_short_name : p.state_weight for p in self.params if p.kind in kinds}
 
     @cached_property
     def domain_info(self) -> DomainInfo:
@@ -648,9 +633,7 @@ class InferPoesyDataset(PoesyDataset):
             for member in self.settings.members:
                 for sample in range(0, sample_by_date):
                     input_terms = terms[
-                        sample
-                        * num_total_steps : sample
-                        * num_total_steps
+                        sample * num_total_steps : sample * num_total_steps
                         + self.settings.num_input_steps
                     ]
 
@@ -706,7 +689,7 @@ class InferPoesyDataset(PoesyDataset):
                     grid=grid,
                     load_param_info=load_param_info,
                     kind="input_output",
-                    get_weight_per_level=get_weight
+                    get_weight_per_level=get_weight,
                 )
                 param_list.append(param)
         inference_period = Period(**conf["periods"]["test"], name="infer")

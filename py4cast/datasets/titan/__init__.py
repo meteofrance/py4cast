@@ -5,7 +5,7 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 from functools import cached_property, lru_cache
 from pathlib import Path
-from typing import Dict, List, Literal, Optional, Tuple, Union
+from typing import Callable, Dict, List, Literal, Optional, Tuple, Union
 
 import gif
 import matplotlib.pyplot as plt
@@ -21,7 +21,6 @@ from py4cast.datasets.base import (
     DatasetInfo,
     Grid,
     GridConfig,
-    get_param_list,
     Item,
     NamedTensor,
     Param,
@@ -31,6 +30,7 @@ from py4cast.datasets.base import (
     Stats,
     TorchDataloaderSettings,
     collate_fn,
+    get_param_list,
 )
 from py4cast.datasets.titan.settings import (
     DEFAULT_CONFIG,
@@ -77,7 +77,8 @@ def load_grid_info(name: str) -> GridConfig:
 #                              PARAMS                       #
 #############################################################
 
-def load_param_info(name :str) -> ParamConfig:
+
+def load_param_info(name: str) -> ParamConfig:
     info = METADATA["WEATHER_PARAMS"][name]
     grib_name = info["grib"]
     grib_param = info["param"]
@@ -86,16 +87,21 @@ def load_param_info(name :str) -> ParamConfig:
     long_name = info["long_name"]
     grid = info["grid"]
     if grid not in ["PAAROME_1S100", "PAAROME_1S40", "PA_01D"]:
-            raise NotImplementedError(
-                "Parameter native grid must be in ['PAAROME_1S100', 'PAAROME_1S40', 'PA_01D']"
-            )
-    return ParamConfig(unit,level_type,long_name,grid,grib_name,grib_param)
+        raise NotImplementedError(
+            "Parameter native grid must be in ['PAAROME_1S100', 'PAAROME_1S40', 'PA_01D']"
+        )
+    return ParamConfig(unit, level_type, long_name, grid, grib_name, grib_param)
+
 
 def get_grid_coords() -> List[int]:
     return METADATA["GRIDS"][param.grid.name]["extent"]
 
+
 def get_filepath(
-    param: Param, date: dt.datetime, file_format: Literal["npy", "grib"], npy_path: Optional[str]=None
+    param: Param,
+    date: dt.datetime,
+    file_format: Literal["npy", "grib"],
+    npy_path: Optional[str] = None,
 ) -> Path:
     """
     Returns the path of the file containing the parameter data.
@@ -109,17 +115,15 @@ def get_filepath(
         filename = f"{param.name}_{param.level}{param.level_type.lower()}.npy"
         return npy_path / date.strftime(FORMATSTR) / filename
 
-def process_sample_dataset(
-     date: dt.datetime,
-     params: List[Param]
-     ):
+
+def process_sample_dataset(date: dt.datetime, params: List[Param]):
     """Saves each 2D parameter data of the given date as one NPY file."""
     for param in params:
         dest_file = get_filepath(param, date, "npy")
         dest_file.parent.mkdir(exist_ok=True)
         if not dest_file.exists():
             try:
-                arr = load_data_from_disk(param, date, get_filepath,"grib")
+                arr = load_data_from_disk(param, date, "grib")
                 np.save(dest_file, arr)
             except Exception as e:
                 print(e)
@@ -128,9 +132,13 @@ def process_sample_dataset(
                 )
                 break
 
+
 def fit_to_grid(
-    param: Param, arr: np.ndarray, lons: np.ndarray, lats: np.ndarray,
-    get_grid_coords:  Callable[[], List[str]]
+    param: Param,
+    arr: np.ndarray,
+    lons: np.ndarray,
+    lats: np.ndarray,
+    get_grid_coords: Callable[[], List[str]],
 ) -> np.ndarray:
     # already on good grid, nothing to do:
     if param.grid.name == param.native_grid:
@@ -156,6 +164,7 @@ def fit_to_grid(
 def read_grib(path_grib: Path) -> xr.Dataset:
     return xr.load_dataset(path_grib, engine="cfgrib", backend_kwargs={"indexpath": ""})
 
+
 def load_data_grib(param: Param, path: Path) -> np.ndarray:
     ds = read_grib(path)
     assert param.grib_param is not None
@@ -168,18 +177,16 @@ def load_data_grib(param: Param, path: Path) -> np.ndarray:
         arr = ds[param.grib_param].sel(isobaricInhPa=self.level).values
     return arr, lons, lats
 
+
 def load_data_from_disk(
-    param: Param,
-    date: dt.datetime,
-    get_filepath: Callable[[Param, dt.datetime,str], Path],
-    file_format: Literal["npy", "grib"] = "grib"
+    param: Param, date: dt.datetime, file_format: Literal["npy", "grib"] = "grib"
 ):
     """
     Function to load invidiual parameter and lead time from a file stored in disk
     """
     data_path = get_filepath(param, date, file_format)
     if file_format == "grib":
-        arr, lons, lats = load_data_grib(param,data_path)
+        arr, lons, lats = load_data_grib(param, data_path)
         arr = fit_to_grid(arr, lons, lats)
         subdomain = param.grid.subdomain
         arr = arr[subdomain[0] : subdomain[1], subdomain[2] : subdomain[3]]
@@ -187,26 +194,30 @@ def load_data_from_disk(
     else:
         return np.load(data_path)
 
-def exists(param: Param,
-        date: dt.datetime,
-        get_filepath: Callable[[Param,dt.datetime,str],Path],
-        file_format: Literal["npy", "grib"] = "grib") -> bool:
+
+def exists(
+    param: Param, date: dt.datetime, file_format: Literal["npy", "grib"] = "grib"
+) -> bool:
     filepath = get_filepath(param, date, file_format)
     return filepath.exists()
 
+
 def get_param_tensor(
-        param: Param,
-        stats : Stats
-        dates: List[dt.datetime], 
-        settings: Settings,
-        no_standardize: bool = False,
-    ) -> torch.tensor:
+    param: Param,
+    stats: Stats,
+    dates: List[dt.datetime],
+    settings: Settings,
+    no_standardize: bool = False,
+) -> torch.tensor:
     """
     Fetch data on disk fo the given parameter and all involved dates
     Unless specified, normalize the samples with parameter-specific constants
     returns a tensor
     """
-    arrays = [load_data_from_disk(param, date,get_filepath,settings.file_format) for date in dates]
+    arrays = [
+        load_data_from_disk(param, date, settings.file_format)
+        for date in dates
+    ]
     arr = np.stack(arrays)
     # Extend dimension to match 3D (level dimension)
     if len(arr.shape) != 4:
@@ -219,15 +230,21 @@ def get_param_tensor(
         arr = (arr - means) / std
     return torch.from_numpy(arr)
 
-def get_weight_per_lvl(level: int, kind: Literal["isobaricInhPa", "heightAboveGround", "surface", "meanSea"]):
+
+def get_weight_per_lvl(
+    level: int,
+    kind: Literal["isobaricInhPa", "heightAboveGround", "surface", "meanSea"],
+):
     if kind == "isobaricInhPa":
         return 1 + (level) / (1000)
     else:
         return 2
 
+
 #############################################################
 #                            SAMPLE                         #
 #############################################################
+
 
 @dataclass(slots=True)
 class Sample:
@@ -268,7 +285,8 @@ class Sample:
         """
         for date in self.all_dates:
             for param in self.params:
-                if not exists(param, date, get_filepath,self.settings.file_format):
+                if not exists(param, date, self.settings.file_format):
+                    print("invalid sample")
                     return False
         return True
 
@@ -285,18 +303,18 @@ class Sample:
             if param.kind == "input":
                 # forcing is taken for every predicted step
                 dates = self.all_dates[-self.settings.num_pred_steps :]
-                tensor = self.get_param_tensor(param, dates, no_standardize)
+                tensor = get_param_tensor(param, self.stats, dates, self.settings, no_standardize)
                 tmp_state = NamedTensor(tensor=tensor, **deepcopy(state_kwargs))
                 lforcings.append(tmp_state)
 
             elif param.kind == "output":
                 dates = self.all_dates[-self.settings.num_pred_steps :]
-                tensor = self.get_param_tensor(param, dates, no_standardize)
+                tensor = get_param_tensor(param, self.stats, dates, self.settings, no_standardize)
                 tmp_state = NamedTensor(tensor=tensor, **deepcopy(state_kwargs))
                 loutputs.append(tmp_state)
 
             else:  # input_output
-                tensor = self.get_param_tensor(param, self.all_dates, no_standardize)
+                tensor = get_param_tensor(param, self.stats, self.all_dates, self.settings, no_standardize)
                 state_kwargs["names"][0] = "timestep"
                 tmp_state = NamedTensor(
                     tensor=tensor[-self.settings.num_pred_steps :],
@@ -555,10 +573,10 @@ class TitanDataset(DatasetABC, Dataset):
         num_pred_steps_val_test: int,
     ) -> Tuple["TitanDataset", "TitanDataset", "TitanDataset"]:
 
-        conf["grid"]["load_grid_info_func"] = load_Titan_grid_info
+        conf["grid"]["load_grid_info_func"] = load_grid_info
         grid = Grid(**conf["grid"])
         dataset_path = get_dataset_path(name, grid)
-        param_list = get_param_list(conf, grid, load_param_info)
+        param_list = get_param_list(conf, grid, load_param_info, get_weight_per_lvl)
 
         train_settings = Settings(
             num_input_steps, num_pred_steps_train, **conf["settings"]
@@ -640,20 +658,20 @@ class TitanDataset(DatasetABC, Dataset):
         Does not include grid information (such as geopotentiel and LandSeaMask).
         Make the difference between inputs, outputs.
         """
-        return [p.parameter_short_name for p in self.params if p.kind==kind]
+        return [p.parameter_short_name for p in self.params if p.kind == kind]
 
     @cached_property
-    def units(self) -> Dict[str, int]:
+    def units(self) -> Dict[str, str]:
         """
         Return a dictionnary with name and units
         """
-        return {p.name :  p.unit for p in self.params}
+        return {p.parameter_short_name: p.unit for p in self.params}
 
     @cached_property
     def state_weights(self):
         """Weights used in the loss function."""
         kinds = ["output", "input_output"]
-        return {p.name : p.state_weight for p in self.params if p.kind in kinds}
+        return {p.parameter_short_name: p.state_weight for p in self.params if p.kind in kinds}
 
     @property
     def cache_dir(self) -> Path:
@@ -704,7 +722,9 @@ def prepare(
 
     if convert_grib2npy:
         print("Converting gribs to npy...")
-        param_list = get_param_list(conf, train_ds.grid, load_param_info)
+        param_list = get_param_list(
+            conf, train_ds.grid, load_param_info, get_weight_per_lvl
+        )
         sum_dates = (
             list(train_ds.period.date_list)
             + list(valid_ds.period.date_list)
