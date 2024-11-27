@@ -17,11 +17,14 @@
         }
     },
     "grid":{
-        "geometry":"EURW1S40_gribcompat", 
+        "name":"EURW1S40_gribcompat", 
         "border_size":10, 
-        "domain":"france",
-        "model":"arome",
-        "subgrid":[50,178,50,178]
+        "subdomain":[50,178,50,178],
+        "proj_name": "LambertConformal",
+        "projection_kwargs": {
+            "central_longitude" : 2,
+            "central_latitude" : 46.7
+        }
     }, 
     "settings":{
         "step_duration": 1,
@@ -31,7 +34,22 @@
     "dataset": {
         "arome": {
             "members": [
-                0
+                0,
+                1, 
+                2,
+                3,
+                4,
+                5,
+                6,
+                7,
+                8,
+                9,
+                10,
+                11,
+                12,
+                13,
+                14,
+                15
             ],
             "term": {
                 "start": 0,

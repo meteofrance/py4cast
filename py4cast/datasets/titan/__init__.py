@@ -7,11 +7,9 @@ from functools import cached_property, lru_cache
 from pathlib import Path
 from typing import Dict, List, Literal, Tuple, Union
 
-import cartopy
 import gif
 import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
 import torch
 import tqdm
 import typer
@@ -22,8 +20,11 @@ from torch.utils.data import DataLoader, Dataset
 from py4cast.datasets.base import (
     DatasetABC,
     DatasetInfo,
+    Grid,
+    GridConfig,
     Item,
     NamedTensor,
+    Period,
     Stats,
     TorchDataloaderSettings,
     collate_fn,
@@ -49,121 +50,24 @@ def get_weight_per_lvl(level: int, kind: Literal["hPa", "m"]):
 
 
 #############################################################
-#                            PERIOD                         #
-#############################################################
-
-
-@dataclass(slots=True)
-class Period:
-    start: dt.datetime
-    end: dt.datetime
-    step: int  # In hours, step btw the t0 of 2 samples
-    name: str
-
-    def __init__(self, start: int, end: int, step: int, name: str):
-        self.start = dt.datetime.strptime(str(start), "%Y%m%d%H")
-        self.end = dt.datetime.strptime(str(end), "%Y%m%d%H")
-        self.step = step
-        self.name = name
-
-    @property
-    def date_list(self):
-        return pd.date_range(
-            start=self.start, end=self.end, freq=f"{self.step}H"
-        ).to_pydatetime()
-
-
-#############################################################
 #                            GRID                           #
 #############################################################
 
 
-@dataclass
-class Grid:
-    name: Literal["ANTJP7CLIM_1S100", "PAAROME_1S100", "PAAROME_1S40", "PA_01D"]
-    border_size: int = 10
-    # subdomain selection: If (0,0,0,0) the whole domain is kept.
-    subdomain: Tuple[int] = (0, 0, 0, 0)
-    # Note : training won't work with the full domain on some NN because the size
-    # can't be divided by 2. Minimal domain : [0,1776,0,2800]
-    x: int = field(init=False)  # X dimension
-    y: int = field(init=False)  # Y dimension
-
-    def __post_init__(self):
-        grid_info = METADATA["GRIDS"][self.name]
-        self.full_size = grid_info["size"]
-        self.path_config = SCRATCH_PATH / f"conf_{self.name}.grib"
-
-        # Setting correct subdomain if no subdomain is selected.
-        if sum(self.subdomain) == 0:
-            self.subdomain = (0, self.full_size[0], 0, self.full_size[1])
-        self.x = self.subdomain[1] - self.subdomain[0]
-        self.y = self.subdomain[3] - self.subdomain[2]
-
-    @cached_property
-    def lat(self) -> np.array:
-        conf_ds = xr.open_dataset(self.path_config)
-        latitudes = conf_ds.latitude[self.subdomain[0] : self.subdomain[1]]
-        return np.transpose(np.tile(latitudes, (self.y, 1)))
-
-    @cached_property
-    def lon(self) -> np.array:
-        conf_ds = xr.open_dataset(self.path_config)
-        longitudes = conf_ds.longitude[self.subdomain[2] : self.subdomain[3]]
-        return np.tile(longitudes, (self.x, 1))
-
-    # TODO : from the grib, save a npy lat lon h mask for each grid
-
-    @property
-    def geopotential(self) -> np.array:
-        conf_ds = xr.open_dataset(self.path_config)
-        return conf_ds.h.values[
-            self.subdomain[0] : self.subdomain[1], self.subdomain[2] : self.subdomain[3]
-        ]
-
-    @property
-    def landsea_mask(self) -> np.array:
-        return np.zeros((self.x, self.y))  # TODO : add real mask
-
-    @property
-    def border_mask(self) -> np.array:
-        if self.border_size > 0:
-            border_mask = np.ones((self.x, self.y)).astype(bool)
-            size = self.border_size
-            border_mask[size:-size, size:-size] *= False
-        elif self.border_size == 0:
-            border_mask = np.ones((self.x, self.y)).astype(bool) * False
-        else:
-            raise ValueError(f"Bordersize should be positive. Get {self.border_size}")
-        return border_mask
-
-    @property
-    def N_grid(self) -> int:
-        return self.x * self.y
-
-    @cached_property
-    def grid_limits(self):
-        conf_ds = xr.open_dataset(self.path_config)
-        grid_limits = [  # In projection (llon, ulon, llat, ulat)
-            float(conf_ds.longitude[self.subdomain[2]].values),  # min y
-            float(conf_ds.longitude[self.subdomain[3] - 1].values),  # max y
-            float(conf_ds.latitude[self.subdomain[1] - 1].values),  # max x
-            float(conf_ds.latitude[self.subdomain[0]].values),  # min x
-        ]
-        return grid_limits
-
-    @cached_property
-    def meshgrid(self) -> np.array:
-        """Build a meshgrid from coordinates position."""
-        conf_ds = xr.open_dataset(self.path_config)
-        latitudes = conf_ds.latitude[self.subdomain[0] : self.subdomain[1]]
-        longitudes = conf_ds.longitude[self.subdomain[2] : self.subdomain[3]]
-        meshgrid = np.array(np.meshgrid(longitudes, latitudes))
-        return meshgrid  # shape (2, x, y)
-
-    @cached_property
-    def projection(self):
-        return cartopy.crs.PlateCarree()
+def load_Titan_grid_info(name: str) -> GridConfig:
+    path = SCRATCH_PATH / f"conf_{name}.grib"
+    conf_ds = xr.open_dataset(path)
+    grid_info = METADATA["GRIDS"][name]
+    full_size = grid_info["size"]
+    landsea_mask = None
+    grid_conf = GridConfig(
+        full_size,
+        conf_ds.latitude.values,
+        conf_ds.longitude.values,
+        conf_ds.h.values,
+        landsea_mask,
+    )
+    return grid_conf
 
 
 #############################################################
@@ -693,6 +597,8 @@ class TitanDataset(DatasetABC, Dataset):
         num_pred_steps_train: int,
         num_pred_steps_val_test: int,
     ) -> Tuple["TitanDataset", "TitanDataset", "TitanDataset"]:
+
+        conf["grid"]["load_grid_info_func"] = load_Titan_grid_info
         grid = Grid(**conf["grid"])
         dataset_path = get_dataset_path(name, grid)
         param_list = get_param_list(conf, grid, dataset_path)
