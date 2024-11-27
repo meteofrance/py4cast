@@ -285,9 +285,7 @@ def browser(period: Period, settings: PoesySettings)-> List[Dict[str, Any]]:
     list_args_all_samples = []
 
     # Create all datetimes
-    date_list = pd.date_range(
-            start=period.start, end=period.end, freq=f"{period.step}H"
-        ).to_pydatetime()
+    date_list = np.arange(np.datetime64(period.start), np.datetime64(period.end)+ np.timedelta64(period.step, "h"), np.timedelta64(period.step, "h"), dtype="datetime64[s]" ).tolist()
 
     # Get the number of sample for 1 run
     terms = list(
