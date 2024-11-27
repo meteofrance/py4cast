@@ -691,7 +691,7 @@ class InferPoesyDataset(PoesyDataset):
             if config_override is not None:
                 conf = merge_dicts(conf, config_override)
                 print(conf["periods"]["test"])
-
+        conf["grid"]["load_grid_info_func"] = load_poesy_grid_info
         grid = Grid(**conf["grid"])
         param_list = []
         for data_source in conf["dataset"]:

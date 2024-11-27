@@ -117,6 +117,8 @@ or
 pip install --editable .
 ```
 
+In case the install fail because some dependencies are not found or are in conflict, please look at the [installation known issues](doc/known_issues.md#installation).
+
 
 ### Install with micromamba
 
@@ -424,28 +426,8 @@ python bin/train.py --dataset smeagol --model halfunet --strategy diff_ar
 
 [Details on available training strategies.](doc/features.md/#available-training-strategies)
 
-### Tracking experiment
 
-We use [Tensorboad](https://www.tensorflow.org/tensorboard) to track the experiments. You can launch a tensorboard server using the following command:
-
-**At Météo-France**:
-
-**runai** will handle port forwarding for you.
-
-```bash
-runai tensorboard --logdir PATH_TO_YOUR_ROOT_PATH
-```
-
-**Elsewhere**
-
-```bash
-tensorboard --logdir PATH_TO_YOUR_ROOT_PATH
-```
-
-Then you can access the tensorboard server at the following address: `http://YOUR_SERVER_IP:YOUR_PORT/`
-
-
-4. **Other training options**:
+3. **Other training options**:
 
 * `--seed SEED`           random seed (default: 42)
 * `--loss LOSS`           Loss function to use (default: mse)
@@ -469,7 +451,9 @@ Then you can access the tensorboard server at the following address: `http://YOU
 * `--num_inter_steps NUM_INTER_STEPS`
                     Number of model steps between two samples
 * `--no_log`
-    When activated, log are not stored and models are not saved. Use in dev mode. (default: False)
+    When activated, logs are not stored and models are not saved. Use in dev mode. (default: False)
+* `--mlflow_log`
+    When activated, the MLFlowLogger is used and the model is saved in the MLFlow style (default: False)
 * `--dev_mode`
     When activated, reduce number of epoch and steps. (default: False)
 * `--load_model_ckpt LOAD_MODEL_CKPT`
@@ -477,6 +461,51 @@ Then you can access the tensorboard server at the following address: `http://YOU
 
 
 You can find more details about all the `num_X_steps` options [here](doc/num_steps.md).
+
+
+### Tracking experiment
+
+#### Tensorboard
+
+We use [Tensorboad](https://www.tensorflow.org/tensorboard) to track the experiments. You can launch a tensorboard server using the following command:
+
+**At Météo-France**:
+
+**runai** will handle port forwarding for you.
+
+```bash
+runai tensorboard --logdir PATH_TO_YOUR_ROOT_PATH
+```
+
+**Elsewhere**
+
+```bash
+tensorboard --logdir PATH_TO_YOUR_ROOT_PATH
+```
+
+Then you can access the tensorboard server at the following address: `http://YOUR_SERVER_IP:YOUR_PORT/`
+
+
+#### MLFlow
+
+Optionally, you can use MLFlow, in addition to Tensorboard, to track your experiment and log your model. To activate the MLFlow logger simply add the `--mlflow_log` option on the `bin/train.py` command line.
+
+**Local usage**
+
+Without a MLFlow server, the logs are stored in your root path, at `PY4CAST_ROOTDIR/logs/mlflow`.
+
+**With a MLFlow server**
+
+If you have a MLFow server you can configure your training environment to push the logs on the remote server. A set of [environment variables](https://mlflow.org/docs/latest/cli.html#mlflow-server) are available to do that.
+
+For exemple, you can export the following variable in your training environment:
+
+```bash
+export MLFLOW_TRACKING_URI=https://my.mlflow.server.com/
+export MLFLOW_TRACKING_USERNAME=<your-mlflow-user>
+export MLFLOW_TRACKING_PASSWORD=<your-mlflow-pwd>
+export MLFLOW_EXPERIMENT_NAME=py4cast/unetrpp
+```
 
 ### Inference
 

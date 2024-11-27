@@ -740,7 +740,7 @@ class Grid:
         self.y = self.subdomain[3] - self.subdomain[2]
 
     def get_grid_info(self) -> GridConfig:
-        return self.load_grid_info_func(self)
+        return self.load_grid_info_func(self.name)
 
     @cached_property
     def lat(self) -> np.array:

@@ -10,11 +10,13 @@ from argparse import ArgumentParser, BooleanOptionalAction
 from datetime import datetime
 from pathlib import Path
 
+import mlflow.pytorch
 import pytorch_lightning as pl
 import torch
-from lightning.pytorch.loggers import TensorBoardLogger
+from lightning.pytorch.loggers import MLFlowLogger, TensorBoardLogger
 from lightning.pytorch.profilers import AdvancedProfiler, PyTorchProfiler
 from lightning_fabric.utilities import seed
+from mlflow.models.signature import infer_signature
 from pytorch_lightning.callbacks import LearningRateMonitor
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 
@@ -156,6 +158,12 @@ parser.add_argument(
     action=BooleanOptionalAction,
     default=False,
     help="When activated, log are not stored and models are not saved. Use in dev mode.",
+)
+parser.add_argument(
+    "--mlflow_log",
+    action=BooleanOptionalAction,
+    default=False,
+    help="When activated, the MLFlowLogger is used and the model is saved in the MLFlow style.",
 )
 parser.add_argument(
     "--dev_mode",
@@ -301,19 +309,31 @@ hp = ArLightningHyperParam(
 # Logger & checkpoint callback
 callback_list = []
 if args.no_log:
-    logger = None
+    loggers = None
 else:
+    loggers = {
+        "TensorBoardLogger": TensorBoardLogger(
+            save_dir=log_dir, name=folder, version=subfolder, default_hp_metric=False
+        ),
+    }
+
+    if args.mlflow_log:
+        mlflow_logger = {
+            "MLFlowLogger": MLFlowLogger(
+                experiment_name=os.getenv("MLFLOW_EXPERIMENT_NAME", str(folder)),
+                run_name=subfolder,
+                log_model=True,
+                save_dir=log_dir / "mlflow",
+            )
+        }
+        loggers.update(mlflow_logger)
+
     print(
         "--> Model, checkpoints, and tensorboard artifacts "
         + f"will be saved in {save_path}."
     )
-    logger = TensorBoardLogger(
-        save_dir=log_dir,
-        name=folder,
-        version=subfolder,
-        default_hp_metric=False,
-    )
-    logger.experiment.add_custom_scalars(layout)
+
+    loggers["TensorBoardLogger"].experiment.add_custom_scalars(layout)
     checkpoint_callback = pl.callbacks.ModelCheckpoint(
         dirpath=save_path,
         filename="{epoch:02d}-{val_mean_loss:.2f}",  # Custom filename pattern
@@ -357,7 +377,7 @@ trainer = pl.Trainer(
     strategy="ddp",
     accumulate_grad_batches=10,
     accelerator=device_name,
-    logger=logger,
+    logger=loggers.values(),
     profiler=profiler,
     log_every_n_steps=1,
     callbacks=callback_list,
@@ -389,3 +409,19 @@ if not args.no_log:
         f"Testing using {'best' if best_checkpoint else 'last'} model at {model_to_test}"
     )
     trainer.test(ckpt_path=model_to_test, datamodule=dm)
+
+# Finally log the model in a MLFlow fashion
+if trainer.is_global_zero and args.mlflow_log:
+    # Get random sample to infer the signature of the model
+    dataloader = dm.test_dataloader()
+    data = next(iter(dataloader))
+    signature = infer_signature(
+        data.inputs.tensor.detach().numpy(), data.outputs.tensor.detach().numpy()
+    )
+
+    # Manually log the trained model in Mlflow style with its signature
+    run_id = loggers["MLFlowLogger"].version
+    with mlflow.start_run(run_id=run_id):
+        mlflow.pytorch.log_model(
+            pytorch_model=trainer.model, artifact_path="model", signature=signature
+        )
