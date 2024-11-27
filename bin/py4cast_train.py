@@ -1,6 +1,20 @@
 from lightning.pytorch.cli import LightningCLI, ArgsType
 from py4cast.ARLightningModule import AutoRegressiveLightningModule
 from py4cast.TitanDataModule import TitanDataModule
+from pytorch_lightning.callbacks import ModelCheckpoint
+import os
+
+def find_available_checkpoint_name(dirpath, model_name, index=0):
+    # Créer le nom du fichier
+    checkpoint_name = f"best_{model_name}_{index}.ckpt"
+    checkpoint_path = os.path.join(dirpath, checkpoint_name)
+
+    # Vérifier si le fichier existe
+    if not os.path.exists(checkpoint_path):
+        return checkpoint_name
+    else:
+        # Si le fichier existe, appeler la fonction récursivement avec l'index incrémenté
+        return find_available_checkpoint_name(dirpath, model_name, index + 1)
 
 
 class MyLightningCLI(LightningCLI):
@@ -12,6 +26,7 @@ class MyLightningCLI(LightningCLI):
         parser.link_arguments(
             "data.batch_shape", "model.batch_shape", apply_on="instantiate"
         )
+        parser.add_argument("--checkpoint_path", type=str, default="/scratch/shared/py4cast/models/best.ckpt", help="Path to the best checkpoint")
 
 
 def cli_main(args: ArgsType = None):
@@ -21,13 +36,28 @@ def cli_main(args: ArgsType = None):
         run=False,
         args=args,
     )
+    model_name = cli.model.__class__.__name__.lower()
+
+    checkpoint_dir = args.checkpoint_path.rsplit('/', 1)[0]  # Répertoire où sauvegarder les checkpoints
+    checkpoint_filename = find_available_checkpoint_name(checkpoint_dir, model_name)
+
+    checkpoint_callback = ModelCheckpoint(
+        monitor='val_loss',  # Changez cela selon la métrique que vous souhaitez surveiller
+        save_top_k=1,  # Sauvegarder le meilleur checkpoint
+        mode='min',  # 'min' pour val_loss, 'max' pour val_accuracy
+        dirpath=checkpoint_dir,  # Répertoire où sauvegarder les checkpoints
+        filename=checkpoint_filename  # Nom du fichier du meilleur modèle
+    )
+    cli.trainer.callbacks.append(checkpoint_callback)
+
     cli.trainer.fit(cli.model, datamodule=cli.datamodule)
-    cli.trainer.test(cli.model, cli.datamodule.test_dataloader(), ckpt_path="best")
+    cli.trainer.test(cli.model, cli.datamodule.test_dataloader(), ckpt_path=os.path.join(checkpoint_dir, checkpoint_filename))
 
 
 if __name__ == "__main__":
     cli_main(
         [
             "--config=config/config_AR_train.yaml",
+            "--checkpoint_path=path/to/your/checkpoints/best.ckpt",
         ]
     )
