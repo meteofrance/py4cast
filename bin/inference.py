@@ -96,5 +96,5 @@ if __name__ == "__main__":
                     but {kw} output_kwargs and {fi} sample identifiers."
                 )
 
-        for sample, pred in zip(infer_ds.sample_list, preds):
-            save_named_tensors_to_grib(pred, infer_ds, sample, save_settings)
+        # for sample, pred in zip(infer_ds.sample_list, preds):
+        save_named_tensors_to_grib(preds[0], infer_ds, infer_ds.sample_list[0], save_settings)
