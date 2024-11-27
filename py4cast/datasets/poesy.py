@@ -65,14 +65,14 @@ def get_weight(level: float, level_type: str) -> float:
 
 @dataclass(slots=True)
 class Period:
-    start: dt.datetime
-    end: dt.datetime
+    start: np.datetime64
+    end: np.datetime64
     step: int  # In hours
     name: str
 
     def __init__(self, start: int, end: int, step: int, name: str):
-        self.start = dt.datetime.strptime(str(start), "%Y%m%d%H")
-        self.end = dt.datetime.strptime(str(end), "%Y%m%d%H")
+        self.start = np.datetime64(dt.datetime.strptime(str(start), "%Y%m%d%H"))
+        self.end = np.datetime64(dt.datetime.strptime(str(end), "%Y%m%d%H"))
         self.step = step
         self.name = name
 
@@ -285,7 +285,7 @@ def browser(period: Period, settings: PoesySettings)-> List[Dict[str, Any]]:
     list_args_all_samples = []
 
     # Create all datetimes
-    date_list = np.arange(np.datetime64(period.start), np.datetime64(period.end)+ np.timedelta64(period.step, "h"), np.timedelta64(period.step, "h"), dtype="datetime64[s]" ).tolist()
+    date_list = np.arange(period.start, period.end+ np.timedelta64(period.step, "h"), np.timedelta64(period.step, "h"), dtype="datetime64[s]" ).tolist()
 
     # Get the number of sample for 1 run
     terms = list(
