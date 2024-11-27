@@ -28,6 +28,6 @@ def cli_main(args: ArgsType = None):
 if __name__ == "__main__":
     cli_main(
         [
-            "--config=config/config_cli_autoregressive.yaml",
+            "--config=config/config_AR_train.yaml",
         ]
     )
