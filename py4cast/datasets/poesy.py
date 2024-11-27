@@ -276,7 +276,7 @@ class PoesySettings:
 #############################################################
 
 
-def browser(period: Period, settings: PoesySettings)-> List[Dict[str, Any]]:
+def _run_through_timestamps(period: Period, settings: PoesySettings)-> List[Dict[str, Any]]:
     """
     Create a list of arguments used to instantiate Sample. 
     This function indicates how to run through / browse the Poesy.    
@@ -384,7 +384,7 @@ class PoesyDataset(DatasetABC, Dataset):
         self.shuffle = self.split == "train"
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self.step_duration = self.settings.term["timestep"]
-        self.browse_dataset = browser
+        self.run_through_timestamps = _run_through_timestamps
 
     @cached_property
     def cache_dir(self):
@@ -437,7 +437,7 @@ class PoesyDataset(DatasetABC, Dataset):
         n_samples = 0
 
         # Run through the dataset and get a list of sample's args.
-        list_args_sample = self.browse_dataset(self.period, self.settings)
+        list_args_sample = self.run_through_timestamps(self.period, self.settings)
 
         for dict_args in list_args_sample:
             
