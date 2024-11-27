@@ -826,8 +826,8 @@ class Param:
     load_param_info : Callable[[str], ParamConfig]
     # Parameter status :
     # input = forcings, output = diagnostic, input_output = classical weather var
-    kind: Literal["input", "output", "input_output"],
-    get_weight_per_level : Callable[[int,str],[float]],
+    kind: Literal["input", "output", "input_output"]
+    get_weight_per_level : Callable[[int,str],[float]]
     level_type: str = field(init=False)
     long_name: str = field(init=False)
     unit: str = field(init=False)

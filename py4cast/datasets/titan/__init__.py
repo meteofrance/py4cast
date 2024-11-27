@@ -162,7 +162,7 @@ def load_data_from_disk(
     file_format: Literal["npy", "grib"] = "grib"
 ):
     """
-    
+    Function to load invidiual parameter and lead time from a file stored in disk
     """
     data_path = get_filepath(param, date, file_format)
     if file_format == "grib":
