@@ -7,7 +7,7 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 from functools import cached_property
 from pathlib import Path
-from typing import Dict, List, Literal, Tuple, Union
+from typing import Dict, List, Any, Literal, Tuple, Union
 
 import cartopy
 import numpy as np
@@ -276,7 +276,7 @@ class PoesySettings:
 #############################################################
 
 
-def browse_poesy(period: Period, settings: PoesySettings):
+def browser(period: Period, settings: PoesySettings)-> List[Dict[str, Any]]:
     """
     Create a list of arguments used to instantiate Sample. 
     This function indicates how to run through / browse the Poesy.    
@@ -384,7 +384,7 @@ class PoesyDataset(DatasetABC, Dataset):
         self.shuffle = self.split == "train"
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self.step_duration = self.settings.term["timestep"]
-        self.browse_dataset = browse_poesy
+        self.browse_dataset = browser
 
     @cached_property
     def cache_dir(self):
