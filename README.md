@@ -207,7 +207,7 @@ docker run \
     py4cast:<your_tag> \
     bash -c " \
         pip install -e . &&  \
-        python bin/pyr4cast.py
+        python bin/py4cast.py
     "
 ```
 
@@ -366,6 +366,7 @@ The LightningCLI use a config.yaml file to parse its arguments. Any argument can
 - Any arg associated with the Trainer will be refered as trainer.arg
 - Any arg associated with the LightningModule will be refered as model.arg
 - Any arg associated with the DataModule will be refered as data.arg
+
 Config file path : "py4cast/config/config_cli_autoregressive.yaml"
 
 #### Dataset config 
