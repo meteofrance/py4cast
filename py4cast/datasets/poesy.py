@@ -484,7 +484,6 @@ class PoesyDataset(DatasetABC, Dataset):
             if config_override is not None:
                 conf = merge_dicts(conf, config_override)
         conf["grid"]["load_grid_info_func"] = load_poesy_grid_info
-        conf["grid"]
         grid = Grid(**conf["grid"])
         param_list = []
         for data_source in conf["dataset"]:

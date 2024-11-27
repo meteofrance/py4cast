@@ -592,6 +592,8 @@ class TitanDataset(DatasetABC, Dataset):
         num_pred_steps_train: int,
         num_pred_steps_val_test: int,
     ) -> Tuple["TitanDataset", "TitanDataset", "TitanDataset"]:
+        
+        conf["grid"]["load_grid_info_func"] = load_Titan_grid_info
         grid = Grid(**conf["grid"])
         dataset_path = get_dataset_path(name, grid)
         param_list = get_param_list(conf, grid, dataset_path)
