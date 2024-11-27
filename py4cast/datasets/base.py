@@ -860,6 +860,22 @@ class Param:
     def parameter_short_name(self) -> str:
         return f"{self.name}_{self.level}_{self.level_type}"
 
+def get_param_list(conf: dict, 
+    grid: Grid,
+    load_param_info : Callable[[str], ParamConfig]) -> List[Param]:
+    param_list = []
+    for name, values in conf["params"].items():
+        for lvl in values["levels"]:
+            param = Param(
+                name=name,
+                level=lvl,
+                grid=grid,
+                load_param_info=load_param_info,
+                kind=values["kind"],
+            )
+            param_list.append(param)
+    return param_list
+
 @dataclass(slots=True)
 class TorchDataloaderSettings:
     """

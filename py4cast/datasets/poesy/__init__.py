@@ -19,6 +19,7 @@ from py4cast.datasets.base import (
     DatasetInfo,
     Grid,
     GridConfig,
+    get_param_list,
     Item,
     NamedTensor,
     Param,
@@ -27,6 +28,14 @@ from py4cast.datasets.base import (
     Settings,
     TorchDataloaderSettings,
     collate_fn,
+)
+from py4cast.datasets.poesy.settings import (
+    DEFAULT_CONFIG,
+    SECONDS_IN_YEAR,
+    OROGRAPHY_FNAME,
+    LATLON_FNAME,
+    METADATA,
+    SCRATCH_PATH,
 )
 from py4cast.forcingutils import generate_toa_radiation_forcing, get_year_hour_forcing
 from py4cast.plots import DomainInfo
@@ -76,13 +85,18 @@ def get_filepath(param: Param, date: dt.datetime) -> str:
         """
         Return the filename.
         """
-        var_file_name = POESY_PARAMETER_NAMES[param.name]
+        var_file_name = METADATA["WEATHER_PARAMS"][param.name]["file_name"]
         return SCRATCH_PATH / f"{date.strftime('%Y-%m-%dT%H:%M:%SZ')}_{var_file_name}_lt1-45_crop.npy"
 
 def load_param_info(name: str) -> ParamConfig:
-    
-
-    return pconf
+    info = METADATA["WEATHER_PARAMS"][name]
+    unit = info["unit"]
+    long_name = info["long_name"]
+    grid = info["grid"]
+    level_type = info["level_type"]
+    grib_name = None
+    grib_param = None
+    return ParamConfig(unit,level_type,long_name,grid,grib_name,grib_param)
 
 def load_data(param: Param, date: dt.datetime, term: List, member: int) -> np.array:
     """
@@ -153,7 +167,6 @@ class PoesyDataset(DatasetABC, Dataset):
         self._cache_dir = CACHE_DIR / str(self)
         self.shuffle = self.split == "train"
         self.cache_dir.mkdir(parents=True, exist_ok=True)
-        self.step_duration = self.settings.term["timestep"]
 
     @cached_property
     def cache_dir(self):
@@ -188,7 +201,7 @@ class PoesyDataset(DatasetABC, Dataset):
             shortnames=shortnames,
             weather_dim=self.weather_dim,
             forcing_dim=self.forcing_dim,
-            step_duration=self.step_duration,
+            step_duration=self.settings.step_duration,
             statics=self.statics,
             stats=self.stats,
             diff_stats=self.diff_stats,
@@ -203,13 +216,13 @@ class PoesyDataset(DatasetABC, Dataset):
         print("Start forming samples")
         terms = list(
             np.arange(
-                self.settings.term["start"],
-                self.settings.term["end"],
-                self.settings.term["timestep"],
+                METADATA["TERMS"]["start"],
+                METADATA["TERMS"]["end"],
+                METADATA["TERMS"]["timestep"],
             )
         )
-
-        sample_by_date = len(terms) // self.settings.num_total_steps
+        num_total_steps = self.settings.num_input_steps + self.settings.num_pred_steps
+        sample_by_date = len(terms) // num_total_steps
 
         samples = []
         number = 0
@@ -219,16 +232,16 @@ class PoesyDataset(DatasetABC, Dataset):
                 for sample in range(0, sample_by_date):
                     input_terms = terms[
                         sample
-                        * self.settings.num_total_steps : sample
-                        * self.settings.num_total_steps
+                        * num_total_steps : sample
+                        * num_total_steps
                         + self.settings.num_input_steps
                     ]
                     output_terms = terms[
-                        sample * self.settings.num_total_steps
+                        sample * num_total_steps
                         + self.settings.num_input_steps : sample
-                        * self.settings.num_total_steps
+                        * num_total_steps
                         + self.settings.num_input_steps
-                        + self.settings.num_output_steps
+                        + self.settings.num_pred_steps
                     ]
                     samp = Sample(
                         date=date,
@@ -382,7 +395,7 @@ class PoesyDataset(DatasetABC, Dataset):
                         sample.date,
                         terms=sample.terms,
                         member=sample.member,
-                        inference_steps=self.settings.num_inference_pred_steps,
+                        inference_steps=self.settings.num_pred_steps,
                     )
                     state_kwargs["names"][0] = "timestep"
                     # Save outputs
@@ -430,26 +443,12 @@ class PoesyDataset(DatasetABC, Dataset):
                 conf = merge_dicts(conf, config_override)
         conf["grid"]["load_grid_info_func"] = load_grid_info
         grid = Grid(**conf["grid"])
-        param_list = []
-        for data_source in conf["dataset"]:
-            data = conf["dataset"][data_source]
-            members = conf["dataset"][data_source].get("members", [0])
-            term = conf["dataset"][data_source]["term"]
-            for var in data["var"]:
-                vard = data["var"][var]
-                # Change grid definition
-                param = Param(
-                    name=var,
-                    level=vard.pop("level", 2),
-                    grid=grid,
-                    load_param_info=load_param_info,
-                    kind="input_output",
-                    get_weight_per_level=get_weight
-                )
-                param_list.append(param)
+        param_list = get_param_list(conf, grid, load_param_info)
+        
         train_period = Period(**conf["periods"]["train"], name="train")
         valid_period = Period(**conf["periods"]["valid"], name="valid")
         test_period = Period(**conf["periods"]["test"], name="test")
+        
         train_ds = PoesyDataset(
             grid,
             train_period,
@@ -457,7 +456,7 @@ class PoesyDataset(DatasetABC, Dataset):
             Settings(
                 num_pred_steps=num_pred_steps_train,
                 num_input_steps=num_input_steps,
-                members=members,
+                members=conf["members"],
                 **conf["settings"]
             ),
         )
@@ -468,7 +467,7 @@ class PoesyDataset(DatasetABC, Dataset):
             Settings(
                 num_pred_steps=num_pred_steps_val_test,
                 num_input_steps=num_input_steps,
-                members=members,
+                members=conf["members"],
                 **conf["settings"]
             ),
         )
@@ -479,7 +478,7 @@ class PoesyDataset(DatasetABC, Dataset):
             Settings(
                 num_pred_steps=num_pred_steps_val_test,
                 num_input_steps=num_input_steps,
-                members=members,
+                members=conf["members"],
                 **conf["settings"]
             ),
         )
@@ -635,13 +634,14 @@ class InferPoesyDataset(PoesyDataset):
         print("Start forming samples")
         terms = list(
             np.arange(
-                self.settings.term["start"],
-                self.settings.term["end"],
-                self.settings.term["timestep"],
+                METADATA["TERMS"]["start"],
+                METADATA["TERMS"]["end"],
+                METADATA["TERMS"]["timestep"],
             )
         )
 
-        sample_by_date = len(terms) // self.settings.num_total_steps
+        num_total_steps = self.settings.num_input_steps + self.settings.num_pred_steps
+        sample_by_date = len(terms) // num_total_steps
         samples = []
         number = 0
         for date in self.period.date_list:
@@ -649,14 +649,14 @@ class InferPoesyDataset(PoesyDataset):
                 for sample in range(0, sample_by_date):
                     input_terms = terms[
                         sample
-                        * self.settings.num_total_steps : sample
-                        * self.settings.num_total_steps
+                        * num_total_steps : sample
+                        * num_total_steps
                         + self.settings.num_input_steps
                     ]
 
                     output_terms = [
-                        input_terms[-1] + self.settings.term["timestep"] * (step + 1)
-                        for step in range(self.settings.num_inference_pred_steps)
+                        input_terms[-1] + METADATA["TERMS"]["timestep"] * (step + 1)
+                        for step in range(self.settings.num_pred_steps)
                     ]
 
                     samp = InferSample(

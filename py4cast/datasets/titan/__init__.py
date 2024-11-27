@@ -21,6 +21,7 @@ from py4cast.datasets.base import (
     DatasetInfo,
     Grid,
     GridConfig,
+    get_param_list,
     Item,
     NamedTensor,
     Param,
@@ -400,22 +401,6 @@ def get_dataset_path(name: str, grid: Grid):
     return SCRATCH_PATH / "subdatasets" / subdataset_name
 
 
-def get_param_list(conf: dict, grid: Grid, dataset_path: Path) -> List[Param]:
-    param_list = []
-    for name, values in conf["params"].items():
-        for lvl in values["levels"]:
-            param = Param(
-                name=name,
-                level=lvl,
-                grid=grid,
-                load_param_info=load_param_info,
-                kind=values["kind"],
-
-            )
-            param_list.append(param)
-    return param_list
-
-
 class TitanDataset(DatasetABC, Dataset):
     # Si on doit travailler avec plusieurs grilles, on fera un super dataset qui contient
     # plusieurs datasets chacun sur une seule grille
@@ -558,7 +543,7 @@ class TitanDataset(DatasetABC, Dataset):
     ) -> Tuple["TitanDataset", "TitanDataset", "TitanDataset"]:
         grid = Grid(**conf["grid"])
         dataset_path = get_dataset_path(name, grid)
-        param_list = get_param_list(conf, grid, dataset_path)
+        param_list = get_param_list(conf, grid, load_param_info)
 
         train_settings = Settings(
             num_input_steps, num_pred_steps_train, **conf["settings"]
@@ -704,7 +689,7 @@ def prepare(
 
     if convert_grib2npy:
         print("Converting gribs to npy...")
-        param_list = get_param_list(conf, train_ds.grid, train_ds.cache_dir)
+        param_list = get_param_list(conf, train_ds.grid, load_param_info)
         sum_dates = (
             list(train_ds.period.date_list)
             + list(valid_ds.period.date_list)
