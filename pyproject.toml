@@ -36,6 +36,3 @@ method_length = 58
 method_cyclomatic_complexity = 22
 method_cognitive_complexity = 34
 method_working_memory = 45
-
-[project.optional-dependencies]
-MF = ["tornado==6.4.1"]
