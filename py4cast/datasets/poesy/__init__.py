@@ -25,7 +25,6 @@ from py4cast.datasets.base import (
     Period,
     Settings,
     Stats,
-    Stats,
     TorchDataloaderSettings,
     collate_fn,
     get_param_list,
@@ -133,17 +132,16 @@ def get_param_tensor(
     terms: List,
     standardize: bool,
     member: int = 1,
-    inference_steps: int = 0,
 ) -> torch.tensor:
     """
     This function load a specific parameter into a tensor
     """
     if standardize:
-        names = param.parameter_short_name
-        means = np.asarray([stats[name]["mean"] for name in names])
-        std = np.asarray([stats[name]["std"] for name in names])
+        name = param.parameter_short_name
+        means = np.asarray(stats[name]["mean"])
+        std = np.asarray(stats[name]["std"])
 
-    array = param.load_data(date, terms, member)
+    array = load_data(settings.dataset_name, param, date, terms, member)
 
     # Extend dimension to match 3D (level dimension)
     if len(array.shape) != 4:
@@ -187,8 +185,8 @@ class Sample:
         Returns:
             Boolean:  Whether the sample exists or not
         """
-        for param in param_list:
-            if not param.exists(self.date):
+        for param in self.params:
+            if not exists(self.settings.dataset_name, param, self.date):
                 return False
 
         return True
@@ -246,7 +244,7 @@ class Sample:
         # Reading parameters from files
         for param in self.params:
             state_kwargs = {
-                "feature_names": param.parameter_short_name,
+                "feature_names": [param.parameter_short_name],
                 "names": ["timestep", "lat", "lon", "features"],
             }
             try:
@@ -397,7 +395,7 @@ class PoesyDataset(DatasetABC, Dataset):
                         params=self.params,
                     )
 
-                    if samp.is_valid(self.params):
+                    if samp.is_valid():
                         samples.append(samp)
                         number += 1
 
@@ -693,7 +691,7 @@ class InferPoesyDataset(PoesyDataset):
                         output_terms=output_terms,
                     )
 
-                    if samp.is_valid(self.params):
+                    if samp.is_valid():
                         samples.append(samp)
                         number += 1
         print(f"All {len(samples)} samples are now defined")
