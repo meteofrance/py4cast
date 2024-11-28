@@ -194,6 +194,7 @@ def get_param_tensor(
         tensor_data = torch.cat((tensor_data, empty_data), dim=0)
     return tensor_data
 
+
 @dataclass(slots=True)
 class Sample:
     # Describe a sample
@@ -228,8 +229,11 @@ class Sample:
 
         return True
 
-    def load(self, get_param):
-        
+    def generate_forcings(self) -> List[NamedTensor]:
+        """
+        Generate all the forcing in this function. 
+        Return a list of NamedTensor.
+        """
         # Datetime Forcing
         datetime_forcing = get_year_hour_forcing(self.date, self.output_terms).type(
             torch.float32
@@ -265,6 +269,10 @@ class Sample:
                 names=["timestep", "lat", "lon", "features"],
             ),
         ]
+
+        return lforcings
+
+    def load(self, get_param):
 
         linputs = []
         loutputs = []
@@ -305,6 +313,8 @@ class Sample:
                 print(f"Error for param {param}")
                 raise e
 
+        # Get forcings
+        lforcings = self.generate_forcings()
         for lforcing in lforcings:
             lforcing.unsqueeze_and_expand_from_(linputs[0])
 
@@ -313,8 +323,6 @@ class Sample:
             outputs=NamedTensor.concat(loutputs),
             forcing=NamedTensor.concat(lforcings),
         )
-
-
 
 
 class InferSample(Sample):
