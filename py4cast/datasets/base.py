@@ -542,7 +542,7 @@ def np_arange_include_end(start, end, step, dtype=None):
     np.arange(start, end + step, step) = 0, 2, 4 -> ok
     but if,
     start = 0; end = 3; step = 2
-    np.arange(start, end + step, step) = 0, 2, 4 -> exclude the 4
+    np.arange(start, end + step, step) = 0, 2, 4 -> arange is too large, exclude the 4
     """
     large_arange = np.arange(
         start,
