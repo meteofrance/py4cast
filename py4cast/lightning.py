@@ -69,7 +69,7 @@ class PlDataModule(pl.LightningDataModule):
             self.dataset_conf,
             self.config_override,
         )
-        
+
     @property
     def len_train_dl(self):
         return len(self.train_ds.torch_dataloader(self.dl_settings))

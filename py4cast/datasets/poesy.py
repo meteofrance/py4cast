@@ -17,12 +17,12 @@ from torch.utils.data import DataLoader, Dataset
 from py4cast.datasets.base import (
     DatasetABC,
     DatasetInfo,
-    Stats,
     Grid,
     GridConfig,
     Item,
     NamedTensor,
     Period,
+    Stats,
     TorchDataloaderSettings,
     collate_fn,
 )
@@ -166,7 +166,6 @@ def get_param_tensor(
     standardize: bool,
     member: int = 1,
     inference_steps: int = 0,
-
 ) -> torch.tensor:
     """
     This function load a specific parameter into a tensor
@@ -205,7 +204,7 @@ class Sample:
     output_terms: Tuple[float]
     settings: PoesySettings
     stats: Stats
-    grid: Grid 
+    grid: Grid
     params: List[Param]
 
     # Term wrt to the date {date}. Gives validity
@@ -229,15 +228,15 @@ class Sample:
 
         return True
 
-    def generate_forcings(self, date: dt.datetime, output_terms: Tuple[float], grid: Grid) -> List[NamedTensor]:
+    def generate_forcings(
+        self, date: dt.datetime, output_terms: Tuple[float], grid: Grid
+    ) -> List[NamedTensor]:
         """
-        Generate all the forcing in this function. 
+        Generate all the forcing in this function.
         Return a list of NamedTensor.
         """
         # Datetime Forcing
-        datetime_forcing = get_year_hour_forcing(date, output_terms).type(
-            torch.float32
-        )
+        datetime_forcing = get_year_hour_forcing(date, output_terms).type(torch.float32)
 
         # Solar forcing, dim : [num_pred_steps, Lat, Lon, feature = 1]
         solar_forcing = generate_toa_radiation_forcing(
@@ -289,8 +288,8 @@ class Sample:
                 if param.kind == "input_output":
                     # Search data for date sample.date and terms sample.terms
                     tensor = get_param_tensor(
-                        param = param,
-                        date = self.date,
+                        param=param,
+                        date=self.date,
                         terms=self.terms,
                         stats=self.stats,
                         standardize=self.settings.standardize,
@@ -316,7 +315,9 @@ class Sample:
                 raise e
 
         # Get forcings
-        lforcings = self.generate_forcings(date=self.date, output_terms=self.output_terms, grid=self.grid)
+        lforcings = self.generate_forcings(
+            date=self.date, output_terms=self.output_terms, grid=self.grid
+        )
         for lforcing in lforcings:
             lforcing.unsqueeze_and_expand_from_(linputs[0])
 
@@ -431,8 +432,8 @@ class PoesyDataset(DatasetABC, Dataset):
                         output_terms=output_terms,
                         settings=self.settings,
                         stats=self.stats,
-                        grid=self.grid, 
-                        params=self.params
+                        grid=self.grid,
+                        params=self.params,
                     )
 
                     if samp.is_valid(self.params):
@@ -500,7 +501,6 @@ class PoesyDataset(DatasetABC, Dataset):
         sample = self.sample_list[index]
         item = sample.load()
         return item
-    
 
     @classmethod
     def from_json(
