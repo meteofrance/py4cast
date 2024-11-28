@@ -240,7 +240,7 @@ class TitanSettings:
 #############################################################
 
 
-def _run_through_timestamps(period: Period) -> List[Dict[str, Any]]:
+def run_through_timestamps(period: Period) -> List[Dict[str, Any]]:
     """
     Create a list of arguments used to instantiate Sample.
     This function indicates how to run through the timestamps in Titan.
@@ -501,7 +501,6 @@ class TitanDataset(DatasetABC, Dataset):
         n_input, n_pred = self.settings.num_input_steps, self.settings.num_pred_steps
         filename = f"valid_samples_{self.period.name}_{n_input}_{n_pred}.txt"
         self.valid_samples_file = self.cache_dir / filename
-        self.run_through_timestamps = _run_through_timestamps
 
     @cached_property
     def dataset_info(self) -> DatasetInfo:
@@ -560,7 +559,7 @@ class TitanDataset(DatasetABC, Dataset):
                 f"Valid samples file {self.valid_samples_file} does not exist. Computing samples list..."
             )
             samples = []
-            list_args_sample = self.run_through_timestamps(self.period)
+            list_args_sample = run_through_timestamps(self.period)
             for dict_args in tqdm.tqdm(list_args_sample):
                 sample = Sample(
                     dict_args["date"], self.settings, self.params, stats, self.grid

@@ -195,7 +195,7 @@ class PoesySettings:
 #############################################################
 
 
-def _run_through_timestamps(
+def run_through_timestamps(
     period: Period, settings: PoesySettings
 ) -> List[Dict[str, Any]]:
     """
@@ -314,7 +314,6 @@ class PoesyDataset(DatasetABC, Dataset):
         self.shuffle = self.split == "train"
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self.step_duration = self.settings.term["timestep"]
-        self.run_through_timestamps = _run_through_timestamps
 
     @cached_property
     def cache_dir(self):
@@ -367,7 +366,7 @@ class PoesyDataset(DatasetABC, Dataset):
         n_samples = 0
 
         # Run through the dataset and get a list of sample's args.
-        list_args_sample = self.run_through_timestamps(self.period, self.settings)
+        list_args_sample = run_through_timestamps(self.period, self.settings)
 
         for dict_args in list_args_sample:
 
