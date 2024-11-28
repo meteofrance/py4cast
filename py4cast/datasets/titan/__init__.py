@@ -45,8 +45,11 @@ from py4cast.utils import merge_dicts
 app = typer.Typer()
 
 
-def get_weight_per_lvl(level: int, kind: Literal["hPa", "m"]):
-    if kind == "hPa":
+def get_weight_per_lvl(
+    level: int,
+    level_type: Literal["isobaricInhPa", "heightAboveGround", "surface", "meanSea"],
+):
+    if level_type == "isobaricInhPa":
         return 1 + (level) / (1000)
     else:
         return 2
@@ -241,16 +244,30 @@ def get_param_tensor(
         arr = (arr - means) / std
     return torch.from_numpy(arr)
 
+def generate_forcings(
+    date: dt.datetime, output_terms: Tuple[float], grid: Grid
+) -> List[NamedTensor]:
+    """
+    Generate all the forcing in this function.
+    Return a list of NamedTensor.
+    """
+    lforcings = []
+    time_forcing = NamedTensor(  # doy : day_of_year
+        feature_names=["cos_hour", "sin_hour", "cos_doy", "sin_doy"],
+        tensor=get_year_hour_forcing(date, output_terms).type(torch.float32),
+        names=["timestep", "features"],
+    )
+    solar_forcing = NamedTensor(
+        feature_names=["toa_radiation"],
+        tensor=generate_toa_radiation_forcing(
+            grid.lat, grid.lon, date, output_terms
+        ).type(torch.float32),
+        names=["timestep", "lat", "lon", "features"],
+    )
+    lforcings.append(time_forcing)
+    lforcings.append(solar_forcing)
 
-def get_weight_per_lvl(
-    level: int,
-    kind: Literal["isobaricInhPa", "heightAboveGround", "surface", "meanSea"],
-):
-    if kind == "isobaricInhPa":
-        return 1 + (level) / (1000)
-    else:
-        return 2
-
+    return lforcings
 
 #############################################################
 #                            SAMPLE                         #
@@ -304,7 +321,10 @@ class Sample:
         return True
 
     def load(self, no_standardize: bool = False) -> Item:
-        linputs, loutputs, lforcings = [], [], []
+        """
+        Return inputs, outputs, forcings as tensors concatenated into a Item.
+        """
+        linputs, loutputs = [], []
 
         # Reading parameters from files
         for param in self.params:
@@ -315,39 +335,18 @@ class Sample:
             if param.kind == "input":
                 # forcing is taken for every predicted step
                 dates = self.all_dates[-self.settings.num_pred_steps :]
-                tensor = get_param_tensor(
-                    self.settings.dataset_name,
-                    param,
-                    self.stats,
-                    dates,
-                    self.settings,
-                    no_standardize,
-                )
+                tensor = self.get_param_tensor(param, dates, no_standardize)
                 tmp_state = NamedTensor(tensor=tensor, **deepcopy(state_kwargs))
                 lforcings.append(tmp_state)
 
             elif param.kind == "output":
                 dates = self.all_dates[-self.settings.num_pred_steps :]
-                tensor = get_param_tensor(
-                    self.settings.dataset_name,
-                    param,
-                    self.stats,
-                    dates,
-                    self.settings,
-                    no_standardize,
-                )
+                tensor = self.get_param_tensor(param, dates, no_standardize)
                 tmp_state = NamedTensor(tensor=tensor, **deepcopy(state_kwargs))
                 loutputs.append(tmp_state)
 
             else:  # input_output
-                tensor = get_param_tensor(
-                    self.settings.dataset_name,
-                    param,
-                    self.stats,
-                    self.all_dates,
-                    self.settings,
-                    no_standardize,
-                )
+                tensor = self.get_param_tensor(param, self.all_dates, no_standardize)
                 state_kwargs["names"][0] = "timestep"
                 tmp_state = NamedTensor(
                     tensor=tensor[-self.settings.num_pred_steps :],
@@ -355,7 +354,6 @@ class Sample:
                 )
 
                 loutputs.append(tmp_state)
-                state_kwargs["names"][0] = "timestep"
                 tmp_state = NamedTensor(
                     tensor=tensor[: self.settings.num_input_steps],
                     **deepcopy(state_kwargs),
@@ -369,7 +367,6 @@ class Sample:
             ),
             names=["timestep", "features"],
         )
-
         solar_forcing = NamedTensor(
             feature_names=["toa_radiation"],
             tensor=generate_toa_radiation_forcing(
@@ -382,6 +379,7 @@ class Sample:
 
         for forcing in lforcings:
             forcing.unsqueeze_and_expand_from_(linputs[0])
+
         return Item(
             inputs=NamedTensor.concat(linputs),
             outputs=NamedTensor.concat(loutputs),
@@ -609,6 +607,7 @@ class TitanDataset(DatasetABC, Dataset):
 
         conf["grid"]["load_grid_info_func"] = load_grid_info
         grid = Grid(**conf["grid"])
+
         dataset_path = get_dataset_path(name, grid)
         param_list = get_param_list(conf, grid, load_param_info, get_weight_per_lvl)
 
