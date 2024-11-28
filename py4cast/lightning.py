@@ -69,8 +69,6 @@ class PlDataModule(pl.LightningDataModule):
             self.dataset_conf,
             self.config_override,
         )
-        test = self.train_ds[0]
-        pass
         
     @property
     def len_train_dl(self):
