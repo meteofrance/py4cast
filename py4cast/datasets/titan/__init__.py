@@ -5,7 +5,7 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 from functools import cached_property, lru_cache
 from pathlib import Path
-from typing import Dict, List, Any, Literal, Tuple, Union
+from typing import Any, Dict, List, Literal, Tuple, Union
 
 import gif
 import matplotlib.pyplot as plt
@@ -47,6 +47,7 @@ def get_weight_per_lvl(level: int, kind: Literal["hPa", "m"]):
         return 1 + (level) / (1000)
     else:
         return 2
+
 
 #############################################################
 #                            GRID                           #
@@ -241,8 +242,8 @@ class TitanSettings:
 
 def _run_through_timestamps(period: Period) -> List[Dict[str, Any]]:
     """
-    Create a list of arguments used to instantiate Sample. 
-    This function indicates how to run through the timestamps in Titan.      
+    Create a list of arguments used to instantiate Sample.
+    This function indicates how to run through the timestamps in Titan.
     """
     list_args_all_samples = []
     for date in period.date_list:
@@ -561,7 +562,9 @@ class TitanDataset(DatasetABC, Dataset):
             samples = []
             list_args_sample = self.run_through_timestamps(self.period)
             for dict_args in tqdm.tqdm(list_args_sample):
-                sample = Sample(dict_args["date"], self.settings, self.params, stats, self.grid)
+                sample = Sample(
+                    dict_args["date"], self.settings, self.params, stats, self.grid
+                )
                 if sample.is_valid():
                     samples.append(sample)
 
@@ -602,7 +605,7 @@ class TitanDataset(DatasetABC, Dataset):
             if param.kind == "input_output":
                 res += param.number
         return res
-    
+
     def __getitem__(self, index: int) -> Item:
         sample = self.sample_list[index]
         item = sample.load()

@@ -1,16 +1,12 @@
-from py4cast.datasets.poesy import browse_poesy, Period, PoesySettings
+from py4cast.datasets.poesy import Period, PoesySettings, browse_poesy
+
 
 def test_browse_poesy():
     """
     Test the browse_dataset function
     """
     ### Exemple 1
-    period = Period(
-        start= "2021061500",
-        end= "2021061503",
-        step = 2,
-        name = "test"
-        )
+    period = Period(start="2021061500", end="2021061503", step=2, name="test")
 
     term = {"start": 0, "end": 11, "timestep": 2}
 
@@ -24,10 +20,7 @@ def test_browse_poesy():
     list_args_all_samples = browse_poesy(period, settings)
 
     # Test time * term * member
-    assert len(list_args_all_samples) == 2*3*2
-
-        
-
+    assert len(list_args_all_samples) == 2 * 3 * 2
 
 
 if __name__ == "__main__":

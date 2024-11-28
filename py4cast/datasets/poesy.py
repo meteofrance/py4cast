@@ -7,7 +7,7 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 from functools import cached_property
 from pathlib import Path
-from typing import Dict, List, Any, Literal, Tuple, Union
+from typing import Any, Dict, List, Literal, Tuple, Union
 
 import numpy as np
 import torch
@@ -83,6 +83,7 @@ class Period:
 #############################################################
 
 # Define static attributes to add -> see Grid class in smeagol.py
+
 
 def load_poesy_grid_info(name: str) -> GridConfig:
     geopotential = np.load(SCRATCH_PATH / OROGRAPHY_FNAME)
@@ -194,26 +195,33 @@ class PoesySettings:
 #############################################################
 
 
-def _run_through_timestamps(period: Period, settings: PoesySettings)-> List[Dict[str, Any]]:
+def _run_through_timestamps(
+    period: Period, settings: PoesySettings
+) -> List[Dict[str, Any]]:
     """
-    Create a list of arguments used to instantiate Sample. 
-    This function indicates how to run through the timestamps in Poesy.    
+    Create a list of arguments used to instantiate Sample.
+    This function indicates how to run through the timestamps in Poesy.
     """
-    
+
     list_args_all_samples = []
 
     # Create all datetimes
-    date_list = np.arange(period.start, period.end+ np.timedelta64(period.step, "h"), np.timedelta64(period.step, "h"), dtype="datetime64[s]" ).tolist()
+    date_list = np.arange(
+        period.start,
+        period.end + np.timedelta64(period.step, "h"),
+        np.timedelta64(period.step, "h"),
+        dtype="datetime64[s]",
+    ).tolist()
 
     # Get the number of sample for 1 run
     terms = list(
-            np.arange(
-                settings.term["start"],
-                settings.term["end"],
-                settings.term["timestep"],
-            )
+        np.arange(
+            settings.term["start"],
+            settings.term["end"],
+            settings.term["timestep"],
         )
-    
+    )
+
     # compute the number of samples to build from all the terms of 1 leadtime
     n_sample_by_leadtime = len(terms) // settings.num_total_steps
 
@@ -229,12 +237,16 @@ def _run_through_timestamps(period: Period, settings: PoesySettings)-> List[Dict
                 ]
                 output_terms = terms[
                     sample * settings.num_total_steps
-                    + settings.num_input_steps : sample
-                    * settings.num_total_steps
+                    + settings.num_input_steps : sample * settings.num_total_steps
                     + settings.num_input_steps
                     + settings.num_output_steps
                 ]
-                dict_sample_args = {"date": date, "member": member, "input_terms": input_terms, "output_terms": output_terms}
+                dict_sample_args = {
+                    "date": date,
+                    "member": member,
+                    "input_terms": input_terms,
+                    "output_terms": output_terms,
+                }
                 list_args_all_samples.append(dict_sample_args)
 
     return list_args_all_samples
@@ -358,14 +370,14 @@ class PoesyDataset(DatasetABC, Dataset):
         list_args_sample = self.run_through_timestamps(self.period, self.settings)
 
         for dict_args in list_args_sample:
-            
+
             samp = Sample(
-                date = dict_args["date"],
-                member = dict_args["member"],
-                input_terms = dict_args["input_terms"],
-                output_terms = dict_args["output_terms"],
-                )
-            
+                date=dict_args["date"],
+                member=dict_args["member"],
+                input_terms=dict_args["input_terms"],
+                output_terms=dict_args["output_terms"],
+            )
+
             if samp.is_valid(self.params):
                 samples.append(samp)
                 n_samples += 1
