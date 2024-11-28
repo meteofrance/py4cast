@@ -32,23 +32,23 @@ class AutoRegressiveLightningModule(pl.LightningModule):
         dataset_name: str,
         batch_shape: Tuple[int, int, int, int, int],
         # args exclusive to lightningmodule
-        batch_size: int,
-        model_conf: Union[Path, None] = None,  # Path | None
+        batch_size: int, # soon to be synchronized with TorchDataLoaderSettings
+        model_conf: Path | None = None,  # Path | None
         model_name: str = "halfunet",
-        lr: float = 0.1,
+        lr: float = 0.1, # initial value of learning rate
         loss_name: str = "mse",
-        num_input_steps: int = 2,
-        num_pred_steps_train: int = 2,
-        num_pred_steps_val_test: int = 2,
+        num_input_steps: int = 2, # Ti, Ti-1 Ti-2, etc.
+        num_pred_steps_train: int = 2, # Ti+1, Ti+2, Ti+3, etc.
+        num_pred_steps_val_test: int = 2, # Ti+1, Ti+2, Ti+3, etc.
         num_samples_to_plot: int = 1,
-        training_strategy: str = "diff_ar",
+        training_strategy: str = "diff_ar", # or scaled_diff, soon deleted
         len_train_loader: int = 1,
-        save_path: Path = None,
+        save_path: Path = None, # MetricPSDK directory
         use_lr_scheduler: bool = False,
-        precision: str = "bf16",
-        no_log: bool = False,
-        channels_last: bool = False,
-        save_weights_path: Path = None,
+        precision: str = "bf16", # degree of precision
+        no_log: bool = False, # False = dont log things on tensorboard
+        channels_last: bool = False, # False ~ (B,T,C,H,W)
+        save_weights_path: Path = None, # weights directory
     ):
         super().__init__()
         # exclusive args
@@ -69,18 +69,14 @@ class AutoRegressiveLightningModule(pl.LightningModule):
         self.channels_last = channels_last
         self.save_weights_path = save_weights_path
         # linked args
-        self.batch_shape = (
-            batch_shape  # (Batch_size, Timestep, Height, Width, Channels)
-        )
+        self.batch_shape = batch_shape # (B, T, H, W, C)
         self.dataset_info = dataset_info
         self.dataset_name = dataset_name
 
         # Creates a model with the config file (.json) if available.
         self.input_shape = self.batch_shape[2:4]
         self.num_output_features = self.batch_shape[4]  # = nombre de feature du dataset
-        self.num_input_features = (
-            self.num_output_features + 10
-        )  # +10 car concat(x,statics)
+        self.num_input_features = self.num_output_features + 10 # concat(x,statics)
         self.model, self.model_settings = build_model_from_settings(
             network_name=self.model_name,
             num_input_features=self.num_input_features,

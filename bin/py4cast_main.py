@@ -34,7 +34,7 @@ def cli_main(args: ArgsType = None):
         args=args,
     )
     model_name = cli.model.__class__.__name__.lower()
-    checkpoint_dir = args.checkpoint_path.rstrip('/')  # Répertoire où sauvegarder les checkpoints
+    checkpoint_dir = cli.config.checkpoint_path.rstrip('/')  # Répertoire où sauvegarder les checkpoints
     checkpoint_filename = find_available_checkpoint_name(checkpoint_dir, model_name)
     checkpoint_callback = ModelCheckpoint(
         monitor='val_loss',  # Changez cela selon la métrique que vous souhaitez surveiller

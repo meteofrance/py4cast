@@ -1,7 +1,7 @@
 seed_everything: "True"
 
 model:
-  batch_size: 1
+  batch_size: 4
   model_conf: 
   model_name: "unetrpp" 
   lr: 0.1
