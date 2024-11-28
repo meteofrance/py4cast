@@ -698,12 +698,21 @@ class Period:
 
     @property
     def date_list(self):
-        return np.arange(
+        _date_list = np.arange(
             self.start,
             self.end + np.timedelta64(self.step, "h"),
             np.timedelta64(self.step, "h"),
             dtype="datetime64[s]",
         ).tolist()
+
+        # exclude the last one if beyond end, exemple:
+        # start = 0; end = 4; step = 2
+        # np.arange(start, end, step) = 0, 2 -> 4 is not included
+        # np.arange(start, end + step, step) = 0, 2, 4 -> ok
+        # but if,
+        # start = 0; end = 3; step = 2
+        # np.arange(start, end + step, step) = 0, 2, 4 -> exclude the 4
+        return _date_list[:-1] if _date_list[-1] > self.end else _date_list
 
 
 GridConfig = namedtuple(
