@@ -5,7 +5,7 @@ def test_run_through_timestamps():
     """
     Test the browse_dataset function
     """
-    # Test period odd 
+    # Test period odd
     period = Period(start="2021061500", end="2021061503", step=2, name="test")
 
     term = {"start": 0, "end": 7, "timestep": 2}
@@ -21,8 +21,8 @@ def test_run_through_timestamps():
 
     # Test time * term * member
     assert len(list_args_all_samples) == 2 * 2 * 2
-    
-    # Test period even 
+
+    # Test period even
     period = Period(start="2021061500", end="2021061504", step=2, name="test")
     list_args_all_samples = run_through_timestamps(period, settings)
 
@@ -43,7 +43,7 @@ def test_run_through_timestamps():
     list_args_all_samples = run_through_timestamps(period, settings)
     # Test time * term * member
     assert len(list_args_all_samples) == 2 * 2 * 1
-    
+
     # Test even terms
     term = {"start": 0, "end": 6, "timestep": 2}
 
@@ -57,6 +57,7 @@ def test_run_through_timestamps():
     list_args_all_samples = run_through_timestamps(period, settings)
     # Test time * term * member
     assert len(list_args_all_samples) == 2 * 2 * 1
+
 
 if __name__ == "__main__":
     test_run_through_timestamps()

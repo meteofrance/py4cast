@@ -189,9 +189,7 @@ def run_through_timestamps(
 
     # Get the number of sample for 1 run
     terms = np_arange_include_end(
-        settings.term["start"],
-        settings.term["end"],
-        settings.term["timestep"]
+        settings.term["start"], settings.term["end"], settings.term["timestep"]
     ).tolist()
 
     # compute the number of samples to build from all the terms of 1 leadtime
