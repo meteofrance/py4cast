@@ -197,8 +197,8 @@ def get_param_tensor(
 
 @dataclass(slots=True)
 class Sample:
-    # Describe a sample
-    # TODO consider members
+    """Describes a sample"""
+
     member: int
     date: dt.datetime
     input_terms: Tuple[float]
@@ -272,8 +272,10 @@ class Sample:
 
         return lforcings
 
-    def load(self, get_param) -> Item:
-
+    def load(self) -> Item:
+        """
+        Return inputs, outputs, forcings as tensors concatenated into a Item.
+        """
         linputs = []
         loutputs = []
 
@@ -286,7 +288,7 @@ class Sample:
             try:
                 if param.kind == "input_output":
                     # Search data for date sample.date and terms sample.terms
-                    tensor = get_param(
+                    tensor = get_param_tensor(
                         param = param,
                         date = self.date,
                         terms=self.terms,
@@ -496,7 +498,7 @@ class PoesyDataset(DatasetABC, Dataset):
         Return an item from an index of the sample_list
         """
         sample = self.sample_list[index]
-        item = sample.load(get_param=get_param_tensor)
+        item = sample.load()
         return item
     
 

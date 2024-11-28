@@ -236,8 +236,15 @@ class TitanSettings:
 
 
 def get_param_tensor(
-    param: Param, dates: List[dt.datetime], stats: Stats, settings: TitanSettings, no_standardize: bool = False
+    param: Param, 
+    dates: List[dt.datetime], 
+    stats: Stats, 
+    settings: TitanSettings, 
+    no_standardize: bool = False
 ) -> torch.tensor:
+    """
+    This function load a specific parameter into a tensor
+    """
     if settings.standardize and not no_standardize:
         names = param.parameter_short_names
         means = np.asarray([stats[name]["mean"] for name in names])
@@ -325,8 +332,10 @@ class Sample:
                     return False
         return True
 
-    def load(self, get_param,  no_standardize: bool = False) -> Item:
-        
+    def load(self, no_standardize: bool = False) -> Item:
+        """
+        Return inputs, outputs, forcings as tensors concatenated into a Item.
+        """
         linputs, loutputs = [], []
 
         # Reading parameters from files
@@ -337,7 +346,12 @@ class Sample:
             }
             try:
                 if param.kind == "input_output":  # input_output
-                    tensor = get_param(param, self.all_dates, self.stats, self.settings, no_standardize)
+                    tensor = get_param_tensor(param,
+                        self.all_dates, 
+                        self.stats, 
+                        self.settings, 
+                        no_standardize
+                    )
                     state_kwargs["names"][0] = "timestep"
                     tmp_state = NamedTensor(
                         tensor=tensor[-self.settings.num_pred_steps :],
@@ -422,7 +436,7 @@ class Sample:
 
     def plot_gif(self, save_path: Path):
         # We don't want to standardize data for plots
-        item = self.load(get_param = get_param_tensor, no_standardize=True)
+        item = self.load(no_standardize=True)
         frames = []
         n_inputs, n_preds = self.settings.num_input_steps, self.settings.num_pred_steps
         steps = list(range(-n_inputs + 1, n_preds + 1))
@@ -586,7 +600,7 @@ class TitanDataset(DatasetABC, Dataset):
 
     def __getitem__(self, index: int) -> Item:
         sample = self.sample_list[index]
-        item = sample.load(get_param = get_param_tensor)
+        item = sample.load()
         return item
 
     @classmethod
@@ -823,7 +837,7 @@ def plot(path_config: Path = DEFAULT_CONFIG):
     sample = train_ds.sample_list[0]
     sample.plot_gif("test.gif")
     print("Plot png for one step of sample...")
-    item = sample.load(get_param = get_param_tensor, no_standardize=True)
+    item = sample.load(no_standardize=True)
     sample.plot(item, 0, "test.png")
 
 
