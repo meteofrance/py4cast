@@ -57,7 +57,7 @@ def get_weight(level: float, level_type: str) -> float:
         return 1.0
     else:
         raise Exception(f"unknown level_type:{level_type}")
-    
+
 
 #############################################################
 #                            GRID                           #
