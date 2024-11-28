@@ -229,19 +229,19 @@ class Sample:
 
         return True
 
-    def generate_forcings(self) -> List[NamedTensor]:
+    def generate_forcings(self, date: dt.datetime, output_terms: Tuple[float], grid: Grid) -> List[NamedTensor]:
         """
         Generate all the forcing in this function. 
         Return a list of NamedTensor.
         """
         # Datetime Forcing
-        datetime_forcing = get_year_hour_forcing(self.date, self.output_terms).type(
+        datetime_forcing = get_year_hour_forcing(date, output_terms).type(
             torch.float32
         )
 
         # Solar forcing, dim : [num_pred_steps, Lat, Lon, feature = 1]
         solar_forcing = generate_toa_radiation_forcing(
-            self.grid.lat, self.grid.lon, self.date, self.output_terms
+            grid.lat, grid.lon, date, output_terms
         ).type(torch.float32)
 
         lforcings = [
@@ -284,24 +284,11 @@ class Sample:
                 "names": ["timestep", "lat", "lon", "features"],
             }
             try:
-                if param.kind == "input":
-                    # forcing is taken for every predicted step
-                    dates = self.all_dates[-self.settings.num_pred_steps :]
-                    tensor = get_param(param, dates, self.stats, self.settings, no_standardize)
-                    tmp_state = NamedTensor(tensor=tensor, **deepcopy(state_kwargs))
-                    lforcings.append(tmp_state)
-
-                elif param.kind == "output":
-                    dates = self.all_dates[-self.settings.num_pred_steps :]
-                    tensor = get_param(param, dates, self.stats, self.settings, no_standardize)
-                    tmp_state = NamedTensor(tensor=tensor, **deepcopy(state_kwargs))
-                    loutputs.append(tmp_state)
-
-                elif param.kind == "input_output":
+                if param.kind == "input_output":
                     # Search data for date sample.date and terms sample.terms
                     tensor = get_param(
-                        param,
-                        self.date,
+                        param = param,
+                        date = self.date,
                         terms=self.terms,
                         stats=self.stats,
                         standardize=self.settings.standardize,
@@ -327,7 +314,7 @@ class Sample:
                 raise e
 
         # Get forcings
-        lforcings = self.generate_forcings()
+        lforcings = self.generate_forcings(date=self.date, output_terms=self.output_terms, grid=self.grid)
         for lforcing in lforcings:
             lforcing.unsqueeze_and_expand_from_(linputs[0])
 

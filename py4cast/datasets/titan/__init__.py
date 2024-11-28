@@ -252,6 +252,31 @@ def get_param_tensor(
         arr = (arr - means) / std
     return torch.from_numpy(arr)
 
+def generate_forcings(date: dt.datetime, output_terms: Tuple[float], grid: Grid) -> List[NamedTensor]:
+        """
+        Generate all the forcing in this function. 
+        Return a list of NamedTensor.
+        """
+        lforcings = []
+        time_forcing = NamedTensor(  # doy : day_of_year
+            feature_names=["cos_hour", "sin_hour", "cos_doy", "sin_doy"],
+            tensor=get_year_hour_forcing(date, output_terms).type(
+                torch.float32
+            ),
+            names=["timestep", "features"],
+        )
+        solar_forcing = NamedTensor(
+            feature_names=["toa_radiation"],
+            tensor=generate_toa_radiation_forcing(
+                grid.lat, grid.lon, date, output_terms
+            ).type(torch.float32),
+            names=["timestep", "lat", "lon", "features"],
+        )
+        lforcings.append(time_forcing)
+        lforcings.append(solar_forcing)
+
+        return lforcings
+
 #############################################################
 #                            SAMPLE                         #
 #############################################################
@@ -300,31 +325,6 @@ class Sample:
                     return False
         return True
 
-    def generate_forcings(self) -> List[NamedTensor]:
-        """
-        Generate all the forcing in this function. 
-        Return a list of NamedTensor.
-        """
-        lforcings = []
-        time_forcing = NamedTensor(  # doy : day_of_year
-            feature_names=["cos_hour", "sin_hour", "cos_doy", "sin_doy"],
-            tensor=get_year_hour_forcing(self.date_t0, self.pred_timesteps).type(
-                torch.float32
-            ),
-            names=["timestep", "features"],
-        )
-        solar_forcing = NamedTensor(
-            feature_names=["toa_radiation"],
-            tensor=generate_toa_radiation_forcing(
-                self.grid.lat, self.grid.lon, self.date_t0, self.pred_timesteps
-            ).type(torch.float32),
-            names=["timestep", "lat", "lon", "features"],
-        )
-        lforcings.append(time_forcing)
-        lforcings.append(solar_forcing)
-
-        return lforcings
-
     def load(self, get_param,  no_standardize: bool = False) -> Item:
         
         linputs, loutputs = [], []
@@ -336,20 +336,7 @@ class Sample:
                 "names": ["timestep", "lat", "lon", "features"],
             }
             try:
-                if param.kind == "input":
-                    # forcing is taken for every predicted step
-                    dates = self.all_dates[-self.settings.num_pred_steps :]
-                    tensor = get_param(param, dates, self.stats, self.settings, no_standardize)
-                    tmp_state = NamedTensor(tensor=tensor, **deepcopy(state_kwargs))
-                    lforcings.append(tmp_state)
-
-                elif param.kind == "output":
-                    dates = self.all_dates[-self.settings.num_pred_steps :]
-                    tensor = get_param(param, dates, self.stats, self.settings, no_standardize)
-                    tmp_state = NamedTensor(tensor=tensor, **deepcopy(state_kwargs))
-                    loutputs.append(tmp_state)
-
-                elif param.kind == "input_output":  # input_output
+                if param.kind == "input_output":  # input_output
                     tensor = get_param(param, self.all_dates, self.stats, self.settings, no_standardize)
                     state_kwargs["names"][0] = "timestep"
                     tmp_state = NamedTensor(
@@ -368,8 +355,7 @@ class Sample:
                 print(f"Error for param {param}")
                 raise e
 
-        
-        lforcings = self.generate_forcings()
+        lforcings = generate_forcings(date=self.date_t0, output_terms=self.pred_timesteps, grid=self.grid)
         for forcing in lforcings:
             forcing.unsqueeze_and_expand_from_(linputs[0])
 
