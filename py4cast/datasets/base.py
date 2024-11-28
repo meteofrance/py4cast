@@ -685,21 +685,24 @@ class DatasetInfo:
 
 @dataclass(slots=True)
 class Period:
-    start: dt.datetime
-    end: dt.datetime
-    step: int  # In hours, step btw the t0 of 2 samples
+    start: np.datetime64
+    end: np.datetime64
+    step: int  # In hours
     name: str
 
     def __init__(self, start: int, end: int, step: int, name: str):
-        self.start = dt.datetime.strptime(str(start), "%Y%m%d%H")
-        self.end = dt.datetime.strptime(str(end), "%Y%m%d%H")
+        self.start = np.datetime64(dt.datetime.strptime(str(start), "%Y%m%d%H"))
+        self.end = np.datetime64(dt.datetime.strptime(str(end), "%Y%m%d%H"))
         self.step = step
         self.name = name
 
     @property
     def date_list(self):
         return np.arange(
-            self.start, self.end, np.timedelta64(self.step, "h"), dtype="datetime64[s]"
+            self.start,
+            self.end + np.timedelta64(self.step, "h"),
+            np.timedelta64(self.step, "h"),
+            dtype="datetime64[s]",
         ).tolist()
 
 

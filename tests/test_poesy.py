@@ -1,7 +1,7 @@
-from py4cast.datasets.poesy import Period, PoesySettings, browse_poesy
+from py4cast.datasets.poesy import Period, PoesySettings, run_through_timestamps
 
 
-def test_browse_poesy():
+def test_run_through_timestamps():
     """
     Test the browse_dataset function
     """
@@ -17,11 +17,11 @@ def test_browse_poesy():
         num_input_steps=1,
     )
 
-    list_args_all_samples = browse_poesy(period, settings)
+    list_args_all_samples = run_through_timestamps(period, settings)
 
     # Test time * term * member
     assert len(list_args_all_samples) == 2 * 3 * 2
 
 
 if __name__ == "__main__":
-    test_browse_poesy()
+    test_run_through_timestamps()

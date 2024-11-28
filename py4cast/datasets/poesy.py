@@ -57,26 +57,7 @@ def get_weight(level: float, level_type: str) -> float:
         return 1.0
     else:
         raise Exception(f"unknown level_type:{level_type}")
-
-
-#############################################################
-#                            PERIOD                         #
-#############################################################
-
-
-@dataclass(slots=True)
-class Period:
-    start: np.datetime64
-    end: np.datetime64
-    step: int  # In hours
-    name: str
-
-    def __init__(self, start: int, end: int, step: int, name: str):
-        self.start = np.datetime64(dt.datetime.strptime(str(start), "%Y%m%d%H"))
-        self.end = np.datetime64(dt.datetime.strptime(str(end), "%Y%m%d%H"))
-        self.step = step
-        self.name = name
-
+    
 
 #############################################################
 #                            GRID                           #
@@ -205,14 +186,6 @@ def run_through_timestamps(
 
     list_args_all_samples = []
 
-    # Create all datetimes
-    date_list = np.arange(
-        period.start,
-        period.end + np.timedelta64(period.step, "h"),
-        np.timedelta64(period.step, "h"),
-        dtype="datetime64[s]",
-    ).tolist()
-
     # Get the number of sample for 1 run
     terms = list(
         np.arange(
@@ -226,7 +199,7 @@ def run_through_timestamps(
     n_sample_by_leadtime = len(terms) // settings.num_total_steps
 
     # Create a dict of args for each datetime, member and for all sample
-    for date in date_list:
+    for date in period.date_list:
         for member in settings.members:
             for sample in range(0, n_sample_by_leadtime):
                 input_terms = terms[
