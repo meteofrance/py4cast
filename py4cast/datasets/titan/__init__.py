@@ -300,45 +300,12 @@ class Sample:
                     return False
         return True
 
-    def load(self, get_param,  no_standardize: bool = False) -> Item:
-        linputs, loutputs, lforcings = [], [], []
-
-        # Reading parameters from files
-        for param in self.params:
-            state_kwargs = {
-                "feature_names": param.parameter_short_names,
-                "names": ["timestep", "lat", "lon", "features"],
-            }
-
-            if param.kind == "input":
-                # forcing is taken for every predicted step
-                dates = self.all_dates[-self.settings.num_pred_steps :]
-                tensor = get_param(param, dates, self.stats, self.settings, no_standardize)
-                tmp_state = NamedTensor(tensor=tensor, **deepcopy(state_kwargs))
-                lforcings.append(tmp_state)
-
-            elif param.kind == "output":
-                dates = self.all_dates[-self.settings.num_pred_steps :]
-                tensor = get_param(param, dates, self.stats, self.settings, no_standardize)
-                tmp_state = NamedTensor(tensor=tensor, **deepcopy(state_kwargs))
-                loutputs.append(tmp_state)
-
-            else:  # input_output
-                tensor = get_param(param, self.all_dates, self.stats, self.settings, no_standardize)
-                state_kwargs["names"][0] = "timestep"
-                tmp_state = NamedTensor(
-                    tensor=tensor[-self.settings.num_pred_steps :],
-                    **deepcopy(state_kwargs),
-                )
-
-                loutputs.append(tmp_state)
-                state_kwargs["names"][0] = "timestep"
-                tmp_state = NamedTensor(
-                    tensor=tensor[: self.settings.num_input_steps],
-                    **deepcopy(state_kwargs),
-                )
-                linputs.append(tmp_state)
-
+    def generate_forcings(self) -> List[NamedTensor]:
+        """
+        Generate all the forcing in this function. 
+        Return a list of NamedTensor.
+        """
+        lforcings = []
         time_forcing = NamedTensor(  # doy : day_of_year
             feature_names=["cos_hour", "sin_hour", "cos_doy", "sin_doy"],
             tensor=get_year_hour_forcing(self.date_t0, self.pred_timesteps).type(
@@ -356,8 +323,56 @@ class Sample:
         lforcings.append(time_forcing)
         lforcings.append(solar_forcing)
 
+        return lforcings
+
+    def load(self, get_param,  no_standardize: bool = False) -> Item:
+        
+        linputs, loutputs = [], []
+
+        # Reading parameters from files
+        for param in self.params:
+            state_kwargs = {
+                "feature_names": param.parameter_short_names,
+                "names": ["timestep", "lat", "lon", "features"],
+            }
+            try:
+                if param.kind == "input":
+                    # forcing is taken for every predicted step
+                    dates = self.all_dates[-self.settings.num_pred_steps :]
+                    tensor = get_param(param, dates, self.stats, self.settings, no_standardize)
+                    tmp_state = NamedTensor(tensor=tensor, **deepcopy(state_kwargs))
+                    lforcings.append(tmp_state)
+
+                elif param.kind == "output":
+                    dates = self.all_dates[-self.settings.num_pred_steps :]
+                    tensor = get_param(param, dates, self.stats, self.settings, no_standardize)
+                    tmp_state = NamedTensor(tensor=tensor, **deepcopy(state_kwargs))
+                    loutputs.append(tmp_state)
+
+                elif param.kind == "input_output":  # input_output
+                    tensor = get_param(param, self.all_dates, self.stats, self.settings, no_standardize)
+                    state_kwargs["names"][0] = "timestep"
+                    tmp_state = NamedTensor(
+                        tensor=tensor[-self.settings.num_pred_steps :],
+                        **deepcopy(state_kwargs),
+                    )
+
+                    loutputs.append(tmp_state)
+                    tmp_state = NamedTensor(
+                        tensor=tensor[: self.settings.num_input_steps],
+                        **deepcopy(state_kwargs),
+                    )
+                    linputs.append(tmp_state)
+            
+            except KeyError as e:
+                print(f"Error for param {param}")
+                raise e
+
+        
+        lforcings = self.generate_forcings()
         for forcing in lforcings:
             forcing.unsqueeze_and_expand_from_(linputs[0])
+
         return Item(
             inputs=NamedTensor.concat(linputs),
             outputs=NamedTensor.concat(loutputs),

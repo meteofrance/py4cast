@@ -166,7 +166,7 @@ def get_param_tensor(
     standardize: bool,
     member: int = 1,
     inference_steps: int = 0,
-    
+
 ) -> torch.tensor:
     """
     This function load a specific parameter into a tensor
@@ -272,7 +272,7 @@ class Sample:
 
         return lforcings
 
-    def load(self, get_param):
+    def load(self, get_param) -> Item:
 
         linputs = []
         loutputs = []
@@ -284,7 +284,20 @@ class Sample:
                 "names": ["timestep", "lat", "lon", "features"],
             }
             try:
-                if param.kind == "input_output":
+                if param.kind == "input":
+                    # forcing is taken for every predicted step
+                    dates = self.all_dates[-self.settings.num_pred_steps :]
+                    tensor = get_param(param, dates, self.stats, self.settings, no_standardize)
+                    tmp_state = NamedTensor(tensor=tensor, **deepcopy(state_kwargs))
+                    lforcings.append(tmp_state)
+
+                elif param.kind == "output":
+                    dates = self.all_dates[-self.settings.num_pred_steps :]
+                    tensor = get_param(param, dates, self.stats, self.settings, no_standardize)
+                    tmp_state = NamedTensor(tensor=tensor, **deepcopy(state_kwargs))
+                    loutputs.append(tmp_state)
+
+                elif param.kind == "input_output":
                     # Search data for date sample.date and terms sample.terms
                     tensor = get_param(
                         param,
@@ -492,10 +505,13 @@ class PoesyDataset(DatasetABC, Dataset):
         return res
 
     def __getitem__(self, index):
+        """
+        Return an item from an index of the sample_list
+        """
         sample = self.sample_list[index]
         item = sample.load(get_param=get_param_tensor)
         return item
-        
+    
 
     @classmethod
     def from_json(
