@@ -98,10 +98,10 @@ def get_grid_coords() -> List[int]:
 
 
 def get_filepath(
+    ds_name: str,
     param: Param,
     date: dt.datetime,
     file_format: Literal["npy", "grib"],
-    npy_path: Optional[str] = None,
 ) -> Path:
     """
     Returns the path of the file containing the parameter data.
@@ -112,18 +112,19 @@ def get_filepath(
         folder = SCRATCH_PATH / "grib" / date.strftime(FORMATSTR)
         return folder / param.grib_name
     else:
-        filename = f"{param.name}_{param.level}{param.level_type.lower()}.npy"
+        npy_path = get_dataset_path(ds_name, param.grid) / "data"
+        filename = f"{param.name}_{param.level}_{param.level_type}.npy"
         return npy_path / date.strftime(FORMATSTR) / filename
 
 
-def process_sample_dataset(date: dt.datetime, params: List[Param]):
+def process_sample_dataset(ds_name: str, date: dt.datetime, params: List[Param]):
     """Saves each 2D parameter data of the given date as one NPY file."""
     for param in params:
-        dest_file = get_filepath(param, date, "npy")
+        dest_file = get_filepath(ds_name, param, date, "npy")
         dest_file.parent.mkdir(exist_ok=True)
         if not dest_file.exists():
             try:
-                arr = load_data_from_disk(param, date, "grib")
+                arr = load_data_from_disk(ds_name, param, date, "grib")
                 np.save(dest_file, arr)
             except Exception as e:
                 print(e)
@@ -179,30 +180,40 @@ def load_data_grib(param: Param, path: Path) -> np.ndarray:
 
 
 def load_data_from_disk(
-    param: Param, date: dt.datetime, file_format: Literal["npy", "grib"] = "grib"
+    ds_name: str,
+    param: Param,
+    date: dt.datetime,
+    file_format: Literal["npy", "grib"] = "grib",
 ):
     """
     Function to load invidiual parameter and lead time from a file stored in disk
     """
-    data_path = get_filepath(param, date, file_format)
+    data_path = get_filepath(ds_name, param, date, file_format)
     if file_format == "grib":
         arr, lons, lats = load_data_grib(param, data_path)
         arr = fit_to_grid(arr, lons, lats)
-        subdomain = param.grid.subdomain
-        arr = arr[subdomain[0] : subdomain[1], subdomain[2] : subdomain[3]]
-        return arr[::-1]  # invert latitude
     else:
-        return np.load(data_path)
+        arr = np.load(data_path)
+
+    subdomain = param.grid.subdomain
+    arr = arr[subdomain[0] : subdomain[1], subdomain[2] : subdomain[3]]
+    if file_format == "grib":
+        arr = arr[::-1]
+    return arr  # invert latitude
 
 
 def exists(
-    param: Param, date: dt.datetime, file_format: Literal["npy", "grib"] = "grib"
+    ds_name: str,
+    param: Param,
+    date: dt.datetime,
+    file_format: Literal["npy", "grib"] = "grib",
 ) -> bool:
-    filepath = get_filepath(param, date, file_format)
+    filepath = get_filepath(ds_name, param, date, file_format)
     return filepath.exists()
 
 
 def get_param_tensor(
+    ds_name: str,
     param: Param,
     stats: Stats,
     dates: List[dt.datetime],
@@ -215,7 +226,7 @@ def get_param_tensor(
     returns a tensor
     """
     arrays = [
-        load_data_from_disk(param, date, settings.file_format)
+        load_data_from_disk(ds_name, param, date, settings.file_format)
         for date in dates
     ]
     arr = np.stack(arrays)
@@ -285,7 +296,9 @@ class Sample:
         """
         for date in self.all_dates:
             for param in self.params:
-                if not exists(param, date, self.settings.file_format):
+                if not exists(
+                    self.settings.dataset_name, param, date, self.settings.file_format
+                ):
                     print("invalid sample")
                     return False
         return True
@@ -296,25 +309,45 @@ class Sample:
         # Reading parameters from files
         for param in self.params:
             state_kwargs = {
-                "feature_names": param.parameter_short_name,
+                "feature_names": [param.parameter_short_name],
                 "names": ["timestep", "lat", "lon", "features"],
             }
-
             if param.kind == "input":
                 # forcing is taken for every predicted step
                 dates = self.all_dates[-self.settings.num_pred_steps :]
-                tensor = get_param_tensor(param, self.stats, dates, self.settings, no_standardize)
+                tensor = get_param_tensor(
+                    self.settings.dataset_name,
+                    param,
+                    self.stats,
+                    dates,
+                    self.settings,
+                    no_standardize,
+                )
                 tmp_state = NamedTensor(tensor=tensor, **deepcopy(state_kwargs))
                 lforcings.append(tmp_state)
 
             elif param.kind == "output":
                 dates = self.all_dates[-self.settings.num_pred_steps :]
-                tensor = get_param_tensor(param, self.stats, dates, self.settings, no_standardize)
+                tensor = get_param_tensor(
+                    self.settings.dataset_name,
+                    param,
+                    self.stats,
+                    dates,
+                    self.settings,
+                    no_standardize,
+                )
                 tmp_state = NamedTensor(tensor=tensor, **deepcopy(state_kwargs))
                 loutputs.append(tmp_state)
 
             else:  # input_output
-                tensor = get_param_tensor(param, self.stats, self.all_dates, self.settings, no_standardize)
+                tensor = get_param_tensor(
+                    self.settings.dataset_name,
+                    param,
+                    self.stats,
+                    self.all_dates,
+                    self.settings,
+                    no_standardize,
+                )
                 state_kwargs["names"][0] = "timestep"
                 tmp_state = NamedTensor(
                     tensor=tensor[-self.settings.num_pred_steps :],
@@ -336,6 +369,7 @@ class Sample:
             ),
             names=["timestep", "features"],
         )
+
         solar_forcing = NamedTensor(
             feature_names=["toa_radiation"],
             tensor=generate_toa_radiation_forcing(
@@ -579,13 +613,13 @@ class TitanDataset(DatasetABC, Dataset):
         param_list = get_param_list(conf, grid, load_param_info, get_weight_per_lvl)
 
         train_settings = Settings(
-            num_input_steps, num_pred_steps_train, **conf["settings"]
+            name, num_input_steps, num_pred_steps_train, **conf["settings"]
         )
         train_period = Period(**conf["periods"]["train"], name="train")
         train_ds = TitanDataset(name, grid, train_period, param_list, train_settings)
 
         valid_settings = Settings(
-            num_input_steps, num_pred_steps_val_test, **conf["settings"]
+            name, num_input_steps, num_pred_steps_val_test, **conf["settings"]
         )
         valid_period = Period(**conf["periods"]["valid"], name="valid")
         valid_ds = TitanDataset(name, grid, valid_period, param_list, valid_settings)
@@ -671,7 +705,11 @@ class TitanDataset(DatasetABC, Dataset):
     def state_weights(self):
         """Weights used in the loss function."""
         kinds = ["output", "input_output"]
-        return {p.parameter_short_name: p.state_weight for p in self.params if p.kind in kinds}
+        return {
+            p.parameter_short_name: p.state_weight
+            for p in self.params
+            if p.kind in kinds
+        }
 
     @property
     def cache_dir(self) -> Path:

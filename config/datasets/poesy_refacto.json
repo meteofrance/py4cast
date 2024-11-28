@@ -3,21 +3,21 @@
         "train": {
             "start": 2020061521,
             "end": 2021061521,
-            "step": 24
+            "step": 1
         },
         "test": {
             "start": 2021061621,
             "end": 2021071621,
-            "step": 24
+            "step": 1
         },
         "valid": {
             "start": 2021071721,
             "end": 2021111521,
-            "step": 24
+            "step": 1
         }
     },
     "grid":{
-        "name":"EURW1S40_gribcompat", 
+        "name":"EURW1S40_refacto", 
         "border_size":10, 
         "subdomain":[50,178,50,178],
         "proj_name": "LambertConformal",

@@ -573,7 +573,7 @@ class Stats:
     fname: Path
 
     def __post_init__(self):
-        self.stats = torch.load(self.fname, "cpu")
+        self.stats = torch.load(self.fname, "cpu", weights_only=True)
 
     def items(self):
         return self.stats.items()
@@ -809,6 +809,7 @@ class Grid:
 
 @dataclass(slots=True)
 class Settings:
+    dataset_name: str
     num_input_steps: int  # Number of input timesteps
     num_pred_steps: int  # Number of output timesteps
     step_duration: float  # duration in hour

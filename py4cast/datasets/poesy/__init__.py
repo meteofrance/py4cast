@@ -24,6 +24,7 @@ from py4cast.datasets.base import (
     ParamConfig,
     Period,
     Settings,
+    Stats,
     TorchDataloaderSettings,
     collate_fn,
     get_param_list,
@@ -80,7 +81,7 @@ def load_grid_info(grid: Grid) -> GridConfig:
 #############################################################
 
 
-def get_filepath(param: Param, date: dt.datetime) -> str:
+def get_filepath(ds_name: str, param: Param, date: dt.datetime) -> str:
     """
     Return the filename.
     """
@@ -102,12 +103,14 @@ def load_param_info(name: str) -> ParamConfig:
     return ParamConfig(unit, level_type, long_name, grid, grib_name, grib_param)
 
 
-def load_data(param: Param, date: dt.datetime, term: List, member: int) -> np.array:
+def load_data(
+    ds_name: str, param: Param, date: dt.datetime, term: List, member: int
+) -> np.array:
     """
     date : Date of file.
     term : Position of leadtimes in file.
     """
-    data_array = np.load(get_filepath(param, date), mmap_mode="r")
+    data_array = np.load(get_filepath(ds_name, param, date), mmap_mode="r")
     return data_array[
         param.grid.subdomain[0] : param.grid.subdomain[1],
         param.grid.subdomain[2] : param.grid.subdomain[3],
@@ -116,8 +119,8 @@ def load_data(param: Param, date: dt.datetime, term: List, member: int) -> np.ar
     ]
 
 
-def exists(param: Param, date: dt.datetime) -> bool:
-    flist = get_filepath(param, date)
+def exists(ds_name: str, param: Param, date: dt.datetime) -> bool:
+    flist = get_filepath(ds_name, param, date)
     return flist.exists()
 
 
@@ -127,6 +130,7 @@ class Sample:
     # TODO consider members
     member: int
     date: dt.datetime
+    settings: Settings
     input_terms: Tuple[float]
     output_terms: Tuple[float]
 
@@ -146,10 +150,39 @@ class Sample:
             Boolean:  Whether the sample exists or not
         """
         for param in param_list:
-            if not exists(param, self.date):
+            if not exists(self.settings.dataset_name, param, self.date):
                 return False
 
         return True
+
+
+def get_param_tensor(
+    param: Param,
+    stats: Stats,
+    date: dt.datetime,
+    settings: Settings,
+    terms: List,
+    member: int = 1,
+) -> torch.tensor:
+    if settings.standardize:
+        name = param.parameter_short_name
+        means = np.asarray(stats[name]["mean"])
+        std = np.asarray(stats[name]["std"])
+
+    array = load_data(settings.dataset_name, param, date, terms, member)
+
+    # Extend dimension to match 3D (level dimension)
+    if len(array.shape) != 4:
+        array = np.expand_dims(array, axis=-1)
+    array = np.transpose(array, axes=[2, 0, 1, 3])  # shape = (steps, lvl, x, y)
+
+    if settings.standardize:
+        array = (array - means) / std
+
+    # Define which value is considered invalid
+    tensor_data = torch.from_numpy(array)
+
+    return tensor_data
 
 
 class InferSample(Sample):
@@ -248,6 +281,7 @@ class PoesyDataset(DatasetABC, Dataset):
                     samp = Sample(
                         date=date,
                         member=member,
+                        settings=self.settings,
                         input_terms=input_terms,
                         output_terms=output_terms,
                     )
@@ -256,7 +290,7 @@ class PoesyDataset(DatasetABC, Dataset):
                         samples.append(samp)
                         number += 1
 
-        print("All samples are now defined")
+        print(f"All {len(samples)} samples are now defined")
         return samples
 
     @cached_property
@@ -310,37 +344,6 @@ class PoesyDataset(DatasetABC, Dataset):
                 res += 1
         return res
 
-    def get_param_tensor(
-        self,
-        param: Param,
-        date: dt.datetime,
-        terms: List,
-        member: int = 1,
-        inference_steps: int = 0,
-    ) -> torch.tensor:
-        if self.settings.standardize:
-            name = param.parameter_short_name
-            means = np.asarray(self.stats[name]["mean"])
-            std = np.asarray(self.stats[name]["std"])
-
-        array = load_data(param, date, terms, member)
-
-        # Extend dimension to match 3D (level dimension)
-        if len(array.shape) != 4:
-            array = np.expand_dims(array, axis=-1)
-        array = np.transpose(array, axes=[2, 0, 1, 3])  # shape = (steps, lvl, x, y)
-
-        if self.settings.standardize:
-            array = (array - means) / std
-
-        # Define which value is considered invalid
-        tensor_data = torch.from_numpy(array)
-
-        if inference_steps:
-            empty_data = torch.empty((inference_steps, *array.shape[1:]))
-            tensor_data = torch.cat((tensor_data, empty_data), dim=0)
-        return tensor_data
-
     def __getitem__(self, index):
         sample = self.sample_list[index]
 
@@ -386,18 +389,19 @@ class PoesyDataset(DatasetABC, Dataset):
         # Reading parameters from files
         for param in self.params:
             state_kwargs = {
-                "feature_names": param.parameter_short_name,
+                "feature_names": [param.parameter_short_name],
                 "names": ["timestep", "lat", "lon", "features"],
             }
             try:
                 if param.kind == "input_output":
                     # Search data for date sample.date and terms sample.terms
-                    tensor = self.get_param_tensor(
+                    tensor = get_param_tensor(
                         param,
+                        self.stats,
                         sample.date,
+                        self.settings,
                         terms=sample.terms,
                         member=sample.member,
-                        inference_steps=self.settings.num_pred_steps,
                     )
                     state_kwargs["names"][0] = "timestep"
                     # Save outputs
@@ -450,12 +454,12 @@ class PoesyDataset(DatasetABC, Dataset):
         train_period = Period(**conf["periods"]["train"], name="train")
         valid_period = Period(**conf["periods"]["valid"], name="valid")
         test_period = Period(**conf["periods"]["test"], name="test")
-
         train_ds = PoesyDataset(
             grid,
             train_period,
             param_list,
             Settings(
+                dataset_name=fname.stem,
                 num_pred_steps=num_pred_steps_train,
                 num_input_steps=num_input_steps,
                 members=conf["members"],
@@ -467,6 +471,7 @@ class PoesyDataset(DatasetABC, Dataset):
             valid_period,
             param_list,
             Settings(
+                dataset_name=fname.stem,
                 num_pred_steps=num_pred_steps_val_test,
                 num_input_steps=num_input_steps,
                 members=conf["members"],
@@ -478,6 +483,7 @@ class PoesyDataset(DatasetABC, Dataset):
             test_period,
             param_list,
             Settings(
+                dataset_name=fname.stem,
                 num_pred_steps=num_pred_steps_val_test,
                 num_input_steps=num_input_steps,
                 members=conf["members"],
@@ -536,7 +542,7 @@ class PoesyDataset(DatasetABC, Dataset):
         """
         Return a dictionnary with name and units
         """
-        return {p.parameter_short_name : p.unit for p in self.params}
+        return {p.parameter_short_name: p.unit for p in self.params}
 
     def shortnames(
         self,
@@ -551,7 +557,7 @@ class PoesyDataset(DatasetABC, Dataset):
         Does not include grid information (such as geopotentiel and LandSeaMask).
         Make the difference between inputs, outputs.
         """
-        return [p.parameter_short_name for p in self.params if p.kind==kind]
+        return [p.parameter_short_name for p in self.params if p.kind == kind]
 
     @cached_property
     def state_weights(self):
@@ -559,7 +565,11 @@ class PoesyDataset(DatasetABC, Dataset):
         Weights used in the loss function.
         """
         kinds = ["output", "input_output"]
-        return {p.parameter_short_name : p.state_weight for p in self.params if p.kind in kinds}
+        return {
+            p.parameter_short_name: p.state_weight
+            for p in self.params
+            if p.kind in kinds
+        }
 
     @cached_property
     def domain_info(self) -> DomainInfo:
@@ -645,6 +655,7 @@ class InferPoesyDataset(PoesyDataset):
                     samp = InferSample(
                         date=date,
                         member=member,
+                        settings=self.settings,
                         input_terms=input_terms,
                         output_terms=output_terms,
                     )
@@ -652,7 +663,7 @@ class InferPoesyDataset(PoesyDataset):
                     if samp.is_valid(self.params):
                         samples.append(samp)
                         number += 1
-        print("All samples are now defined")
+        print(f"All {len(samples)} samples are now defined")
 
         return samples
 
