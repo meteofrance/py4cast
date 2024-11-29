@@ -16,7 +16,7 @@ from PIL import Image
 from tueplots import bundles, figsizes
 
 if TYPE_CHECKING:
-    from py4cast.ARLightningModule import AutoRegressiveLightningModule
+    from py4cast.arlightningmodule import AutoRegressiveLightningModule
 
 from py4cast.datasets.base import NamedTensor
 from py4cast.losses import Py4CastLoss
