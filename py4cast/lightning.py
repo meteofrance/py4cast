@@ -8,7 +8,6 @@ from pathlib import Path
 from typing import Dict, List, Tuple, Union
 
 import einops
-
 import lightning as pl
 import matplotlib
 import torch
@@ -65,7 +64,7 @@ class PlDataModule(pl.LightningDataModule):
     def __post_init__(self):
         super().__init__()
 
-        # Instantiate dataloader settings 
+        # Instantiate dataloader settings
         self.dl_settings = TorchDataloaderSettings(
             self.batch_size,
             self.num_workers,
@@ -140,7 +139,6 @@ class ArLightningHyperParam:
     save_path: str = None
     use_lr_scheduler: bool = False
     precision: str = "bf16"
-    no_log: bool = False
     channels_last: bool = False
 
     def __post_init__(self):
@@ -216,7 +214,6 @@ class AutoRegressiveLightning(pl.LightningModule):
         training_strategy: str,
         use_lr_scheduler: bool,
         precision: str,
-        no_log: bool,  # doublon avec trainer.logger
         channels_last: bool,
         len_train_loader: int,
         dataset_info,
@@ -245,12 +242,11 @@ class AutoRegressiveLightning(pl.LightningModule):
             save_path=save_path,
             use_lr_scheduler=use_lr_scheduler,
             precision=precision,
-            no_log=no_log,
             channels_last=channels_last,
         )
 
         # write hparams.yaml in save folder
-        self.save_hyperparameters(hparams.__dict__)  
+        self.save_hyperparameters(hparams.__dict__)
         self.save_path = self.hparams.save_path
 
         # Load static features for grid/data
@@ -341,12 +337,6 @@ class AutoRegressiveLightning(pl.LightningModule):
 
         self.loss.prepare(self, statics.interior_mask, hparams.dataset_info)
 
-        max_pred_step = self.hparams.num_pred_steps_val_test - 1
-        if self.logging_enabled:
-            self.rmse_psd_plot_metric = MetricPSDVar(pred_step=max_pred_step)
-            self.psd_plot_metric = MetricPSDK(self.hparams.save_path, pred_step=max_pred_step)
-            self.acc_metric = MetricACC(self.hparams.dataset_info)
-
     @property
     def dtype(self):
         """
@@ -369,8 +359,17 @@ class AutoRegressiveLightning(pl.LightningModule):
 
     @rank_zero_only
     def log_hparams_tb(self):
-        if self.logging_enabled and self.logger:
+        if self.logger:
+
             hparams = self.hparams
+
+            max_pred_step = self.hparams.num_pred_steps_val_test - 1
+            self.rmse_psd_plot_metric = MetricPSDVar(pred_step=max_pred_step)
+            self.psd_plot_metric = MetricPSDK(
+                self.hparams.save_path, pred_step=max_pred_step
+            )
+            self.acc_metric = MetricACC(self.hparams.dataset_info)
+
             # Log hparams in tensorboard hparams window
             dict_log = hparams
             dict_log["username"] = getpass.getuser()
@@ -378,7 +377,8 @@ class AutoRegressiveLightning(pl.LightningModule):
             # Save model & dataset conf as files
             if self.hparams.dataset_conf is not None:
                 shutil.copyfile(
-                    self.hparams.dataset_conf, self.hparams.save_path / "dataset_conf.json"
+                    self.hparams.dataset_conf,
+                    self.hparams.save_path / "dataset_conf.json",
                 )
             if hparams["model_conf"] is not None:
                 shutil.copyfile(
@@ -466,9 +466,7 @@ class AutoRegressiveLightning(pl.LightningModule):
         force_border: bool = (
             True if self.hparams.training_strategy == "scaled_ar" else False
         )
-        scale_y: bool = (
-            True if self.hparams.training_strategy == "scaled_ar" else False
-        )
+        scale_y: bool = True if self.hparams.training_strategy == "scaled_ar" else False
         # raise if mismatch between strategy and num_inter_steps
         if self.hparams.training_strategy == "diff_ar":
             if self.hparams.num_inter_steps != 1:
@@ -628,7 +626,7 @@ class AutoRegressiveLightning(pl.LightningModule):
         """Computes and logs the averaged metrics at the end of an epoch.
         Step shared by training and validation epochs.
         """
-        if self.logging_enabled:
+        if self.logger:
             avg_loss = torch.stack([x for x in outputs]).mean()
             tb = self.logger.experiment
             tb.add_scalar(f"mean_loss_epoch/{label}", avg_loss, self.current_epoch)
@@ -654,18 +652,11 @@ class AutoRegressiveLightning(pl.LightningModule):
         self.training_step_losses.append(batch_loss)
 
         # Notify every plotters
-        if self.logging_enabled:
+        if self.logger:
             for plotter in self.train_plotters:
                 plotter.update(self, prediction=self.prediction, target=self.target)
 
         return batch_loss
-
-    @property
-    def logging_enabled(self):
-        """
-        Check if logging is enabled
-        """
-        return not self.hparams.no_log
 
     def on_save_checkpoint(self, checkpoint):
         """
@@ -714,7 +705,7 @@ class AutoRegressiveLightning(pl.LightningModule):
         """
         Add some plots when starting validation
         """
-        if self.logging_enabled:
+        if self.logger:
             l1_loss = ScaledLoss("L1Loss", reduction="none")
             l1_loss.prepare(self, self.interior_mask, self.hparams.dataset_info)
             metrics = {"mae": l1_loss}
@@ -742,7 +733,7 @@ class AutoRegressiveLightning(pl.LightningModule):
         time_step_loss = torch.mean(self.loss(prediction, target), dim=0)
         mean_loss = torch.mean(time_step_loss)
 
-        if self.logging_enabled:
+        if self.logger:
             # Log loss per timestep
             loss_dict = {
                 f"timestep_losses/{label}_step_{step}": time_step_loss[step]
@@ -769,7 +760,7 @@ class AutoRegressiveLightning(pl.LightningModule):
 
         self.val_mean_loss = mean_loss
 
-        if self.logging_enabled:
+        if self.logger:
             # Notify every plotters
             if self.current_epoch % PLOT_PERIOD == 0:
                 for plotter in self.valid_plotters:
@@ -783,7 +774,7 @@ class AutoRegressiveLightning(pl.LightningModule):
         Compute val metrics at the end of val epoch
         """
 
-        if self.logging_enabled:
+        if self.logger:
             # Get dict of metrics' results
             dict_metrics = dict()
             dict_metrics.update(self.psd_plot_metric.compute())
@@ -809,7 +800,7 @@ class AutoRegressiveLightning(pl.LightningModule):
         # free memory
         self.validation_step_losses.clear()
 
-        if self.logging_enabled:
+        if self.logger:
             # Notify every plotters
             if self.current_epoch % PLOT_PERIOD == 0:
                 for plotter in self.valid_plotters:
@@ -819,7 +810,7 @@ class AutoRegressiveLightning(pl.LightningModule):
         """
         Attach observer when starting test
         """
-        if self.logging_enabled:
+        if self.logger:
             metrics = {}
             for torch_loss, alias in ("L1Loss", "mae"), ("MSELoss", "rmse"):
                 loss = ScaledLoss(torch_loss, reduction="none")
@@ -843,7 +834,7 @@ class AutoRegressiveLightning(pl.LightningModule):
         """
         prediction, target, _ = self._shared_val_test_step(batch, batch_idx, "test")
 
-        if self.logging_enabled:
+        if self.logger:
             # Notify plotters & metrics
             for plotter in self.test_plotters:
                 plotter.update(self, prediction=prediction, target=target)
@@ -868,7 +859,7 @@ class AutoRegressiveLightning(pl.LightningModule):
         """
         Compute test metrics and make plots at the end of test epoch.
         """
-        if self.logging_enabled:
+        if self.logger:
             self.psd_plot_metric.compute()
             self.rmse_psd_plot_metric.compute()
             self.acc_metric.compute()

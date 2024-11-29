@@ -7,7 +7,5 @@ model:
   training_strategy: "diff_ar"
   use_lr_scheduler: False
   precision: "32"
-
-  no_log: False # doublon avec trainer.logger
   channels_last: False
   save_path: "/scratch/shared/py4cast/logs/test_cli/poesy/halfunet/to_del/"
