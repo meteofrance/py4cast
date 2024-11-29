@@ -8,4 +8,4 @@ model:
   use_lr_scheduler: False
   precision: "32"
   channels_last: False
-  save_path: "/scratch/shared/py4cast/logs/test_cli/poesy/halfunet/to_del/"
+  # save_path: "/scratch/shared/py4cast/logs/test_cli/poesy/halfunet/to_del/"

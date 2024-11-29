@@ -80,18 +80,6 @@ class LCli(LightningCLI):
             apply_on="instantiate",
         )
 
-        parser.link_arguments(
-            "model.save_path",
-            "trainer.logger.init_args.save_dir",
-            apply_on="instantiate",
-        )
-
-        parser.link_arguments(
-            "model.save_path",
-            "trainer.callbacks.init_args.dirpath",
-            apply_on="instantiate",
-        )
-
 
 def cli_main():
     LCli(AutoRegressiveLightning, PlDataModule)
