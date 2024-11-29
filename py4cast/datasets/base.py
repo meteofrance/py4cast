@@ -814,8 +814,8 @@ class TorchDataloaderSettings:
     Settings for the torch dataloader
     """
 
-    batch_size: int = 1
-    num_workers: int = 1
+    batch_size: int = 4
+    num_workers: int = 10
     pin_memory: bool = False
     prefetch_factor: Union[int, None] = None
     persistent_workers: bool = False

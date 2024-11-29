@@ -1,7 +1,9 @@
 from lightning.pytorch.cli import LightningCLI, ArgsType
-from py4cast.ARLightningModule import AutoRegressiveLightningModule
-from py4cast.TitanDataModule import TitanDataModule
+from py4cast.arlightningmodule import AutoRegressiveLightningModule
+from py4cast.titandatamodule import TitanDataModule
 from pytorch_lightning.callbacks import ModelCheckpoint
+from pytorch_lightning.loggers import TensorBoardLogger
+
 import os
 
 def find_available_checkpoint_name(dirpath, model_name, index=0):
@@ -37,9 +39,10 @@ def cli_main(args: ArgsType = None):
         args=args,
     )
     model_name = cli.model.__class__.__name__.lower()
-    checkpoint_dir = args.checkpoint_path.rstrip('/')  # Répertoire où sauvegarder les checkpoints
+    logger = TensorBoardLogger("logs/camp0", name=model_name)
+    cli.trainer.logger = logger
+    checkpoint_dir = cli.config.checkpoint_path.rstrip('/')  # Répertoire où sauvegarder les checkpoints
     checkpoint_filename = find_available_checkpoint_name(checkpoint_dir, model_name)
-
     checkpoint_callback = ModelCheckpoint(
         monitor='val_loss',  # Changez cela selon la métrique que vous souhaitez surveiller
         save_top_k=1,  # Sauvegarder le meilleur checkpoint
@@ -49,9 +52,9 @@ def cli_main(args: ArgsType = None):
     )
     cli.trainer.callbacks.append(checkpoint_callback)
     checkpoint_path = os.path.join(checkpoint_dir, checkpoint_filename)
+    print(f"Logs are saved in: {logger.log_dir}")
 
     cli.trainer.test(cli.model, cli.datamodule.test_dataloader(), ckpt_path=checkpoint_path) # Lance l'inférence
-
 
 if __name__ == "__main__":
     cli_main(

@@ -348,6 +348,7 @@ class AutoRegressiveLightningModule(pl.LightningModule):
     ###--------------------- TRAIN ---------------------###
 
     def training_step(self, batch):
+        print(self.logger.log_dir)
         y_hat, y = self.shared_step(batch)
         loss = self.loss(y_hat, y).mean()
         self.shared_loss_step(loss, "train")
@@ -365,6 +366,7 @@ class AutoRegressiveLightningModule(pl.LightningModule):
     ###--------------------- VALIDATION ---------------------###
 
     def validation_step(self, batch):
+        print(self.logger.log_dir)
         y_hat, y = self.shared_step(batch)
         loss = self.loss(y_hat, y).mean()
         self.shared_loss_step(loss, "val")
