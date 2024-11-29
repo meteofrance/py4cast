@@ -29,4 +29,4 @@ typer==0.12.5
 transformers==4.45.2
 torch-geometric==2.6.1
 jsonargparse[signatures]>=4.27.7
-
+mlflow==2.17.2

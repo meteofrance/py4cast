@@ -390,11 +390,20 @@ class PredictionTimestepPlot(MapPlot):
             for var_name, fig in zip(feature_names, var_figs):
                 fig_name = f"timestep_evol_per_param/{var_name}_example_{self.plotted_examples}"
                 tensorboard.add_figure(fig_name, fig, t_i)
+                fig_full_name = f"{fig_name}_{t_i}.png"
                 if self.save_path is not None and self.save_path.exists():
-                    dest_file = self.save_path / f"{fig_name}_{t_i}.png"
+                    dest_file = self.save_path / fig_full_name
                     paths_dict[var_name].append(dest_file)
                     dest_file.parent.mkdir(exist_ok=True)
                     fig.savefig(dest_file)
+
+                if obj.mlflow_logger:
+                    run_id = obj.mlflow_logger.version
+                    obj.mlflow_logger.experiment.log_figure(
+                        run_id=run_id,
+                        figure=fig,
+                        artifact_file=f"figures/{fig_full_name}",
+                    )
 
                 plt.close(fig)
 
@@ -451,10 +460,17 @@ class PredictionEpochPlot(MapPlot):
                 f"epoch_evol_per_param/{var_name}_example_{self.plotted_examples}"
             )
             tensorboard.add_figure(fig_name, fig, obj.current_epoch)
+            fig_full_name = f"{fig_name}_{obj.current_epoch}.png"
             if self.save_path is not None:
-                dest_file = self.save_path / f"{fig_name}_{obj.current_epoch}.png"
+                dest_file = self.save_path / fig_full_name
                 dest_file.parent.mkdir(exist_ok=True)
                 fig.savefig(dest_file)
+
+            if obj.mlflow_logger:
+                run_id = obj.mlflow_logger.version
+                obj.mlflow_logger.experiment.log_figure(
+                    run_id=run_id, figure=fig, artifact_file=f"figures/{fig_full_name}"
+                )
 
         plt.close("all")  # Close all figs for this time step, saves memory
 
@@ -534,10 +550,19 @@ class StateErrorPlot(Plotter):
                     # log it in tensorboard
                     fig_name = f"score_cards/{self.prefix}_{name}"
                     tensorboard.add_figure(fig_name, fig, obj.current_epoch)
+                    fig_full_name = f"{fig_name}.png"
                     if self.save_path is not None:
-                        dest_file = self.save_path / f"{fig_name}.png"
+                        dest_file = self.save_path / fig_full_name
                         dest_file.parent.mkdir(exist_ok=True)
                         fig.savefig(dest_file)
+
+                    if obj.mlflow_logger:
+                        run_id = obj.mlflow_logger.version
+                        obj.mlflow_logger.experiment.log_figure(
+                            run_id=run_id,
+                            figure=fig,
+                            artifact_file=f"figures/{fig_full_name}",
+                        )
                     plt.close(fig)
 
                     if self.save_path is not None:
@@ -596,10 +621,18 @@ class SpatialErrorPlot(Plotter):
                 for t_i, loss_map in enumerate(mean_spatial_loss)
             ]
             tensorboard = obj.logger.experiment
+
             for t_i, fig in enumerate(loss_map_figs):
-                tensorboard.add_figure(
-                    f"spatial_error_{label}/{self.prefix}_loss", fig, t_i
-                )
+                fig_full_name = f"spatial_error_{label}/{self.prefix}_loss"
+                tensorboard.add_figure(fig_full_name, fig, t_i)
+
+                if obj.mlflow_logger:
+                    run_id = obj.mlflow_logger.version
+                    obj.mlflow_logger.experiment.log_figure(
+                        run_id=run_id,
+                        figure=fig,
+                        artifact_file=f"figures/{fig_full_name}.png",
+                    )
             plt.close()
 
         self.spatial_loss_maps.clear()
