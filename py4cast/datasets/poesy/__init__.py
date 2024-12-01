@@ -30,12 +30,10 @@ from py4cast.datasets.base import (
     get_param_list,
 )
 from py4cast.datasets.poesy.settings import (
-    DEFAULT_CONFIG,
     LATLON_FNAME,
     METADATA,
     OROGRAPHY_FNAME,
     SCRATCH_PATH,
-    SECONDS_IN_YEAR,
 )
 from py4cast.forcingutils import generate_toa_radiation_forcing, get_year_hour_forcing
 from py4cast.plots import DomainInfo
@@ -718,22 +716,7 @@ class InferPoesyDataset(PoesyDataset):
                 print(conf["periods"]["test"])
         conf["grid"]["load_grid_info_func"] = load_grid_info
         grid = Grid(**conf["grid"])
-        param_list = []
-        for data_source in conf["dataset"]:
-            data = conf["dataset"][data_source]
-            members = conf["dataset"][data_source].get("members", [0])
-            term = conf["dataset"][data_source]["term"]
-            for var in data["var"]:
-                vard = data["var"][var]
-                param = Param(
-                    name=var,
-                    level=vard.pop("level", 2),
-                    grid=grid,
-                    load_param_info=load_param_info,
-                    kind="input_output",
-                    get_weight_per_level=get_weight,
-                )
-                param_list.append(param)
+        param_list = get_param_list(conf, grid, load_param_info, get_weight)
         inference_period = Period(**conf["periods"]["test"], name="infer")
 
         ds = InferPoesyDataset(
@@ -743,7 +726,7 @@ class InferPoesyDataset(PoesyDataset):
             Settings(
                 num_pred_steps=0,
                 num_input_steps=num_input_steps,
-                members=members,
+                members=conf["members"],
                 **conf["settings"],
             ),
         )

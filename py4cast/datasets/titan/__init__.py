@@ -5,7 +5,7 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 from functools import cached_property, lru_cache
 from pathlib import Path
-from typing import Callable, Dict, List, Literal, Optional, Tuple, Union
+from typing import Callable, Dict, List, Literal, Tuple, Union
 
 import gif
 import matplotlib.pyplot as plt
@@ -14,6 +14,7 @@ import torch
 import tqdm
 import typer
 import xarray as xr
+from skimage.transform import resize
 from torch.utils.data import DataLoader, Dataset
 
 from py4cast.datasets.base import (
@@ -96,7 +97,7 @@ def load_param_info(name: str) -> ParamConfig:
     return ParamConfig(unit, level_type, long_name, grid, grib_name, grib_param)
 
 
-def get_grid_coords() -> List[int]:
+def get_grid_coords(param:Param) -> List[int]:
     return METADATA["GRIDS"][param.grid.name]["extent"]
 
 
@@ -142,7 +143,7 @@ def fit_to_grid(
     arr: np.ndarray,
     lons: np.ndarray,
     lats: np.ndarray,
-    get_grid_coords: Callable[[], List[str]],
+    get_grid_coords: Callable[[Param], List[str]],
 ) -> np.ndarray:
     # already on good grid, nothing to do:
     if param.grid.name == param.native_grid:
@@ -153,7 +154,7 @@ def fit_to_grid(
         "PAAROME_1S100",
         "PAAROME_1S40",
     ]:
-        grid_coords = get_grid_coords()
+        grid_coords = get_grid_coords(param)
         # Mask ARPEGE data to AROME bounding box
         mask_lon = (lons >= grid_coords[2]) & (lons <= grid_coords[3])
         mask_lat = (lats >= grid_coords[1]) & (lats <= grid_coords[0])
@@ -178,7 +179,7 @@ def load_data_grib(param: Param, path: Path) -> np.ndarray:
     if level_type != "isobaricInhPa":  # Only one level
         arr = ds[param.grib_param].values
     else:
-        arr = ds[param.grib_param].sel(isobaricInhPa=self.level).values
+        arr = ds[param.grib_param].sel(isobaricInhPa=param.level).values
     return arr, lons, lats
 
 
@@ -340,7 +341,6 @@ class Sample:
                     param, self.stats, dates, self.settings, no_standardize
                 )
                 tmp_state = NamedTensor(tensor=tensor, **deepcopy(state_kwargs))
-                lforcings.append(tmp_state)
 
             elif param.kind == "output":
                 dates = self.all_dates[-self.settings.num_pred_steps :]
@@ -602,7 +602,6 @@ class TitanDataset(DatasetABC, Dataset):
         conf["grid"]["load_grid_info_func"] = load_grid_info
         grid = Grid(**conf["grid"])
 
-        dataset_path = get_dataset_path(name, grid)
         param_list = get_param_list(conf, grid, load_param_info, get_weight_per_lvl)
 
         train_settings = Settings(
