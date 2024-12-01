@@ -6,7 +6,7 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 from functools import cached_property
 from pathlib import Path
-from typing import Callable, Dict, List, Literal, Tuple, Union
+from typing import Dict, List, Literal, Tuple, Union
 
 import numpy as np
 import torch

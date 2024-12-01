@@ -97,7 +97,7 @@ def load_param_info(name: str) -> ParamConfig:
     return ParamConfig(unit, level_type, long_name, grid, grib_name, grib_param)
 
 
-def get_grid_coords(param:Param) -> List[int]:
+def get_grid_coords(param: Param) -> List[int]:
     return METADATA["GRIDS"][param.grid.name]["extent"]
 
 
