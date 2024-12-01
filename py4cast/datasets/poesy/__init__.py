@@ -300,8 +300,9 @@ class InferSample(Sample):
 
 class PoesyDataset(DatasetABC, Dataset):
     def __init__(
-        self, grid: Grid, period: Period, params: List[Param], settings: Settings
+        self, name, grid: Grid, period: Period, params: List[Param], settings: Settings
     ):
+        self.name = name
         self.grid = grid
         self.period = period
         self.params = params
