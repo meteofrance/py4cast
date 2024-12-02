@@ -105,13 +105,12 @@ def save_named_tensors_to_grib(
                 if not os.path.exists(f"{saving_settings.directory}/{filename}")
                 else "ab"
             )
-
             xtg.to_grib(
                 storable,
                 Path(saving_settings.directory) / filename,
                 option,
             )
-        pass
+
 
 def write_storable_dataset(
     pred: NamedTensor,
