@@ -154,43 +154,8 @@ def get_param_tensor(
 
     return tensor_data
 
-
-@dataclass(slots=True)
-class Sample:
-    """Describes a sample"""
-
-    member: int
-    date: dt.datetime
-    settings: Settings
-    input_terms: Tuple[float]
-    output_terms: Tuple[float]
-    stats: Stats
-    grid: Grid
-    params: List[Param]
-
-    # Term wrt to the date {date}. Gives validity
-    terms: Tuple[float] = field(init=False)
-
-    def __post_init__(self):
-        self.terms = self.input_terms + self.output_terms
-
-    def is_valid(self) -> bool:
-        """
-        Check that all the files necessary for this samples exists.
-
-        Args:
-            param_list (List): List of parameters
-        Returns:
-            Boolean:  Whether the sample exists or not
-        """
-        for param in self.params:
-            if not exists(self.settings.dataset_name, param, self.date):
-                return False
-
-        return True
-
-    def generate_forcings(
-        self, date: dt.datetime, output_terms: Tuple[float], grid: Grid
+def generate_forcings(
+        date: dt.datetime, output_terms: Tuple[float], grid: Grid
     ) -> List[NamedTensor]:
         """
         Generate all the forcing in this function.
@@ -231,6 +196,41 @@ class Sample:
         ]
 
         return lforcings
+
+@dataclass(slots=True)
+class Sample:
+    """Describes a sample"""
+
+    member: int
+    date: dt.datetime
+    settings: Settings
+    input_terms: Tuple[float]
+    output_terms: Tuple[float]
+    stats: Stats
+    grid: Grid
+    params: List[Param]
+
+    # Term wrt to the date {date}. Gives validity
+    terms: Tuple[float] = field(init=False)
+
+    def __post_init__(self):
+        self.terms = self.input_terms + self.output_terms
+
+    def is_valid(self) -> bool:
+        """
+        Check that all the files necessary for this samples exists.
+
+        Args:
+            param_list (List): List of parameters
+        Returns:
+            Boolean:  Whether the sample exists or not
+        """
+        for param in self.params:
+            if not exists(self.settings.dataset_name, param, self.date):
+                return False
+
+        return True
+
 
     def load(self) -> Item:
         """
@@ -276,7 +276,7 @@ class Sample:
                 raise e
 
         # Get forcings
-        lforcings = self.generate_forcings(
+        lforcings = generate_forcings(
             date=self.date, output_terms=self.output_terms, grid=self.grid
         )
         for lforcing in lforcings:
