@@ -46,7 +46,7 @@ except (ImportError, FileNotFoundError, ModuleNotFoundError):
 try:
     from .poesy import PoesyDataset
 
-    registry["poesy"] = (PoesyDataset, default_config_root / "poesy.json")
+    registry["poesy"] = (PoesyDataset, default_config_root / "poesy_refacto.json")
 except ImportError:
     warnings.warn(f"Could not import PoesyDataset. {traceback.format_exc()}")
 

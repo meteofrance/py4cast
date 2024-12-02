@@ -7,7 +7,7 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 from functools import cached_property
 from pathlib import Path
-from typing import Dict, List, Literal, Tuple, Union
+from typing import Any, Dict, List, Literal, Tuple, Union
 
 import numpy as np
 import torch
@@ -59,6 +59,10 @@ def get_weight(level: float, level_type: str) -> float:
         raise Exception(f"unknown level_type:{level_type}")
 
 
+#############################################################
+#                            GRID                           #
+#############################################################
+
 # Define static attributes to add -> see Grid class in smeagol.py
 
 
@@ -70,6 +74,11 @@ def load_poesy_grid_info(name: str) -> GridConfig:
     longitude = latlon[0, 0]
     landsea_mask = np.where(geopotential > 0, 1.0, 0.0).astype(np.float32)
     return GridConfig(full_size, latitude, longitude, geopotential, landsea_mask)
+
+
+#############################################################
+#                            PARAM                          #
+#############################################################
 
 
 @dataclass(slots=True)
@@ -136,6 +145,11 @@ class Param:
         return flist.exists()
 
 
+#############################################################
+#                            SETTINGS                       #
+#############################################################
+
+
 @dataclass(slots=True)
 class PoesySettings:
     term: dict
@@ -155,6 +169,61 @@ class PoesySettings:
         """
         # Nb of step in one sample
         return self.num_input_steps + self.num_output_steps
+
+
+#############################################################
+#                      BROWSE DATASET                       #
+#############################################################
+
+
+def run_through_timestamps(
+    period: Period, settings: PoesySettings
+) -> List[Dict[str, Any]]:
+    """
+    Create a list of arguments used to instantiate Sample.
+    This function indicates how to run through the timestamps in Poesy.
+    """
+
+    list_args_all_samples = []
+
+    # Get the number of sample for 1 run
+    terms = np.arange(
+        settings.term["start"], settings.term["end"] + 1, settings.term["timestep"]
+    ).tolist()
+
+    # compute the number of samples to build from all the terms of 1 leadtime
+    n_sample_by_leadtime = len(terms) // settings.num_total_steps
+
+    # Create a dict of args for each datetime, member and for all sample
+    for date in period.date_list:
+        for member in settings.members:
+            for sample in range(0, n_sample_by_leadtime):
+                input_terms = terms[
+                    sample
+                    * settings.num_total_steps : sample
+                    * settings.num_total_steps
+                    + settings.num_input_steps
+                ]
+                output_terms = terms[
+                    sample * settings.num_total_steps
+                    + settings.num_input_steps : sample * settings.num_total_steps
+                    + settings.num_input_steps
+                    + settings.num_output_steps
+                ]
+                dict_sample_args = {
+                    "date": date,
+                    "member": member,
+                    "input_terms": input_terms,
+                    "output_terms": output_terms,
+                }
+                list_args_all_samples.append(dict_sample_args)
+
+    return list_args_all_samples
+
+
+#############################################################
+#                            SAMPLE                         #
+#############################################################
 
 
 @dataclass(slots=True)
@@ -195,6 +264,11 @@ class InferSample(Sample):
 
     def __post_init__(self):
         self.terms = self.input_terms
+
+
+#############################################################
+#                            DATASET                        #
+#############################################################
 
 
 class PoesyDataset(DatasetABC, Dataset):
@@ -256,45 +330,25 @@ class PoesyDataset(DatasetABC, Dataset):
         Create a list of sample from information
         """
         print("Start forming samples")
-        terms = list(
-            np.arange(
-                self.settings.term["start"],
-                self.settings.term["end"],
-                self.settings.term["timestep"],
-            )
-        )
-
-        sample_by_date = len(terms) // self.settings.num_total_steps
 
         samples = []
-        number = 0
+        n_samples = 0
 
-        for date in self.period.date_list:
-            for member in self.settings.members:
-                for sample in range(0, sample_by_date):
-                    input_terms = terms[
-                        sample
-                        * self.settings.num_total_steps : sample
-                        * self.settings.num_total_steps
-                        + self.settings.num_input_steps
-                    ]
-                    output_terms = terms[
-                        sample * self.settings.num_total_steps
-                        + self.settings.num_input_steps : sample
-                        * self.settings.num_total_steps
-                        + self.settings.num_input_steps
-                        + self.settings.num_output_steps
-                    ]
-                    samp = Sample(
-                        date=date,
-                        member=member,
-                        input_terms=input_terms,
-                        output_terms=output_terms,
-                    )
+        # Run through the dataset and get a list of sample's args.
+        list_args_sample = run_through_timestamps(self.period, self.settings)
 
-                    if samp.is_valid(self.params):
-                        samples.append(samp)
-                        number += 1
+        for dict_args in list_args_sample:
+
+            samp = Sample(
+                date=dict_args["date"],
+                member=dict_args["member"],
+                input_terms=dict_args["input_terms"],
+                output_terms=dict_args["output_terms"],
+            )
+
+            if samp.is_valid(self.params):
+                samples.append(samp)
+                n_samples += 1
 
         print("All samples are now defined")
         return samples

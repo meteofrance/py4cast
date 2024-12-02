@@ -5,7 +5,7 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 from functools import cached_property, lru_cache
 from pathlib import Path
-from typing import Dict, List, Literal, Tuple, Union
+from typing import Any, Dict, List, Literal, Tuple, Union
 
 import gif
 import matplotlib.pyplot as plt
@@ -233,6 +233,24 @@ class TitanSettings:
     step_duration: float  # duration in hour
     standardize: bool = True
     file_format: Literal["npy", "grib"] = "grib"
+
+
+#############################################################
+#                      BROWSE DATASET                       #
+#############################################################
+
+
+def run_through_timestamps(period: Period) -> List[Dict[str, Any]]:
+    """
+    Create a list of arguments used to instantiate Sample.
+    This function indicates how to run through the timestamps in Titan.
+    """
+    list_args_all_samples = []
+    for date in period.date_list:
+        dict_sample_args = {"date": date}
+        list_args_all_samples.append(dict_sample_args)
+
+    return list_args_all_samples
 
 
 #############################################################
@@ -541,10 +559,14 @@ class TitanDataset(DatasetABC, Dataset):
                 f"Valid samples file {self.valid_samples_file} does not exist. Computing samples list..."
             )
             samples = []
-            for date in tqdm.tqdm(self.period.date_list):
-                sample = Sample(date, self.settings, self.params, stats, self.grid)
+            list_args_sample = run_through_timestamps(self.period)
+            for dict_args in tqdm.tqdm(list_args_sample):
+                sample = Sample(
+                    dict_args["date"], self.settings, self.params, stats, self.grid
+                )
                 if sample.is_valid():
                     samples.append(sample)
+
         print(f"--> All {len(samples)} {self.period.name} samples are now defined")
         return samples
 
