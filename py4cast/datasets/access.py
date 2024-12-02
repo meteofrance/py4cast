@@ -11,6 +11,7 @@ ParamConfig = namedtuple(
     "ParamConfig", "unit level_type long_name grid grib_name grib_param"
 )
 
+
 @dataclass(slots=True)
 class Param:
     name: str
@@ -53,9 +54,11 @@ class Param:
     def parameter_short_name(self) -> str:
         return f"{self.name}_{self.level}_{self.level_type}"
 
+
 GridConfig = namedtuple(
     "GridConfig", "full_size latitude longitude geopotential landsea_mask"
 )
+
 
 @dataclass
 class Grid:
@@ -200,6 +203,7 @@ def grid_static_features(grid: Grid, extra_statics: List[NamedTensor]):
     state_var.type_(torch.float32)
     return state_var
 
+
 @dataclass
 class Stats:
     fname: Path
@@ -249,6 +253,7 @@ class Settings:
     members: Optional(Tuple[int]) = None
     add_landsea_mask: bool = False
 
+
 class DataAccessor(ABC):
     """
     Abstract base class used as interface contract for user-defined data sources.
@@ -261,7 +266,7 @@ class DataAccessor(ABC):
     """
 
     @abstractmethod
-    def get_dataset_path(name:str, grid: Grid) -> Path:
+    def get_dataset_path(name: str, grid: Grid) -> Path:
         """
         Return the path that will be used as cache for data during dataset preparation.
         """
@@ -269,14 +274,14 @@ class DataAccessor(ABC):
 
     @abstractmethod
     def get_weight_per_level(
-    level: int,
-    level_type: Literal["isobaricInhPa", "heightAboveGround", "surface", "meanSea"],
+        level: int,
+        level_type: Literal["isobaricInhPa", "heightAboveGround", "surface", "meanSea"],
     ) -> float:
         """
         Attribute a weight in the final reconstruction loss depending on the height level and level_type
         """
         pass
-    
+
     @abstractmethod
     def load_grid_info(name: str) -> GridConfig:
         """
@@ -289,7 +294,7 @@ class DataAccessor(ABC):
     @abstractmethod
     def get_grid_coords(param: Param) -> List[float]:
         """
-        Get the extent of the grid related to a given parameter 
+        Get the extent of the grid related to a given parameter
         (min and max for latitude (2 first positions) and longitude (positions 3 and 4))
         """
         pass
@@ -327,29 +332,33 @@ class DataAccessor(ABC):
 
     @abstractmethod
     def load_data_from_disk(
-    self,
-    dataset_name: str, # name of the dataset or dataset version
-    param: Param, # specific parameter (2D field associated to a grid)
-    date: dt.datetime, # specific timestamp at which to load the field
-    members: Optional(Tuple[int]) = None, # optional members id. when dealing with ensembles
-    file_format: Literal["npy", "grib"] = "npy" # format of the base file on disk
+        self,
+        dataset_name: str,  # name of the dataset or dataset version
+        param: Param,  # specific parameter (2D field associated to a grid)
+        date: dt.datetime,  # specific timestamp at which to load the field
+        members: Optional(
+            Tuple[int]
+        ) = None,  # optional members id. when dealing with ensembles
+        file_format: Literal["npy", "grib"] = "npy",  # format of the base file on disk
     ) -> np.array:
         """
         Main loading function to fetch actual data on disk.
         loads a given parameter on a given timestamp
         """
         pass
-    
+
     def get_param_tensor(
-    self,
-    dataset_name: str, # name of the dataset or dataset version
-    param: Param, # specific parameter (2D field associated to a grid)
-    stats: Stats, # Statistical constants (mean, standard deviation, min or max to normalize the given field)
-    date: dt.datetime, # time stamp for date
-    terms: List, # time stamp for lead times
-    standardize: bool, #whether or not to normalize the field with Stats
-    members: Optional(Tuple[int]) = None,  # optional members id. when dealing with ensembles
-    file_format: Literal["npy", "grib"] = "npy" # format of the base file on disk
+        self,
+        dataset_name: str,  # name of the dataset or dataset version
+        param: Param,  # specific parameter (2D field associated to a grid)
+        stats: Stats,  # Statistical constants (mean, standard deviation, min or max to normalize the given field)
+        date: dt.datetime,  # time stamp for date
+        terms: List,  # time stamp for lead times
+        standardize: bool,  # whether or not to normalize the field with Stats
+        members: Optional(
+            Tuple[int]
+        ) = None,  # optional members id. when dealing with ensembles
+        file_format: Literal["npy", "grib"] = "npy",  # format of the base file on disk
     ) -> torch.tensor:
         """
         Fetch all data related to a parameter at each element of a list of timestamps.
@@ -359,7 +368,9 @@ class DataAccessor(ABC):
             means = np.asarray(stats[name]["mean"])
             std = np.asarray(stats[name]["std"])
 
-        array = self.load_data_from_disk(dataset_name, param, date, terms, members, file_format)
+        array = self.load_data_from_disk(
+            dataset_name, param, date, terms, members, file_format
+        )
 
         # Extend dimension to match 3D (level dimension)
         if len(array.shape) != 4:

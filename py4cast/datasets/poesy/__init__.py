@@ -13,6 +13,15 @@ import torch
 import tqdm
 from torch.utils.data import DataLoader, Dataset
 
+from py4cast.datasets.access import (
+    DataAccessor,
+    Grid,
+    GridConfig,
+    Param,
+    ParamConfig,
+    Settings,
+    Stats,
+)
 from py4cast.datasets.base import (
     DatasetABC,
     DatasetInfo,
@@ -23,17 +32,6 @@ from py4cast.datasets.base import (
     collate_fn,
     get_param_list,
 )
-
-from py4cast.datasets.access import (
-    DataAccessor,
-    Grid,
-    GridConfig,
-    Param,
-    ParamConfig,
-    Settings,
-    Stats
-)
-
 from py4cast.datasets.poesy.settings import (
     LATLON_FNAME,
     METADATA,
@@ -48,12 +46,13 @@ from py4cast.utils import merge_dicts
 
 class PoesyAccessor(DataAccessor):
 
-    def get_dataset_path(name:str, grid: Grid) -> Path:
+    def get_dataset_path(name: str, grid: Grid) -> Path:
         return CACHE_DIR / str(name)
 
     def get_weight_per_level(
-    level: float,
-    level_type: Literal['isobaricInhPa','heightAboveGround','surface','meanSea']) -> float:
+        level: float,
+        level_type: Literal["isobaricInhPa", "heightAboveGround", "surface", "meanSea"],
+    ) -> float:
         if level_type == "isobaricInHpa":
             return 1.0 + (level) / (90)
         elif level_type == "heightAboveGround":
@@ -81,11 +80,16 @@ class PoesyAccessor(DataAccessor):
         grib_name = None
         grib_param = None
         return ParamConfig(unit, level_type, long_name, grid, grib_name, grib_param)
-    
+
     def get_grid_coords(param: Param) -> List[float]:
         raise NotImplementedError("Poesy does not require get_grid_coords")
 
-    def get_filepath(ds_name: str, param: Param, date: dt.datetime, file_format: Optional[str]='npy') -> str:
+    def get_filepath(
+        ds_name: str,
+        param: Param,
+        date: dt.datetime,
+        file_format: Optional[str] = "npy",
+    ) -> str:
         """
         Return the filename.
         """
@@ -97,11 +101,11 @@ class PoesyAccessor(DataAccessor):
 
     def load_data_from_disk(
         self,
-        dataset_name: str, # name of the dataset or dataset version
-        param: Param, # specific parameter (2D field associated to a grid)
-        date: dt.datetime, # specific timestamp at which to load the field
-        members: Tuple[int], # optional members id. when dealing with ensembles
-        file_format: Literal["npy", "grib"] = "npy" # format of the base file on disk
+        dataset_name: str,  # name of the dataset or dataset version
+        param: Param,  # specific parameter (2D field associated to a grid)
+        date: dt.datetime,  # specific timestamp at which to load the field
+        members: Tuple[int],  # optional members id. when dealing with ensembles
+        file_format: Literal["npy", "grib"] = "npy",  # format of the base file on disk
     ) -> np.array:
 
         data_array = np.load(get_filepath(ds_name, param, date), mmap_mode="r")
@@ -111,6 +115,8 @@ class PoesyAccessor(DataAccessor):
             term,
             members,
         ]
+
+
 @dataclass(slots=True)
 class Sample:
     """Describes a sample"""
@@ -144,8 +150,6 @@ class Sample:
                 return False
 
         return True
-
-
 
     def load(self) -> Item:
         """
@@ -225,7 +229,6 @@ class PoesyDataset(DatasetABC, Dataset):
         self._cache_dir = CACHE_DIR / str(self)
         self.shuffle = self.split == "train"
         self.cache_dir.mkdir(parents=True, exist_ok=True)
-
 
     @cached_property
     def sample_list(self):

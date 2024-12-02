@@ -19,15 +19,23 @@ import einops
 import numpy as np
 import torch
 from tabulate import tabulate
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Dataset
 from torch.utils.data._utils.collate import collate_tensor_fn
 from tqdm import tqdm
 
 if TYPE_CHECKING:
     from py4cast.plots import DomainInfo
 
+from py4cast.datasets.access import (
+    DataAccessor,
+    Grid,
+    GridConfig,
+    Param,
+    ParamConfig,
+    Settings,
+)
 from py4cast.utils import RegisterFieldsMixin
-from py4cast.datasets.access import DataAccessor, Grid, GridConfig, Param, ParamConfig, Settings
+
 
 @dataclass(slots=True)
 class TensorWrapper:
@@ -567,6 +575,7 @@ class Statics(RegisterFieldsMixin):
             ("x y n -> n x y"),
         )
 
+
 def generate_forcings(
     date: dt.datetime, output_terms: Tuple[float], grid: Grid
 ) -> List[NamedTensor]:
@@ -609,6 +618,7 @@ def generate_forcings(
     ]
 
     return lforcings
+
 
 @dataclass(slots=True)
 class DatasetInfo:
@@ -705,6 +715,7 @@ class Period:
             self.start, self.end, np.timedelta64(self.step, "h"), dtype="datetime64[s]"
         ).tolist()
 
+
 def get_param_list(
     conf: dict,
     grid: Grid,
@@ -738,6 +749,7 @@ class TorchDataloaderSettings:
     prefetch_factor: Union[int, None] = None
     persistent_workers: bool = False
 
+
 @dataclass(slots=True)
 class Sample:
     """Describes a sample"""
@@ -750,7 +762,6 @@ class Sample:
     pred_timesteps: Tuple[float] = field(init=False)  # gaps in hours btw step and t0
     all_dates: Tuple[dt.datetime] = field(init=False)  # date of each step
     members: List[int] = field(default_factory=[])
-
 
     def __post_init__(self):
         """Setups time variables to be able to define a sample.
@@ -911,12 +922,11 @@ class Sample:
         gif.save(frames, str(save_path), duration=250)
 
 
-class DatasetABC(ABC):
+class DatasetABC(Dataset):
     """
-    Abstract Base class defining the mandatory
-    properties and methods a dataset MUST
-    implement.
+    Base class for gridded datasets used in weather forecasts
     """
+
     def __init__(
         self,
         name: str,
@@ -924,27 +934,29 @@ class DatasetABC(ABC):
         period: Period,
         params: List[Param],
         settings: Settings,
-        accessor: DataAccessor
+        accessor: DataAccessor,
     ):
         self.name = name
         self.grid = grid
         self.period = period
         self.params = params
         self.settings = settings
-        self.shuffle = (self.period.name == "train")
+        self.shuffle = self.period.name == "train"
         self.cache_dir = accessor.get_dataset_path(name, grid)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
 
         n_input, n_pred = self.settings.num_input_steps, self.settings.num_pred_steps
-        valid_samples_filename = f"valid_samples_{self.period.name}_{n_input}_{n_pred}.txt"
+        valid_samples_filename = (
+            f"valid_samples_{self.period.name}_{n_input}_{n_pred}.txt"
+        )
         self.valid_samples_file = self.cache_dir / filename
-    
+
     def __str__(self) -> str:
         return f"{self.name}_{self.grid.name}"
 
     def __len__(self):
         return len(self.sample_list)
-    
+
     def __getitem__(self, index):
         """
         Return an item from an index of the sample_list
@@ -952,7 +964,7 @@ class DatasetABC(ABC):
         sample = self.sample_list[index]
         item = sample.load()
         return item
-    
+
     @cached_property
     def dataset_info(self) -> DatasetInfo:
         """Returns a DatasetInfo object describing the dataset.
@@ -1080,7 +1092,7 @@ class DatasetABC(ABC):
                 "grid_shape": self.grid_shape,
             }
         )
-            
+
     @cached_property
     def stats(self) -> Stats:
         return Stats(fname=self.cache_dir / "parameters_stats.pt")
@@ -1088,7 +1100,7 @@ class DatasetABC(ABC):
     @cached_property
     def diff_stats(self) -> Stats:
         return Stats(fname=self.cache_dir / "diff_stats.pt")
-    
+
     def shortnames(
         self,
         kind: List[Literal["input", "output", "input_output"]] = [
@@ -1103,7 +1115,7 @@ class DatasetABC(ABC):
         Make the difference between inputs, outputs.
         """
         return [p.parameter_short_name for p in self.params if p.kind == kind]
-    
+
     @cached_property
     def units(self) -> Dict[str, str]:
         """
@@ -1136,40 +1148,48 @@ class DatasetABC(ABC):
         num_input_steps: int,
         num_pred_steps_train: int,
         num_pred_steps_val_test: int,
-        accessor: DataAccessor
+        accessor: DataAccessor,
     ) -> Tuple["DatasetABC", "DatasetABC", "DatasetABC"]:
 
         conf["grid"]["load_grid_info_func"] = accessor.load_grid_info
         grid = Grid(**conf["grid"])
-        try: 
+        try:
             members = conf["members"]
         except KeyError:
-            members=None
+            members = None
 
-        param_list = get_param_list(conf, grid, accessor.load_param_info, accessor.get_weight_per_level)
+        param_list = get_param_list(
+            conf, grid, accessor.load_param_info, accessor.get_weight_per_level
+        )
 
         train_settings_settings = Settings(
-            dataset_name=name, 
+            dataset_name=name,
             num_input_steps=num_input_steps,
             num_pred_steps=num_pred_steps_train,
             members=members,
-            **conf["settings"]
+            **conf["settings"],
         )
         train_period = Period(**conf["periods"]["train"], name="train")
-        train_ds = DatasetABC(name, grid, train_period, param_list, train_settings, accessor)
+        train_ds = DatasetABC(
+            name, grid, train_period, param_list, train_settings, accessor
+        )
 
         valid_settings = Settings(
-            dataset_name=name, 
+            dataset_name=name,
             num_input_steps=num_input_steps,
             num_pred_steps=num_pred_steps_val_test,
             members=members,
-            **conf["settings"]
+            **conf["settings"],
         )
         valid_period = Period(**conf["periods"]["valid"], name="valid")
-        valid_ds = DatasetABC(name, grid, valid_period, param_list, valid_settings, accessor)
+        valid_ds = DatasetABC(
+            name, grid, valid_period, param_list, valid_settings, accessor
+        )
 
         test_period = Period(**conf["periods"]["test"], name="test")
-        test_ds = DatasetABC(name, grid, test_period, param_list, valid_settings, accessor)
+        test_ds = DatasetABC(
+            name, grid, test_period, param_list, valid_settings, accessor
+        )
 
         return train_ds, valid_ds, test_ds
 
