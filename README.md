@@ -56,7 +56,7 @@ This project started as a fork of neural-lam, a project by Joel Oskarsson, see [
 * neural networks as simple torch.nn.Module
 * training with pytorchlightning
 * simple interfaces to easily add a new dataset, neural network, training strategy or loss
-* simple command line to lauch a training
+* simple command line to lauch a training with lightning CLI
 * config files to change the parameters of your dataset or neural network during training
 * experiment tracking with tensorboard and plots of forecasts with matplotlib
 * implementation of [NamedTensors](doc/features.md#namedtensors) to tracks features and dimensions of tensors at each step of the training
@@ -359,7 +359,6 @@ cd $PY4CAST_PATH # Go to Py4CAST (you can either add an environment variable or 
 srun python bin/launcher.py fit --config config/CLI/trainer.yaml --config config/CLI/poesy.yaml --config config/CLI/halfunet.yaml
 ```
 
-
 Then just launch this script using
 
 ```sh
@@ -381,53 +380,23 @@ To compute the stats of the Titan dataset:
 python py4cast/datasets/titan/__init__.py
 ```
 
-To train on a dataset with its default settings just pass the name of the dataset (all lowercase) :
-
-```bash
-python bin/launcher.py fit --config config/CLI/trainer.yaml --config config/CLI/poesy.yaml --config config/CLI/halfunet.yaml
-```
-
-You can override the dataset default configuration file:
-
-```bash
-python bin/train.py --dataset smeagol --model halfunet --dataset_conf config/smeagoldev.json
-```
-
 [Details on available datasets.](doc/features.md/#available-datasets)
 
 ### Training options
 
 1. **Configuring the neural network**
 
-To train on a dataset using a network with its default settings just pass the name of the architecture (all lowercase) as shown below:
-
-```bash
-python bin/train.py --dataset smeagol --model hilam
-
-python bin/train.py --dataset smeagol --model halfunet
-```
-
-You can override some settings of the model using a json config file (here we increase the number of filter to 128 and use ghost modules):
-
-```bash
-python bin/train.py --dataset smeagol --model halfunet --model_conf config/halfunet128_ghost.json
-```
-
 [Details on available neural networks.](doc/features.md/#available-pytorchs-architecture)
 
 
 2. **Changing the training strategy**
 
-You can choose a training strategy using the **--strategy STRATEGY_NAME** cli argument:
-
-```bash
-python bin/train.py --dataset smeagol --model halfunet --strategy diff_ar
-```
-
 [Details on available training strategies.](doc/features.md/#available-training-strategies)
 
 
 3. **Other training options**:
+
+You can modify all training options in yaml files.
 
 * `--seed SEED`           random seed (default: 42)
 * `--loss LOSS`           Loss function to use (default: mse)
@@ -488,7 +457,7 @@ Then you can access the tensorboard server at the following address: `http://YOU
 
 #### MLFlow
 
-Optionally, you can use MLFlow, in addition to Tensorboard, to track your experiment and log your model. To activate the MLFlow logger simply add the `--mlflow_log` option on the `bin/train.py` command line.
+Optionally, you can use MLFlow, in addition to Tensorboard, to track your experiment and log your model. MLFlow logger can be added to loggers in the trainer.yaml file. 
 
 **Local usage**
 
@@ -509,35 +478,15 @@ export MLFLOW_EXPERIMENT_NAME=py4cast/unetrpp
 
 ### Inference
 
-Inference is done by running the `bin/inference.py` script. This script will load a model and run it on a dataset using the training parameters (dataset config, timestep options, ...).
+Inference is done by using the predict option of CLI. It will load a model from the checkpoint path and run it on a dataset using the training parameters (dataset config, timestep options, ...).
 
 ```bash
-usage: python bin/inference.py [-h] [--model_path MODEL_PATH] [--dataset DATASET] [--infer_steps INFER_STEPS] [--date DATE]
-
-options:
-  -h, --help            show this help message and exit
-  --model_path MODEL_PATH
-                        Path to the model checkpoint
-  --date DATE
-                        Date of the sample to infer on. Format:YYYYMMDDHH
-  --dataset DATASET
-                        Name of the dataset to use (typically the same as has been used for training)
-  --dataset_conf DATASET_CONF
-                        Name of the dataset config file (json, to change e.g dates, leadtimes, etc)
-  --infer_steps INFER_STEPS
-                        Number of auto-regressive steps/prediction steps during the inference
-   --precision PRECISION
-                        floating point precision for the inference (default: 32)
-   --grib BOOL
-                        Whether the outputs should be saved as grib, needs saving conf.
-   --saving_conf SAVING_CONF
-                        Name of the config file for write settings (json)
-```
+usage: python bin/launcher.py predict [-h] [--ckpt_path CHECKPOINT_PATH] [--config CONFIG]
 
 A simple example of inference is shown below:
 
 ```bash
- runai exec_gpu python bin/inference.py --model_path /scratch/shared/py4cast/logs/camp0/poesy/halfunet/sezn_run_dev_12 --date 2021061621 --dataset poesy_infer --infer_steps 2
+python bin/launcher.py predict --ckpt_path /scratch/shared/py4cast/logs/test_cli/poesy/halfunet/last.ckpt --config config/CLI/trainer.yaml --config config/CLI/poesy.yaml --config config/CLI/halfunet.yaml
 ```
 
 ### Making animated plots comparing multiple models

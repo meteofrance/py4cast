@@ -379,7 +379,9 @@ class AutoRegressiveLightning(pl.LightningModule):
                     self.path_tensorboard / "dataset_conf.json",
                 )
             if hparams["model_conf"] is not None:
-                shutil.copyfile(hparams.model_conf, self.path_tensorboard / "model_conf.json")
+                shutil.copyfile(
+                    hparams.model_conf, self.path_tensorboard / "model_conf.json"
+                )
             # Write commit and state of git repo in log file
             dest_git_log = self.path_tensorboard / "git_log.txt"
             out_log = (
@@ -617,7 +619,9 @@ class AutoRegressiveLightning(pl.LightningModule):
             self.path_tensorboard = Path(self.trainer.logger.log_dir)
         else:
             # If fast_dev_run = True, loggers are removed and a DummyLogger is used. Hardcode the outputs
-            self.path_tensorboard = Path("/scratch/shared/py4cast/logs/test_cli/DummyLogger")
+            self.path_tensorboard = Path(
+                "/scratch/shared/py4cast/logs/test_cli/DummyLogger"
+            )
         self.log_hparams_tb()
 
     def on_train_start(self):
@@ -778,7 +782,9 @@ class AutoRegressiveLightning(pl.LightningModule):
         if self.logger:
             # Get dict of metrics' results
             dict_metrics = dict()
-            dict_metrics.update(self.psd_plot_metric.compute(save_path=self.path_tensorboard))
+            dict_metrics.update(
+                self.psd_plot_metric.compute(save_path=self.path_tensorboard)
+            )
             dict_metrics.update(self.rmse_psd_plot_metric.compute())
             dict_metrics.update(self.acc_metric.compute())
             for name, elmnt in dict_metrics.items():
@@ -872,7 +878,9 @@ class AutoRegressiveLightning(pl.LightningModule):
         if self.logger:
             dict_metrics = {}
             dict_metrics.update(
-                self.psd_plot_metric.compute(save_path=self.path_tensorboard, prefix="test")
+                self.psd_plot_metric.compute(
+                    save_path=self.path_tensorboard, prefix="test"
+                )
             )
             dict_metrics.update(self.rmse_psd_plot_metric.compute(prefix="test"))
             dict_metrics.update(self.acc_metric.compute(prefix="test"))

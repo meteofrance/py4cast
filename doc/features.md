@@ -185,3 +185,30 @@ Features:
 │ t2m            │ 5.06639e-06 │ 0.999995 │
 
 ```
+
+
+## Lightning CLI
+
+Lightning CLI is a configurable command line tool for pytorch-lightning. 
+
+It receives as input pytorch-lightning classes (or callables which return pytorch-lightning classes), which are called / instantiated using a parsed configuration file yaml and / or command line args.
+
+3 classes need to be instantiate: 
+- A Trainer
+- A LightningModule
+- A LightningDatamodule
+For each classes, a yaml file with every parameters needed to instantiate the class is used. 
+
+https://lightning.ai/docs/pytorch/stable/cli/lightning_cli_intermediate.html
+
+You can get the defaut values of a specific configuration with --print_config
+
+```bash
+python bin/launcher.py fit --config config/CLI/trainer.yaml --config config/CLI/poesy.yaml --config config/CLI/halfunet.yaml --print_config
+```
+
+You can also override variable in the command line over the yaml for instance, here with the variable max_epochs: 
+```bash
+python bin/launcher.py fit --config config/CLI/trainer.yaml --config config/CLI/poesy.yaml --config config/CLI/halfunet.yaml --trainer.max_epochs 100
+
+```
