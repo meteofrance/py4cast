@@ -701,6 +701,7 @@ class Period:
             self.start, self.end, np.timedelta64(self.step, "h"), dtype="datetime64[s]"
         ).tolist()
 
+
 # This namedtuple contains attributes that are used by the Grid class
 # These attributes are retrieved from disk in any user-defined manner.
 # It is there to define the expected type of the retrieval function.
@@ -816,6 +817,7 @@ class Settings:
     that will be used during training/inference.
     You can interact with these values by defining a `settings` field in the configuration json file.
     """
+
     dataset_name: str
     num_input_steps: int  # Number of input timesteps
     num_pred_steps: int  # Number of output timesteps
@@ -823,6 +825,7 @@ class Settings:
     standardize: bool = True
     file_format: Literal["npy", "grib"] = "grib"
     members: Tuple[int] = (0,)
+
 
 # This namedtuple contains attributes that are used by the Param class
 # These attributes are retrieved from disk in any user-defined manner.
