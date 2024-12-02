@@ -216,6 +216,34 @@ def exists(
     return filepath.exists()
 
 
+@dataclass
+class Timestamps:
+    """
+    Describe all timestamps in a sample. It contains datetime, validitytimes and all terms  
+    """
+    datetime: dt.datetime
+    all_terms: List[np.int64] 
+    validity_times: List[dt.datetime]
+    
+
+def _is_valid(dataset_name: str, params: List[Param], all_dates: List[dt.datetime], file_format: str): 
+    """Check that all the files necessary for this sample exist.
+
+    Args:
+        param_list (List): List of parameters
+    Returns:
+        Boolean: Whether the sample is available or not
+    """
+    for date in all_dates:
+        for param in params:
+            if not exists(
+                dataset_name, param, date, file_format
+            ):
+                print("invalid sample")
+                return False
+    return True
+
+
 def get_param_tensor(
     param: Param,
     stats: Stats,
@@ -280,11 +308,12 @@ def generate_forcings(
 class Sample:
     """Describes a sample"""
 
-    date_t0: dt.datetime
+    timestamps: Timestamps
     settings: Settings
     params: List[Param]
     stats: Stats
     grid: Grid
+
     pred_timesteps: Tuple[float] = field(init=False)  # gaps in hours btw step and t0
     all_dates: Tuple[dt.datetime] = field(init=False)  # date of each step
 
@@ -300,27 +329,14 @@ class Sample:
         all_steps = list(range(-n_inputs + 1, n_preds + 1))
         all_timesteps = [self.settings.step_duration * step for step in all_steps]
         self.pred_timesteps = all_timesteps[-n_preds:]
-        self.all_dates = [self.date_t0 + dt.timedelta(hours=ts) for ts in all_timesteps]
+        self.all_dates = [self.timestamps.datetime + dt.timedelta(hours=ts) for ts in all_timesteps]
 
     def __repr__(self):
-        return f"Date T0 {self.date_t0}, leadtimes {self.pred_timesteps}"
+        return f"Date T0 {self.timestamps.datetime}, leadtimes {self.pred_timesteps}"
 
     def is_valid(self) -> bool:
-        """Check that all the files necessary for this sample exist.
-
-        Args:
-            param_list (List): List of parameters
-        Returns:
-            Boolean: Whether the sample is available or not
-        """
-        for date in self.all_dates:
-            for param in self.params:
-                if not exists(
-                    self.settings.dataset_name, param, date, self.settings.file_format
-                ):
-                    print("invalid sample")
-                    return False
-        return True
+        return _is_valid(self.settings.dataset_name, self.params, self.all_dates, self.settings.file_format)
+        
 
     def load(self, no_standardize: bool = False) -> Item:
         """
@@ -368,7 +384,7 @@ class Sample:
                 linputs.append(tmp_state)
 
         lforcings = generate_forcings(
-            date=self.date_t0, output_terms=self.pred_timesteps, grid=self.grid
+            date=self.timestamps.datetime, output_terms=self.pred_timesteps, grid=self.grid
         )
 
         for forcing in lforcings:
@@ -533,17 +549,22 @@ class TitanDataset(DatasetABC, Dataset):
                 dateformat = "%Y-%m-%d_%Hh%M"
                 dates = [dt.datetime.strptime(ds, dateformat) for ds in dates_str]
                 dates = list(set(dates).intersection(set(self.period.date_list)))
-                samples = [
-                    Sample(date, self.settings, self.params, stats, self.grid)
-                    for date in dates
-                ]
+                
+                # ? quoi faire si il a deja les dates ? écrire la boucle ? Pas sur qu'il faille faire ca
+                samples = []
+                for date in tqdm.tqdm(dates):
+                    timestamps = Timestamps(datetime=date, all_terms=None, validity_times=date)
+                    sample = Sample(timestamps, self.settings, self.params, stats, self.grid)
+                    if sample.is_valid():
+                        samples.append(sample)
         else:
             print(
                 f"Valid samples file {self.valid_samples_file} does not exist. Computing samples list..."
             )
             samples = []
             for date in tqdm.tqdm(self.period.date_list):
-                sample = Sample(date, self.settings, self.params, stats, self.grid)
+                timestamps = Timestamps(datetime=date, all_terms=None, validity_times=date)
+                sample = Sample(timestamps, self.settings, self.params, stats, self.grid)
                 if sample.is_valid():
                     samples.append(sample)
         print(f"--> All {len(samples)} {self.period.name} samples are now defined")
