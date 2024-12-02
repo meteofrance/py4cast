@@ -1,5 +1,5 @@
 trainer:
-  fast_dev_run: True
+  fast_dev_run: False
   num_nodes: 1
   devices: "auto"
   max_epochs: 4
@@ -13,11 +13,12 @@ trainer:
         name: "folder_logger"
         default_hp_metric: False
         save_dir: /scratch/shared/py4cast/logs/test_cli/poesy/halfunet/to_del
-    # - class_path: lightning.pytorch.loggers.MLFlowLogger
-    #   init_args:
-    #     experiment_name: "mlflow_test1"
-    #     log_model: True
-    #     save_dir: /scratch/shared/py4cast/logs/test_cli/poesy/halfunet/to_del #${trainer.logger.save_dir} +"/mlflow/"
+    - class_path: lightning.pytorch.loggers.MLFlowLogger
+      init_args:
+        run_name: "mlrun"
+        experiment_name: "mlflow_test1"
+        log_model: True
+        save_dir: /scratch/shared/py4cast/logs/test_cli/poesy/halfunet/to_del/mlflow #${trainer.logger.save_dir} +"/mlflow/"
   profiler: null
   log_every_n_steps: 1
   callbacks:

@@ -614,8 +614,8 @@ class AutoRegressiveLightning(pl.LightningModule):
         return pred_out, batch.outputs
 
     def on_fit_start(self):
-        if self.trainer.logger.save_dir:
-            self.save_path = Path(self.trainer.logger.save_dir)
+        if self.trainer.logger.log_dir:
+            self.save_path = Path(self.trainer.logger.log_dir)
         else:
             # If fast_dev_run = True, loggers are removde and a DummyLogger is used. Hardcode the outputs 
             self.save_path = Path("/scratch/shared/py4cast/logs/test_cli/DummyLogger")
