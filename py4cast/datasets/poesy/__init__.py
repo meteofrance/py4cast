@@ -111,7 +111,6 @@ class PoesyAccessor(DataAccessor):
             term,
             members,
         ]
-
 @dataclass(slots=True)
 class Sample:
     """Describes a sample"""
@@ -146,48 +145,7 @@ class Sample:
 
         return True
 
-    def generate_forcings(
-        self, date: dt.datetime, output_terms: Tuple[float], grid: Grid
-    ) -> List[NamedTensor]:
-        """
-        Generate all the forcing in this function.
-        Return a list of NamedTensor.
-        """
-        # Datetime Forcing
-        datetime_forcing = get_year_hour_forcing(date, output_terms).type(torch.float32)
 
-        # Solar forcing, dim : [num_pred_steps, Lat, Lon, feature = 1]
-        solar_forcing = generate_toa_radiation_forcing(
-            grid.lat, grid.lon, date, output_terms
-        ).type(torch.float32)
-
-        lforcings = [
-            NamedTensor(
-                feature_names=[
-                    "cos_hour",
-                    "sin_hour",
-                ],  # doy : day_of_year
-                tensor=datetime_forcing[:, :2],
-                names=["timestep", "features"],
-            ),
-            NamedTensor(
-                feature_names=[
-                    "cos_doy",
-                    "sin_doy",
-                ],  # doy : day_of_year
-                tensor=datetime_forcing[:, 2:],
-                names=["timestep", "features"],
-            ),
-            NamedTensor(
-                feature_names=[
-                    "toa_radiation",
-                ],
-                tensor=solar_forcing,
-                names=["timestep", "lat", "lon", "features"],
-            ),
-        ]
-
-        return lforcings
 
     def load(self) -> Item:
         """
@@ -233,7 +191,7 @@ class Sample:
                 raise e
 
         # Get forcings
-        lforcings = self.generate_forcings(
+        lforcings = generate_forcings(
             date=self.date, output_terms=self.output_terms, grid=self.grid
         )
         for lforcing in lforcings:
