@@ -330,6 +330,7 @@ class AutoRegressiveLightning(pl.LightningModule):
 
         self.loss.prepare(self, statics.interior_mask, hparams.dataset_info)
 
+        # Instantiate metrics
         max_pred_step = self.hparams.num_pred_steps_val_test - 1
         self.psd_plot_metric = MetricPSDK(
             pred_step=max_pred_step,
@@ -375,12 +376,12 @@ class AutoRegressiveLightning(pl.LightningModule):
             if self.hparams.dataset_conf is not None:
                 shutil.copyfile(
                     self.hparams.dataset_conf,
-                    self.save_path / "dataset_conf.json",
+                    self.path_tensorboard / "dataset_conf.json",
                 )
             if hparams["model_conf"] is not None:
-                shutil.copyfile(hparams.model_conf, self.save_path / "model_conf.json")
+                shutil.copyfile(hparams.model_conf, self.path_tensorboard / "model_conf.json")
             # Write commit and state of git repo in log file
-            dest_git_log = self.save_path / "git_log.txt"
+            dest_git_log = self.path_tensorboard / "git_log.txt"
             out_log = (
                 subprocess.check_output(["git", "log", "-n", "1"])
                 .strip()
@@ -613,10 +614,10 @@ class AutoRegressiveLightning(pl.LightningModule):
 
     def on_fit_start(self):
         if self.trainer.logger.log_dir:
-            self.save_path = Path(self.trainer.logger.log_dir)
+            self.path_tensorboard = Path(self.trainer.logger.log_dir)
         else:
             # If fast_dev_run = True, loggers are removed and a DummyLogger is used. Hardcode the outputs
-            self.save_path = Path("/scratch/shared/py4cast/logs/test_cli/DummyLogger")
+            self.path_tensorboard = Path("/scratch/shared/py4cast/logs/test_cli/DummyLogger")
         self.log_hparams_tb()
 
     def on_train_start(self):
@@ -716,13 +717,13 @@ class AutoRegressiveLightning(pl.LightningModule):
                     num_samples_to_plot=1,
                     num_features_to_plot=4,
                     prefix="Validation",
-                    save_path=self.save_path,
+                    save_path=self.path_tensorboard,
                 ),
                 PredictionEpochPlot(
                     num_samples_to_plot=1,
                     num_features_to_plot=4,
                     prefix="Validation",
-                    save_path=self.save_path,
+                    save_path=self.path_tensorboard,
                 ),
             ]
 
@@ -777,7 +778,7 @@ class AutoRegressiveLightning(pl.LightningModule):
         if self.logger:
             # Get dict of metrics' results
             dict_metrics = dict()
-            dict_metrics.update(self.psd_plot_metric.compute(save_path=self.save_path))
+            dict_metrics.update(self.psd_plot_metric.compute(save_path=self.path_tensorboard))
             dict_metrics.update(self.rmse_psd_plot_metric.compute())
             dict_metrics.update(self.acc_metric.compute())
             for name, elmnt in dict_metrics.items():
@@ -827,13 +828,13 @@ class AutoRegressiveLightning(pl.LightningModule):
                 metrics[alias] = loss
 
             self.test_plotters = [
-                StateErrorPlot(metrics, save_path=self.save_path),
+                StateErrorPlot(metrics, save_path=self.path_tensorboard),
                 SpatialErrorPlot(),
                 PredictionTimestepPlot(
                     num_samples_to_plot=self.hparams.num_samples_to_plot,
                     num_features_to_plot=4,
                     prefix="Test",
-                    save_path=self.save_path,
+                    save_path=self.path_tensorboard,
                 ),
             ]
 
@@ -871,7 +872,7 @@ class AutoRegressiveLightning(pl.LightningModule):
         if self.logger:
             dict_metrics = {}
             dict_metrics.update(
-                self.psd_plot_metric.compute(save_path=self.save_path, prefix="test")
+                self.psd_plot_metric.compute(save_path=self.path_tensorboard, prefix="test")
             )
             dict_metrics.update(self.rmse_psd_plot_metric.compute(prefix="test"))
             dict_metrics.update(self.acc_metric.compute(prefix="test"))
