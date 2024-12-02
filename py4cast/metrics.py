@@ -349,10 +349,8 @@ class MetricACC(Metric):
 
     def __init__(self, dataset_info: DatasetInfo):
         super().__init__(
-            compute_on_cpu=False,
-            sync_on_compute=False,
-            dist_sync_on_step=True
-            )
+            compute_on_cpu=False, sync_on_compute=False, dist_sync_on_step=True
+        )
 
         # storing climate normals as a tensor
         warnings.warn(

@@ -28,9 +28,7 @@ class LCli(LightningCLI):
 
     def __init__(self, model_class, datamodule_class):
 
-        super().__init__(
-            model_class, datamodule_class
-        )
+        super().__init__(model_class, datamodule_class)
 
     def add_arguments_to_parser(self, parser):
         parser.link_arguments(

@@ -335,11 +335,11 @@ class AutoRegressiveLightning(pl.LightningModule):
             pred_step=max_pred_step,
         )
         self.rmse_psd_plot_metric = MetricPSDVar(
-            pred_step=max_pred_step, 
+            pred_step=max_pred_step,
         )
         self.acc_metric = MetricACC(
             self.hparams.dataset_info,
-            )
+        )
 
     @property
     def dtype(self):
@@ -378,9 +378,7 @@ class AutoRegressiveLightning(pl.LightningModule):
                     self.save_path / "dataset_conf.json",
                 )
             if hparams["model_conf"] is not None:
-                shutil.copyfile(
-                    hparams.model_conf, self.save_path / "model_conf.json"
-                )
+                shutil.copyfile(hparams.model_conf, self.save_path / "model_conf.json")
             # Write commit and state of git repo in log file
             dest_git_log = self.save_path / "git_log.txt"
             out_log = (
@@ -617,13 +615,12 @@ class AutoRegressiveLightning(pl.LightningModule):
         if self.trainer.logger.log_dir:
             self.save_path = Path(self.trainer.logger.log_dir)
         else:
-            # If fast_dev_run = True, loggers are removed and a DummyLogger is used. Hardcode the outputs 
+            # If fast_dev_run = True, loggers are removed and a DummyLogger is used. Hardcode the outputs
             self.save_path = Path("/scratch/shared/py4cast/logs/test_cli/DummyLogger")
         self.log_hparams_tb()
-    
+
     def on_train_start(self):
         self.train_plotters = []
-        
 
     def _shared_epoch_end(self, outputs: List[torch.Tensor], label: str) -> None:
         """Computes and logs the averaged metrics at the end of an epoch.
@@ -780,7 +777,7 @@ class AutoRegressiveLightning(pl.LightningModule):
         if self.logger:
             # Get dict of metrics' results
             dict_metrics = dict()
-            dict_metrics.update(self.psd_plot_metric.compute(save_path = self.save_path))
+            dict_metrics.update(self.psd_plot_metric.compute(save_path=self.save_path))
             dict_metrics.update(self.rmse_psd_plot_metric.compute())
             dict_metrics.update(self.acc_metric.compute())
             for name, elmnt in dict_metrics.items():
@@ -873,7 +870,9 @@ class AutoRegressiveLightning(pl.LightningModule):
         """
         if self.logger:
             dict_metrics = {}
-            dict_metrics.update(self.psd_plot_metric.compute(save_path = self.save_path, prefix="test"))
+            dict_metrics.update(
+                self.psd_plot_metric.compute(save_path=self.save_path, prefix="test")
+            )
             dict_metrics.update(self.rmse_psd_plot_metric.compute(prefix="test"))
             dict_metrics.update(self.acc_metric.compute(prefix="test"))
 
