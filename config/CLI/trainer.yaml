@@ -1,6 +1,5 @@
 trainer:
   fast_dev_run: True
-  # default_root_dir: "/scratch/shared/py4cast/logs/test_cli"
   num_nodes: 1
   devices: "auto"
   max_epochs: 4
