@@ -4,18 +4,18 @@ and their interfaces
 """
 
 import datetime as dt
-from abc import  abstractproperty
+import json
+from abc import abstractproperty
 from copy import deepcopy
 from dataclasses import dataclass, field, fields
 from functools import cached_property
 from itertools import chain
-import json
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable, Dict, List, Literal, Tuple, Union
 
+import einops
 import gif
 import matplotlib.pyplot as plt
-import einops
 import numpy as np
 import torch
 from tabulate import tabulate
@@ -26,18 +26,19 @@ from tqdm import tqdm
 if TYPE_CHECKING:
     from py4cast.plots import DomainInfo
 
-from py4cast.datasets.named_tensors import NamedTensor
 from py4cast.datasets.access import (
     DataAccessor,
     Grid,
-    grid_static_features,
     Param,
     ParamConfig,
     Settings,
-    Stats
+    Stats,
+    grid_static_features,
 )
+from py4cast.datasets.named_tensors import NamedTensor
 from py4cast.forcingutils import generate_toa_radiation_forcing, get_year_hour_forcing
 from py4cast.utils import RegisterFieldsMixin
+
 
 @dataclass(slots=True)
 class Item:

@@ -21,13 +21,7 @@ from py4cast.datasets.access import (
     Settings,
     Stats,
 )
-from py4cast.datasets.base import (
-    DatasetABC,
-    Item,
-    NamedTensor,
-    Period,
-    get_param_list,
-)
+from py4cast.datasets.base import DatasetABC, Item, NamedTensor, Period, get_param_list
 from py4cast.datasets.poesy.settings import (
     LATLON_FNAME,
     METADATA,
