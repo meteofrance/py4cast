@@ -121,11 +121,36 @@ def exists(ds_name: str, param: Param, date: dt.datetime) -> bool:
     flist = get_filepath(ds_name, param, date)
     return flist.exists()
 
+@dataclass
+class Timestamps:
+    """
+    Describe all timestamps in a sample. It contains datetime, validitytimes and all terms  
+    """
+    datetime: dt.datetime
+    all_terms: List[np.int64] 
+    validity_times: List[dt.datetime]
+
+def _is_valid(dataset_name: str, params: List[Param], timestamps: Timestamps): 
+    """
+    Check that all the files necessary for this samples exists.
+
+    Args:
+        dataset_name: name of dataset
+        param_list (List): List of parameters
+        timestamps (Timestamps): class which holds datetime, all_terms and validity times
+    Returns:
+    Boolean:  Whether the sample exists or not
+    """
+    for param in params:
+        if not exists(dataset_name, param, timestamps.datetime):
+            return False
+
+    return True
 
 def get_param_tensor(
     param: Param,
     stats: Stats,
-    date: dt.datetime,
+    timestamps: Timestamps,
     settings: Settings,
     terms: List,
     standardize: bool,
@@ -139,7 +164,7 @@ def get_param_tensor(
         means = np.asarray(stats[name]["mean"])
         std = np.asarray(stats[name]["std"])
 
-    array = load_data(settings.dataset_name, param, date, terms, member)
+    array = load_data(settings.dataset_name, param, timestamps.datetime, terms, member)
 
     # Extend dimension to match 3D (level dimension)
     if len(array.shape) != 4:
@@ -199,40 +224,44 @@ def generate_forcings(
     return lforcings
 
 
+
 @dataclass(slots=True)
 class Sample:
     """Describes a sample"""
 
     member: int
-    date: dt.datetime
+    timestamps: Timestamps
     settings: Settings
-    input_terms: Tuple[float]
-    output_terms: Tuple[float]
     stats: Stats
     grid: Grid
     params: List[Param]
 
     # Term wrt to the date {date}. Gives validity
     terms: Tuple[float] = field(init=False)
+    output_terms: Tuple[float] = field(init=False)
+    input_terms: Tuple[float] = field(init=False)
 
     def __post_init__(self):
+
+        num_total_steps = self.settings.num_input_steps + self.settings.num_pred_steps
+        sample_by_date = len(self.timestamps.all_terms) // num_total_steps
+        
+        for sample in range(0, sample_by_date):
+            self.input_terms = self.timestamps.all_terms[
+                sample * num_total_steps : sample * num_total_steps
+                + self.settings.num_input_steps
+            ]
+            self.output_terms = self.timestamps.all_terms[
+                sample * num_total_steps
+                + self.settings.num_input_steps : sample * num_total_steps
+                + self.settings.num_input_steps
+                + self.settings.num_pred_steps
+            ]
         self.terms = self.input_terms + self.output_terms
 
     def is_valid(self) -> bool:
-        """
-        Check that all the files necessary for this samples exists.
-
-        Args:
-            param_list (List): List of parameters
-        Returns:
-            Boolean:  Whether the sample exists or not
-        """
-        for param in self.params:
-            if not exists(self.settings.dataset_name, param, self.date):
-                return False
-
-        return True
-
+        return _is_valid(self.settings.dataset_name, self.params, self.timestamps)
+     
     def load(self) -> Item:
         """
         Return inputs, outputs, forcings as tensors concatenated into a Item.
@@ -252,7 +281,7 @@ class Sample:
                     tensor = get_param_tensor(
                         param=param,
                         stats=self.stats,
-                        date=self.date,
+                        timestamps=self.timestamps,
                         settings=self.settings,
                         terms=self.terms,
                         standardize=self.settings.standardize,
@@ -278,7 +307,7 @@ class Sample:
 
         # Get forcings
         lforcings = generate_forcings(
-            date=self.date, output_terms=self.output_terms, grid=self.grid
+            date=self.timestamps.datetime, output_terms=self.output_terms, grid=self.grid
         )
         for lforcing in lforcings:
             lforcing.unsqueeze_and_expand_from_(linputs[0])
@@ -357,46 +386,33 @@ class PoesyDataset(DatasetABC, Dataset):
         Create a list of sample from information
         """
         print("Start forming samples")
-        terms = list(
+        all_terms = list(
             np.arange(
                 METADATA["TERMS"]["start"],
                 METADATA["TERMS"]["end"],
                 METADATA["TERMS"]["timestep"],
             )
         )
-        num_total_steps = self.settings.num_input_steps + self.settings.num_pred_steps
-        sample_by_date = len(terms) // num_total_steps
-
+        
         samples = []
         number = 0
 
         for date in self.period.date_list:
+            validity_times = [date + dt.timedelta(hours = int(term)) for term in all_terms]
+            timestamps = Timestamps(datetime=date, all_terms=all_terms, validity_times=validity_times)
             for member in self.settings.members:
-                for sample in range(0, sample_by_date):
-                    input_terms = terms[
-                        sample * num_total_steps : sample * num_total_steps
-                        + self.settings.num_input_steps
-                    ]
-                    output_terms = terms[
-                        sample * num_total_steps
-                        + self.settings.num_input_steps : sample * num_total_steps
-                        + self.settings.num_input_steps
-                        + self.settings.num_pred_steps
-                    ]
-                    samp = Sample(
-                        date=date,
-                        member=member,
-                        input_terms=input_terms,
-                        output_terms=output_terms,
-                        settings=self.settings,
-                        stats=self.stats,
-                        grid=self.grid,
-                        params=self.params,
-                    )
+                samp = Sample(
+                    timestamps=timestamps,
+                    member=member,
+                    settings=self.settings,
+                    stats=self.stats,
+                    grid=self.grid,
+                    params=self.params,
+                )
 
-                    if samp.is_valid():
-                        samples.append(samp)
-                        number += 1
+                if samp.is_valid():
+                    samples.append(samp)
+                    number += 1
 
         print(f"All {len(samples)} samples are now defined")
         return samples
