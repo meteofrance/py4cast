@@ -542,13 +542,13 @@ class Statics(RegisterFieldsMixin):
     """
 
     # border_mask: torch.Tensor
-    grid_static_features: NamedTensor
+    grid_statics: NamedTensor
     grid_shape: Tuple[int, int]
     border_mask: torch.Tensor = field(init=False)
     interior_mask: torch.Tensor = field(init=False)
 
     def __post_init__(self):
-        self.border_mask = self.grid_static_features["border_mask"]
+        self.border_mask = self.grid_statics["border_mask"]
         self.interior_mask = 1.0 - self.border_mask
 
     @cached_property
@@ -559,8 +559,8 @@ class Statics(RegisterFieldsMixin):
         return einops.rearrange(
             torch.cat(
                 [
-                    self.grid_static_features["x"],
-                    self.grid_static_features["y"],
+                    self.grid_statics["x"],
+                    self.grid_statics["y"],
                 ],
                 dim=-1,
             ),
@@ -634,8 +634,8 @@ class DatasetInfo:
         """
         print(f"\n Summarizing {self.name} \n")
         print(f"Step_duration {self.step_duration}")
-        print(f"Static fields {self.statics.grid_static_features.feature_names}")
-        print(f"Grid static features {self.statics.grid_static_features}")
+        print(f"Static fields {self.statics.grid_statics.feature_names}")
+        print(f"Grid static features {self.statics.grid_statics}")
         print(f"Features shortnames {self.shortnames}")
         for p in ["input", "input_output", "output"]:
             names = self.shortnames[p]
@@ -806,6 +806,51 @@ class Grid:
         func = getattr(cartopy.crs, self.proj_name)
         return func(**self.projection_kwargs)
 
+def grid_static_features(grid: Grid, extra_statics: List[NamedTensor]):
+    """
+    Grid static features
+    """
+    # -- Static grid node features --
+    xy = grid.meshgrid  # (2, N_x, N_y)
+    grid_xy = torch.tensor(xy)
+    # Need to rearange
+    pos_max = torch.max(torch.max(grid_xy, dim=1).values, dim=1).values
+    pos_min = torch.min(torch.min(grid_xy, dim=1).values, dim=1).values
+    grid_xy = (einops.rearrange(grid_xy, ("n x y -> x y n")) - pos_min) / (
+        pos_max - pos_min
+    )  # Rearange and divide  by maximum coordinate
+
+    # (Nx, Ny, 1)
+    geopotential = torch.tensor(grid.geopotential_info).unsqueeze(
+        2
+    )  # (N_x, N_y, 1)
+    gp_min = torch.min(geopotential)
+    gp_max = torch.max(geopotential)
+    # Rescale geopotential to [0,1]
+    if gp_max != gp_min:
+        geopotential = (geopotential - gp_min) / (gp_max - gp_min)  # (N_x,N_y, 1)
+    else:
+        warnings.warn("Geopotential is constant. Set it to 1")
+        geopotential = geopotential / gp_max
+
+    grid_border_mask = torch.tensor(grid.border_mask).unsqueeze(2)  # (N_x, N_y,1)
+
+    feature_names = []
+    for x in grid.landsea_mask:
+        feature_names += x.feature_names
+    state_var = NamedTensor(
+        tensor=torch.cat(
+            [grid_xy, geopotential, grid_border_mask]
+            + [x.tensor for x in extra_statics],
+            dim=-1,
+        ),
+        feature_names=["x", "y", "geopotential", "border_mask"]
+        + feature_names,  # Noms des champs 2D
+        names=["lat", "lon", "features"],
+    )
+    state_var.type_(torch.float32)
+    return state_var
+
 
 @dataclass(slots=True)
 class Settings:
@@ -955,14 +1000,10 @@ class DatasetABC(ABC):
         return []
 
     @cached_property
-    def get_grid_statics(self):
-        return grid_static_features(self.grid)
-
-    @cached_property
     def statics(self) -> Statics:
         return Statics(
             **{
-                "grid_static_features": self.grid_static_features,
+                "grid_statics": grid_static_features(self.grid),
                 "grid_shape": self.grid_shape,
             }
         )

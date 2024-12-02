@@ -9,12 +9,12 @@ from base import NamedTensor, DatasetABC, Grid
 
 
 def compute_mean_std_min_max(
-        self, type_tensor: Literal["inputs", "outputs", "forcing"]
+        dataset: DatasetABC, type_tensor: Literal["inputs", "outputs", "forcing"]
     ):
         """
         Compute mean and standard deviation for this dataset.
         """
-        random_batch = next(iter(self.torch_dataloader()))
+        random_batch = next(iter(dataset.torch_dataloader()))
         named_tensor = getattr(random_batch, type_tensor)
         n_features = len(named_tensor.feature_names)
         sum_means = torch.zeros(n_features)
@@ -24,11 +24,11 @@ def compute_mean_std_min_max(
         best_min = torch.min(flat_input, dim=0).values
         best_max = torch.max(flat_input, dim=0).values
         counter = 0
-        if self.settings.standardize:
+        if dataset.settings.standardize:
             raise ValueError("Your dataset should not be standardized.")
 
         for batch in tqdm(
-            self.torch_dataloader(), desc=f"Computing {type_tensor} stats"
+            dataset.torch_dataloader(), desc=f"Computing {type_tensor} stats"
         ):
             tensor = getattr(batch, type_tensor).tensor
             tensor = tensor.flatten(1, 3)  # Flatten to be (Batch, X, Features)
@@ -59,19 +59,19 @@ def compute_mean_std_min_max(
             }
         return stats
 
-def compute_parameters_stats(self):
+def compute_parameters_stats(dataset: DatasetABC):
     """
     Compute mean and standard deviation for this dataset.
     """
     all_stats = {}
     for type_tensor in ["inputs", "outputs", "forcing"]:
-        stats_dict = self.compute_mean_std_min_max(type_tensor)
+        stats_dict = compute_mean_std_min_max(type_tensor)
         for feature, stats in stats_dict.items():
             # If feature was computed multiple times we keep only first occurence
             if feature not in all_stats.keys():
                 all_stats[feature] = stats
 
-    dest_file = self.cache_dir / "parameters_stats.pt"
+    dest_file = dataset.cache_dir / "parameters_stats.pt"
     torch_save(all_stats, dest_file)
     print(f"Parameters statistics saved in {dest_file}")
 
@@ -117,48 +117,3 @@ def compute_time_step_stats(dataset : DatasetABC):
     dest_file = dataset.cache_dir / "diff_stats.pt"
     torch_save(store_d, dataset.cache_dir / "diff_stats.pt")
     print(f"Parameters time diff stats saved in {dest_file}")
-    
-def grid_static_features(grid: Grid, extra_statics: List[NamedTensor]):
-        """
-        Grid static features
-        """
-        # -- Static grid node features --
-        xy = grid.meshgrid  # (2, N_x, N_y)
-        grid_xy = torch.tensor(xy)
-        # Need to rearange
-        pos_max = torch.max(torch.max(grid_xy, dim=1).values, dim=1).values
-        pos_min = torch.min(torch.min(grid_xy, dim=1).values, dim=1).values
-        grid_xy = (einops.rearrange(grid_xy, ("n x y -> x y n")) - pos_min) / (
-            pos_max - pos_min
-        )  # Rearange and divide  by maximum coordinate
-
-        # (Nx, Ny, 1)
-        geopotential = torch.tensor(grid.geopotential_info).unsqueeze(
-            2
-        )  # (N_x, N_y, 1)
-        gp_min = torch.min(geopotential)
-        gp_max = torch.max(geopotential)
-        # Rescale geopotential to [0,1]
-        if gp_max != gp_min:
-            geopotential = (geopotential - gp_min) / (gp_max - gp_min)  # (N_x,N_y, 1)
-        else:
-            warnings.warn("Geopotential is constant. Set it to 1")
-            geopotential = geopotential / gp_max
-
-        grid_border_mask = torch.tensor(grid.border_mask).unsqueeze(2)  # (N_x, N_y,1)
-
-        feature_names = []
-        for x in grid.landsea_mask:
-            feature_names += x.feature_names
-        state_var = NamedTensor(
-            tensor=torch.cat(
-                [grid_xy, geopotential, grid_border_mask]
-                + [x.tensor for x in extra_statics],
-                dim=-1,
-            ),
-            feature_names=["x", "y", "geopotential", "border_mask"]
-            + feature_names,  # Noms des champs 2D
-            names=["lat", "lon", "features"],
-        )
-        state_var.type_(torch.float32)
-        return state_var
