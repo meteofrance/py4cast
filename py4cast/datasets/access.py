@@ -1,59 +1,15 @@
 import datetime as dt
 from abc import ABC, abstractmethod
+from collections import namedtuple
 from dataclasses import dataclass, field
+from functools import cached_property
+
 from pathlib import Path
-from typing import Callable, Dict, List, Literal, Optional, Tuple, Union
+from typing import Any, Callable, List, Literal, Optional, Tuple
 
-import numpy
+import numpy as np
 import torch
-
-ParamConfig = namedtuple(
-    "ParamConfig", "unit level_type long_name grid grib_name grib_param"
-)
-
-
-@dataclass(slots=True)
-class Param:
-    name: str
-    level: int
-    grid: Grid
-    load_param_info: Callable[[str], ParamConfig]
-    # Parameter status :
-    # input = forcings, output = diagnostic, input_output = classical weather var
-    kind: Literal["input", "output", "input_output"]
-    get_weight_per_level: Callable[[int, str], [float]]
-    level_type: str = field(init=False)
-    long_name: str = field(init=False)
-    unit: str = field(init=False)
-    native_grid: str = field(init=False)
-    grib_name: str = field(init=False)
-    grib_param: str = field(init=False)
-
-    def __post_init__(self):
-        param_info = self.load_param_info(self.name)
-        self.unit = param_info.unit
-        if param_info.level_type in ["heightAboveGround", "meanSea", "surface"]:
-            self.level_type = param_info.level_type
-        else:
-            self.level_type = "isobaricInhPa"
-        self.long_name = param_info.long_name
-        self.native_grid = param_info.grid
-        self.grib_name = param_info.grib_name
-        self.grib_param = param_info.grib_param
-
-    @property
-    def state_weight(self) -> float:
-        """Weight to confer to the param in the loss function"""
-        return self.get_weight_per_level(self.level, self.level_type)
-
-    @property
-    def parameter_name(self) -> str:
-        return f"{self.long_name}_{self.level}_{self.level_type}"
-
-    @property
-    def parameter_short_name(self) -> str:
-        return f"{self.name}_{self.level}_{self.level_type}"
-
+import warnings
 
 GridConfig = namedtuple(
     "GridConfig", "full_size latitude longitude geopotential landsea_mask"
@@ -202,6 +158,54 @@ def grid_static_features(grid: Grid, extra_statics: List[NamedTensor]):
     )
     state_var.type_(torch.float32)
     return state_var
+
+
+ParamConfig = namedtuple(
+    "ParamConfig", "unit level_type long_name grid grib_name grib_param"
+)
+
+
+@dataclass(slots=True)
+class Param:
+    name: str
+    level: int
+    grid: Grid
+    load_param_info: Callable[[str], ParamConfig]
+    # Parameter status :
+    # input = forcings, output = diagnostic, input_output = classical weather var
+    kind: Literal["input", "output", "input_output"]
+    get_weight_per_level: Callable[[int, str], [float]]
+    level_type: str = field(init=False)
+    long_name: str = field(init=False)
+    unit: str = field(init=False)
+    native_grid: str = field(init=False)
+    grib_name: str = field(init=False)
+    grib_param: str = field(init=False)
+
+    def __post_init__(self):
+        param_info = self.load_param_info(self.name)
+        self.unit = param_info.unit
+        if param_info.level_type in ["heightAboveGround", "meanSea", "surface"]:
+            self.level_type = param_info.level_type
+        else:
+            self.level_type = "isobaricInhPa"
+        self.long_name = param_info.long_name
+        self.native_grid = param_info.grid
+        self.grib_name = param_info.grib_name
+        self.grib_param = param_info.grib_param
+
+    @property
+    def state_weight(self) -> float:
+        """Weight to confer to the param in the loss function"""
+        return self.get_weight_per_level(self.level, self.level_type)
+
+    @property
+    def parameter_name(self) -> str:
+        return f"{self.long_name}_{self.level}_{self.level_type}"
+
+    @property
+    def parameter_short_name(self) -> str:
+        return f"{self.name}_{self.level}_{self.level_type}"
 
 
 @dataclass
