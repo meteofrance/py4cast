@@ -330,6 +330,16 @@ class AutoRegressiveLightning(pl.LightningModule):
 
         self.loss.prepare(self, statics.interior_mask, hparams.dataset_info)
 
+        max_pred_step = self.hparams.num_pred_steps_val_test - 1
+        self.psd_plot_metric = MetricPSDK(
+            pred_step=max_pred_step,
+        )
+        self.rmse_psd_plot_metric = MetricPSDVar(
+            pred_step=max_pred_step, 
+        )
+        self.acc_metric = MetricACC(
+            self.hparams.dataset_info,
+            )
 
     @property
     def dtype(self):
@@ -354,15 +364,6 @@ class AutoRegressiveLightning(pl.LightningModule):
     @rank_zero_only
     def log_hparams_tb(self):
         if self.logger:
-
-            self.save_path = Path(self.trainer.logger.save_dir)
-            
-            max_pred_step = self.hparams.num_pred_steps_val_test - 1
-            self.rmse_psd_plot_metric = MetricPSDVar(pred_step=max_pred_step)
-            self.psd_plot_metric = MetricPSDK(
-                self.save_path, pred_step=max_pred_step
-            )
-            self.acc_metric = MetricACC(self.hparams.dataset_info)
 
             hparams = self.hparams
 
@@ -393,9 +394,6 @@ class AutoRegressiveLightning(pl.LightningModule):
             with open(dest_git_log, "w") as f:
                 f.write(out_log)
                 f.write(out_status)
-
-    def on_fit_start(self):
-        self.log_hparams_tb()
 
     def configure_optimizers(self) -> torch.optim.Optimizer:
         lr = self.hparams.lr
@@ -615,8 +613,16 @@ class AutoRegressiveLightning(pl.LightningModule):
             )
         return pred_out, batch.outputs
 
+    def on_fit_start(self):
+        if self.trainer.logger.save_dir:
+            self.save_path = Path(self.trainer.logger.save_dir)
+        else:
+            self.save_path = Path("/scratch/shared/py4cast/logs/test_cli/test")
+        self.log_hparams_tb()
+    
     def on_train_start(self):
         self.train_plotters = []
+        
 
     def _shared_epoch_end(self, outputs: List[torch.Tensor], label: str) -> None:
         """Computes and logs the averaged metrics at the end of an epoch.
@@ -773,7 +779,7 @@ class AutoRegressiveLightning(pl.LightningModule):
         if self.logger:
             # Get dict of metrics' results
             dict_metrics = dict()
-            dict_metrics.update(self.psd_plot_metric.compute())
+            dict_metrics.update(self.psd_plot_metric.compute(save_path = self.save_path))
             dict_metrics.update(self.rmse_psd_plot_metric.compute())
             dict_metrics.update(self.acc_metric.compute())
             for name, elmnt in dict_metrics.items():
@@ -866,7 +872,7 @@ class AutoRegressiveLightning(pl.LightningModule):
         """
         if self.logger:
             dict_metrics = {}
-            dict_metrics.update(self.psd_plot_metric.compute(prefix="test"))
+            dict_metrics.update(self.psd_plot_metric.compute(save_path = self.save_path, prefix="test"))
             dict_metrics.update(self.rmse_psd_plot_metric.compute(prefix="test"))
             dict_metrics.update(self.acc_metric.compute(prefix="test"))
 

@@ -1,5 +1,5 @@
 trainer:
-  fast_dev_run: False
+  fast_dev_run: True
   # default_root_dir: "/scratch/shared/py4cast/logs/test_cli"
   num_nodes: 1
   devices: "auto"
@@ -9,18 +9,16 @@ trainer:
   accumulate_grad_batches: 10
   accelerator: "auto"
   logger:
-    class_path: lightning.pytorch.loggers.TensorBoardLogger
-    init_args:
-      name: "folder_logger"
-      version: "alpha"
-      default_hp_metric: False
-      save_dir: /scratch/shared/py4cast/logs/test_cli/poesy/halfunet/to_del
+    - class_path: lightning.pytorch.loggers.TensorBoardLogger
+      init_args:
+        name: "folder_logger"
+        default_hp_metric: False
+        save_dir: /scratch/shared/py4cast/logs/test_cli/poesy/halfunet/to_del
     # - class_path: lightning.pytorch.loggers.MLFlowLogger
-    # init_args:
-    #   experiment_name: "mlflow_test1"
-    #   run_name: "alpha"
-    #   log_model: True
-    #   save_dir: ${trainer.logger.save_dir} +"/mlflow/"
+    #   init_args:
+    #     experiment_name: "mlflow_test1"
+    #     log_model: True
+    #     save_dir: /scratch/shared/py4cast/logs/test_cli/poesy/halfunet/to_del #${trainer.logger.save_dir} +"/mlflow/"
   profiler: null
   log_every_n_steps: 1
   callbacks:

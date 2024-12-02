@@ -26,9 +26,10 @@ class LCli(LightningCLI):
         present in the folder, useful for development.
     """
 
-    def __init__(self, model_class, datamodule_class, parser_kwargs):
+    def __init__(self, model_class, datamodule_class):
+
         super().__init__(
-            model_class, datamodule_class, save_config_kwargs={"overwrite": True}, parser_kwargs=parser_kwargs
+            model_class, datamodule_class, save_config_kwargs={"overwrite": True}
         )
 
     def add_arguments_to_parser(self, parser):
@@ -82,7 +83,7 @@ class LCli(LightningCLI):
 
 
 def cli_main():
-    LCli(AutoRegressiveLightning, PlDataModule, parser_kwargs={"parser_mode": "omegaconf"})
+    LCli(AutoRegressiveLightning, PlDataModule)
 
 
 if __name__ == "__main__":

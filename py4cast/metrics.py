@@ -15,9 +15,9 @@ class MetricPSDK(Metric):
     Compute the PSD as a function of the wave number for each channels/features
     """
 
-    def __init__(self, save_path: Path, pred_step: int = 0):
+    def __init__(self, pred_step: int = 0):
         super().__init__()
-        self.save_path = save_path
+
         self.pred_step = pred_step  # timestep of pred where we compute psd
 
         # Declaration of state, states are reset when self.reset() is called
@@ -74,7 +74,7 @@ class MetricPSDK(Metric):
             preds.flatten_("ngrid", 2, 3)
             targets.flatten_("ngrid", 2, 3)
 
-    def compute(self, prefix: str = "val") -> dict:
+    def compute(self, save_path: Path, prefix: str = "val") -> dict:
         """
         Compute PSD mean for each channels/features, plot the figure, return a dict.
         Should be called at each epoch's end
@@ -102,10 +102,10 @@ class MetricPSDK(Metric):
             )
             dict_psd_metric[f"{prefix}_mean_psd_k/{features_name[c]}"] = fig
             dest_file = (
-                self.save_path
+                save_path
                 / f"{prefix}_mean_psd_k/{features_name[c]}_{self.pred_step+1}.png"
             )
-            if self.save_path.exists():
+            if save_path.exists():
                 dest_file.parent.mkdir(exist_ok=True)
                 fig.savefig(dest_file)
 
@@ -147,6 +147,7 @@ class MetricPSDVar(Metric):
 
     def __init__(self, pred_step: int = 0):
         super().__init__()
+
         self.pred_step = pred_step  # timestep of pred where we compute psd
 
         # Declaration of state, states are reset when self.reset() is called
@@ -347,7 +348,11 @@ class MetricACC(Metric):
     """
 
     def __init__(self, dataset_info: DatasetInfo):
-        super().__init__()
+        super().__init__(
+            compute_on_cpu=False,
+            sync_on_compute=False,
+            dist_sync_on_step=True
+            )
 
         # storing climate normals as a tensor
         warnings.warn(
