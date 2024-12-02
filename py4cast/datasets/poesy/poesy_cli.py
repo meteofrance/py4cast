@@ -55,6 +55,18 @@ def describe(path_config: Path = DEFAULT_CONFIG):
 
 
 @app.command()
+def plot(path_config: Path = DEFAULT_CONFIG):
+    """Plots a png and a gif for one sample."""
+    train_ds, _, _ = PoesyDataset.from_json(path_config, 2, 1, 5)
+    print("Plot gif of one sample...")
+    sample = train_ds.sample_list[0]
+    sample.plot_gif("test.gif")
+    print("Plot png for one step of sample...")
+    item = sample.load(no_standardize=True)
+    sample.plot(item, 0, "test.png")
+
+
+@app.command()
 def speedtest(path_config: Path = DEFAULT_CONFIG, n_iter: int = 5):
     print("Speed test:")
     start_time = time.time()
