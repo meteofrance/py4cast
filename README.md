@@ -386,6 +386,12 @@ python py4cast/datasets/titan/__init__.py
 
 1. **Configuring the neural network**
 
+To train on a dataset using a specific network, you have to create a yaml file and to give to the variable model_name, the name of your network in lowercase.
+
+model_name: "halfunet"
+or
+model_name: "hilam"
+
 [Details on available neural networks.](doc/features.md/#available-pytorchs-architecture)
 
 

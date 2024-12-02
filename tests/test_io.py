@@ -481,7 +481,7 @@ def test_write_template_dataset():
 def test_get_output_filename():
     saving_settings = out.GribSavingSettings(
         template_grib="fake_grib.grib",
-        directory="fakedirectory",
+        output_dir="fakedirectory",
         sample_identifiers=("date", "leadtime"),
         output_fmt="grid.forecast_ai_date_{}_ech_{}.json",
     )
@@ -493,7 +493,7 @@ def test_get_output_filename():
 
     saving_settings = out.GribSavingSettings(
         template_grib="fake_grib.grib",
-        directory="fakedirectory",
+        output_dir="fakedirectory",
         output_kwargs=("congress",),
         sample_identifiers=("date", "leadtime"),
         output_fmt="grid.forecast_{}_date_{}_ech_{}.json",
