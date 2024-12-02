@@ -217,18 +217,11 @@ class InferSample(Sample):
         self.terms = self.input_terms
 
 
-class PoesyDataset(DatasetABC, Dataset):
+class PoesyDataset(DatasetABC):
     def __init__(
         self, name, grid: Grid, period: Period, params: List[Param], settings: Settings
     ):
-        self.name = name
-        self.grid = grid
-        self.period = period
-        self.params = params
-        self.settings = settings
-        self._cache_dir = CACHE_DIR / str(self)
-        self.shuffle = self.split == "train"
-        self.cache_dir.mkdir(parents=True, exist_ok=True)
+        super().__init__(name, grid, period, params, settings, accessor=PoesyAccessor)
 
     @cached_property
     def sample_list(self):
@@ -279,36 +272,6 @@ class PoesyDataset(DatasetABC, Dataset):
 
         print(f"All {len(samples)} samples are now defined")
         return samples
-
-    @classmethod
-    def prepare(cls, path_config: Path):
-        print("--> Preparing Poesy Dataset...")
-
-        print("Load train dataset configuration...")
-        with open(path_config, "r") as fp:
-            conf = json.load(fp)
-
-        print("Computing stats on each parameter...")
-        conf["settings"]["standardize"] = True
-        train_ds, _, _ = PoesyDataset.from_json(
-            fname=path_config,
-            num_input_steps=2,
-            num_pred_steps_train=1,
-            num_pred_steps_val_test=1,
-        )
-        train_ds.compute_parameters_stats()
-
-        print("Computing time stats on each parameters, between 2 timesteps...")
-        conf["settings"]["standardize"] = True
-        train_ds, _, _ = PoesyDataset.from_json(
-            fname=path_config,
-            num_input_steps=2,
-            num_pred_steps_train=1,
-            num_pred_steps_val_test=1,
-        )
-        train_ds.compute_time_step_stats()
-
-        return train_ds
 
 
 class InferPoesyDataset(PoesyDataset):
@@ -435,11 +398,3 @@ if __name__ == "__main__":
     print("First Item description :")
     data_iter = iter(train_ds.torch_dataloader())
     print(next(data_iter))
-
-    print("Speed test:")
-    start_time = time.time()
-    for i in tqdm.trange(args.n_iter, desc="Loading samples"):
-        _ = next(data_iter)
-    delta = time.time() - start_time
-    speed = args.n_iter / delta
-    print(f"Loading speed: {round(speed, 3)} sample(s)/sec")
