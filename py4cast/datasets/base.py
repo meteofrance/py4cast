@@ -701,7 +701,9 @@ class Period:
             self.start, self.end, np.timedelta64(self.step, "h"), dtype="datetime64[s]"
         ).tolist()
 
-
+# This namedtuple contains attributes that are used by the Grid class
+# These attributes are retrieved from disk in any user-defined manner.
+# It is there to define the expected type of the retrieval function.
 GridConfig = namedtuple(
     "GridConfig", "full_size latitude longitude geopotential landsea_mask"
 )
@@ -809,6 +811,11 @@ class Grid:
 
 @dataclass(slots=True)
 class Settings:
+    """
+    Main settings defining the timesteps of a data sample (regardless of parameters)
+    that will be used during training/inference.
+    You can interact with these values by defining a `settings` field in the configuration json file.
+    """
     dataset_name: str
     num_input_steps: int  # Number of input timesteps
     num_pred_steps: int  # Number of output timesteps
@@ -817,7 +824,9 @@ class Settings:
     file_format: Literal["npy", "grib"] = "grib"
     members: Tuple[int] = (0,)
 
-
+# This namedtuple contains attributes that are used by the Param class
+# These attributes are retrieved from disk in any user-defined manner.
+# It is there to define the expected type of the retrieval function.
 ParamConfig = namedtuple(
     "ParamConfig", "unit level_type long_name grid grib_name grib_param"
 )
