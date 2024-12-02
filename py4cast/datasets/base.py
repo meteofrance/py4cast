@@ -533,26 +533,6 @@ def collate_fn(items: List[Item]) -> ItemBatch:
     return ItemBatch(**batch_of_items)
 
 
-def np_arange_include_end(start, end, step, dtype=None):
-    """
-    This function modify np.arange to include the end (np.arange is going from start to end-1)
-    exclude the last one if beyond end, exemple:
-    start = 0; end = 4; step = 2
-    np.arange(start, end, step) = 0, 2 -> 4 is not included
-    np.arange(start, end + step, step) = 0, 2, 4 -> ok
-    but if,
-    start = 0; end = 3; step = 2
-    np.arange(start, end + step, step) = 0, 2, 4 -> arange is too large, exclude the 4
-    """
-    large_arange = np.arange(
-        start,
-        end + step,
-        step,
-        dtype=dtype,
-    )
-    return large_arange[:-1] if large_arange[-1] > end else large_arange
-
-
 @dataclass
 class Statics(RegisterFieldsMixin):
     """
@@ -718,8 +698,11 @@ class Period:
 
     @property
     def date_list(self):
-        return np_arange_include_end(
-            self.start, self.end, np.timedelta64(self.step, "h"), dtype="datetime64[s]"
+        return np.arange(
+            self.start,
+            self.end + np.timedelta64(1, "h"),
+            np.timedelta64(self.step, "h"),
+            dtype="datetime64[s]",
         ).tolist()
 
 

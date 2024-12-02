@@ -24,7 +24,6 @@ from py4cast.datasets.base import (
     Period,
     TorchDataloaderSettings,
     collate_fn,
-    np_arange_include_end,
 )
 from py4cast.forcingutils import generate_toa_radiation_forcing, get_year_hour_forcing
 from py4cast.plots import DomainInfo
@@ -188,8 +187,8 @@ def run_through_timestamps(
     list_args_all_samples = []
 
     # Get the number of sample for 1 run
-    terms = np_arange_include_end(
-        settings.term["start"], settings.term["end"], settings.term["timestep"]
+    terms = np.arange(
+        settings.term["start"], settings.term["end"] + 1, settings.term["timestep"]
     ).tolist()
 
     # compute the number of samples to build from all the terms of 1 leadtime
