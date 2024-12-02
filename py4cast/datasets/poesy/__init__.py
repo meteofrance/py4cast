@@ -16,19 +16,24 @@ from torch.utils.data import DataLoader, Dataset
 from py4cast.datasets.base import (
     DatasetABC,
     DatasetInfo,
-    Grid,
-    GridConfig,
     Item,
     NamedTensor,
-    Param,
-    ParamConfig,
     Period,
-    Settings,
-    Stats,
     TorchDataloaderSettings,
     collate_fn,
     get_param_list,
 )
+
+from py4cast.datasets.access import (
+    DataAccessor,
+    Grid,
+    GridConfig,
+    Param,
+    ParamConfig,
+    Settings,
+    Stats
+)
+
 from py4cast.datasets.poesy.settings import (
     LATLON_FNAME,
     METADATA,
@@ -41,119 +46,71 @@ from py4cast.settings import CACHE_DIR
 from py4cast.utils import merge_dicts
 
 
-def poesy_forecast_namer(date: dt.datetime, var_file_name, **kwargs):
-    """
-    use to find local files
-    """
-    return f"{date.strftime('%Y-%m-%dT%H:%M:%SZ')}_{var_file_name}_lt1-45_crop.npy"
+class PoesyAccessor(DataAccessor):
 
+    def get_dataset_path(name:str, grid: Grid) -> Path:
+        return CACHE_DIR / str(name)
 
-def get_weight(level: float, level_type: str) -> float:
-    if level_type == "isobaricInHpa":
-        return 1.0 + (level) / (90)
-    elif level_type == "heightAboveGround":
-        return 2.0
-    elif level_type == "surface":
-        return 1.0
-    else:
-        raise Exception(f"unknown level_type:{level_type}")
+    def get_weight_per_level(
+    level: float,
+    level_type: Literal['isobaricInhPa','heightAboveGround','surface','meanSea']) -> float:
+        if level_type == "isobaricInHpa":
+            return 1.0 + (level) / (90)
+        elif level_type == "heightAboveGround":
+            return 2.0
+        elif level_type == "surface":
+            return 1.0
+        else:
+            raise Exception(f"unknown level_type:{level_type}")
 
+    def load_grid_info(grid: Grid) -> GridConfig:
+        geopotential = np.load(SCRATCH_PATH / OROGRAPHY_FNAME)
+        latlon = np.load(SCRATCH_PATH / LATLON_FNAME)
+        full_size = geopotential.shape
+        latitude = latlon[1, :, 0]
+        longitude = latlon[0, 0]
+        landsea_mask = np.where(geopotential > 0, 1.0, 0.0).astype(np.float32)
+        return GridConfig(full_size, latitude, longitude, geopotential, landsea_mask)
 
-#############################################################
-#                            GRID                           #
-#############################################################
+    def load_param_info(name: str) -> ParamConfig:
+        info = METADATA["WEATHER_PARAMS"][name]
+        unit = info["unit"]
+        long_name = info["long_name"]
+        grid = info["grid"]
+        level_type = info["level_type"]
+        grib_name = None
+        grib_param = None
+        return ParamConfig(unit, level_type, long_name, grid, grib_name, grib_param)
+    
+    def get_grid_coords(param: Param) -> List[float]:
+        raise NotImplementedError("Poesy does not require get_grid_coords")
 
+    def get_filepath(ds_name: str, param: Param, date: dt.datetime, file_format: Optional[str]='npy') -> str:
+        """
+        Return the filename.
+        """
+        var_file_name = METADATA["WEATHER_PARAMS"][param.name]["file_name"]
+        return (
+            SCRATCH_PATH
+            / f"{date.strftime('%Y-%m-%dT%H:%M:%SZ')}_{var_file_name}_lt1-45_crop.npy"
+        )
 
-def load_grid_info(grid: Grid) -> GridConfig:
-    geopotential = np.load(SCRATCH_PATH / OROGRAPHY_FNAME)
-    latlon = np.load(SCRATCH_PATH / LATLON_FNAME)
-    full_size = geopotential.shape
-    latitude = latlon[1, :, 0]
-    longitude = latlon[0, 0]
-    landsea_mask = np.where(geopotential > 0, 1.0, 0.0).astype(np.float32)
-    return GridConfig(full_size, latitude, longitude, geopotential, landsea_mask)
+    def load_data_from_disk(
+        self,
+        dataset_name: str, # name of the dataset or dataset version
+        param: Param, # specific parameter (2D field associated to a grid)
+        date: dt.datetime, # specific timestamp at which to load the field
+        members: Tuple[int], # optional members id. when dealing with ensembles
+        file_format: Literal["npy", "grib"] = "npy" # format of the base file on disk
+    ) -> np.array:
 
-
-#############################################################
-#                            PARAMS                         #
-#############################################################
-
-
-def get_filepath(ds_name: str, param: Param, date: dt.datetime) -> str:
-    """
-    Return the filename.
-    """
-    var_file_name = METADATA["WEATHER_PARAMS"][param.name]["file_name"]
-    return (
-        SCRATCH_PATH
-        / f"{date.strftime('%Y-%m-%dT%H:%M:%SZ')}_{var_file_name}_lt1-45_crop.npy"
-    )
-
-
-def load_param_info(name: str) -> ParamConfig:
-    info = METADATA["WEATHER_PARAMS"][name]
-    unit = info["unit"]
-    long_name = info["long_name"]
-    grid = info["grid"]
-    level_type = info["level_type"]
-    grib_name = None
-    grib_param = None
-    return ParamConfig(unit, level_type, long_name, grid, grib_name, grib_param)
-
-
-def load_data(
-    ds_name: str, param: Param, date: dt.datetime, term: List, member: int
-) -> np.array:
-    """
-    date : Date of file.
-    term : Position of leadtimes in file.
-    """
-    data_array = np.load(get_filepath(ds_name, param, date), mmap_mode="r")
-    return data_array[
-        param.grid.subdomain[0] : param.grid.subdomain[1],
-        param.grid.subdomain[2] : param.grid.subdomain[3],
-        term,
-        member,
-    ]
-
-
-def exists(ds_name: str, param: Param, date: dt.datetime) -> bool:
-    flist = get_filepath(ds_name, param, date)
-    return flist.exists()
-
-
-def get_param_tensor(
-    param: Param,
-    stats: Stats,
-    date: dt.datetime,
-    settings: Settings,
-    terms: List,
-    standardize: bool,
-    member: int = 1,
-) -> torch.tensor:
-    """
-    This function load a specific parameter into a tensor
-    """
-    if standardize:
-        name = param.parameter_short_name
-        means = np.asarray(stats[name]["mean"])
-        std = np.asarray(stats[name]["std"])
-
-    array = load_data(settings.dataset_name, param, date, terms, member)
-
-    # Extend dimension to match 3D (level dimension)
-    if len(array.shape) != 4:
-        array = np.expand_dims(array, axis=-1)
-    array = np.transpose(array, axes=[2, 0, 1, 3])  # shape = (steps, lvl, x, y)
-
-    if standardize:
-        array = (array - means) / std
-
-    # Define which value is considered invalid
-    tensor_data = torch.from_numpy(array)
-
-    return tensor_data
-
+        data_array = np.load(get_filepath(ds_name, param, date), mmap_mode="r")
+        return data_array[
+            param.grid.subdomain[0] : param.grid.subdomain[1],
+            param.grid.subdomain[2] : param.grid.subdomain[3],
+            term,
+            members,
+        ]
 
 @dataclass(slots=True)
 class Sample:
@@ -311,45 +268,6 @@ class PoesyDataset(DatasetABC, Dataset):
         self.shuffle = self.split == "train"
         self.cache_dir.mkdir(parents=True, exist_ok=True)
 
-    @cached_property
-    def cache_dir(self):
-        return self._cache_dir
-
-    def __str__(self) -> str:
-        return f"Poesy_{self.grid.name}"
-
-    def __len__(self):
-        return len(self.sample_list)
-
-    @cached_property
-    def dataset_info(self) -> DatasetInfo:
-        """
-        Return a DatasetInfo object.
-        This object describes the dataset.
-
-        Returns:
-            DatasetInfo: _description_
-        """
-
-        shortnames = {
-            "input": self.shortnames("input"),
-            "input_output": self.shortnames("input_output"),
-            "output": self.shortnames("output"),
-        }
-
-        return DatasetInfo(
-            name=str(self),
-            domain_info=self.domain_info,
-            units=self.units,
-            shortnames=shortnames,
-            weather_dim=self.weather_dim,
-            forcing_dim=self.forcing_dim,
-            step_duration=self.settings.step_duration,
-            statics=self.statics,
-            stats=self.stats,
-            diff_stats=self.diff_stats,
-            state_weights=self.state_weights,
-        )
 
     @cached_property
     def sample_list(self):
@@ -400,215 +318,6 @@ class PoesyDataset(DatasetABC, Dataset):
 
         print(f"All {len(samples)} samples are now defined")
         return samples
-
-    @cached_property
-    def dataset_extra_statics(self):
-        """
-        We add the LandSea Mask to the statics.
-        """
-        return [
-            NamedTensor(
-                feature_names=["LandSeaMask"],
-                tensor=torch.from_numpy(self.grid.landsea_mask)
-                .type(torch.float32)
-                .unsqueeze(2),
-                names=["lat", "lon", "features"],
-            )
-        ]
-
-    @cached_property
-    def forcing_dim(self) -> int:
-        """
-        Return the number of forcings.
-        """
-        res = 4  # For date
-        res += 1  # For solar forcing
-
-        for param in self.params:
-            if param.kind == "input":
-                res += 1
-        return res
-
-    @cached_property
-    def weather_dim(self) -> int:
-        """
-        Return the dimension of pronostic variable.
-        """
-        res = 0
-        for param in self.params:
-            if param.kind == "input_output":
-                res += 1
-        return res
-
-    @cached_property
-    def diagnostic_dim(self):
-        """
-        Return dimensions of output variable only
-        Not used yet
-        """
-        res = 0
-        for param in self.params:
-            if param.kind == "output":
-                res += 1
-        return res
-
-    def __getitem__(self, index):
-        """
-        Return an item from an index of the sample_list
-        """
-        sample = self.sample_list[index]
-        item = sample.load()
-        return item
-
-    @classmethod
-    def from_json(
-        cls,
-        fname: Path,
-        num_input_steps: int,
-        num_pred_steps_train: int,
-        num_pred_steps_val_test: int,
-        config_override: Union[Dict, None] = None,
-    ) -> Tuple["PoesyDataset", "PoesyDataset", "PoesyDataset"]:
-        """
-        Return 3 PoesyDataset.
-        Override configuration file if needed.
-        """
-        with open(fname, "r") as fp:
-            conf = json.load(fp)
-            if config_override is not None:
-                conf = merge_dicts(conf, config_override)
-        conf["grid"]["load_grid_info_func"] = load_grid_info
-        grid = Grid(**conf["grid"])
-        param_list = get_param_list(conf, grid, load_param_info, get_weight)
-
-        train_period = Period(**conf["periods"]["train"], name="train")
-        valid_period = Period(**conf["periods"]["valid"], name="valid")
-        test_period = Period(**conf["periods"]["test"], name="test")
-        train_ds = PoesyDataset(
-            grid,
-            train_period,
-            param_list,
-            Settings(
-                dataset_name=fname.stem,
-                num_pred_steps=num_pred_steps_train,
-                num_input_steps=num_input_steps,
-                members=conf["members"],
-                **conf["settings"],
-            ),
-        )
-        valid_ds = PoesyDataset(
-            grid,
-            valid_period,
-            param_list,
-            Settings(
-                dataset_name=fname.stem,
-                num_pred_steps=num_pred_steps_val_test,
-                num_input_steps=num_input_steps,
-                members=conf["members"],
-                **conf["settings"],
-            ),
-        )
-        test_ds = PoesyDataset(
-            grid,
-            test_period,
-            param_list,
-            Settings(
-                dataset_name=fname.stem,
-                num_pred_steps=num_pred_steps_val_test,
-                num_input_steps=num_input_steps,
-                members=conf["members"],
-                **conf["settings"],
-            ),
-        )
-        return train_ds, valid_ds, test_ds
-
-    def torch_dataloader(
-        self, tl_settings: TorchDataloaderSettings = TorchDataloaderSettings()
-    ) -> DataLoader:
-        return DataLoader(
-            self,
-            batch_size=tl_settings.batch_size,
-            num_workers=tl_settings.num_workers,
-            shuffle=self.shuffle,
-            prefetch_factor=tl_settings.prefetch_factor,
-            collate_fn=collate_fn,
-            pin_memory=tl_settings.pin_memory,
-        )
-
-    @property
-    def meshgrid(self) -> np.array:
-        """
-        array of shape (2, num_lat, num_lon)
-        of (X, Y) values
-        """
-        return self.grid.meshgrid
-
-    @property
-    def geopotential_info(self) -> np.array:
-        """
-        array of shape (num_lat, num_lon)
-        with geopotential value for each datapoint
-        """
-        return self.grid.geopotential
-
-    @property
-    def limited_area(self) -> bool:
-        """
-        Returns True if the dataset is
-        compatible with Limited area models
-        """
-        return True
-
-    @property
-    def border_mask(self) -> np.array:
-        return self.grid.border_mask
-
-    @property
-    def split(self) -> Literal["train", "valid", "test"]:
-        return self.period.name
-
-    @cached_property
-    def units(self) -> Dict[str, int]:
-        """
-        Return a dictionnary with name and units
-        """
-        return {p.parameter_short_name: p.unit for p in self.params}
-
-    def shortnames(
-        self,
-        kind: List[Literal["input", "output", "input_output"]] = [
-            "input",
-            "output",
-            "input_output",
-        ],
-    ) -> List[str]:
-        """
-        Return the name of the parameters in the dataset.
-        Does not include grid information (such as geopotentiel and LandSeaMask).
-        Make the difference between inputs, outputs.
-        """
-        return [p.parameter_short_name for p in self.params if p.kind == kind]
-
-    @cached_property
-    def state_weights(self):
-        """
-        Weights used in the loss function.
-        """
-        kinds = ["output", "input_output"]
-        return {
-            p.parameter_short_name: p.state_weight
-            for p in self.params
-            if p.kind in kinds
-        }
-
-    @cached_property
-    def domain_info(self) -> DomainInfo:
-        """Information on the domain considered.
-        Usefull information for plotting.
-        """
-        return DomainInfo(
-            grid_limits=self.grid.grid_limits, projection=self.grid.projection
-        )
 
     @classmethod
     def prepare(cls, path_config: Path):
