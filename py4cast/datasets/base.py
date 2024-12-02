@@ -806,6 +806,7 @@ class Grid:
         func = getattr(cartopy.crs, self.proj_name)
         return func(**self.projection_kwargs)
 
+
 def grid_static_features(grid: Grid, extra_statics: List[NamedTensor]):
     """
     Grid static features
@@ -821,9 +822,7 @@ def grid_static_features(grid: Grid, extra_statics: List[NamedTensor]):
     )  # Rearange and divide  by maximum coordinate
 
     # (Nx, Ny, 1)
-    geopotential = torch.tensor(grid.geopotential_info).unsqueeze(
-        2
-    )  # (N_x, N_y, 1)
+    geopotential = torch.tensor(grid.geopotential_info).unsqueeze(2)  # (N_x, N_y, 1)
     gp_min = torch.min(geopotential)
     gp_max = torch.max(geopotential)
     # Rescale geopotential to [0,1]

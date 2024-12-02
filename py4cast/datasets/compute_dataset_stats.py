@@ -1,63 +1,65 @@
+import warnings
+from typing import List, Literal
+
 import einops
 import torch
+from base import DatasetABC, Grid, NamedTensor
 from tqdm import tqdm
-from typing import List, Literal
-import warnings
 
 from py4cast.utils import torch_save
-from base import NamedTensor, DatasetABC, Grid
 
 
 def compute_mean_std_min_max(
-        dataset: DatasetABC, type_tensor: Literal["inputs", "outputs", "forcing"]
+    dataset: DatasetABC, type_tensor: Literal["inputs", "outputs", "forcing"]
+):
+    """
+    Compute mean and standard deviation for this dataset.
+    """
+    random_batch = next(iter(dataset.torch_dataloader()))
+    named_tensor = getattr(random_batch, type_tensor)
+    n_features = len(named_tensor.feature_names)
+    sum_means = torch.zeros(n_features)
+    sum_squares = torch.zeros(n_features)
+    ndim_features = len(named_tensor.tensor.shape) - 1
+    flat_input = named_tensor.tensor.flatten(0, ndim_features - 1)  # (X, Features)
+    best_min = torch.min(flat_input, dim=0).values
+    best_max = torch.max(flat_input, dim=0).values
+    counter = 0
+    if dataset.settings.standardize:
+        raise ValueError("Your dataset should not be standardized.")
+
+    for batch in tqdm(
+        dataset.torch_dataloader(), desc=f"Computing {type_tensor} stats"
     ):
-        """
-        Compute mean and standard deviation for this dataset.
-        """
-        random_batch = next(iter(dataset.torch_dataloader()))
-        named_tensor = getattr(random_batch, type_tensor)
-        n_features = len(named_tensor.feature_names)
-        sum_means = torch.zeros(n_features)
-        sum_squares = torch.zeros(n_features)
-        ndim_features = len(named_tensor.tensor.shape) - 1
-        flat_input = named_tensor.tensor.flatten(0, ndim_features - 1)  # (X, Features)
-        best_min = torch.min(flat_input, dim=0).values
-        best_max = torch.max(flat_input, dim=0).values
-        counter = 0
-        if dataset.settings.standardize:
-            raise ValueError("Your dataset should not be standardized.")
+        tensor = getattr(batch, type_tensor).tensor
+        tensor = tensor.flatten(1, 3)  # Flatten to be (Batch, X, Features)
+        counter += tensor.shape[0]  # += batch size
 
-        for batch in tqdm(
-            dataset.torch_dataloader(), desc=f"Computing {type_tensor} stats"
-        ):
-            tensor = getattr(batch, type_tensor).tensor
-            tensor = tensor.flatten(1, 3)  # Flatten to be (Batch, X, Features)
-            counter += tensor.shape[0]  # += batch size
+        sum_means += torch.sum(tensor.mean(dim=1), dim=0)  # (d_features)
+        sum_squares += torch.sum((tensor**2).mean(dim=1), dim=0)  # (d_features)
 
-            sum_means += torch.sum(tensor.mean(dim=1), dim=0)  # (d_features)
-            sum_squares += torch.sum((tensor**2).mean(dim=1), dim=0)  # (d_features)
+        mini = torch.min(tensor, 1).values[0]
+        stack_mini = torch.stack([best_min, mini], dim=0)
+        best_min = torch.min(stack_mini, dim=0).values  # (d_features)
 
-            mini = torch.min(tensor, 1).values[0]
-            stack_mini = torch.stack([best_min, mini], dim=0)
-            best_min = torch.min(stack_mini, dim=0).values  # (d_features)
+        maxi = torch.max(tensor, 1).values[0]
+        stack_maxi = torch.stack([best_max, maxi], dim=0)
+        best_max = torch.max(stack_maxi, dim=0).values  # (d_features)
 
-            maxi = torch.max(tensor, 1).values[0]
-            stack_maxi = torch.stack([best_max, maxi], dim=0)
-            best_max = torch.max(stack_maxi, dim=0).values  # (d_features)
+    mean = sum_means / counter
+    second_moment = sum_squares / counter
+    std = torch.sqrt(second_moment - mean**2)  # (d_features)
 
-        mean = sum_means / counter
-        second_moment = sum_squares / counter
-        std = torch.sqrt(second_moment - mean**2)  # (d_features)
+    stats = {}
+    for i, name in enumerate(named_tensor.feature_names):
+        stats[name] = {
+            "mean": mean[i],
+            "std": std[i],
+            "min": best_min[i],
+            "max": best_max[i],
+        }
+    return stats
 
-        stats = {}
-        for i, name in enumerate(named_tensor.feature_names):
-            stats[name] = {
-                "mean": mean[i],
-                "std": std[i],
-                "min": best_min[i],
-                "max": best_max[i],
-            }
-        return stats
 
 def compute_parameters_stats(dataset: DatasetABC):
     """
@@ -75,7 +77,8 @@ def compute_parameters_stats(dataset: DatasetABC):
     torch_save(all_stats, dest_file)
     print(f"Parameters statistics saved in {dest_file}")
 
-def compute_time_step_stats(dataset : DatasetABC):
+
+def compute_time_step_stats(dataset: DatasetABC):
     random_inputs = next(iter(dataset.torch_dataloader())).inputs
     n_features = len(random_inputs.feature_names)
     sum_means = torch.zeros(n_features)
@@ -90,9 +93,7 @@ def compute_time_step_stats(dataset : DatasetABC):
         outputs = batch.outputs.tensor
 
         in_out = torch.cat([inputs, outputs], dim=1)
-        diff = (
-            in_out[:, 1:] - in_out[:, :-1]
-        )  # Substract information on time dimension
+        diff = in_out[:, 1:] - in_out[:, :-1]  # Substract information on time dimension
         diff = diff.flatten(1, 3)  # Flatten everybody to be (Batch, X, Features)
 
         counter += in_out.shape[0]  # += batch size
