@@ -33,6 +33,8 @@ class LCli(LightningCLI):
         super().__init__(model_class, datamodule_class)
 
     def add_arguments_to_parser(self, parser):
+        parser.add_argument('--dev_mode', action='store_true')
+        
         parser.link_arguments(
             "data.dataset",
             "model.dataset_name",
@@ -80,6 +82,13 @@ class LCli(LightningCLI):
             "model.len_train_loader",
             apply_on="instantiate",
         )
+
+    def before_instantiate_classes(self):
+        if self.config.fit.dev_mode:
+            self.config.fit.trainer.max_epochs =2
+            self.config.fit.trainer.limit_train_batches= 20
+            self.config.fit.trainer.limit_val_batches= 20
+            self.config.fit.trainer.limit_test_batches= 20
 
 
 def cli_main():
