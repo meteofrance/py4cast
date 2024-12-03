@@ -386,7 +386,7 @@ class Sample:
                 linputs.append(tmp_state)
 
         lforcings = generate_forcings(
-            date=self.timestamps.datetime, output_terms=self.pred_timesteps, grid=self.grid
+            date=self.timestamps.datetime, output_terms=self.timestamps.terms[self.settings.num_pred_steps:], grid=self.grid
         )
 
         for forcing in lforcings:
@@ -442,7 +442,7 @@ class Sample:
                 cbar.set_label(param.unit)
 
         hours_delta = dt.timedelta(hours=self.settings.step_duration * step)
-        plt.suptitle(f"Run: {self.date_t0} - Valid time: {self.date_t0 + hours_delta}")
+        plt.suptitle(f"Run: {self.timestamps.datetime} - Valid time: {self.timestamps.datetime + hours_delta}")
         plt.tight_layout()
 
         if save_path is not None:
@@ -535,7 +535,14 @@ class TitanDataset(DatasetABC, Dataset):
             for date in tqdm.tqdm(
                 self.period.date_list, f"{self.period.name} samples validation"
             ):
-                sample = Sample(date, self.settings, self.params, self.stats, self.grid)
+
+                n_inputs, n_preds = self.settings.num_input_steps, self.settings.num_pred_steps
+                all_steps = list(range(-n_inputs + 1, n_preds + 1))
+                all_timesteps = [self.settings.step_duration * step for step in all_steps]
+                validity_times = [date+ dt.timedelta(hours=ts) for ts in all_timesteps]
+                timestamps = Timestamps(datetime=date, terms=all_timesteps, validity_times=validity_times)
+                
+                sample = Sample(timestamps, self.settings, self.params, self.stats, self.grid)
                 if sample.is_valid():
                     f.write(f"{date.strftime('%Y-%m-%d_%Hh%M')}\n")
 
@@ -551,35 +558,27 @@ class TitanDataset(DatasetABC, Dataset):
                 dateformat = "%Y-%m-%d_%Hh%M"
                 dates = [dt.datetime.strptime(ds, dateformat) for ds in dates_str]
                 dates = list(set(dates).intersection(set(self.period.date_list)))
-                
-                # ? quoi faire si il a deja les dates ? écrire la boucle ? Pas sur qu'il faille faire ca
-                samples = []
-                for date in tqdm.tqdm(dates):
-                    n_inputs, n_preds = self.settings.num_input_steps, self.settings.num_pred_steps
-                    all_steps = list(range(-n_inputs + 1, n_preds + 1))
-                    all_timesteps = [self.settings.step_duration * step for step in all_steps]
-                    validity_times = [date+ dt.timedelta(hours=ts) for ts in all_timesteps]
+                dates_iterator = dates
 
-                    timestamps = Timestamps(datetime=date, terms=all_timesteps, validity_times=validity_times)
-                    sample = Sample(timestamps, self.settings, self.params, stats, self.grid)
-                    if sample.is_valid():
-                        samples.append(sample)
         else:
             print(
                 f"Valid samples file {self.valid_samples_file} does not exist. Computing samples list..."
             )
-            samples = []
-            for date in tqdm.tqdm(self.period.date_list):
-                
-                n_inputs, n_preds = self.settings.num_input_steps, self.settings.num_pred_steps
-                all_steps = list(range(-n_inputs + 1, n_preds + 1))
-                all_timesteps = [self.settings.step_duration * step for step in all_steps]
-                validity_times = [date+ dt.timedelta(hours=ts) for ts in all_timesteps]
-                        
-                timestamps = Timestamps(datetime=date, terms=all_timesteps, validity_times=validity_times)
-                sample = Sample(timestamps, self.settings, self.params, stats, self.grid)
-                if sample.is_valid():
-                    samples.append(sample)
+            dates_iterator = self.period.date_list
+
+        samples = []
+        for date in tqdm.tqdm(dates_iterator):
+            
+            n_inputs, n_preds = self.settings.num_input_steps, self.settings.num_pred_steps
+            all_steps = list(range(-n_inputs + 1, n_preds + 1))
+            all_timesteps = [self.settings.step_duration * step for step in all_steps]
+            validity_times = [date+ dt.timedelta(hours=ts) for ts in all_timesteps]
+                    
+            timestamps = Timestamps(datetime=date, terms=all_timesteps, validity_times=validity_times)
+            sample = Sample(timestamps, self.settings, self.params, stats, self.grid)
+            if sample.is_valid():
+                samples.append(sample)
+
         print(f"--> All {len(samples)} {self.period.name} samples are now defined")
         return samples
 
