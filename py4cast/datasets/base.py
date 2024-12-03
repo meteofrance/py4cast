@@ -827,7 +827,7 @@ class Settings:
     members: Tuple[int] = (0,)
 
 
-# This namedtuple contains attributes that are used by the Param class
+# This namedtuple contains attributes that are used by the WeatherParam class
 # These attributes are retrieved from disk in any user-defined manner.
 # It is there to define the expected type of the retrieval function.
 ParamConfig = namedtuple(
@@ -836,7 +836,12 @@ ParamConfig = namedtuple(
 
 
 @dataclass(slots=True)
-class Param:
+class WeatherParam:
+    """
+    This class represent a single weather parameter (seen as a 2D field)
+    with all attributes used to retrieve and manipulate the parameter;
+    Used in the construction of the Dataset object.
+    """
     name: str
     level: int
     grid: Grid
@@ -883,11 +888,11 @@ def get_param_list(
     grid: Grid,
     load_param_info: Callable[[str], ParamConfig],
     get_weight_per_level: Callable[[str], float],
-) -> List[Param]:
+) -> List[WeatherParam]:
     param_list = []
     for name, values in conf["params"].items():
         for lvl in values["levels"]:
-            param = Param(
+            param = WeatherParam(
                 name=name,
                 level=lvl,
                 grid=grid,

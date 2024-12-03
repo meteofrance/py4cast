@@ -24,7 +24,7 @@ from py4cast.datasets.base import (
     GridConfig,
     Item,
     NamedTensor,
-    Param,
+    WeatherParam,
     ParamConfig,
     Period,
     Settings,
@@ -97,13 +97,13 @@ def load_param_info(name: str) -> ParamConfig:
     return ParamConfig(unit, level_type, long_name, grid, grib_name, grib_param)
 
 
-def get_grid_coords(param: Param) -> List[int]:
+def get_grid_coords(param: WeatherParam) -> List[int]:
     return METADATA["GRIDS"][param.grid.name]["extent"]
 
 
 def get_filepath(
     ds_name: str,
-    param: Param,
+    param: WeatherParam,
     date: dt.datetime,
     file_format: Literal["npy", "grib"],
 ) -> Path:
@@ -121,7 +121,7 @@ def get_filepath(
         return npy_path / date.strftime(FORMATSTR) / filename
 
 
-def process_sample_dataset(ds_name: str, date: dt.datetime, params: List[Param]):
+def process_sample_dataset(ds_name: str, date: dt.datetime, params: List[WeatherParam]):
     """Saves each 2D parameter data of the given date as one NPY file."""
     for param in params:
         dest_file = get_filepath(ds_name, param, date, "npy")
@@ -139,11 +139,11 @@ def process_sample_dataset(ds_name: str, date: dt.datetime, params: List[Param])
 
 
 def fit_to_grid(
-    param: Param,
+    param: WeatherParam,
     arr: np.ndarray,
     lons: np.ndarray,
     lats: np.ndarray,
-    get_grid_coords: Callable[[Param], List[str]],
+    get_grid_coords: Callable[[WeatherParam], List[str]],
 ) -> np.ndarray:
     # already on good grid, nothing to do:
     if param.grid.name == param.native_grid:
@@ -170,7 +170,7 @@ def read_grib(path_grib: Path) -> xr.Dataset:
     return xr.load_dataset(path_grib, engine="cfgrib", backend_kwargs={"indexpath": ""})
 
 
-def load_data_grib(param: Param, path: Path) -> np.ndarray:
+def load_data_grib(param: WeatherParam, path: Path) -> np.ndarray:
     ds = read_grib(path)
     assert param.grib_param is not None
     level_type = ds[param.grib_param].attrs["GRIB_typeOfLevel"]
@@ -185,7 +185,7 @@ def load_data_grib(param: Param, path: Path) -> np.ndarray:
 
 def load_data_from_disk(
     ds_name: str,
-    param: Param,
+    param: WeatherParam,
     date: dt.datetime,
     file_format: Literal["npy", "grib"] = "grib",
 ):
@@ -208,7 +208,7 @@ def load_data_from_disk(
 
 def exists(
     ds_name: str,
-    param: Param,
+    param: WeatherParam,
     date: dt.datetime,
     file_format: Literal["npy", "grib"] = "grib",
 ) -> bool:
@@ -217,7 +217,7 @@ def exists(
 
 
 def get_param_tensor(
-    param: Param,
+    param: WeatherParam,
     stats: Stats,
     dates: List[dt.datetime],
     settings: Settings,
@@ -282,7 +282,7 @@ class Sample:
 
     date_t0: dt.datetime
     settings: Settings
-    params: List[Param]
+    params: List[WeatherParam]
     stats: Stats
     grid: Grid
     pred_timesteps: Tuple[float] = field(init=False)  # gaps in hours btw step and t0
@@ -466,7 +466,7 @@ class TitanDataset(DatasetABC, Dataset):
         name: str,
         grid: Grid,
         period: Period,
-        params: List[Param],
+        params: List[WeatherParam],
         settings: Settings,
     ):
         self.name = name

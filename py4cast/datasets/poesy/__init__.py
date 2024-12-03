@@ -20,7 +20,7 @@ from py4cast.datasets.base import (
     GridConfig,
     Item,
     NamedTensor,
-    Param,
+    WeatherParam,
     ParamConfig,
     Period,
     Settings,
@@ -79,7 +79,7 @@ def load_grid_info(grid: Grid) -> GridConfig:
 #############################################################
 
 
-def get_filepath(ds_name: str, param: Param, date: dt.datetime) -> str:
+def get_filepath(ds_name: str, param: WeatherParam, date: dt.datetime) -> str:
     """
     Return the filename.
     """
@@ -102,7 +102,7 @@ def load_param_info(name: str) -> ParamConfig:
 
 
 def load_data(
-    ds_name: str, param: Param, date: dt.datetime, term: List, member: int
+    ds_name: str, param: WeatherParam, date: dt.datetime, term: List, member: int
 ) -> np.array:
     """
     date : Date of file.
@@ -117,13 +117,13 @@ def load_data(
     ]
 
 
-def exists(ds_name: str, param: Param, date: dt.datetime) -> bool:
+def exists(ds_name: str, param: WeatherParam, date: dt.datetime) -> bool:
     flist = get_filepath(ds_name, param, date)
     return flist.exists()
 
 
 def get_param_tensor(
-    param: Param,
+    param: WeatherParam,
     stats: Stats,
     date: dt.datetime,
     settings: Settings,
@@ -210,7 +210,7 @@ class Sample:
     output_terms: Tuple[float]
     stats: Stats
     grid: Grid
-    params: List[Param]
+    params: List[WeatherParam]
 
     # Term wrt to the date {date}. Gives validity
     terms: Tuple[float] = field(init=False)
@@ -301,7 +301,7 @@ class InferSample(Sample):
 
 class PoesyDataset(DatasetABC, Dataset):
     def __init__(
-        self, grid: Grid, period: Period, params: List[Param], settings: Settings
+        self, grid: Grid, period: Period, params: List[WeatherParam], settings: Settings
     ):
         self.grid = grid
         self.period = period
