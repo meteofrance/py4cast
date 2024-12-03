@@ -1,4 +1,5 @@
 import getpass
+import os
 import shutil
 import subprocess
 from copy import deepcopy
@@ -41,6 +42,8 @@ LR_SCHEDULER_PERIOD: int = 10
 
 # PNG plots period in epochs. Plots are made, logged and saved every nth epoch.
 PLOT_PERIOD: int = 10
+
+LOG_SAVEPATH = Path(os.getenv("LOG_SAVEPATH"), "/scratch/shared/py4cast/logs/test_cli")
 
 
 @dataclass
@@ -619,9 +622,8 @@ class AutoRegressiveLightning(pl.LightningModule):
             self.path_tensorboard = Path(self.trainer.logger.log_dir)
         else:
             # If fast_dev_run = True, loggers are removed and a DummyLogger is used. Hardcode the outputs
-            self.path_tensorboard = Path(
-                "/scratch/shared/py4cast/logs/test_cli/DummyLogger"
-            )
+            self.path_tensorboard = LOG_SAVEPATH / "DummyLogger"
+            self.path_tensorboard.mkdir(parents=True, exist_ok=True)
         self.log_hparams_tb()
 
     def on_train_start(self):

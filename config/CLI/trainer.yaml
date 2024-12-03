@@ -1,5 +1,5 @@
 trainer:
-  fast_dev_run: False
+  fast_dev_run: True
   num_nodes: 1
   devices: "auto"
   max_epochs: 4
