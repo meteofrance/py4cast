@@ -39,14 +39,14 @@ except ImportError:
 try:
     from .titan import TitanDataset
 
-    registry["titan"] = (TitanDataset, default_config_root / "titan.json")
+    registry["titan"] = (TitanDataset, default_config_root / "titan_full.json")
 except (ImportError, FileNotFoundError, ModuleNotFoundError):
     warnings.warn(f"Could not import TitanDataset. {traceback.format_exc()}")
 
 try:
     from .poesy import PoesyDataset
 
-    registry["poesy"] = (PoesyDataset, default_config_root / "poesy.json")
+    registry["poesy"] = (PoesyDataset, default_config_root / "poesy_refacto.json")
 except ImportError:
     warnings.warn(f"Could not import PoesyDataset. {traceback.format_exc()}")
 

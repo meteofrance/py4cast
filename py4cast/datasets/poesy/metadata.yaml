@@ -1,0 +1,92 @@
+GRIDS:
+  EURW1S40:
+    extent: &id001
+    - 55.4
+    - 37.5
+    - -12.0
+    - 16.0
+    resolution: 0.025
+    size: &id002
+ISOBARIC_LEVELS_HPA:
+  - 850
+  - 500
+TERMS:
+  start: 1
+  end: 45
+  timestep: 1
+MEMBERS:
+  - 0
+  - 1 
+  - 2
+  - 3
+  - 4
+  - 5
+  - 6
+  - 7
+  - 8
+  - 9
+  - 10
+  - 11
+  - 12
+  - 13
+  - 14
+  - 15
+WEATHER_PARAMS:
+  t2m:
+    extent: *id001
+    grid: EURW1S40
+    levels: 2
+    level_type: heightAboveGround
+    unit: K
+    long_name: PEARO 2-meters temperature
+    file_name: t2m
+  u10:
+    extent: *id001
+    grid: EURW1S40
+    levels: 10
+    level_type: heightAboveGround
+    unit: m * s**-1
+    long_name: PEARO 10-meters U component of wind
+    file_name: u
+  v10:
+    extent: *id001
+    grid: EURW1S40
+    levels: 10
+    level_type: heightAboveGround
+    unit: m * s**-1
+    long_name: PEARO 10-meters V component of wind
+    file_name: v
+  tirf:
+    extent: *id001
+    grid: EURW1S40
+    levels: 0
+    level_type: surface
+    unit: kg * m**-2
+    long_name: PEARO 1-hour integral of rain flux
+    file_name: rrdecum
+  tirf_cum:
+    extent: *id001
+    grid: EURW1S40
+    levels: 0
+    level_type: surface
+    unit: kg * m**-2
+    long_name: PEARO total integral of rain flux
+    file_name: rr
+  t_850:
+    extent: *id001
+    grid: EURW1S40
+    levels: 850
+    level_type: isobaricInhPa
+    unit: K
+    long_name: PEARO 850 hPa temperature
+    file_name: t850
+  z_500:
+    extent: *id001
+    grid: EURW1S40
+    levels: 500
+    level_type: isobaricInhPa
+    unit: m
+    long_name: PEARO 500 hPa geopotential height
+    file_name: z500
+  
+
