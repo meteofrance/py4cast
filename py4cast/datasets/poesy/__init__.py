@@ -121,16 +121,19 @@ def exists(ds_name: str, param: Param, date: dt.datetime) -> bool:
     flist = get_filepath(ds_name, param, date)
     return flist.exists()
 
+
 @dataclass
 class Timestamps:
     """
-    Describe all timestamps in a sample. It contains datetime, validitytimes and terms  
+    Describe all timestamps in a sample. It contains datetime, validitytimes and terms
     """
+
     datetime: dt.datetime
-    terms: List[np.int64] 
+    terms: List[np.int64]
     validity_times: List[dt.datetime]
 
-def _is_valid(dataset_name: str, params: List[Param], timestamps: Timestamps): 
+
+def _is_valid(dataset_name: str, params: List[Param], timestamps: Timestamps):
     """
     Check that all the files necessary for this samples exists.
 
@@ -146,6 +149,7 @@ def _is_valid(dataset_name: str, params: List[Param], timestamps: Timestamps):
             return False
 
     return True
+
 
 def get_param_tensor(
     param: Param,
@@ -163,7 +167,9 @@ def get_param_tensor(
         means = np.asarray(stats[name]["mean"])
         std = np.asarray(stats[name]["std"])
 
-    array = load_data(settings.dataset_name, param, timestamps.datetime, timestamps.terms, member)
+    array = load_data(
+        settings.dataset_name, param, timestamps.datetime, timestamps.terms, member
+    )
 
     # Extend dimension to match 3D (level dimension)
     if len(array.shape) != 4:
@@ -223,7 +229,6 @@ def generate_forcings(
     return lforcings
 
 
-
 @dataclass(slots=True)
 class Sample:
     """Describes a sample"""
@@ -235,19 +240,20 @@ class Sample:
     grid: Grid
     params: List[Param]
 
-
     output_terms: Tuple[float] = field(init=False)
     input_terms: Tuple[float] = field(init=False)
 
     def __post_init__(self):
-        if not self.settings.num_input_steps + self.settings.num_pred_steps == len(self.timestamps.terms):
+        if not self.settings.num_input_steps + self.settings.num_pred_steps == len(
+            self.timestamps.terms
+        ):
             raise Exception("terms does not have the correct size")
-        self.input_terms = self.timestamps.terms[:self.settings.num_input_steps]
-        self.output_terms = self.timestamps.terms[self.settings.num_pred_steps:]
+        self.input_terms = self.timestamps.terms[: self.settings.num_input_steps]
+        self.output_terms = self.timestamps.terms[self.settings.num_pred_steps :]
 
     def is_valid(self) -> bool:
         return _is_valid(self.settings.dataset_name, self.params, self.timestamps)
-     
+
     def load(self) -> Item:
         """
         Return inputs, outputs, forcings as tensors concatenated into a Item.
@@ -292,7 +298,9 @@ class Sample:
 
         # Get forcings
         lforcings = generate_forcings(
-            date=self.timestamps.datetime, output_terms=self.output_terms, grid=self.grid
+            date=self.timestamps.datetime,
+            output_terms=self.output_terms,
+            grid=self.grid,
         )
         for lforcing in lforcings:
             lforcing.unsqueeze_and_expand_from_(linputs[0])
@@ -378,13 +386,13 @@ class PoesyDataset(DatasetABC, Dataset):
                 METADATA["TERMS"]["timestep"],
             )
         )
-        
+
         samples = []
         number = 0
 
         num_total_steps = self.settings.num_input_steps + self.settings.num_pred_steps
         sample_by_date = len(all_terms) // num_total_steps
-        
+
         for date in self.period.date_list:
             for member in self.settings.members:
                 for idx_sample in range(0, sample_by_date):
@@ -392,8 +400,12 @@ class PoesyDataset(DatasetABC, Dataset):
                         idx_sample * num_total_steps : idx_sample * num_total_steps
                         + num_total_steps
                     ]
-                    validity_times = [date + dt.timedelta(hours = int(term)) for term in terms]
-                    timestamps = Timestamps(datetime=date, terms=terms, validity_times=validity_times)
+                    validity_times = [
+                        date + dt.timedelta(hours=int(term)) for term in terms
+                    ]
+                    timestamps = Timestamps(
+                        datetime=date, terms=terms, validity_times=validity_times
+                    )
                     samp = Sample(
                         timestamps=timestamps,
                         member=member,

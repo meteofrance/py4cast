@@ -5,7 +5,7 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 from functools import cached_property, lru_cache
 from pathlib import Path
-from typing import Callable, Dict, List, Literal, Tuple, Union, Optional
+from typing import Callable, Dict, List, Literal, Optional, Tuple, Union
 
 import gif
 import matplotlib.pyplot as plt
@@ -219,14 +219,17 @@ def exists(
 @dataclass
 class Timestamps:
     """
-    Describe all timestamps in a sample. It contains datetime, validitytimes and all terms  
+    Describe all timestamps in a sample. It contains datetime, validitytimes and all terms
     """
-    datetime: dt.datetime
-    terms: List[np.int64] 
-    validity_times: List[dt.datetime]
-    
 
-def _is_valid(dataset_name: str, params: List[Param], timestamps: Timestamps, file_format: str): 
+    datetime: dt.datetime
+    terms: List[np.int64]
+    validity_times: List[dt.datetime]
+
+
+def _is_valid(
+    dataset_name: str, params: List[Param], timestamps: Timestamps, file_format: str
+):
     """Check that all the files necessary for this sample exist.
 
     Args:
@@ -238,9 +241,7 @@ def _is_valid(dataset_name: str, params: List[Param], timestamps: Timestamps, fi
     """
     for val_time in timestamps.validity_times:
         for param in params:
-            if not exists(
-                dataset_name, param, val_time, file_format
-            ):
+            if not exists(dataset_name, param, val_time, file_format):
                 print("invalid sample")
                 return False
     return True
@@ -327,10 +328,16 @@ class Sample:
         pred_timesteps = [3h, 6h, 9h]
         all_dates = [24/10/22 21:00,  24/10/23 00:00, 24/10/23 03:00, 24/10/23 06:00, 24/10/23 09:00]
         """
-        if not self.settings.num_input_steps + self.settings.num_pred_steps == len(self.timestamps.validity_times):
+        if not self.settings.num_input_steps + self.settings.num_pred_steps == len(
+            self.timestamps.validity_times
+        ):
             raise Exception("Length terms does not match inputs + outputs")
-        self.input_terms = self.timestamps.validity_times[:self.settings.num_input_steps]
-        self.output_terms = self.timestamps.validity_times[self.settings.num_pred_steps:]
+        self.input_terms = self.timestamps.validity_times[
+            : self.settings.num_input_steps
+        ]
+        self.output_terms = self.timestamps.validity_times[
+            self.settings.num_pred_steps :
+        ]
 
         # self.pred_timesteps = self.timestamps.terms[-self.settings.num_pred_steps:]
 
@@ -338,8 +345,13 @@ class Sample:
         return f"Date T0 {self.timestamps.datetime}, leadtimes {self.pred_timesteps}"
 
     def is_valid(self) -> bool:
-        return _is_valid(self.settings.dataset_name, self.params, self.timestamps, self.settings.file_format)
-        
+        return _is_valid(
+            self.settings.dataset_name,
+            self.params,
+            self.timestamps,
+            self.settings.file_format,
+        )
+
     def load(self, no_standardize: bool = False) -> Item:
         """
         Return inputs, outputs, forcings as tensors concatenated into a Item.
@@ -370,7 +382,11 @@ class Sample:
 
             else:  # input_output
                 tensor = get_param_tensor(
-                    param, self.stats, self.timestamps.validity_times, self.settings, no_standardize
+                    param,
+                    self.stats,
+                    self.timestamps.validity_times,
+                    self.settings,
+                    no_standardize,
                 )
                 state_kwargs["names"][0] = "timestep"
                 tmp_state = NamedTensor(
@@ -386,7 +402,9 @@ class Sample:
                 linputs.append(tmp_state)
 
         lforcings = generate_forcings(
-            date=self.timestamps.datetime, output_terms=self.timestamps.terms[self.settings.num_pred_steps:], grid=self.grid
+            date=self.timestamps.datetime,
+            output_terms=self.timestamps.terms[self.settings.num_pred_steps :],
+            grid=self.grid,
         )
 
         for forcing in lforcings:
@@ -442,7 +460,9 @@ class Sample:
                 cbar.set_label(param.unit)
 
         hours_delta = dt.timedelta(hours=self.settings.step_duration * step)
-        plt.suptitle(f"Run: {self.timestamps.datetime} - Valid time: {self.timestamps.datetime + hours_delta}")
+        plt.suptitle(
+            f"Run: {self.timestamps.datetime} - Valid time: {self.timestamps.datetime + hours_delta}"
+        )
         plt.tight_layout()
 
         if save_path is not None:
@@ -536,13 +556,22 @@ class TitanDataset(DatasetABC, Dataset):
                 self.period.date_list, f"{self.period.name} samples validation"
             ):
 
-                n_inputs, n_preds = self.settings.num_input_steps, self.settings.num_pred_steps
+                n_inputs, n_preds = (
+                    self.settings.num_input_steps,
+                    self.settings.num_pred_steps,
+                )
                 all_steps = list(range(-n_inputs + 1, n_preds + 1))
-                all_timesteps = [self.settings.step_duration * step for step in all_steps]
-                validity_times = [date+ dt.timedelta(hours=ts) for ts in all_timesteps]
-                timestamps = Timestamps(datetime=date, terms=all_timesteps, validity_times=validity_times)
-                
-                sample = Sample(timestamps, self.settings, self.params, self.stats, self.grid)
+                all_timesteps = [
+                    self.settings.step_duration * step for step in all_steps
+                ]
+                validity_times = [date + dt.timedelta(hours=ts) for ts in all_timesteps]
+                timestamps = Timestamps(
+                    datetime=date, terms=all_timesteps, validity_times=validity_times
+                )
+
+                sample = Sample(
+                    timestamps, self.settings, self.params, self.stats, self.grid
+                )
                 if sample.is_valid():
                     f.write(f"{date.strftime('%Y-%m-%d_%Hh%M')}\n")
 
@@ -568,13 +597,18 @@ class TitanDataset(DatasetABC, Dataset):
 
         samples = []
         for date in tqdm.tqdm(dates_iterator):
-            
-            n_inputs, n_preds = self.settings.num_input_steps, self.settings.num_pred_steps
+
+            n_inputs, n_preds = (
+                self.settings.num_input_steps,
+                self.settings.num_pred_steps,
+            )
             all_steps = list(range(-n_inputs + 1, n_preds + 1))
             all_timesteps = [self.settings.step_duration * step for step in all_steps]
-            validity_times = [date+ dt.timedelta(hours=ts) for ts in all_timesteps]
-                    
-            timestamps = Timestamps(datetime=date, terms=all_timesteps, validity_times=validity_times)
+            validity_times = [date + dt.timedelta(hours=ts) for ts in all_timesteps]
+
+            timestamps = Timestamps(
+                datetime=date, terms=all_timesteps, validity_times=validity_times
+            )
             sample = Sample(timestamps, self.settings, self.params, stats, self.grid)
             if sample.is_valid():
                 samples.append(sample)
