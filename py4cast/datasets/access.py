@@ -7,8 +7,12 @@ from functools import cached_property
 from pathlib import Path
 from typing import Any, Callable, List, Literal, Optional, Tuple
 
+import cartopy
+import einops
 import numpy as np
 import torch
+
+from py4cast.datasets.named_tensors import NamedTensor
 
 GridConfig = namedtuple(
     "GridConfig", "full_size latitude longitude geopotential landsea_mask"

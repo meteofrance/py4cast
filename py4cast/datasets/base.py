@@ -9,7 +9,6 @@ from abc import abstractproperty
 from copy import deepcopy
 from dataclasses import dataclass, field, fields
 from functools import cached_property
-from itertools import chain
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable, Dict, List, Literal, Tuple, Union
 

@@ -3,7 +3,7 @@ from typing import List, Literal
 
 import einops
 import torch
-from base import DatasetABC, Grid, NamedTensor
+from base import DatasetABC
 from tqdm import tqdm
 
 from py4cast.utils import torch_save
