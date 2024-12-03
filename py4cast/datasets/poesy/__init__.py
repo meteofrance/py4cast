@@ -242,8 +242,8 @@ class Sample:
     def __post_init__(self):
         if not self.settings.num_input_steps + self.settings.num_pred_steps == len(self.timestamps.terms):
             raise Exception("terms does not have the correct size")
-        self.input_terms = self.timestamps.terms[self.settings.num_input_steps:]
-        self.output_terms = self.timestamps.terms[:self.settings.num_pred_steps]
+        self.input_terms = self.timestamps.terms[:self.settings.num_input_steps]
+        self.output_terms = self.timestamps.terms[self.settings.num_pred_steps:]
 
     def is_valid(self) -> bool:
         return _is_valid(self.settings.dataset_name, self.params, self.timestamps)
@@ -385,28 +385,27 @@ class PoesyDataset(DatasetABC, Dataset):
         num_total_steps = self.settings.num_input_steps + self.settings.num_pred_steps
         sample_by_date = len(all_terms) // num_total_steps
         
-        for sample in range(0, sample_by_date):
-            terms = all_terms[
-                sample * num_total_steps : sample * num_total_steps
-                + num_total_steps
-            ]
-
         for date in self.period.date_list:
-            validity_times = [date + dt.timedelta(hours = int(term)) for term in all_terms]
-            timestamps = Timestamps(datetime=date, terms=terms, validity_times=validity_times)
             for member in self.settings.members:
-                samp = Sample(
-                    timestamps=timestamps,
-                    member=member,
-                    settings=self.settings,
-                    stats=self.stats,
-                    grid=self.grid,
-                    params=self.params,
-                )
+                for idx_sample in range(0, sample_by_date):
+                    terms = all_terms[
+                        idx_sample * num_total_steps : idx_sample * num_total_steps
+                        + num_total_steps
+                    ]
+                    validity_times = [date + dt.timedelta(hours = int(term)) for term in terms]
+                    timestamps = Timestamps(datetime=date, terms=terms, validity_times=validity_times)
+                    samp = Sample(
+                        timestamps=timestamps,
+                        member=member,
+                        settings=self.settings,
+                        stats=self.stats,
+                        grid=self.grid,
+                        params=self.params,
+                    )
 
-                if samp.is_valid():
-                    samples.append(samp)
-                    number += 1
+                    if samp.is_valid():
+                        samples.append(samp)
+                        number += 1
 
         print(f"All {len(samples)} samples are now defined")
         return samples
