@@ -1,5 +1,5 @@
 model:
-  model_name: "halfunet"
+  model_name: "unetrpp"
   model_conf: null
   lr: 1e-4
   loss_name: "mse"

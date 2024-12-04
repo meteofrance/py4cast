@@ -3,7 +3,7 @@ import torchmetrics as tm
 import lightning.pytorch as pl
 from lightning.pytorch.utilities import rank_zero_only
 from pathlib import Path
-from typing import Union, Tuple
+from typing import Tuple
 import matplotlib.figure as pltfig
 import einops
 from functools import cached_property
@@ -15,7 +15,7 @@ from py4cast.losses import WeightedLoss
 from py4cast.metrics import MetricACC, MetricPSDK, MetricPSDVar
 from py4cast.models.base import expand_to_batch
 from py4cast.utils import str_to_dtype
-from py4cast.datasets.base import ItemBatch, NamedTensor, DatasetInfo
+from py4cast.datasets.base import ItemBatch, NamedTensor
 
 # learning rate scheduling period in steps (update every nth step)
 LR_SCHEDULER_PERIOD: int = 10
@@ -31,18 +31,16 @@ class AutoRegressiveLightningModule(pl.LightningModule):
         dataset_info,
         dataset_name: str,
         batch_shape: Tuple[int, int, int, int, int],
+        batch_size: int,
+        num_input_steps: int = 1, # Ti, Ti-1 Ti-2, etc.
+        num_pred_steps_train: int = 1, # Ti+1, Ti+2, Ti+3, etc.
+        num_pred_steps_val_test: int = 1, # Ti+1, Ti+2, Ti+3, etc.
+        len_train_loader: int = 1,
         # args exclusive to lightningmodule
-        batch_size: int, # soon to be synchronized with TorchDataLoaderSettings
         model_conf: Path | None = None,  # Path | None
         model_name: str = "halfunet",
         lr: float = 0.1, # initial value of learning rate
         loss_name: str = "mse",
-        num_input_steps: int = 2, # Ti, Ti-1 Ti-2, etc.
-        num_pred_steps_train: int = 2, # Ti+1, Ti+2, Ti+3, etc.
-        num_pred_steps_val_test: int = 2, # Ti+1, Ti+2, Ti+3, etc.
-        num_samples_to_plot: int = 1,
-        training_strategy: str = "diff_ar", # or scaled_diff, soon deleted
-        len_train_loader: int = 1,
         save_path: Path = None, # MetricPSDK directory
         use_lr_scheduler: bool = False,
         precision: str = "bf16", # degree of precision
@@ -60,8 +58,6 @@ class AutoRegressiveLightningModule(pl.LightningModule):
         self.num_input_steps = num_input_steps
         self.num_pred_steps_train = num_pred_steps_train
         self.num_pred_steps_val_test = num_pred_steps_val_test
-        self.num_samples_to_plot = num_samples_to_plot
-        self.training_strategy = training_strategy
         self.len_train_loader = len_train_loader
         self.use_lr_scheduler = use_lr_scheduler
         self.precision = precision
@@ -76,7 +72,7 @@ class AutoRegressiveLightningModule(pl.LightningModule):
         # Creates a model with the config file (.json) if available.
         self.input_shape = self.batch_shape[2:4]
         self.num_output_features = self.batch_shape[4]  # = nombre de feature du dataset
-        self.num_input_features = self.num_output_features + 10 # concat(x,statics)
+        self.num_input_features = self.num_output_features*self.num_input_steps + 10 # concat(x,statics)
         self.model, self.model_settings = build_model_from_settings(
             network_name=self.model_name,
             num_input_features=self.num_input_features,
@@ -264,7 +260,6 @@ class AutoRegressiveLightningModule(pl.LightningModule):
             batch.forcing.flatten_("ngrid", *batch.forcing.spatial_dim_idx)
         prev_states = batch.inputs
         prediction_list = []
-
         # autoregressive prediction loop
         for i in range(batch.num_pred_steps):
             """

@@ -1,57 +1,83 @@
-from lightning.pytorch.cli import LightningCLI, ArgsType
-from py4cast.ARLightningModule import AutoRegressiveLightningModule
-from py4cast.TitanDataModule import TitanDataModule
-from pytorch_lightning.callbacks import ModelCheckpoint
-import os
+"""
+Main script to use the model with lightning CLI
+Training with fit and infer with predict
+Exemple usage:
+    - Train
+    python bin/launcher.py fit --config config/CLI/trainer.yaml --config config/CLI/poesy.yaml --config config/CLI/halfunet.yaml
 
-def find_available_checkpoint_name(dirpath, model_name, index=0):
-    checkpoint_name = f"best_{model_name}_{index}.ckpt" # Créer le nom du fichier
-    checkpoint_path = os.path.join(dirpath, checkpoint_name)
-    if not os.path.exists(checkpoint_path): # Vérifier si le fichier existe
-        return checkpoint_name
-    else:
-        # Si le fichier existe, appeler la fonction récursivement avec l'index incrémenté
-        return find_available_checkpoint_name(dirpath, model_name, index + 1)
+    - Inference
+    python -m pdb bin/launcher.py predict --ckpt_path /scratch/shared/py4cast/logs/test_cli/last.ckpt --config config/CLI/trainer.yaml --config config/CLI/poesy.yaml --config config/CLI/halfunet.yaml
 
+"""
+from lightning.pytorch.cli import LightningCLI
+from py4cast.arlightningmodule import AutoRegressiveLightningModule
+from py4cast.titandatamodule import TitanDataModule
 
 class MyLightningCLI(LightningCLI):
+    """
+    CLI - Command Line Interface from lightning
+    Args:
+        A model which inherits from LightningModule
+        A datamodule which inherits from LightningDataModule
+        save_config_kwargs define if checkpoint should be store even if one is already
+        present in the folder, useful for development.
+    """
+
+    def __init__(self, model_class, datamodule_class, parser_kwargs):
+        super().__init__(
+            model_class,
+            datamodule_class,
+            save_config_kwargs={"overwrite": True},
+            parser_kwargs=parser_kwargs
+        )
+
     def add_arguments_to_parser(self, parser):
-        parser.link_arguments("data.dataset_name", "model.dataset_name")
         parser.link_arguments(
-            "data.train_dataset_info", "model.dataset_info", apply_on="instantiate"
+            "data.dataset_name",
+            "model.dataset_name",
         )
         parser.link_arguments(
-            "data.batch_shape", "model.batch_shape", apply_on="instantiate"
+            "data.train_dataset_info",
+            "model.dataset_info",
+            apply_on="instantiate",
         )
-        parser.add_argument("--checkpoint_path", type=str, help="Path to the best checkpoint")
+        parser.link_arguments(
+            "data.batch_shape",
+            "model.batch_shape",
+            apply_on="instantiate",
+        )
+        parser.link_arguments(
+            "data.batch_size",
+            "model.batch_size",
+            apply_on="instantiate",
+        )
+        parser.link_arguments(
+            "data.num_input_steps",
+            "model.num_input_steps",
+            apply_on="instantiate",
+        )
+        parser.link_arguments(
+            "data.num_pred_steps_train",
+            "model.num_pred_steps_train",
+            apply_on="instantiate",
+        )
+        parser.link_arguments(
+            "data.num_pred_steps_val_test",
+            "model.num_pred_steps_val_test",
+            apply_on="instantiate",
+        ) 
+        parser.link_arguments(
+            "data.len_train_dl",
+            "model.len_train_loader",
+            apply_on="instantiate",
+        )
 
-
-def cli_main(args: ArgsType = None):
+def cli_main():
     cli = MyLightningCLI(
         AutoRegressiveLightningModule,
         TitanDataModule,
-        run=False,
-        args=args,
+        parser_kwargs={"parser_mode": "yaml"},
     )
-    model_name = cli.model.__class__.__name__.lower()
-    checkpoint_dir = cli.config.checkpoint_path.rstrip('/')  # Répertoire où sauvegarder les checkpoints
-    checkpoint_filename = find_available_checkpoint_name(checkpoint_dir, model_name)
-    checkpoint_callback = ModelCheckpoint(
-        monitor='val_loss',  # Changez cela selon la métrique que vous souhaitez surveiller
-        save_top_k=1,  # Sauvegarder le meilleur checkpoint
-        mode='min',  # 'min' pour val_loss, 'max' pour val_accuracy
-        dirpath=checkpoint_dir,  # Répertoire où sauvegarder les checkpoints
-        filename=checkpoint_filename  # Nom du fichier du meilleur modèle
-    )
-    cli.trainer.callbacks.append(checkpoint_callback)
-
-    cli.trainer.fit(cli.model, cli.datamodule.test_dataloader()) # Lance le train
-
 
 if __name__ == "__main__":
-    cli_main(
-        [
-            "--config=config/config_cli_main.yaml",
-            "--checkpoint_path=/scratch/shared/py4cast/models/",
-        ]
-    )
+    cli_main()

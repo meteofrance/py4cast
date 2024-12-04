@@ -807,7 +807,6 @@ class UNETRPP(ModelABC, nn.Module):
 
     def forward(self, x_in):
         x_in = features_last_to_second(x_in)
-
         _, hidden_states = self.unetr_pp_encoder(x_in)
         convBlock = self.encoder1(x_in)
 

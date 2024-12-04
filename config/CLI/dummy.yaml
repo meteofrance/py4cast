@@ -1,5 +1,5 @@
 data:
-  dataset: "dummy"
+  dataset_name: "dummy"
   num_input_steps: 2
   num_pred_steps_train: 2
   num_pred_steps_val_test: 3
