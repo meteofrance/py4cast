@@ -20,12 +20,12 @@ from py4cast.datasets.base import (
     GridConfig,
     Item,
     NamedTensor,
-    WeatherParam,
     ParamConfig,
     Period,
     Settings,
     Stats,
     TorchDataloaderSettings,
+    WeatherParam,
     collate_fn,
     get_param_list,
 )
