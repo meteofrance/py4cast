@@ -851,6 +851,7 @@ class WeatherParam:
     # Parameter status :
     # input = forcings, output = diagnostic, input_output = classical weather var
     kind: Literal["input", "output", "input_output"]
+    # function to retrieve the weight given to the parameter in the loss, depending on the level
     get_weight_per_level: Callable[[int, str], [float]]
     level_type: str = field(init=False)
     long_name: str = field(init=False)
@@ -888,7 +889,9 @@ class WeatherParam:
 def get_param_list(
     conf: dict,
     grid: Grid,
+    # function to retrieve all parameters information about the dataset
     load_param_info: Callable[[str], ParamConfig],
+    # function to retrieve the weight given to the parameter in the loss
     get_weight_per_level: Callable[[str], float],
 ) -> List[WeatherParam]:
     param_list = []
