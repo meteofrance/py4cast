@@ -3,8 +3,7 @@ Main script to use the model with lightning CLI
 Training with fit and infer with predict
 Exemple usage:
     - Train
-    python bin/launcher.py fit --config config/CLI/trainer.yaml --config config/CLI/poesy.yaml
-    --config config/CLI/halfunet.yaml
+    python bin/launcher.py fit --config config/CLI/trainer.yaml --config config/CLI/poesy.yaml --config config/CLI/halfunet.yaml
 
     - Inference
     python bin/launcher.py predict --ckpt_path /scratch/shared/py4cast/logs/test_cli/last.ckpt
@@ -13,9 +12,7 @@ Exemple usage:
 """
 
 from lightning.pytorch.cli import LightningCLI
-
 from py4cast.lightning import AutoRegressiveLightning, PlDataModule
-
 
 class LCli(LightningCLI):
     """
@@ -84,11 +81,17 @@ class LCli(LightningCLI):
         )
 
     def before_instantiate_classes(self):
+        """
+        Modify values if dev_mode, printing the path to the log.
+        """
+        trainer = self.config.fit.trainer
         if self.config.fit.dev_mode:
-            self.config.fit.trainer.max_epochs =2
-            self.config.fit.trainer.limit_train_batches= 20
-            self.config.fit.trainer.limit_val_batches= 20
-            self.config.fit.trainer.limit_test_batches= 20
+            trainer.max_epochs = 2
+            trainer.limit_train_batches= 20
+            trainer.limit_val_batches= 20
+            trainer.limit_test_batches= 20
+            trainer.logger[0].init_args.version = "dev_run"
+        print(f"\nLogs are saved at {trainer.logger[0].init_args.save_dir}\n")
 
 
 def cli_main():
