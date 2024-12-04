@@ -368,6 +368,14 @@ class AutoRegressiveLightning(pl.LightningModule):
     @rank_zero_only
     def log_hparams_tb(self):
         if self.logger:
+            
+            # Add layout
+            layout = {
+                "Check Overfit": {
+                    "loss": ["Multiline", ["mean_loss_epoch/train", "mean_loss_epoch/validation"]],
+                },
+            }
+            self.logger.experiment.add_custom_scalars(layout)
 
             hparams = self.hparams
 
