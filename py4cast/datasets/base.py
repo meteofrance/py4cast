@@ -811,11 +811,12 @@ class Grid:
 
 
 @dataclass(slots=True)
-class Settings:
+class SamplePreprocSettings:
     """
     Main settings defining the timesteps of a data sample (regardless of parameters)
+    and additional preprocessing information
     that will be used during training/inference.
-    You can interact with these values by defining a `settings` field in the configuration json file.
+    Values can be modified by defining a `settings` field in the configuration json file.
     """
 
     dataset_name: str

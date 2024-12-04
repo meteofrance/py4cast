@@ -22,7 +22,7 @@ from py4cast.datasets.base import (
     NamedTensor,
     ParamConfig,
     Period,
-    Settings,
+    SamplePreprocSettings,
     Stats,
     TorchDataloaderSettings,
     WeatherParam,
@@ -126,7 +126,7 @@ def get_param_tensor(
     param: WeatherParam,
     stats: Stats,
     date: dt.datetime,
-    settings: Settings,
+    settings: SamplePreprocSettings,
     terms: List,
     standardize: bool,
     member: int = 1,
@@ -205,7 +205,7 @@ class Sample:
 
     member: int
     date: dt.datetime
-    settings: Settings
+    settings: SamplePreprocSettings
     input_terms: Tuple[float]
     output_terms: Tuple[float]
     stats: Stats
@@ -301,7 +301,11 @@ class InferSample(Sample):
 
 class PoesyDataset(DatasetABC, Dataset):
     def __init__(
-        self, grid: Grid, period: Period, params: List[WeatherParam], settings: Settings
+        self,
+        grid: Grid,
+        period: Period,
+        params: List[WeatherParam],
+        settings: SamplePreprocSettings,
     ):
         self.grid = grid
         self.period = period
@@ -488,7 +492,7 @@ class PoesyDataset(DatasetABC, Dataset):
             grid,
             train_period,
             param_list,
-            Settings(
+            SamplePreprocSettings(
                 dataset_name=fname.stem,
                 num_pred_steps=num_pred_steps_train,
                 num_input_steps=num_input_steps,
@@ -500,7 +504,7 @@ class PoesyDataset(DatasetABC, Dataset):
             grid,
             valid_period,
             param_list,
-            Settings(
+            SamplePreprocSettings(
                 dataset_name=fname.stem,
                 num_pred_steps=num_pred_steps_val_test,
                 num_input_steps=num_input_steps,
@@ -512,7 +516,7 @@ class PoesyDataset(DatasetABC, Dataset):
             grid,
             test_period,
             param_list,
-            Settings(
+            SamplePreprocSettings(
                 dataset_name=fname.stem,
                 num_pred_steps=num_pred_steps_val_test,
                 num_input_steps=num_input_steps,
@@ -724,7 +728,7 @@ class InferPoesyDataset(PoesyDataset):
             grid,
             inference_period,
             param_list,
-            Settings(
+            SamplePreprocSettings(
                 num_pred_steps=0,
                 num_input_steps=num_input_steps,
                 members=conf["members"],

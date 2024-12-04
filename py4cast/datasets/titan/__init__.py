@@ -26,7 +26,7 @@ from py4cast.datasets.base import (
     NamedTensor,
     ParamConfig,
     Period,
-    Settings,
+    SamplePreprocSettings,
     Stats,
     TorchDataloaderSettings,
     WeatherParam,
@@ -220,7 +220,7 @@ def get_param_tensor(
     param: WeatherParam,
     stats: Stats,
     dates: List[dt.datetime],
-    settings: Settings,
+    settings: SamplePreprocSettings,
     no_standardize: bool = False,
 ) -> torch.tensor:
     """
@@ -281,7 +281,7 @@ class Sample:
     """Describes a sample"""
 
     date_t0: dt.datetime
-    settings: Settings
+    settings: SamplePreprocSettings
     params: List[WeatherParam]
     stats: Stats
     grid: Grid
@@ -467,7 +467,7 @@ class TitanDataset(DatasetABC, Dataset):
         grid: Grid,
         period: Period,
         params: List[WeatherParam],
-        settings: Settings,
+        settings: SamplePreprocSettings,
     ):
         self.name = name
         self.grid = grid
@@ -604,13 +604,13 @@ class TitanDataset(DatasetABC, Dataset):
 
         param_list = get_param_list(conf, grid, load_param_info, get_weight_per_lvl)
 
-        train_settings = Settings(
+        train_settings = SamplePreprocSettings(
             name, num_input_steps, num_pred_steps_train, **conf["settings"]
         )
         train_period = Period(**conf["periods"]["train"], name="train")
         train_ds = TitanDataset(name, grid, train_period, param_list, train_settings)
 
-        valid_settings = Settings(
+        valid_settings = SamplePreprocSettings(
             name, num_input_steps, num_pred_steps_val_test, **conf["settings"]
         )
         valid_period = Period(**conf["periods"]["valid"], name="valid")
