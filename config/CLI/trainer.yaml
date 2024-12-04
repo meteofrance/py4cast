@@ -1,10 +1,10 @@
-dev_mode: False
+dev_mode: True
 
 trainer:
   fast_dev_run: False
   num_nodes: 1
   devices: "auto"
-  max_epochs: 4
+  max_epochs: 100
   deterministic: True
   strategy: "ddp"
   accumulate_grad_batches: 10
@@ -14,13 +14,13 @@ trainer:
       init_args:
         name: "folder_logger"
         default_hp_metric: False
-        save_dir: /scratch/shared/py4cast/logs/test_cli/poesy/halfunet/to_del
+        save_dir: /scratch/shared/py4cast/logs/test_cli/to_del
     - class_path: lightning.pytorch.loggers.MLFlowLogger
       init_args:
         run_name: "mlrun"
         experiment_name: "mlflow_test1"
         log_model: True
-        save_dir: /scratch/shared/py4cast/logs/test_cli/poesy/halfunet/to_del/mlflow #${trainer.logger.save_dir} +"/mlflow/"
+        save_dir: /scratch/shared/py4cast/logs/test_cli/to_del #${trainer.logger.save_dir} +"/mlflow/"
   profiler: null
   log_every_n_steps: 1
   callbacks:
@@ -41,7 +41,7 @@ trainer:
         patience: 50
     - class_path: py4cast.callbacks.GribWriter
       init_args:
-        active: False
+        active: True
         write_interval: 'epoch'
         output_dir: "/scratch/shared/py4cast/gribs_writing/test/"
         template_grib: /scratch/shared/py4cast/gribs_writing/template/grid.arome-forecast.eurw1s40+0001:00.grib

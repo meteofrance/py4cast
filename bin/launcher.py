@@ -6,8 +6,7 @@ Exemple usage:
     python bin/launcher.py fit --config config/CLI/trainer.yaml --config config/CLI/poesy.yaml --config config/CLI/halfunet.yaml
 
     - Inference
-    python bin/launcher.py predict --ckpt_path /scratch/shared/py4cast/logs/test_cli/last.ckpt
-    --config config/CLI/trainer.yaml --config config/CLI/poesy.yaml --config config/CLI/halfunet.yaml
+    python bin/launcher.py predict --ckpt_path /scratch/shared/py4cast/logs/test_cli/last.ckpt --config config/CLI/trainer.yaml --config config/CLI/poesy.yaml --config config/CLI/halfunet.yaml
 
 """
 
@@ -27,7 +26,7 @@ class LCli(LightningCLI):
 
     def __init__(self, model_class, datamodule_class):
 
-        super().__init__(model_class, datamodule_class)
+        super().__init__(model_class, datamodule_class, save_config_kwargs={"overwrite": True})
 
     def add_arguments_to_parser(self, parser):
         parser.add_argument('--dev_mode', action='store_true')
@@ -84,14 +83,25 @@ class LCli(LightningCLI):
         """
         Modify values if dev_mode, printing the path to the log.
         """
-        trainer = self.config.fit.trainer
-        if self.config.fit.dev_mode:
+        if hasattr(self.config, 'fit'):
+            config = self.config.fit
+        elif hasattr(self.config, 'predict'):
+            config = self.config.predict
+
+        if config.dev_mode:
+            trainer = config.trainer
             trainer.max_epochs = 2
             trainer.limit_train_batches= 20
             trainer.limit_val_batches= 20
             trainer.limit_test_batches= 20
             trainer.logger[0].init_args.version = "dev_run"
-        print(f"\nLogs are saved at {trainer.logger[0].init_args.save_dir}\n")
+        
+        dataset = config.data.dataset
+        model = config.model.model_name
+        for logger in  config.trainer.logger:
+            logger.init_args.save_dir += f"/{dataset}/{model}" 
+        config.trainer.logger[1].init_args.save_dir+="/mlflow"
+        print(f"\nLogs are saved at {config.trainer.logger[0].init_args.save_dir}\n")
 
 
 def cli_main():

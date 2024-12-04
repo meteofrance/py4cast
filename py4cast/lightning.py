@@ -86,6 +86,7 @@ class PlDataModule(pl.LightningDataModule):
             self.dataset_conf,
             self.config_override,
         )
+        pass
 
     @property
     def len_train_dl(self):
@@ -369,7 +370,7 @@ class AutoRegressiveLightning(pl.LightningModule):
     def log_hparams_tb(self):
         if self.logger:
             
-            # Add layout
+            # Add layout to tensorboard
             layout = {
                 "Check Overfit": {
                     "loss": ["Multiline", ["mean_loss_epoch/train", "mean_loss_epoch/validation"]],
