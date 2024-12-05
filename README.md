@@ -207,7 +207,7 @@ docker run \
     py4cast:<your_tag> \
     bash -c " \
         pip install -e . &&  \
-        python bin/py4cast.py
+        python bin/py4cast_main.py
     "
 ```
 
@@ -237,7 +237,7 @@ podman run \
     py4cast:<your_tag> \
     bash -c " \
         pip install -e . &&  \
-        python bin/py4cast.py
+        python bin/py4cast_main.py
     "
 ```
 </details>
@@ -262,7 +262,7 @@ singularity exec \
     py4cast-<your_tag>.sif \
     bash -c " \
         pip install -e . &&  \
-        python bin/py4cast.py
+        python bin/py4cast_main.py
     "
 ```
 </details>
@@ -459,6 +459,7 @@ Then you can access the tensorboard server at the following address: `http://YOU
 
 
 #### MLFlow
+/!\ NOT ANYMORE /!\
 
 Optionally, you can use MLFlow, in addition to Tensorboard, to track your experiment and log your model. To activate the MLFlow logger simply add the `--mlflow_log` option on the `bin/train.py` command line.
 
@@ -480,6 +481,7 @@ export MLFLOW_EXPERIMENT_NAME=py4cast/unetrpp
 ```
 
 ### Inference
+/!\ NOT ANYMORE /!\
 
 Inference is done by running the `bin/inference.py` script. This script will load a model and run it on a dataset using the training parameters (dataset config, timestep options, ...).
 
@@ -535,6 +537,7 @@ example: python bin/gif_comparison.py --ckpt AROME --ckpt /.../logs/my_run/epoch
 ```
 
 ### Scoring and comparing models
+/!\ NOT ANYMORE /!\
 
 The `bin/test.py` script will compute and save metrics on the validation set, on as many auto-regressive prediction steps as you want.
 
