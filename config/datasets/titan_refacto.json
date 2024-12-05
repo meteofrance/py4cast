@@ -1,0 +1,69 @@
+{
+    "periods": {
+        "train": {
+            "start": 2023010100,
+            "end": 2023010107,
+            "step": 1
+        },
+        "valid": {
+            "start": 2023010108,
+            "end": 2023010115,
+            "step": 1
+        },
+        "test": {
+            "start": 2023010116,
+            "end": 2023010122,
+            "step": 1
+        }
+    },
+    "grid":{
+        "name": "PAAROME_1S100",
+        "border_size": 0,
+        "subdomain": [256,384,760,888],
+        "proj_name": "PlateCarree",
+        "projection_kwargs": {}
+    },
+    "settings":{
+        "step_duration": 1,
+        "standardize": true,
+        "file_format": "npy"
+    },
+    "params": {
+        "aro_t2m": {
+            "levels": [2],
+            "kind": "input_output"
+        },
+        "aro_r2": {
+            "levels": [2],
+            "kind": "input_output"
+        },
+        "aro_tp": {
+            "levels": [0],
+            "kind": "input_output"
+        },
+        "aro_u10": {
+            "levels": [10],
+            "kind": "input_output"
+        },
+        "aro_v10": {
+            "levels": [10],
+            "kind": "input_output"
+        },
+        "aro_t": {
+            "levels": [250, 500, 700, 850],
+            "kind": "input_output"
+        },
+        "aro_u": {
+            "levels": [250, 500, 700, 850],
+            "kind": "input_output"
+        },
+        "aro_v": {
+            "levels": [250, 500, 700, 850],
+            "kind": "input_output"
+        },
+        "aro_z": {
+            "levels": [250, 500, 700, 850],
+            "kind": "input_output"
+        }
+    }
+}

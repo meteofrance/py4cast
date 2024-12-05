@@ -573,7 +573,7 @@ class Stats:
     fname: Path
 
     def __post_init__(self):
-        self.stats = torch.load(self.fname, "cpu")
+        self.stats = torch.load(self.fname, "cpu", weights_only=True)
 
     def items(self):
         return self.stats.items()
@@ -640,13 +640,12 @@ class DatasetInfo:
         for p in ["input", "input_output", "output"]:
             names = self.shortnames[p]
             print(names)
-            print(self.stats)
             mean = self.stats.to_list("mean", names)
             std = self.stats.to_list("std", names)
             mini = self.stats.to_list("min", names)
             maxi = self.stats.to_list("max", names)
             units = [self.units[name] for name in names]
-            if p != "input":  # Forcing variables
+            if p != "input":
                 diff_mean = self.diff_stats.to_list("mean", names)
                 diff_std = self.diff_stats.to_list("std", names)
                 weight = [self.state_weights[name] for name in names]
@@ -703,6 +702,9 @@ class Period:
         ).tolist()
 
 
+# This namedtuple contains attributes that are used by the Grid class
+# These attributes are retrieved from disk in any user-defined manner.
+# It is there to define the expected type of the retrieval function.
 GridConfig = namedtuple(
     "GridConfig", "full_size latitude longitude geopotential landsea_mask"
 )
@@ -806,6 +808,105 @@ class Grid:
     def projection(self):
         func = getattr(cartopy.crs, self.proj_name)
         return func(**self.projection_kwargs)
+
+
+@dataclass(slots=True)
+class SamplePreprocSettings:
+    """
+    Main settings defining the timesteps of a data sample (regardless of parameters)
+    and additional preprocessing information
+    that will be used during training/inference.
+    Values can be modified by defining a `settings` field in the configuration json file.
+    """
+
+    dataset_name: str
+    num_input_steps: int  # Number of input timesteps
+    num_pred_steps: int  # Number of output timesteps
+    step_duration: float  # duration in hour
+    standardize: bool = True
+    file_format: Literal["npy", "grib"] = "grib"
+    members: Tuple[int] = (0,)
+
+
+# This namedtuple contains attributes that are used by the WeatherParam class
+# These attributes are retrieved from disk in any user-defined manner.
+# It is there to define the expected type of the retrieval function.
+ParamConfig = namedtuple(
+    "ParamConfig", "unit level_type long_name grid grib_name grib_param"
+)
+
+
+@dataclass(slots=True)
+class WeatherParam:
+    """
+    This class represent a single weather parameter (seen as a 2D field)
+    with all attributes used to retrieve and manipulate the parameter;
+    Used in the construction of the Dataset object.
+    """
+
+    name: str
+    level: int
+    grid: Grid
+    load_param_info: Callable[[str], ParamConfig]
+    # Parameter status :
+    # input = forcings, output = diagnostic, input_output = classical weather var
+    kind: Literal["input", "output", "input_output"]
+    # function to retrieve the weight given to the parameter in the loss, depending on the level
+    get_weight_per_level: Callable[[int, str], [float]]
+    level_type: str = field(init=False)
+    long_name: str = field(init=False)
+    unit: str = field(init=False)
+    native_grid: str = field(init=False)
+    grib_name: str = field(init=False)
+    grib_param: str = field(init=False)
+
+    def __post_init__(self):
+        param_info = self.load_param_info(self.name)
+        self.unit = param_info.unit
+        if param_info.level_type in ["heightAboveGround", "meanSea", "surface"]:
+            self.level_type = param_info.level_type
+        else:
+            self.level_type = "isobaricInhPa"
+        self.long_name = param_info.long_name
+        self.native_grid = param_info.grid
+        self.grib_name = param_info.grib_name
+        self.grib_param = param_info.grib_param
+
+    @property
+    def state_weight(self) -> float:
+        """Weight to confer to the param in the loss function"""
+        return self.get_weight_per_level(self.level, self.level_type)
+
+    @property
+    def parameter_name(self) -> str:
+        return f"{self.long_name}_{self.level}_{self.level_type}"
+
+    @property
+    def parameter_short_name(self) -> str:
+        return f"{self.name}_{self.level}_{self.level_type}"
+
+
+def get_param_list(
+    conf: dict,
+    grid: Grid,
+    # function to retrieve all parameters information about the dataset
+    load_param_info: Callable[[str], ParamConfig],
+    # function to retrieve the weight given to the parameter in the loss
+    get_weight_per_level: Callable[[str], float],
+) -> List[WeatherParam]:
+    param_list = []
+    for name, values in conf["params"].items():
+        for lvl in values["levels"]:
+            param = WeatherParam(
+                name=name,
+                level=lvl,
+                grid=grid,
+                load_param_info=load_param_info,
+                kind=values["kind"],
+                get_weight_per_level=get_weight_per_level,
+            )
+            param_list.append(param)
+    return param_list
 
 
 @dataclass(slots=True)
