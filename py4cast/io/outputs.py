@@ -9,13 +9,11 @@ import pandas as pd
 import torch
 import xarray as xr
 from cfgrib import xarray_to_grib as xtg
-from dataclasses_json import dataclass_json
 
 from py4cast.datasets.base import DatasetABC, NamedTensor
 from py4cast.forcingutils import compute_hours_of_day
 
 
-@dataclass_json
 @dataclass
 class GribSavingSettings:
     """
@@ -28,7 +26,7 @@ class GribSavingSettings:
     """
 
     template_grib: str
-    directory: str
+    output_dir: Path
     output_kwargs: tuple[str, ...] = ()
     sample_identifiers: tuple[str, ...] = ("date", "leadtime")
     output_fmt: str = "grid.forecast_ai_date_{}_ech_{}.json"
@@ -38,7 +36,7 @@ def save_named_tensors_to_grib(
     pred: NamedTensor,
     ds: DatasetABC,
     sample: Any,
-    saving_settings: dict,
+    saving_settings: GribSavingSettings,
 ) -> None:
     """
     Write a named tensor (pred) to grib files, using a prefilled grib file as template.
@@ -62,7 +60,7 @@ def save_named_tensors_to_grib(
 
     model_ds = {
         c: xr.open_dataset(
-            Path(saving_settings.directory) / saving_settings.template_grib,
+            Path(saving_settings.template_grib),
             backend_kwargs={
                 "indexpath": "",
                 "read_keys": [
@@ -83,6 +81,9 @@ def save_named_tensors_to_grib(
         for c in grib_groups.keys()
     }
 
+    # Create output directory if not already exist
+    output_dir.mkdir(exists_ok=True)
+
     for t_idx in range(predicted_time_steps):
         for group in model_ds.keys():
             raw_data = pred.select_dim("timestep", t_idx, bare_tensor=False)
@@ -102,12 +103,13 @@ def save_named_tensors_to_grib(
             )
             option = (
                 "wb"
-                if not os.path.exists(f"{saving_settings.directory}/{filename}")
+                if not os.path.exists(f"{saving_settings.output_dir}/{filename}")
                 else "ab"
             )
+
             xtg.to_grib(
                 storable,
-                Path(saving_settings.directory) / filename,
+                Path(saving_settings.output_dir) / filename,
                 option,
             )
 
