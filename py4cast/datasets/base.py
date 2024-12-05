@@ -22,9 +22,7 @@ from torch.utils.data import DataLoader
 from torch.utils.data._utils.collate import collate_tensor_fn
 from tqdm import tqdm
 
-if TYPE_CHECKING:
-    from py4cast.plots import DomainInfo
-
+from py4cast.plots import DomainInfo
 from py4cast.utils import RegisterFieldsMixin, torch_save
 
 
@@ -250,7 +248,7 @@ class DatasetInfo:
     """
 
     name: str  # Name of the dataset
-    domain_info: "DomainInfo"  # Information used for plotting
+    domain_info: DomainInfo  # Information used for plotting
     units: Dict[str, str]  # d[shortname] = unit (str)
     weather_dim: int
     forcing_dim: int
