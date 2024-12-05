@@ -10,7 +10,7 @@ from collections import namedtuple
 from dataclasses import dataclass, field, fields
 from functools import cached_property
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Literal, Tuple, Union
+from typing import Any, Callable, Dict, List, Literal, Tuple, Union
 
 import cartopy
 import einops
