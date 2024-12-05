@@ -12,8 +12,7 @@ class TitanDataModule(pl.LightningDataModule):
         dataset_conf: str | None,
         dataset_name: str,
         num_input_steps: int,
-        num_pred_steps_train: int,
-        num_pred_steps_val_test: int,
+        num_pred_steps: int,
         batch_size: int,
         num_workers: int,
         prefetch_factor: int | None,
@@ -23,8 +22,7 @@ class TitanDataModule(pl.LightningDataModule):
     ):
         super().__init__()
         self.num_input_steps = num_input_steps
-        self.num_pred_steps_train = num_pred_steps_train
-        self.num_pred_steps_val_test = num_pred_steps_val_test
+        self.num_pred_steps = num_pred_steps
         self.batch_size = batch_size
         self.num_workers = num_workers
         self.prefetch_factor = prefetch_factor
@@ -35,8 +33,8 @@ class TitanDataModule(pl.LightningDataModule):
         self.train_ds, self.val_ds, self.test_ds = get_datasets(
             dataset_name,
             num_input_steps,
-            num_pred_steps_train,
-            num_pred_steps_val_test,
+            num_pred_steps,
+            num_pred_steps,
             dataset_conf,
             config_override,
         )

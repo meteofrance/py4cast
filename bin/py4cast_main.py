@@ -57,13 +57,8 @@ class MyLightningCLI(LightningCLI):
             apply_on="instantiate",
         )
         parser.link_arguments(
-            "data.num_pred_steps_train",
-            "model.num_pred_steps_train",
-            apply_on="instantiate",
-        )
-        parser.link_arguments(
-            "data.num_pred_steps_val_test",
-            "model.num_pred_steps_val_test",
+            "data.num_pred_steps",
+            "model.num_pred_steps",
             apply_on="instantiate",
         ) 
         parser.link_arguments(

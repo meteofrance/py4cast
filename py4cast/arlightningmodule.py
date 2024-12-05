@@ -33,8 +33,7 @@ class AutoRegressiveLightningModule(pl.LightningModule):
         batch_shape: Tuple[int, int, int, int, int],
         batch_size: int,
         num_input_steps: int = 1, # Ti, Ti-1 Ti-2, etc.
-        num_pred_steps_train: int = 1, # Ti+1, Ti+2, Ti+3, etc.
-        num_pred_steps_val_test: int = 1, # Ti+1, Ti+2, Ti+3, etc.
+        num_pred_steps: int = 1, # Ti+1, Ti+2, Ti+3, etc.
         len_train_loader: int = 1,
         # args exclusive to lightningmodule
         model_conf: Path | None = None,  # Path | None
@@ -56,8 +55,7 @@ class AutoRegressiveLightningModule(pl.LightningModule):
         self.lr = lr
         self.loss_name = loss_name
         self.num_input_steps = num_input_steps
-        self.num_pred_steps_train = num_pred_steps_train
-        self.num_pred_steps_val_test = num_pred_steps_val_test
+        self.num_pred_steps = num_pred_steps
         self.len_train_loader = len_train_loader
         self.use_lr_scheduler = use_lr_scheduler
         self.precision = precision
@@ -86,7 +84,7 @@ class AutoRegressiveLightningModule(pl.LightningModule):
         self.opt_state = (
             None  # For making restoring of optimizer state optional (slight hack)
         )
-        self.max_pred_step = self.num_pred_steps_val_test - 1
+        self.max_pred_step = self.num_pred_steps - 1
         self.metrics = self.get_metrics()
         self.save_hyperparameters()  # write hparams.yaml in save folder
         statics = deepcopy(self.dataset_info.statics)
