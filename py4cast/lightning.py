@@ -495,6 +495,8 @@ class AutoRegressiveLightning(pl.LightningModule):
                     x = features_last_to_second(x)
                     y = self.model(x)
                     y = features_second_to_last(y)
+                else:
+                    y = self.model(x)
 
                 # We update the latest of our prev_states with the network output
                 if scale_y:
