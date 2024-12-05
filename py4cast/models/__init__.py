@@ -3,19 +3,21 @@ import pkgutil
 from pathlib import Path
 from typing import Any, Tuple, Union
 
-from py4cast.models.base import ModelABC
+from mfai.torch.models.base import ModelABC
+from mfai.torch.models.half_unet import HalfUNet
+from mfai.torch.models.segformer import Segformer
+from mfai.torch.models.swinunetr import SwinUNETR
+from mfai.torch.models.unet import UNet
+from mfai.torch.models.unetrpp import UNETRPP
 
 from .nlam.models import GraphLAM, HiLAM, HiLAMParallel
-from .vision.conv import HalfUnet, Unet
-from .vision.transformers import Segformer, SwinUNETR
-from .vision.unetrpp import UNETRPP
 
 # Models MUST be added to the registry
 # in order to be used by the training script.
 registry = {}
 for kls in (
-    HalfUnet,
-    Unet,
+    HalfUNet,
+    UNet,
     GraphLAM,
     HiLAM,
     HiLAMParallel,
@@ -86,8 +88,8 @@ def build_model_from_settings(
         model_kls(
             num_input_features,
             num_output_features,
-            model_settings,
             input_shape,
+            model_settings,
             *args,
             **kwargs,
         ),

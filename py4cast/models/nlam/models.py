@@ -5,10 +5,11 @@ from typing import Tuple
 import torch
 import torch_geometric as pyg
 from dataclasses_json import dataclass_json
+from mfai.torch.models.base import ModelABC, ModelType
 from torch import nn
 
 from py4cast.datasets.base import Statics
-from py4cast.models.base import BufferList, ModelABC, expand_to_batch, offload_to_cpu
+from py4cast.models.base import BufferList, expand_to_batch, offload_to_cpu
 from py4cast.models.nlam.create_mesh import build_graph_for_grid
 from py4cast.models.nlam.interaction_net import InteractionNet, make_mlp
 
@@ -153,8 +154,10 @@ class BaseGraphModel(ModelABC, nn.Module):
     settings_kls = GraphLamSettings
     hierarchical = False
     onnx_supported = False
-    input_dims: str = ("batch", "ngrid", "features")
-    output_dims: str = ("batch", "ngrid", "features")
+    supported_num_spatial_dims = (1,)
+    num_spatial_dims: int = 1
+    model_type = ModelType.GRAPH
+    features_last: bool = True
 
     @classmethod
     def rank_zero_setup(cls, settings: GraphLamSettings, statics: Statics):
@@ -172,15 +175,20 @@ class BaseGraphModel(ModelABC, nn.Module):
 
     def __init__(
         self,
-        num_input_features: int,
-        num_output_features: int,
-        settings: GraphLamSettings,
+        in_channels: int,
+        out_channels: int,
         input_shape: tuple,
+        settings: GraphLamSettings,
         *args,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
-        self.settings = settings
+
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.input_shape = input_shape
+        self._settings = settings
+
         hierarchical, graph_ldict = load_graph(self.settings.tmp_dir)
         if hierarchical != self.hierarchical:
             raise ValueError(
@@ -207,7 +215,7 @@ class BaseGraphModel(ModelABC, nn.Module):
             self.settings.hidden_layers + 1
         )
         self.grid_embedder = make_mlp(
-            [num_input_features] + self.mlp_blueprint_end,
+            [in_channels] + self.mlp_blueprint_end,
             checkpoint=self.settings.use_checkpointing,
         )
         self.g2m_embedder = make_mlp(
@@ -252,13 +260,18 @@ class BaseGraphModel(ModelABC, nn.Module):
         # Output mapping (hidden_dim -> output_dim)
         self.output_map = make_mlp(
             [self.settings.hidden_dims] * (self.settings.hidden_layers + 1)
-            + [num_output_features],
+            + [out_channels],
             layer_norm=False,
             checkpoint=self.settings.use_checkpointing,
         )  # No layer norm on this one
 
         # subclasses should override this method
         self.finalize_graph_model()
+        self.check_required_attributes()
+
+    @property
+    def settings(self):
+        return self._settings
 
     def finalize_graph_model(self):
         """
