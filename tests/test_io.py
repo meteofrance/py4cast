@@ -10,8 +10,8 @@ import pandas as pd
 import pytest
 import torch
 import xarray as xr
+from mfai.torch.namedtensor import NamedTensor
 
-from py4cast.datasets.base import NamedTensor
 from py4cast.datasets.dummy import DummyDataset
 from py4cast.io import outputs as out
 

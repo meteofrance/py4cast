@@ -4,7 +4,7 @@ from collections import defaultdict
 from copy import deepcopy
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Dict, List, Tuple, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Tuple, Union
 
 import cartopy
 import einops
@@ -18,8 +18,7 @@ from tueplots import bundles, figsizes
 if TYPE_CHECKING:
     from py4cast.lightning import AutoRegressiveLightning
 
-from py4cast.datasets.base import NamedTensor
-from py4cast.losses import Py4CastLoss
+from mfai.torch.namedtensor import NamedTensor
 
 
 @dataclass(slots=True)
@@ -489,7 +488,7 @@ class StateErrorPlot(Plotter):
 
     def __init__(
         self,
-        metrics: Dict[str, Py4CastLoss],
+        metrics: Dict[str, Any],
         prefix: str = "Test",
         save_path: Path = None,
     ):
