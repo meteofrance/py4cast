@@ -43,7 +43,12 @@ LR_SCHEDULER_PERIOD: int = 10
 # PNG plots period in epochs. Plots are made, logged and saved every nth epoch.
 PLOT_PERIOD: int = 10
 
-LOG_SAVEPATH = Path(os.getenv("LOG_SAVEPATH"), "/scratch/shared/py4cast/logs/test_cli")
+# Default value of path log if fast_dev_run=True
+LOG_SAVEPATH = Path(
+    os.getenv(
+        "LOG_SAVEPATH", default="/scratch/shared/py4cast/logs/test_cli/DummyLogger"
+    )
+)
 
 
 @dataclass
@@ -86,7 +91,6 @@ class PlDataModule(pl.LightningDataModule):
             self.dataset_conf,
             self.config_override,
         )
-        pass
 
     @property
     def len_train_dl(self):
@@ -369,11 +373,14 @@ class AutoRegressiveLightning(pl.LightningModule):
     @rank_zero_only
     def log_hparams_tb(self):
         if self.logger:
-            
+
             # Add layout to tensorboard
             layout = {
                 "Check Overfit": {
-                    "loss": ["Multiline", ["mean_loss_epoch/train", "mean_loss_epoch/validation"]],
+                    "loss": [
+                        "Multiline",
+                        ["mean_loss_epoch/train", "mean_loss_epoch/validation"],
+                    ],
                 },
             }
             self.logger.experiment.add_custom_scalars(layout)
@@ -631,7 +638,7 @@ class AutoRegressiveLightning(pl.LightningModule):
             self.path_tensorboard = Path(self.trainer.logger.log_dir)
         else:
             # If fast_dev_run = True, loggers are removed and a DummyLogger is used. Hardcode the outputs
-            self.path_tensorboard = LOG_SAVEPATH / "DummyLogger"
+            self.path_tensorboard = LOG_SAVEPATH
             self.path_tensorboard.mkdir(parents=True, exist_ok=True)
         self.log_hparams_tb()
 

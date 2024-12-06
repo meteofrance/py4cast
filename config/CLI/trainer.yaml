@@ -1,10 +1,8 @@
-dev_mode: True
-
 trainer:
   fast_dev_run: False
   num_nodes: 1
   devices: "auto"
-  max_epochs: 100
+  max_epochs: 20
   deterministic: True
   strategy: "ddp"
   accumulate_grad_batches: 10
@@ -41,9 +39,9 @@ trainer:
         patience: 50
     - class_path: py4cast.callbacks.GribWriter
       init_args:
-        active: True
+        active: False
         write_interval: 'epoch'
-        output_dir: "/scratch/shared/py4cast/gribs_writing/test/"
+        output_dir: "/scratch/shared/py4cast/gribs_writing/test2/"
         template_grib: /scratch/shared/py4cast/gribs_writing/template/grid.arome-forecast.eurw1s40+0001:00.grib
         output_kwargs: ["poesy_eurw1s40"]
         sample_identifiers : ["member", "date", "leadtime"]
