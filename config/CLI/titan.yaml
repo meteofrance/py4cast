@@ -1,19 +1,19 @@
 data:
   dataset_name: "titan"
-  num_input_steps: 3
-  num_pred_steps: 2
+  num_input_steps: 1
+  num_pred_steps: 1
 
-  batch_size: 16
+  batch_size: 2
   num_workers: 10
-  prefetch_factor: null
-  pin_memory: False
+  prefetch_factor: 2
+  pin_memory: True
   persistent_workers: False
   
-  dataset_conf: null
+  dataset_conf: "/home/labia/leborgnelarivierec/py4cast/config/datasets/titan_full.json"
   config_override: 
-      num_inference_pred_steps: 6
-      periods: 
-        test: 
-          start: 2021061621 
-          end: 2021061621 
-          step: 1
+      # num_inference_pred_steps: 6
+      # periods: 
+      #   test: 
+      #     start: 2021061621 
+      #     end: 2021061621 
+      #     step: 1
