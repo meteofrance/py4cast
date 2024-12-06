@@ -5,7 +5,7 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 from functools import cached_property, lru_cache
 from pathlib import Path
-from typing import Any, Dict, List, Literal, Tuple, Union
+from typing import Any, Dict, List, Literal, Tuple, Union, Callable
 
 import gif
 import matplotlib.pyplot as plt
@@ -24,10 +24,14 @@ from py4cast.datasets.base import (
     GridConfig,
     Item,
     NamedTensor,
+    Param,
+    ParamConfig,
     Period,
+    Settings,
     Stats,
     TorchDataloaderSettings,
     collate_fn,
+    get_param_list,
 )
 from py4cast.datasets.titan.settings import (
     DEFAULT_CONFIG,
@@ -42,8 +46,11 @@ from py4cast.utils import merge_dicts
 app = typer.Typer()
 
 
-def get_weight_per_lvl(level: int, kind: Literal["hPa", "m"]):
-    if kind == "hPa":
+def get_weight_per_lvl(
+    level: int,
+    level_type: Literal["isobaricInhPa", "heightAboveGround", "surface", "meanSea"],
+):
+    if level_type == "isobaricInhPa":
         return 1 + (level) / (1000)
     else:
         return 2
@@ -54,7 +61,7 @@ def get_weight_per_lvl(level: int, kind: Literal["hPa", "m"]):
 #############################################################
 
 
-def load_Titan_grid_info(name: str) -> GridConfig:
+def load_grid_info(name: str) -> GridConfig:
     path = SCRATCH_PATH / f"conf_{name}.grib"
     conf_ds = xr.open_dataset(path)
     grid_info = METADATA["GRIDS"][name]
@@ -71,147 +78,57 @@ def load_Titan_grid_info(name: str) -> GridConfig:
 
 
 #############################################################
-#                            PARAM                          #
+#                              PARAMS                       #
 #############################################################
 
 
-@lru_cache(maxsize=50)
-def read_grib(path_grib: Path) -> xr.Dataset:
-    return xr.load_dataset(path_grib, engine="cfgrib", backend_kwargs={"indexpath": ""})
+def load_param_info(name: str) -> ParamConfig:
+    info = METADATA["WEATHER_PARAMS"][name]
+    grib_name = info["grib"]
+    grib_param = info["param"]
+    unit = info["unit"]
+    level_type = info["type_level"]
+    long_name = info["long_name"]
+    grid = info["grid"]
+    if grid not in ["PAAROME_1S100", "PAAROME_1S40", "PA_01D"]:
+        raise NotImplementedError(
+            "Parameter native grid must be in ['PAAROME_1S100', 'PAAROME_1S40', 'PA_01D']"
+        )
+    return ParamConfig(unit, level_type, long_name, grid, grib_name, grib_param)
 
 
-@dataclass(slots=True)
-class Param:
-    name: str
-    level: int
-    grid: Grid
-    # Parameter status :
-    # input = forcings, output = diagnostic, input_output = classical weather var
-    kind: Literal["input", "output", "input_output"]
-    level_type: str = field(init=False)
-    long_name: str = field(init=False)
-    unit: str = field(init=False)
-    native_grid: str = field(init=False)
-    grib_name: str = field(init=False)
-    grib_param: str = field(init=False)
-    npy_path: Path = None
-
-    def __post_init__(self):
-        param_info = METADATA["WEATHER_PARAMS"][self.name]
-        self.grib_name = param_info["grib"]
-        self.grib_param = param_info["param"]
-        self.unit = param_info["unit"]
-        if param_info["type_level"] in ["heightAboveGround", "meanSea", "surface"]:
-            self.level_type = "m"
-        else:
-            self.level_type = "hPa"
-        self.long_name = param_info["long_name"]
-        self.native_grid = param_info["grid"]
-        if self.native_grid not in ["PAAROME_1S100", "PAAROME_1S40", "PA_01D"]:
-            raise NotImplementedError(
-                "Parameter native grid must be in ['PAAROME_1S100', 'PAAROME_1S40', 'PA_01D']"
-            )
-
-    @property
-    def number(self) -> int:
-        """Get the number of parameters."""
-        return 1
-
-    @property  # Does not accept a cached property with slots=True
-    def ndims(self) -> str:
-        return 2
-
-    @property
-    def state_weights(self) -> list:
-        return [get_weight_per_lvl(self.level, self.level_type)]
-
-    @property
-    def parameter_name(self) -> list:
-        return [f"{self.long_name} {self.level}{self.level_type}"]
-
-    @property
-    def parameter_short_names(self) -> list:
-        return [f"{self.name}_{self.level}{self.level_type}"]
-
-    @property
-    def units(self) -> list:
-        """For a given variable, the unit is the same accross all levels."""
-        return [self.unit]
-
-    def get_filepath(
-        self, date: dt.datetime, file_format: Literal["npy", "grib"]
-    ) -> Path:
-        """
-        Returns the path of the file containing the parameter data.
-        - in grib format, data is grouped by level type.
-        - in npy format, data is saved as npy, rescaled to the wanted grid, and each
-        2D array is saved as one file to optimize IO during training."""
-        if file_format == "grib":
-            folder = SCRATCH_PATH / "grib" / date.strftime(FORMATSTR)
-            return folder / self.grib_name
-        else:
-            filename = f"{self.name}_{self.level}{self.level_type.lower()}.npy"
-            return self.npy_path / date.strftime(FORMATSTR) / filename
-
-    def fit_to_grid(
-        self, arr: np.ndarray, lons: np.ndarray, lats: np.ndarray
-    ) -> np.ndarray:
-        # already on good grid, nothing to do:
-        if self.grid.name == self.native_grid:
-            return arr
-
-        # crop arpege data to arome domain:
-        if self.native_grid == "PA_01D" and self.grid.name in [
-            "PAAROME_1S100",
-            "PAAROME_1S40",
-        ]:
-            grid_coords = METADATA["GRIDS"][self.grid.name]["extent"]
-            # Mask ARPEGE data to AROME bounding box
-            mask_lon = (lons >= grid_coords[2]) & (lons <= grid_coords[3])
-            mask_lat = (lats >= grid_coords[1]) & (lats <= grid_coords[0])
-            arr = arr[mask_lat, :][:, mask_lon]
-
-        anti_aliasing = self.grid.name == "PAAROME_1S40"  # True if downsampling
-        # upscale or downscale to grid resolution:
-        return resize(arr, self.grid.full_size, anti_aliasing=anti_aliasing)
-
-    def load_data_grib(self, date: dt.datetime) -> np.ndarray:
-        path_grib = self.get_filepath(date, "grib")
-        ds = read_grib(path_grib)
-        level_type = ds[self.grib_param].attrs["GRIB_typeOfLevel"]
-        lats = ds.latitude.values
-        lons = ds.longitude.values
-        if level_type != "isobaricInhPa":  # Only one level
-            arr = ds[self.grib_param].values
-        else:
-            arr = ds[self.grib_param].sel(isobaricInhPa=self.level).values
-        return arr, lons, lats
-
-    def load_data(
-        self, date: dt.datetime, file_format: Literal["npy", "grib"] = "grib"
-    ):
-        if file_format == "grib":
-            arr, lons, lats = self.load_data_grib(date)
-            arr = self.fit_to_grid(arr, lons, lats)
-            subdomain = self.grid.subdomain
-            arr = arr[subdomain[0] : subdomain[1], subdomain[2] : subdomain[3]]
-            return arr[::-1]  # invert latitude
-        else:
-            return np.load(self.get_filepath(date, file_format))
-
-    def exist(self, date: dt.datetime, file_format: Literal["npy", "grib"] = "grib"):
-        filepath = self.get_filepath(date, file_format)
-        return filepath.exists()
+def get_grid_coords(param: Param) -> List[int]:
+    return METADATA["GRIDS"][param.grid.name]["extent"]
 
 
-def process_sample_dataset(date: dt.datetime, params: List[Param]):
+def get_filepath(
+    ds_name: str,
+    param: Param,
+    date: dt.datetime,
+    file_format: Literal["npy", "grib"],
+) -> Path:
+    """
+    Returns the path of the file containing the parameter data.
+    - in grib format, data is grouped by level type.
+    - in npy format, data is saved as npy, rescaled to the wanted grid, and each
+    2D array is saved as one file to optimize IO during training."""
+    if file_format == "grib":
+        folder = SCRATCH_PATH / "grib" / date.strftime(FORMATSTR)
+        return folder / param.grib_name
+    else:
+        npy_path = get_dataset_path(ds_name, param.grid) / "data"
+        filename = f"{param.name}_{param.level}_{param.level_type}.npy"
+        return npy_path / date.strftime(FORMATSTR) / filename
+
+
+def process_sample_dataset(ds_name: str, date: dt.datetime, params: List[Param]):
     """Saves each 2D parameter data of the given date as one NPY file."""
     for param in params:
-        dest_file = param.get_filepath(date, "npy")
+        dest_file = get_filepath(ds_name, param, date, "npy")
         dest_file.parent.mkdir(exist_ok=True)
         if not dest_file.exists():
             try:
-                arr = param.load_data(date, "grib")
+                arr = load_data_from_disk(ds_name, param, date, "grib")
                 np.save(dest_file, arr)
             except Exception as e:
                 print(e)
@@ -221,18 +138,168 @@ def process_sample_dataset(date: dt.datetime, params: List[Param]):
                 break
 
 
-#############################################################
-#                            SETTINGS                       #
-#############################################################
+def fit_to_grid(
+    param: Param,
+    arr: np.ndarray,
+    lons: np.ndarray,
+    lats: np.ndarray,
+    get_grid_coords: Callable[[Param], List[str]],
+) -> np.ndarray:
+    # already on good grid, nothing to do:
+    if param.grid.name == param.native_grid:
+        return arr
+
+    # crop arpege data to arome domain:
+    if param.native_grid == "PA_01D" and param.grid.name in [
+        "PAAROME_1S100",
+        "PAAROME_1S40",
+    ]:
+        grid_coords = get_grid_coords(param)
+        # Mask ARPEGE data to AROME bounding box
+        mask_lon = (lons >= grid_coords[2]) & (lons <= grid_coords[3])
+        mask_lat = (lats >= grid_coords[1]) & (lats <= grid_coords[0])
+        arr = arr[mask_lat, :][:, mask_lon]
+
+    anti_aliasing = param.grid.name == "PAAROME_1S40"  # True if downsampling
+    # upscale or downscale to grid resolution:
+    return resize(arr, param.grid.full_size, anti_aliasing=anti_aliasing)
 
 
-@dataclass(slots=True)
-class TitanSettings:
-    num_input_steps: int  # Number of input timesteps
-    num_pred_steps: int  # Number of output timesteps
-    step_duration: float  # duration in hour
-    standardize: bool = True
-    file_format: Literal["npy", "grib"] = "grib"
+@lru_cache(maxsize=50)
+def read_grib(path_grib: Path) -> xr.Dataset:
+    return xr.load_dataset(path_grib, engine="cfgrib", backend_kwargs={"indexpath": ""})
+
+
+def load_data_grib(param: Param, path: Path) -> np.ndarray:
+    ds = read_grib(path)
+    assert param.grib_param is not None
+    level_type = ds[param.grib_param].attrs["GRIB_typeOfLevel"]
+    lats = ds.latitude.values
+    lons = ds.longitude.values
+    if level_type != "isobaricInhPa":  # Only one level
+        arr = ds[param.grib_param].values
+    else:
+        arr = ds[param.grib_param].sel(isobaricInhPa=param.level).values
+    return arr, lons, lats
+
+
+def load_data_from_disk(
+    ds_name: str,
+    param: Param,
+    date: dt.datetime,
+    file_format: Literal["npy", "grib"] = "grib",
+):
+    """
+    Function to load invidiual parameter and lead time from a file stored in disk
+    """
+    data_path = get_filepath(ds_name, param, date, file_format)
+    if file_format == "grib":
+        arr, lons, lats = load_data_grib(param, data_path)
+        arr = fit_to_grid(arr, lons, lats)
+    else:
+        arr = np.load(data_path)
+
+    subdomain = param.grid.subdomain
+    arr = arr[subdomain[0] : subdomain[1], subdomain[2] : subdomain[3]]
+    if file_format == "grib":
+        arr = arr[::-1]
+    return arr  # invert latitude
+
+
+def exists(
+    ds_name: str,
+    param: Param,
+    date: dt.datetime,
+    file_format: Literal["npy", "grib"] = "grib",
+) -> bool:
+    filepath = get_filepath(ds_name, param, date, file_format)
+    return filepath.exists()
+
+
+@dataclass
+class Timestamps:
+    """
+    Describe all timestamps in a sample. It contains datetime, validitytimes and all terms
+    """
+
+    datetime: dt.datetime
+    terms: List[np.int64]
+    validity_times: List[dt.datetime]
+
+
+def _is_valid(
+    dataset_name: str, params: List[Param], timestamps: Timestamps, file_format: str
+):
+    """Check that all the files necessary for this sample exist.
+
+    Args:
+        dataset_name: name of dataset
+        param_list (List): List of parameters
+        timestamps (Timestamps): class which holds datetime, terms and validity times
+    Returns:
+    Boolean:  Whether the sample exists or not
+    """
+    for val_time in timestamps.validity_times:
+        for param in params:
+            if not exists(dataset_name, param, val_time, file_format):
+                print("invalid sample")
+                return False
+    return True
+
+
+def get_param_tensor(
+    param: Param,
+    stats: Stats,
+    dates: List[dt.datetime],
+    settings: Settings,
+    no_standardize: bool = False,
+) -> torch.tensor:
+    """
+    Fetch data on disk fo the given parameter and all involved dates
+    Unless specified, normalize the samples with parameter-specific constants
+    returns a tensor
+    """
+    arrays = [
+        load_data_from_disk(settings.dataset_name, param, date, settings.file_format)
+        for date in dates
+    ]
+    arr = np.stack(arrays)
+    # Extend dimension to match 3D (level dimension)
+    if len(arr.shape) != 4:
+        arr = np.expand_dims(arr, axis=1)
+    arr = np.transpose(arr, axes=[0, 2, 3, 1])  # shape = (steps, lvl, x, y)
+    if settings.standardize and not no_standardize:
+        name = param.parameter_short_name
+        means = np.asarray(stats[name]["mean"])
+        std = np.asarray(stats[name]["std"])
+        arr = (arr - means) / std
+    return torch.from_numpy(arr)
+
+
+def generate_forcings(
+    date: dt.datetime, output_terms: Tuple[float], grid: Grid
+) -> List[NamedTensor]:
+    """
+    Generate all the forcing in this function.
+    Return a list of NamedTensor.
+    """
+    lforcings = []
+    time_forcing = NamedTensor(  # doy : day_of_year
+        feature_names=["cos_hour", "sin_hour", "cos_doy", "sin_doy"],
+        tensor=get_year_hour_forcing(date, output_terms).type(torch.float32),
+        names=["timestep", "features"],
+    )
+    solar_forcing = NamedTensor(
+        feature_names=["toa_radiation"],
+        tensor=generate_toa_radiation_forcing(
+            grid.lat, grid.lon, date, output_terms
+        ).type(torch.float32),
+        names=["timestep", "lat", "lon", "features"],
+    )
+    lforcings.append(time_forcing)
+    lforcings.append(solar_forcing)
+
+    return lforcings
 
 
 #############################################################
@@ -262,13 +329,14 @@ def run_through_timestamps(period: Period) -> List[Dict[str, Any]]:
 class Sample:
     """Describes a sample"""
 
-    date_t0: dt.datetime
-    settings: TitanSettings
+    timestamps: Timestamps
+    settings: Settings
     params: List[Param]
     stats: Stats
     grid: Grid
-    pred_timesteps: Tuple[float] = field(init=False)  # gaps in hours btw step and t0
-    all_dates: Tuple[dt.datetime] = field(init=False)  # date of each step
+
+    input_terms: Tuple[float] = field(init=False)  # gaps in hours btw step and t0
+    output_terms: Tuple[float] = field(init=False)  # date of each step
 
     def __post_init__(self):
         """Setups time variables to be able to define a sample.
@@ -278,71 +346,66 @@ class Sample:
         pred_timesteps = [3h, 6h, 9h]
         all_dates = [24/10/22 21:00,  24/10/23 00:00, 24/10/23 03:00, 24/10/23 06:00, 24/10/23 09:00]
         """
-        n_inputs, n_preds = self.settings.num_input_steps, self.settings.num_pred_steps
-        all_steps = list(range(-n_inputs + 1, n_preds + 1))
-        all_timesteps = [self.settings.step_duration * step for step in all_steps]
-        self.pred_timesteps = all_timesteps[-n_preds:]
-        self.all_dates = [self.date_t0 + dt.timedelta(hours=ts) for ts in all_timesteps]
+        if not self.settings.num_input_steps + self.settings.num_pred_steps == len(
+            self.timestamps.validity_times
+        ):
+            raise Exception("Length terms does not match inputs + outputs")
+        self.input_terms = self.timestamps.validity_times[
+            : self.settings.num_input_steps
+        ]
+        self.output_terms = self.timestamps.validity_times[
+            self.settings.num_pred_steps :
+        ]
+
+        # self.pred_timesteps = self.timestamps.terms[-self.settings.num_pred_steps:]
 
     def __repr__(self):
-        return f"Date T0 {self.date_t0}, leadtimes {self.pred_timesteps}"
+        return f"Date T0 {self.timestamps.datetime}, leadtimes {self.pred_timesteps}"
 
     def is_valid(self) -> bool:
-        """Check that all the files necessary for this sample exist.
-
-        Args:
-            param_list (List): List of parameters
-        Returns:
-            Boolean: Whether the sample is available or not
-        """
-        for date in self.all_dates:
-            for param in self.params:
-                if not param.exist(date, self.settings.file_format):
-                    return False
-        return True
-
-    def get_param_tensor(
-        self, param: Param, dates: List[dt.datetime], no_standardize: bool = False
-    ) -> torch.tensor:
-        if self.settings.standardize and not no_standardize:
-            names = param.parameter_short_names
-            means = np.asarray([self.stats[name]["mean"] for name in names])
-            std = np.asarray([self.stats[name]["std"] for name in names])
-        arrays = [param.load_data(date, self.settings.file_format) for date in dates]
-        arr = np.stack(arrays)
-        # Extend dimension to match 3D (level dimension)
-        if len(arr.shape) != 4:
-            arr = np.expand_dims(arr, axis=1)
-        arr = np.transpose(arr, axes=[0, 2, 3, 1])  # shape = (steps, lvl, x, y)
-        if self.settings.standardize and not no_standardize:
-            arr = (arr - means) / std
-        return torch.from_numpy(arr)
+        return _is_valid(
+            self.settings.dataset_name,
+            self.params,
+            self.timestamps,
+            self.settings.file_format,
+        )
 
     def load(self, no_standardize: bool = False) -> Item:
-        linputs, loutputs, lforcings = [], [], []
+        """
+        Return inputs, outputs, forcings as tensors concatenated into a Item.
+        """
+        linputs, loutputs = [], []
 
         # Reading parameters from files
         for param in self.params:
             state_kwargs = {
-                "feature_names": param.parameter_short_names,
+                "feature_names": [param.parameter_short_name],
                 "names": ["timestep", "lat", "lon", "features"],
             }
-
             if param.kind == "input":
                 # forcing is taken for every predicted step
-                dates = self.all_dates[-self.settings.num_pred_steps :]
-                tensor = self.get_param_tensor(param, dates, no_standardize)
+                dates = self.timestamps.validity_times[-self.settings.num_pred_steps :]
+                tensor = get_param_tensor(
+                    param, self.stats, dates, self.settings, no_standardize
+                )
                 tmp_state = NamedTensor(tensor=tensor, **deepcopy(state_kwargs))
-                lforcings.append(tmp_state)
 
             elif param.kind == "output":
-                dates = self.all_dates[-self.settings.num_pred_steps :]
-                tensor = self.get_param_tensor(param, dates, no_standardize)
+                dates = self.timestamps.validity_times[-self.settings.num_pred_steps :]
+                tensor = get_param_tensor(
+                    param, self.stats, dates, self.settings, no_standardize
+                )
                 tmp_state = NamedTensor(tensor=tensor, **deepcopy(state_kwargs))
                 loutputs.append(tmp_state)
 
             else:  # input_output
-                tensor = self.get_param_tensor(param, self.all_dates, no_standardize)
+                tensor = get_param_tensor(
+                    param,
+                    self.stats,
+                    self.timestamps.validity_times,
+                    self.settings,
+                    no_standardize,
+                )
                 state_kwargs["names"][0] = "timestep"
                 tmp_state = NamedTensor(
                     tensor=tensor[-self.settings.num_pred_steps :],
@@ -350,32 +413,21 @@ class Sample:
                 )
 
                 loutputs.append(tmp_state)
-                state_kwargs["names"][0] = "timestep"
                 tmp_state = NamedTensor(
                     tensor=tensor[: self.settings.num_input_steps],
                     **deepcopy(state_kwargs),
                 )
                 linputs.append(tmp_state)
 
-        time_forcing = NamedTensor(  # doy : day_of_year
-            feature_names=["cos_hour", "sin_hour", "cos_doy", "sin_doy"],
-            tensor=get_year_hour_forcing(self.date_t0, self.pred_timesteps).type(
-                torch.float32
-            ),
-            names=["timestep", "features"],
+        lforcings = generate_forcings(
+            date=self.timestamps.datetime,
+            output_terms=self.timestamps.terms[self.settings.num_pred_steps :],
+            grid=self.grid,
         )
-        solar_forcing = NamedTensor(
-            feature_names=["toa_radiation"],
-            tensor=generate_toa_radiation_forcing(
-                self.grid.lat, self.grid.lon, self.date_t0, self.pred_timesteps
-            ).type(torch.float32),
-            names=["timestep", "lat", "lon", "features"],
-        )
-        lforcings.append(time_forcing)
-        lforcings.append(solar_forcing)
 
         for forcing in lforcings:
             forcing.unsqueeze_and_expand_from_(linputs[0])
+
         return Item(
             inputs=NamedTensor.concat(linputs),
             outputs=NamedTensor.concat(loutputs),
@@ -393,10 +445,10 @@ class Sample:
             index_tensor = step - 1
 
         # Sort parameters by level, to plot each level on one line
-        levels = sorted(list(set([param.level for param in self.params])))
+        levels = sorted(list(set([p.level for p in self.params])))
         dict_params = {level: [] for level in levels}
         for param in self.params:
-            if param.parameter_short_names[0] in ntensor.feature_names:
+            if param.parameter_short_name in ntensor.feature_names:
                 dict_params[param.level].append(param)
 
         # Groups levels 0m, 2m and 10m on one "surf" level
@@ -413,7 +465,7 @@ class Sample:
 
         for i, level in enumerate(dict_params.keys()):
             for j, param in enumerate(dict_params[level]):
-                pname = param.parameter_short_names[0]
+                pname = param.parameter_short_name
                 tensor = ntensor[pname][index_tensor, :, :, 0]
                 arr = tensor.numpy()[::-1]  # invert latitude
                 vmin, vmax = self.stats[pname]["min"], self.stats[pname]["max"]
@@ -426,7 +478,9 @@ class Sample:
                 cbar.set_label(param.unit)
 
         hours_delta = dt.timedelta(hours=self.settings.step_duration * step)
-        plt.suptitle(f"Run: {self.date_t0} - Valid time: {self.date_t0 + hours_delta}")
+        plt.suptitle(
+            f"Run: {self.timestamps.datetime} - Valid time: {self.timestamps.datetime + hours_delta}"
+        )
         plt.tight_layout()
 
         if save_path is not None:
@@ -460,21 +514,6 @@ def get_dataset_path(name: str, grid: Grid):
     return SCRATCH_PATH / "subdatasets" / subdataset_name
 
 
-def get_param_list(conf: dict, grid: Grid, dataset_path: Path) -> List[Param]:
-    param_list = []
-    for name, values in conf["params"].items():
-        for lvl in values["levels"]:
-            param = Param(
-                name=name,
-                level=lvl,
-                kind=values["kind"],
-                grid=grid,
-                npy_path=dataset_path / "data",
-            )
-            param_list.append(param)
-    return param_list
-
-
 class TitanDataset(DatasetABC, Dataset):
     # Si on doit travailler avec plusieurs grilles, on fera un super dataset qui contient
     # plusieurs datasets chacun sur une seule grille
@@ -484,7 +523,7 @@ class TitanDataset(DatasetABC, Dataset):
         grid: Grid,
         period: Period,
         params: List[Param],
-        settings: TitanSettings,
+        settings: Settings,
     ):
         self.name = name
         self.grid = grid
@@ -534,7 +573,23 @@ class TitanDataset(DatasetABC, Dataset):
             for date in tqdm.tqdm(
                 self.period.date_list, f"{self.period.name} samples validation"
             ):
-                sample = Sample(date, self.settings, self.params, self.stats, self.grid)
+
+                n_inputs, n_preds = (
+                    self.settings.num_input_steps,
+                    self.settings.num_pred_steps,
+                )
+                all_steps = list(range(-n_inputs + 1, n_preds + 1))
+                all_timesteps = [
+                    self.settings.step_duration * step for step in all_steps
+                ]
+                validity_times = [date + dt.timedelta(hours=ts) for ts in all_timesteps]
+                timestamps = Timestamps(
+                    datetime=date, terms=all_timesteps, validity_times=validity_times
+                )
+
+                sample = Sample(
+                    timestamps, self.settings, self.params, self.stats, self.grid
+                )
                 if sample.is_valid():
                     f.write(f"{date.strftime('%Y-%m-%d_%Hh%M')}\n")
 
@@ -550,10 +605,8 @@ class TitanDataset(DatasetABC, Dataset):
                 dateformat = "%Y-%m-%d_%Hh%M"
                 dates = [dt.datetime.strptime(ds, dateformat) for ds in dates_str]
                 dates = list(set(dates).intersection(set(self.period.date_list)))
-                samples = [
-                    Sample(date, self.settings, self.params, stats, self.grid)
-                    for date in dates
-                ]
+                dates_iterator = dates
+
         else:
             print(
                 f"Valid samples file {self.valid_samples_file} does not exist. Computing samples list..."
@@ -593,7 +646,7 @@ class TitanDataset(DatasetABC, Dataset):
         res += 1  # For solar forcing
         for param in self.params:
             if param.kind == "input":
-                res += param.number
+                res += 1
         return res
 
     @cached_property
@@ -602,7 +655,7 @@ class TitanDataset(DatasetABC, Dataset):
         res = 0
         for param in self.params:
             if param.kind == "input_output":
-                res += param.number
+                res += 1
         return res
 
     def __getitem__(self, index: int) -> Item:
@@ -620,19 +673,19 @@ class TitanDataset(DatasetABC, Dataset):
         num_pred_steps_val_test: int,
     ) -> Tuple["TitanDataset", "TitanDataset", "TitanDataset"]:
 
-        conf["grid"]["load_grid_info_func"] = load_Titan_grid_info
+        conf["grid"]["load_grid_info_func"] = load_grid_info
         grid = Grid(**conf["grid"])
-        dataset_path = get_dataset_path(name, grid)
-        param_list = get_param_list(conf, grid, dataset_path)
 
-        train_settings = TitanSettings(
-            num_input_steps, num_pred_steps_train, **conf["settings"]
+        param_list = get_param_list(conf, grid, load_param_info, get_weight_per_lvl)
+
+        train_settings = Settings(
+            name, num_input_steps, num_pred_steps_train, **conf["settings"]
         )
         train_period = Period(**conf["periods"]["train"], name="train")
         train_ds = TitanDataset(name, grid, train_period, param_list, train_settings)
 
-        valid_settings = TitanSettings(
-            num_input_steps, num_pred_steps_val_test, **conf["settings"]
+        valid_settings = Settings(
+            name, num_input_steps, num_pred_steps_val_test, **conf["settings"]
         )
         valid_period = Period(**conf["periods"]["valid"], name="valid")
         valid_ds = TitanDataset(name, grid, valid_period, param_list, valid_settings)
@@ -701,41 +754,28 @@ class TitanDataset(DatasetABC, Dataset):
         ],
     ) -> List[str]:
         """
-        Return the name of the parameters in the dataset.
+        List of readable names for the parameters in the dataset.
         Does not include grid information (such as geopotentiel and LandSeaMask).
         Make the difference between inputs, outputs.
         """
-        names = []
-        for param in self.params:
-            if param.kind == kind:
-                names += param.parameter_short_names
-        return names
+        return [p.parameter_short_name for p in self.params if p.kind == kind]
 
     @cached_property
-    def units(self) -> Dict[str, int]:
+    def units(self) -> Dict[str, str]:
         """
         Return a dictionnary with name and units
         """
-        dout = {}
-        for param in self.params:
-            names = param.parameter_short_names
-            units = param.units
-            for name, unit in zip(names, units):
-                dout[name] = unit
-        return dout
+        return {p.parameter_short_name: p.unit for p in self.params}
 
     @cached_property
     def state_weights(self):
         """Weights used in the loss function."""
-        w_dict = {}
-        for param in self.params:
-            if param.kind in ["output", "input_output"]:
-                for name, weight in zip(
-                    param.parameter_short_names, param.state_weights
-                ):
-                    w_dict[name] = weight
-
-        return w_dict
+        kinds = ["output", "input_output"]
+        return {
+            p.parameter_short_name: p.state_weight
+            for p in self.params
+            if p.kind in kinds
+        }
 
     @property
     def cache_dir(self) -> Path:
@@ -786,7 +826,9 @@ def prepare(
 
     if convert_grib2npy:
         print("Converting gribs to npy...")
-        param_list = get_param_list(conf, train_ds.grid, train_ds.cache_dir)
+        param_list = get_param_list(
+            conf, train_ds.grid, load_param_info, get_weight_per_lvl
+        )
         sum_dates = (
             list(train_ds.period.date_list)
             + list(valid_ds.period.date_list)

@@ -271,7 +271,6 @@ if torch.cuda.is_available():
 else:
     device_name = "cpu"
     len_loader = len_loader
-
 # Get Log folders
 log_dir = ROOTDIR / "logs"
 folder = Path(args.campaign_name) / args.dataset / args.model
