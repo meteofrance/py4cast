@@ -91,7 +91,9 @@ def test_torch_training_loop(model_name):
 
     # GNNs build the graph here, once at rank zero
     if hasattr(model_kls, "rank_zero_setup"):
-        model_kls.rank_zero_setup(model_settings, FakeStatics(GRID_HEIGHT, GRID_WIDTH))
+        model_kls.rank_zero_setup(
+            model_settings, FakeStatics(GRID_HEIGHT, GRID_WIDTH).meshgrid
+        )
 
     model = model_kls(
         in_channels=NUM_INPUTS,

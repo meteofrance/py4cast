@@ -14,7 +14,11 @@ import torch
 from lightning.pytorch.loggers import MLFlowLogger
 from lightning.pytorch.utilities import rank_zero_only
 from mfai.torch.models.base import ModelType
-from mfai.torch.models.utils import features_last_to_second, features_second_to_last
+from mfai.torch.models.utils import (
+    expand_to_batch,
+    features_last_to_second,
+    features_second_to_last,
+)
 from torch import nn
 from torchinfo import summary
 from transformers import get_cosine_schedule_with_warmup
@@ -24,12 +28,12 @@ from py4cast.datasets.base import (
     DatasetInfo,
     ItemBatch,
     NamedTensor,
+    Statics,
     TorchDataloaderSettings,
 )
 from py4cast.losses import ScaledLoss, WeightedLoss
 from py4cast.metrics import MetricACC, MetricPSDK, MetricPSDVar
 from py4cast.models import build_model_from_settings, get_model_kls_and_settings
-from py4cast.models.base import expand_to_batch
 from py4cast.plots import (
     PredictionEpochPlot,
     PredictionTimestepPlot,
@@ -167,9 +171,9 @@ class ArLightningHyperParam:
 
 
 @rank_zero_only
-def rank_zero_init(model_kls, model_settings, statics):
+def rank_zero_init(model_kls, model_settings, statics: Statics):
     if hasattr(model_kls, "rank_zero_setup"):
-        model_kls.rank_zero_setup(model_settings, statics)
+        model_kls.rank_zero_setup(model_settings, statics.meshgrid)
 
 
 @rank_zero_only

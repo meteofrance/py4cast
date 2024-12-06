@@ -1,3 +1,8 @@
+"""
+Python module to plug mfai models into py4cast
+and also register any plugin found in the PYTHONPATH.
+"""
+
 import importlib
 import pkgutil
 from pathlib import Path
@@ -5,12 +10,11 @@ from typing import Any, Tuple, Union
 
 from mfai.torch.models.base import ModelABC
 from mfai.torch.models.half_unet import HalfUNet
+from mfai.torch.models.nlam import GraphLAM, HiLAM, HiLAMParallel
 from mfai.torch.models.segformer import Segformer
 from mfai.torch.models.swinunetr import SwinUNETR
 from mfai.torch.models.unet import UNet
 from mfai.torch.models.unetrpp import UNETRPP
-
-from .nlam.models import GraphLAM, HiLAM, HiLAMParallel
 
 # Models MUST be added to the registry
 # in order to be used by the training script.
