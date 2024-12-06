@@ -1,8 +1,8 @@
 trainer:
-  fast_dev_run: False
+  fast_dev_run: True
   num_nodes: 1
   devices: "auto"
-  max_epochs: 20
+  max_epochs: 100
   deterministic: True
   strategy: "ddp"
   accumulate_grad_batches: 10
@@ -10,15 +10,15 @@ trainer:
   logger:
     - class_path: lightning.pytorch.loggers.TensorBoardLogger
       init_args:
-        name: "folder_logger"
+        name: "tensorboard"
         default_hp_metric: False
-        save_dir: /scratch/shared/py4cast/logs/test_cli/to_del
+        save_dir: /scratch/shared/py4cast/logs/camp1
     - class_path: lightning.pytorch.loggers.MLFlowLogger
       init_args:
         run_name: "mlrun"
         experiment_name: "mlflow_test1"
         log_model: True
-        save_dir: /scratch/shared/py4cast/logs/test_cli/to_del #${trainer.logger.save_dir} +"/mlflow/"
+        save_dir: /scratch/shared/py4cast/logs/camp1
   profiler: null
   log_every_n_steps: 1
   callbacks:

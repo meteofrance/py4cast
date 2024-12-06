@@ -45,9 +45,7 @@ PLOT_PERIOD: int = 10
 
 # Default value of path log if fast_dev_run=True
 LOG_SAVEPATH = Path(
-    os.getenv(
-        "LOG_SAVEPATH", default="/scratch/shared/py4cast/logs/test_cli/DummyLogger"
-    )
+    os.getenv("LOG_SAVEPATH", default="lightning_logs_cli/fast_dev_run")
 )
 
 
@@ -637,7 +635,8 @@ class AutoRegressiveLightning(pl.LightningModule):
         if self.trainer.logger.log_dir:
             self.path_tensorboard = Path(self.trainer.logger.log_dir)
         else:
-            # If fast_dev_run = True, loggers are removed and a DummyLogger is used. Hardcode the outputs
+            # If fast_dev_run = True, loggers are removed and a DummyLogger is used.
+            # Hardcode the outputs
             self.path_tensorboard = LOG_SAVEPATH
             self.path_tensorboard.mkdir(parents=True, exist_ok=True)
         self.log_hparams_tb()

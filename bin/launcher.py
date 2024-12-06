@@ -88,7 +88,7 @@ class LCli(LightningCLI):
 
     def before_instantiate_classes(self):
         """
-        Modify values if dev_mode, printing the path to the log.
+        Correct path of logs to add dataset/model folder
         """
         # Get correct config
         if hasattr(self.config, "fit"):
