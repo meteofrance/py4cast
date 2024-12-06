@@ -3,21 +3,21 @@
         "train": {
             "start": 2020061521,
             "end": 2021061521,
-            "step": 1
+            "step": 24
         },
         "test": {
             "start": 2021061621,
             "end": 2021071621,
-            "step": 1
+            "step": 24
         },
         "valid": {
             "start": 2021071721,
             "end": 2021111521,
-            "step": 1
+            "step": 24
         }
     },
     "grid":{
-        "name":"EURW1S40_refacto", 
+        "name":"EURW1S40_gribcompat", 
         "border_size":10, 
         "subdomain":[50,178,50,178],
         "proj_name": "LambertConformal",
@@ -31,11 +31,37 @@
         "standardize": true,
         "file_format": "npy"
     },
-    "params": {
-        "t2m" : {"kind" : "input_output", "levels" : [2]},
-        "u10" : {"kind" : "input_output", "levels" : [10]},
-        "v10" : {"kind" : "input_output", "levels" : [10]},
-        "tirf": {"kind" : "input_output", "levels" : [0]}
-    },
-    "members": [0,1,2,4,5,6,7,8,9]
+    "dataset": {
+        "arome": {
+            "members": [
+                0,
+                1, 
+                2,
+                3,
+                4,
+                5,
+                6,
+                7,
+                8,
+                9,
+                10,
+                11,
+                12,
+                13,
+                14,
+                15
+            ],
+            "term": {
+                "start": 0,
+                "end": 44,
+                "timestep": 1
+            },
+            "var": {
+                "TEMPERATURE_2m": {"shortname":"t2m", "filename": "t2m", "level": [2], "typeOfLevel" : "heightAboveGround", "unit" : "K"},
+                "PRECIPITATIONS_DECUM":{"shortname":"tirf", "filename": "rrdecum", "level": [0],"typeOfLevel" : "surface", "unit" : "kg * m **-2"},
+                "WIND.U.PHYS":{"shortname":"u10", "filename": "u","level": [10], "typeOfLevel" : "heightAboveGround", "unit" : "m * s**-1"},
+                "WIND.V.PHYS":{"shortname":"v10", "filename": "v","level": [10], "typeOfLevel" : "heightAboveGround", "unit" : "m * s**-1"}
+                }
+            }
+        }
 }
