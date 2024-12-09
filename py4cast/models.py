@@ -8,28 +8,14 @@ import pkgutil
 from pathlib import Path
 from typing import Any, Tuple, Union
 
+from mfai.torch.models import registry as mfai_registry
 from mfai.torch.models.base import ModelABC
-from mfai.torch.models.half_unet import HalfUNet
-from mfai.torch.models.nlam import GraphLAM, HiLAM, HiLAMParallel
-from mfai.torch.models.segformer import Segformer
-from mfai.torch.models.swinunetr import SwinUNETR
-from mfai.torch.models.unet import UNet
-from mfai.torch.models.unetrpp import UNETRPP
 
 # Models MUST be added to the registry
 # in order to be used by the training script.
+# We init the registry with the models from mfai.
 registry = {}
-for kls in (
-    HalfUNet,
-    UNet,
-    GraphLAM,
-    HiLAM,
-    HiLAMParallel,
-    Segformer,
-    SwinUNETR,
-    UNETRPP,
-):
-    registry[kls.__name__.lower()] = kls
+registry.update(mfai_registry)
 
 
 PLUGIN_PREFIX = "py4cast_plugin_"
@@ -45,12 +31,18 @@ discovered_modules = {
 # Inspired from: https://packaging.python.org/en/latest/guides/creating-and-discovering-plugins
 for module_name, module in discovered_modules.items():
     for name, kls in module.__dict__.items():
-        if isinstance(kls, type) and issubclass(kls, ModelABC) and kls != ModelABC:
-            if kls.__name__.lower() in registry:
+        if (
+            isinstance(kls, type)
+            and issubclass(kls, ModelABC)
+            and kls != ModelABC
+            and kls.register
+        ):
+            if kls.__name__ in registry:
                 raise ValueError(
                     f"Model {kls.__name__} from plugin {module_name} already exists in the registry."
                 )
-            registry[kls.__name__.lower()] = kls
+            registry[kls.__name__] = kls
+all_nn_architectures = list(registry)
 
 
 def get_model_kls_and_settings(

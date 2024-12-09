@@ -4,7 +4,7 @@ from collections import defaultdict
 from copy import deepcopy
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, List, Tuple, Union
+from typing import TYPE_CHECKING, Callable, Dict, List, Tuple, Union
 
 import cartopy
 import einops
@@ -13,6 +13,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 from PIL import Image
+from torchmetrics import Metric
 from tueplots import bundles, figsizes
 
 if TYPE_CHECKING:
@@ -488,7 +489,7 @@ class StateErrorPlot(Plotter):
 
     def __init__(
         self,
-        metrics: Dict[str, Any],
+        metrics: Dict[str, Metric],
         prefix: str = "Test",
         save_path: Path = None,
     ):

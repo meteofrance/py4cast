@@ -23,6 +23,7 @@ class Identity(ModelABC, nn.Module):
     supported_num_spatial_dims = (2,)
     num_spatial_dims = 2
     model_type = ModelType.CONVOLUTIONAL
+    register: bool = True
 
     def __init__(
         self,

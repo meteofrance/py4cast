@@ -21,7 +21,7 @@ from mfai.torch.models.utils import features_last_to_second, features_second_to_
 from py4cast.datasets import get_datasets
 from py4cast.datasets.base import TorchDataloaderSettings, collate_fn
 from py4cast.lightning import ArLightningHyperParam, AutoRegressiveLightning
-from py4cast.models import get_model_kls_and_settings
+from py4cast.models import all_nn_architectures, get_model_kls_and_settings
 
 
 def to_numpy(tensor):
@@ -63,18 +63,6 @@ class FakeStatics:
         y = np.arange(0, self.grid_height, 1)
         xx, yy = np.meshgrid(x, y)
         return torch.from_numpy(np.asarray([xx, yy]))
-
-
-all_nn_architectures = (
-    "swinunetr",
-    "hilam",
-    "graphlam",
-    "halfunet",
-    "unet",
-    "segformer",
-    "identity",
-    "unetrpp",
-)
 
 
 @pytest.mark.parametrize("model_name", all_nn_architectures)
@@ -165,7 +153,7 @@ def test_lightning_fit_inference():
     NUM_INPUTS = 2
     NUM_OUTPUTS = 1
     DATASET = "dummy"
-    MODEL = "halfunet"
+    MODEL = "HalfUNet"
     BATCH_SIZE = 2
     datasets = get_datasets(
         DATASET,
@@ -242,13 +230,16 @@ def test_model_registry():
     from py4cast.models import registry
 
     assert set(registry.keys()) == {
-        "hilam",
-        "graphlam",
-        "halfunet",
-        "unet",
-        "segformer",
-        "identity",
-        "hilamparallel",
-        "swinunetr",
-        "unetrpp",
+        "DeepLabV3",
+        "DeepLabV3Plus",
+        "HalfUNet",
+        "Segformer",
+        "SwinUNETR",
+        "UNet",
+        "CustomUnet",
+        "UNETRPP",
+        "Identity",
+        "HiLAM",
+        "GraphLAM",
+        "HiLAMParallel",
     }
