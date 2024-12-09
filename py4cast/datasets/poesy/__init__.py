@@ -23,6 +23,7 @@ from py4cast.datasets.base import (
     Param,
     ParamConfig,
     Period,
+    Sample,
     Settings,
     Stats,
     TorchDataloaderSettings,
@@ -229,89 +230,6 @@ def generate_forcings(
     return lforcings
 
 
-@dataclass(slots=True)
-class Sample:
-    """Describes a sample"""
-
-    member: int
-    timestamps: Timestamps
-    settings: Settings
-    stats: Stats
-    grid: Grid
-    params: List[Param]
-
-    output_terms: Tuple[float] = field(init=False)
-    input_terms: Tuple[float] = field(init=False)
-
-    def __post_init__(self):
-        if not self.settings.num_input_steps + self.settings.num_pred_steps == len(
-            self.timestamps.terms
-        ):
-            raise Exception("terms does not have the correct size")
-        self.input_terms = self.timestamps.terms[: self.settings.num_input_steps]
-        self.output_terms = self.timestamps.terms[self.settings.num_pred_steps :]
-
-    def is_valid(self) -> bool:
-        return _is_valid(self.settings.dataset_name, self.params, self.timestamps)
-
-    def load(self) -> Item:
-        """
-        Return inputs, outputs, forcings as tensors concatenated into a Item.
-        """
-        linputs = []
-        loutputs = []
-
-        # Reading parameters from files
-        for param in self.params:
-            state_kwargs = {
-                "feature_names": [param.parameter_short_name],
-                "names": ["timestep", "lat", "lon", "features"],
-            }
-            try:
-                if param.kind == "input_output":
-                    # Search data for date sample.date and terms sample.terms
-                    tensor = get_param_tensor(
-                        param=param,
-                        stats=self.stats,
-                        timestamps=self.timestamps,
-                        settings=self.settings,
-                        standardize=self.settings.standardize,
-                        member=self.member,
-                    )
-                    state_kwargs["names"][0] = "timestep"
-                    # Save outputs
-                    tmp_state = NamedTensor(
-                        tensor=tensor[self.settings.num_input_steps :],
-                        **deepcopy(state_kwargs),
-                    )
-                    loutputs.append(tmp_state)
-                    # Save inputs
-                    tmp_state = NamedTensor(
-                        tensor=tensor[: self.settings.num_input_steps],
-                        **deepcopy(state_kwargs),
-                    )
-                    linputs.append(tmp_state)
-
-            except KeyError as e:
-                print(f"Error for param {param}")
-                raise e
-
-        # Get forcings
-        lforcings = generate_forcings(
-            date=self.timestamps.datetime,
-            output_terms=self.output_terms,
-            grid=self.grid,
-        )
-        for lforcing in lforcings:
-            lforcing.unsqueeze_and_expand_from_(linputs[0])
-
-        return Item(
-            inputs=NamedTensor.concat(linputs),
-            outputs=NamedTensor.concat(loutputs),
-            forcing=NamedTensor.concat(lforcings),
-        )
-
-
 class InferSample(Sample):
     """
     Sample dedicated to inference. No outputs terms, only inputs.
@@ -366,7 +284,7 @@ class PoesyDataset(DatasetABC, Dataset):
             shortnames=shortnames,
             weather_dim=self.weather_dim,
             forcing_dim=self.forcing_dim,
-            step_duration=self.settings.step_duration,
+            step_duration=self.period.step_duration,
             statics=self.statics,
             stats=self.stats,
             diff_stats=self.diff_stats,
@@ -388,8 +306,6 @@ class PoesyDataset(DatasetABC, Dataset):
         )
 
         samples = []
-        number = 0
-
         num_total_steps = self.settings.num_input_steps + self.settings.num_pred_steps
         sample_by_date = len(all_terms) // num_total_steps
 
@@ -417,7 +333,6 @@ class PoesyDataset(DatasetABC, Dataset):
 
                     if samp.is_valid():
                         samples.append(samp)
-                        number += 1
 
         print(f"All {len(samples)} samples are now defined")
         return samples

@@ -27,6 +27,7 @@ from py4cast.datasets.base import (
     Param,
     ParamConfig,
     Period,
+    Sample,
     Settings,
     Stats,
     TorchDataloaderSettings,
@@ -187,6 +188,8 @@ def load_data_from_disk(
     ds_name: str,
     param: Param,
     date: dt.datetime,
+    # the member parameter is not accessed if irrelevant
+    member: int = 0,
     file_format: Literal["npy", "grib"] = "grib",
 ):
     """
@@ -209,58 +212,64 @@ def load_data_from_disk(
 def exists(
     ds_name: str,
     param: Param,
-    date: dt.datetime,
+    timestamps: Timestamps,
     file_format: Literal["npy", "grib"] = "grib",
 ) -> bool:
-    filepath = get_filepath(ds_name, param, date, file_format)
-    return filepath.exists()
+    for date in timestamps["validity_times"]:
+        filepath = get_filepath(ds_name, param, date, file_format)
+        if not filepath.exists():
+            return False
+    return True
+
+
+def valid_timestamp(n_inputs: int, timestamps: Timestamps) -> bool:
+    # avoiding duplicating samples on days border (00h00 +/ -1 <-> 24h00 +/- 1)
+    term_0 = timestamps.terms[n_inputs - 1]
+    if term_0 > np.timedelta64(23, "h"):
+        return False
+    return True
 
 
 @dataclass
 class Timestamps:
     """
-    Describe all timestamps in a sample. It contains datetime, validitytimes and all terms
+    Describe all timestamps in a sample.
+    It contains
+        datetime, terms, validity times
+
+    If n_inputs = 2, n_preds = 2, terms will be (-1, 0, 1, 2) * step_duration
+     where step_duration is typically an integer multiple of 1 hour
+
+    validity times correspond to the addition of terms to the reference datetime
     """
 
+    # date and hour of the reference time
     datetime: dt.datetime
+    # terms are time deltas vis-à-vis the last input time step.
     terms: List[np.int64]
+
+    # validity times are complete datetimes
     validity_times: List[dt.datetime]
-
-
-def _is_valid(
-    dataset_name: str, params: List[Param], timestamps: Timestamps, file_format: str
-):
-    """Check that all the files necessary for this sample exist.
-
-    Args:
-        dataset_name: name of dataset
-        param_list (List): List of parameters
-        timestamps (Timestamps): class which holds datetime, terms and validity times
-    Returns:
-    Boolean:  Whether the sample exists or not
-    """
-    for val_time in timestamps.validity_times:
-        for param in params:
-            if not exists(dataset_name, param, val_time, file_format):
-                print("invalid sample")
-                return False
-    return True
 
 
 def get_param_tensor(
     param: Param,
     stats: Stats,
-    dates: List[dt.datetime],
+    timestamps: Timestamps,
     settings: Settings,
-    no_standardize: bool = False,
+    standardize: bool = True,
+    member: int = 0,
 ) -> torch.tensor:
     """
     Fetch data on disk fo the given parameter and all involved dates
     Unless specified, normalize the samples with parameter-specific constants
     returns a tensor
     """
+    dates = timestamps["validity_times"]
     arrays = [
-        load_data_from_disk(settings.dataset_name, param, date, settings.file_format)
+        load_data_from_disk(
+            settings.dataset_name, param, date, member, settings.file_format
+        )
         for date in dates
     ]
     arr = np.stack(arrays)
@@ -268,7 +277,7 @@ def get_param_tensor(
     if len(arr.shape) != 4:
         arr = np.expand_dims(arr, axis=1)
     arr = np.transpose(arr, axes=[0, 2, 3, 1])  # shape = (steps, lvl, x, y)
-    if settings.standardize and not no_standardize:
+    if standardize:
         name = param.parameter_short_name
         means = np.asarray(stats[name]["mean"])
         std = np.asarray(stats[name]["std"])
@@ -300,189 +309,6 @@ def generate_forcings(
     lforcings.append(solar_forcing)
 
     return lforcings
-
-
-#############################################################
-#                            SAMPLE                         #
-#############################################################
-
-
-@dataclass(slots=True)
-class Sample:
-    """Describes a sample"""
-
-    timestamps: Timestamps
-    settings: Settings
-    params: List[Param]
-    stats: Stats
-    grid: Grid
-
-    input_terms: Tuple[float] = field(init=False)  # gaps in hours btw step and t0
-    output_terms: Tuple[float] = field(init=False)  # date of each step
-
-    def __post_init__(self):
-        """Setups time variables to be able to define a sample.
-        For example for n_inputs = 2, n_preds = 3, step_duration = 3h:
-        all_steps = [-1, 0, 1, 2, 3]
-        all_timesteps = [-3h, 0h, 3h, 6h, 9h]
-        pred_timesteps = [3h, 6h, 9h]
-        all_dates = [24/10/22 21:00,  24/10/23 00:00, 24/10/23 03:00, 24/10/23 06:00, 24/10/23 09:00]
-        """
-        if not self.settings.num_input_steps + self.settings.num_pred_steps == len(
-            self.timestamps.validity_times
-        ):
-            raise Exception("Length terms does not match inputs + outputs")
-        self.input_terms = self.timestamps.validity_times[
-            : self.settings.num_input_steps
-        ]
-        self.output_terms = self.timestamps.validity_times[
-            self.settings.num_pred_steps :
-        ]
-
-        # self.pred_timesteps = self.timestamps.terms[-self.settings.num_pred_steps:]
-
-    def __repr__(self):
-        return f"Date T0 {self.timestamps.datetime}, leadtimes {self.pred_timesteps}"
-
-    def is_valid(self) -> bool:
-        return _is_valid(
-            self.settings.dataset_name,
-            self.params,
-            self.timestamps,
-            self.settings.file_format,
-        )
-
-    def load(self, no_standardize: bool = False) -> Item:
-        """
-        Return inputs, outputs, forcings as tensors concatenated into a Item.
-        """
-        linputs, loutputs = [], []
-
-        # Reading parameters from files
-        for param in self.params:
-            state_kwargs = {
-                "feature_names": [param.parameter_short_name],
-                "names": ["timestep", "lat", "lon", "features"],
-            }
-            if param.kind == "input":
-                # forcing is taken for every predicted step
-                dates = self.timestamps.validity_times[-self.settings.num_pred_steps :]
-                tensor = get_param_tensor(
-                    param, self.stats, dates, self.settings, no_standardize
-                )
-                tmp_state = NamedTensor(tensor=tensor, **deepcopy(state_kwargs))
-
-            elif param.kind == "output":
-                dates = self.timestamps.validity_times[-self.settings.num_pred_steps :]
-                tensor = get_param_tensor(
-                    param, self.stats, dates, self.settings, no_standardize
-                )
-                tmp_state = NamedTensor(tensor=tensor, **deepcopy(state_kwargs))
-                loutputs.append(tmp_state)
-
-            else:  # input_output
-                tensor = get_param_tensor(
-                    param,
-                    self.stats,
-                    self.timestamps.validity_times,
-                    self.settings,
-                    no_standardize,
-                )
-                state_kwargs["names"][0] = "timestep"
-                tmp_state = NamedTensor(
-                    tensor=tensor[-self.settings.num_pred_steps :],
-                    **deepcopy(state_kwargs),
-                )
-
-                loutputs.append(tmp_state)
-                tmp_state = NamedTensor(
-                    tensor=tensor[: self.settings.num_input_steps],
-                    **deepcopy(state_kwargs),
-                )
-                linputs.append(tmp_state)
-
-        lforcings = generate_forcings(
-            date=self.timestamps.datetime,
-            output_terms=self.timestamps.terms[self.settings.num_pred_steps :],
-            grid=self.grid,
-        )
-
-        for forcing in lforcings:
-            forcing.unsqueeze_and_expand_from_(linputs[0])
-
-        return Item(
-            inputs=NamedTensor.concat(linputs),
-            outputs=NamedTensor.concat(loutputs),
-            forcing=NamedTensor.concat(lforcings),
-        )
-
-    def plot(self, item: Item, step: int, save_path: Path = None) -> None:
-        # Retrieve the named tensor
-        ntensor = item.inputs if step <= 0 else item.outputs
-
-        # Retrieve the timestep data index
-        if step <= 0:  # input step
-            index_tensor = step + self.settings.num_input_steps - 1
-        else:  # output step
-            index_tensor = step - 1
-
-        # Sort parameters by level, to plot each level on one line
-        levels = sorted(list(set([p.level for p in self.params])))
-        dict_params = {level: [] for level in levels}
-        for param in self.params:
-            if param.parameter_short_name in ntensor.feature_names:
-                dict_params[param.level].append(param)
-
-        # Groups levels 0m, 2m and 10m on one "surf" level
-        dict_params["surf"] = []
-        for lvl in [0, 2, 10]:
-            if lvl in levels:
-                dict_params["surf"] += dict_params.pop(lvl)
-
-        # Plot settings
-        kwargs = {"projection": self.grid.projection}
-        nrows = len(dict_params.keys())
-        ncols = max([len(param_list) for param_list in dict_params.values()])
-        fig, axs = plt.subplots(nrows, ncols, figsize=(20, 15), subplot_kw=kwargs)
-
-        for i, level in enumerate(dict_params.keys()):
-            for j, param in enumerate(dict_params[level]):
-                pname = param.parameter_short_name
-                tensor = ntensor[pname][index_tensor, :, :, 0]
-                arr = tensor.numpy()[::-1]  # invert latitude
-                vmin, vmax = self.stats[pname]["min"], self.stats[pname]["max"]
-                img = axs[i, j].imshow(
-                    arr, vmin=vmin, vmax=vmax, extent=self.grid.grid_limits
-                )
-                axs[i, j].set_title(pname)
-                axs[i, j].coastlines(resolution="50m")
-                cbar = fig.colorbar(img, ax=axs[i, j], fraction=0.04, pad=0.04)
-                cbar.set_label(param.unit)
-
-        hours_delta = dt.timedelta(hours=self.settings.step_duration * step)
-        plt.suptitle(
-            f"Run: {self.timestamps.datetime} - Valid time: {self.timestamps.datetime + hours_delta}"
-        )
-        plt.tight_layout()
-
-        if save_path is not None:
-            plt.savefig(save_path)
-            plt.close()
-
-    @gif.frame
-    def plot_frame(self, item: Item, step: int) -> None:
-        self.plot(item, step)
-
-    def plot_gif(self, save_path: Path):
-        # We don't want to standardize data for plots
-        item = self.load(no_standardize=True)
-        frames = []
-        n_inputs, n_preds = self.settings.num_input_steps, self.settings.num_pred_steps
-        steps = list(range(-n_inputs + 1, n_preds + 1))
-        for step in tqdm.tqdm(steps, desc="Making gif"):
-            frame = self.plot_frame(item, step)
-            frames.append(frame)
-        gif.save(frames, str(save_path), duration=250)
 
 
 #############################################################
@@ -542,76 +368,59 @@ class TitanDataset(DatasetABC, Dataset):
             units=self.units,
             weather_dim=self.weather_dim,
             forcing_dim=self.forcing_dim,
-            step_duration=self.settings.step_duration,
+            step_duration=self.period.step_duration,
             statics=self.statics,
             stats=self.stats,
             diff_stats=self.diff_stats,
             state_weights=self.state_weights,
         )
 
-    def write_list_valid_samples(self):
-        print(f"Writing list of valid samples for {self.period.name} set...")
-        with open(self.valid_samples_file, "w") as f:
-            for date in tqdm.tqdm(
-                self.period.date_list, f"{self.period.name} samples validation"
-            ):
-
-                n_inputs, n_preds = (
-                    self.settings.num_input_steps,
-                    self.settings.num_pred_steps,
-                )
-                all_steps = list(range(-n_inputs + 1, n_preds + 1))
-                all_timesteps = [
-                    self.settings.step_duration * step for step in all_steps
-                ]
-                validity_times = [date + dt.timedelta(hours=ts) for ts in all_timesteps]
-                timestamps = Timestamps(
-                    datetime=date, terms=all_timesteps, validity_times=validity_times
-                )
-
-                sample = Sample(
-                    timestamps, self.settings, self.params, self.stats, self.grid
-                )
-                if sample.is_valid():
-                    f.write(f"{date.strftime('%Y-%m-%d_%Hh%M')}\n")
-
     @cached_property
     def sample_list(self):
         """Creates the list of samples."""
         print("Start creating samples...")
         stats = self.stats if self.settings.standardize else None
-        if self.valid_samples_file.exists():
-            print(f"Retrieving valid samples from file {self.valid_samples_file}")
-            with open(self.valid_samples_file, "r") as f:
-                dates_str = [line[:-1] for line in f.readlines()]
-                dateformat = "%Y-%m-%d_%Hh%M"
-                dates = [dt.datetime.strptime(ds, dateformat) for ds in dates_str]
-                dates = list(set(dates).intersection(set(self.period.date_list)))
-                dates_iterator = dates
 
-        else:
-            print(
-                f"Valid samples file {self.valid_samples_file} does not exist. Computing samples list..."
-            )
-            dates_iterator = self.period.date_list
+        n_inputs, n_preds, step_duration = (
+            self.settings.num_input_steps,
+            self.settings.num_pred_steps,
+            self.period.step_duration,
+        )
+
+        sample_timesteps = [
+            step_duration * step for step in range(-n_inputs + 1, n_preds + 1)
+        ]
+        all_timestamps = []
+        for date in tqdm.tqdm(self.period.date_list):
+            for term in self.period.terms_list:
+                t0 = date + dt.timedelta(hours=term)
+                validity_times = [
+                    t0 + dt.timedelta(hours=ts) for ts in sample_timesteps
+                ]
+                terms = [dt.timedelta(t + term) for t in all_timesteps if t]
+
+                timestamps = Timestamps(
+                    datetime=date,
+                    terms=terms,
+                    validity_times=validity_times,
+                )
+                if valid_timestamp(n_input, timestamps):
+                    all_timestamps.append(timestamps)
 
         samples = []
-        for date in tqdm.tqdm(dates_iterator):
-
-            n_inputs, n_preds = (
-                self.settings.num_input_steps,
-                self.settings.num_pred_steps,
-            )
-            all_steps = list(range(-n_inputs + 1, n_preds + 1))
-            all_timesteps = [self.settings.step_duration * step for step in all_steps]
-            validity_times = [date + dt.timedelta(hours=ts) for ts in all_timesteps]
-
-            timestamps = Timestamps(
-                datetime=date, terms=all_timesteps, validity_times=validity_times
-            )
-            sample = Sample(timestamps, self.settings, self.params, stats, self.grid)
-            if sample.is_valid():
-                samples.append(sample)
+        for ts in all_timestamps:
+            for member in self.settings.members:
+                sample = Sample(
+                    timestamps,
+                    n_inputs,
+                    self.settings,
+                    self.params,
+                    stats,
+                    self.grid,
+                    self.member,
+                )
+                if sample.is_valid():
+                    samples.append(sample)
 
         print(f"--> All {len(samples)} {self.period.name} samples are now defined")
         return samples
