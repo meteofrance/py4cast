@@ -49,7 +49,7 @@ This project started as a fork of neural-lam, a project by Joel Oskarsson, see [
 
 ## Overview
 
-* 7 neural network architectures : Half-Unet, U-Net, SegFormer, SwinUnetR, HiLam, GraphLam, UnetR++
+* Use anu neural network architectures available in [mfai](https://github.com/meteofrance/mfai?tab=readme-ov-file#neural-network-architectures)
 * 1 dataset with samples available on Huggingface : Titan
 * 2 training strategies : Scaled Auto-regressive steps, Differential Auto-regressive steps
 * 4 losses: Scaled RMSE, Scaled L1, Weighted MSE, Weighted L1
@@ -209,7 +209,7 @@ docker run \
         pip install -e . &&  \
         python bin/train.py \
             --dataset titan \
-            --model hilam \
+            --model HiLAM \
             --dataset_conf config/datasets/titan_full.json \
             --dev_mode \
             --no_log \
@@ -246,7 +246,7 @@ podman run \
         pip install -e . &&  \
         python bin/train.py \
             --dataset titan \
-            --model hilam \
+            --model HiLAM \
             --dataset_conf config/datasets/titan_full.json \
             --dev_mode \
             --no_log \
@@ -278,7 +278,7 @@ singularity exec \
         pip install -e . &&  \
         python bin/train.py \
             --dataset titan \
-            --model hilam \
+            --model HiLAM \
             --dataset_conf config/datasets/titan_full.json \
             --dev_mode \
             --no_log \
@@ -302,14 +302,14 @@ For now this works only for internal Météo-France users.
 ```bash
 runai gpu_play 4
 runai build
-runai exec_gpu python bin/train.py --dataset titan --model hilam
+runai exec_gpu python bin/train.py --dataset titan --model HiLAM
 ```
 
 2. Train using sbatch single node multi-GPUs
 
 ```bash
 export RUNAI_GRES="gpu:v100:4"
-runai sbatch python bin/train.py --dataset titan --model hilam
+runai sbatch python bin/train.py --dataset titan --model HiLAM
 ```
 
 3. Train using sbatch multi nodes multi GPUs
@@ -319,7 +319,7 @@ Here we use 2 nodes with 4 GPUs each.
 ```bash
 export RUNAI_SLURM_NNODES=2
 export RUNAI_GRES="gpu:v100:4"
-runai sbatch_multi_node python bin/train.py --dataset titan --model hilam
+runai sbatch_multi_node python bin/train.py --dataset titan --model HiLAM
 ```
 
 For the rest of the documentation, you must preprend each python command with `runai exec_gpu`.
@@ -334,7 +334,7 @@ Once your micromamba environment is setup, you should :
 
 A very simple training can be launch (on your current node)
 ```sh
-python bin/train.py  --dataset dummy --model halfunet --epochs 2
+python bin/train.py  --dataset dummy --model HalfUNet --epochs 2
 ```
 
 #### Example of script  to launch on gpu
@@ -356,7 +356,7 @@ source ~/.bashrc  # Be sure that all your environment variables are set
 conda activate py4cast # Activate your environment (installed by micromamba or conda)
 cd $PY4CAST_PATH # Go to Py4CAST (you can either add an environment variable or hard code it here).
 # Launch your favorite command.
-srun python bin/train.py --model halfunet --dataset dummy --epochs 2
+srun python bin/train.py --model HalfUNet --dataset dummy --epochs 2
 ```
 
 
@@ -384,13 +384,13 @@ python py4cast/datasets/titan/__init__.py
 To train on a dataset with its default settings just pass the name of the dataset (all lowercase) :
 
 ```bash
-python bin/train.py --dataset titan --model halfunet
+python bin/train.py --dataset titan --model HalfUNet
 ```
 
 You can override the dataset default configuration file:
 
 ```bash
-python bin/train.py --dataset smeagol --model halfunet --dataset_conf config/smeagoldev.json
+python bin/train.py --dataset smeagol --model HalfUNet --dataset_conf config/smeagoldev.json
 ```
 
 [Details on available datasets.](doc/features.md/#available-datasets)
@@ -402,15 +402,15 @@ python bin/train.py --dataset smeagol --model halfunet --dataset_conf config/sme
 To train on a dataset using a network with its default settings just pass the name of the architecture (all lowercase) as shown below:
 
 ```bash
-python bin/train.py --dataset smeagol --model hilam
+python bin/train.py --dataset smeagol --model HiLAM
 
-python bin/train.py --dataset smeagol --model halfunet
+python bin/train.py --dataset smeagol --model HalfUNet
 ```
 
 You can override some settings of the model using a json config file (here we increase the number of filter to 128 and use ghost modules):
 
 ```bash
-python bin/train.py --dataset smeagol --model halfunet --model_conf config/halfunet128_ghost.json
+python bin/train.py --dataset smeagol --model HalfUNet --model_conf config/halfunet128_ghost.json
 ```
 
 [Details on available neural networks.](doc/features.md/#available-pytorchs-architecture)
@@ -421,7 +421,7 @@ python bin/train.py --dataset smeagol --model halfunet --model_conf config/halfu
 You can choose a training strategy using the **--strategy STRATEGY_NAME** cli argument:
 
 ```bash
-python bin/train.py --dataset smeagol --model halfunet --strategy diff_ar
+python bin/train.py --dataset smeagol --model HalfUNet --strategy diff_ar
 ```
 
 [Details on available training strategies.](doc/features.md/#available-training-strategies)
