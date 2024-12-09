@@ -849,6 +849,7 @@ class SamplePreprocSettings:
     file_format: Literal["npy", "grib"] = "grib"
     members: Tuple[int] = (0,)
 
+
 # This namedtuple contains attributes that are used by the WeatherParam class
 # These attributes are retrieved from disk in any user-defined manner.
 # It is there to define the expected type of the retrieval function.
@@ -864,6 +865,7 @@ class WeatherParam:
     with all attributes used to retrieve and manipulate the parameter;
     Used in the construction of the Dataset object.
     """
+
     name: str
     level: int
     grid: Grid
@@ -1119,6 +1121,7 @@ class Sample:
             frame = self.plot_frame(item, step)
             frames.append(frame)
         gif.save(frames, str(save_path), duration=250)
+
 
 @dataclass(slots=True)
 class TorchDataloaderSettings:

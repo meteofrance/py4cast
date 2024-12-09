@@ -38,6 +38,7 @@ except ImportError:
 
 try:
     from .titan import TitanDataset
+
     registry["titan"] = (TitanDataset, default_config_root / "titan_full.json")
 
 except (ImportError, FileNotFoundError, ModuleNotFoundError):

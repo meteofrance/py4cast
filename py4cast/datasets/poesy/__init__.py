@@ -151,13 +151,13 @@ def _is_valid(dataset_name: str, params: List[Param], timestamps: Timestamps):
 
     return True
 
+
 def get_param_tensor(
     param: WeatherParam,
     stats: Stats,
     timestamps: Timestamps,
     settings: SamplePreprocSettings,
     terms: List,
-
     standardize: bool,
     member: int = 1,
 ) -> torch.tensor:
@@ -229,6 +229,7 @@ def generate_forcings(
     ]
 
     return lforcings
+
 
 class InferSample(Sample):
     """

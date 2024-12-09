@@ -123,7 +123,7 @@ def get_filepath(
 
 
 def process_sample_dataset(ds_name: str, date: dt.datetime, params: List[WeatherParam]):
-  """Saves each 2D parameter data of the given date as one NPY file."""
+    """Saves each 2D parameter data of the given date as one NPY file."""
     for param in params:
         dest_file = get_filepath(ds_name, param, date, "npy")
         dest_file.parent.mkdir(exist_ok=True)
@@ -166,7 +166,6 @@ def fit_to_grid(
     return resize(arr, param.grid.full_size, anti_aliasing=anti_aliasing)
 
 
-
 @lru_cache(maxsize=50)
 def read_grib(path_grib: Path) -> xr.Dataset:
     return xr.load_dataset(path_grib, engine="cfgrib", backend_kwargs={"indexpath": ""})
@@ -188,6 +187,7 @@ def load_data_grib(param: WeatherParam, path: Path) -> np.ndarray:
     else:
         arr = ds[param.grib_param].sel(isobaricInhPa=param.level).values
     return arr, lons, lats
+
 
 def generate_forcings(
     date: dt.datetime, output_terms: Tuple[float], grid: Grid
@@ -281,6 +281,7 @@ class Timestamps:
 
     # validity times are complete datetimes
     validity_times: List[dt.datetime]
+
 
 def get_param_tensor(
     param: WeatherParam,
@@ -485,7 +486,6 @@ class TitanDataset(DatasetABC, Dataset):
         param_list = get_param_list(conf, grid, load_param_info, get_weight_per_lvl)
 
         train_settings = SamplePreprocSettings(
-
             name, num_input_steps, num_pred_steps_train, **conf["settings"]
         )
         train_period = Period(**conf["periods"]["train"], name="train")
