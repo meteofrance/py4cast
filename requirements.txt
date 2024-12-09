@@ -6,7 +6,6 @@ networkx==3.3
 Cartopy==0.24.1
 tueplots==0.0.17
 cfgrib==0.9.14.1
-dataclasses-json==0.6.7
 xarray==2024.9.0
 argparse-dataclass==2.0.0
 tensorboard==2.17.1
@@ -14,20 +13,15 @@ typer==0.12.5
 netCDF4==1.7.1.post2
 tensorboard-plugin-profile==2.17.0
 torch-tb-profiler==0.4.3
-einops==0.8.0
 torchinfo==1.8.0
 tabulate==0.9.0
 pytest==8.3.3
 coverage==7.6.3
-onnx==1.17.0
-onnxruntime-gpu==1.19.2
-onnxscript==0.1.0.dev20241018
-monai==1.4.0
 gif==23.3.0
-scikit-image==0.24.0
 typer==0.12.5
 transformers==4.45.2
 torch-geometric==2.6.1
 tornado==6.4.1
 mlflow==2.17.2
-
+mfai @ git+https://github.com/meteofrance/mfai@e4bb757
+scikit-image==0.24.0

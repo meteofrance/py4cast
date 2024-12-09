@@ -1,29 +1,21 @@
+"""
+Python module to plug mfai models into py4cast
+and also register any plugin found in the PYTHONPATH.
+"""
+
 import importlib
 import pkgutil
 from pathlib import Path
 from typing import Any, Tuple, Union
 
-from py4cast.models.base import ModelABC
-
-from .nlam.models import GraphLAM, HiLAM, HiLAMParallel
-from .vision.conv import HalfUnet, Unet
-from .vision.transformers import Segformer, SwinUNETR
-from .vision.unetrpp import UNETRPP
+from mfai.torch.models import registry as mfai_registry
+from mfai.torch.models.base import ModelABC
 
 # Models MUST be added to the registry
 # in order to be used by the training script.
+# We init the registry with the models from mfai.
 registry = {}
-for kls in (
-    HalfUnet,
-    Unet,
-    GraphLAM,
-    HiLAM,
-    HiLAMParallel,
-    Segformer,
-    SwinUNETR,
-    UNETRPP,
-):
-    registry[kls.__name__.lower()] = kls
+registry.update(mfai_registry)
 
 
 PLUGIN_PREFIX = "py4cast_plugin_"
@@ -39,12 +31,18 @@ discovered_modules = {
 # Inspired from: https://packaging.python.org/en/latest/guides/creating-and-discovering-plugins
 for module_name, module in discovered_modules.items():
     for name, kls in module.__dict__.items():
-        if isinstance(kls, type) and issubclass(kls, ModelABC) and kls != ModelABC:
-            if kls.__name__.lower() in registry:
+        if (
+            isinstance(kls, type)
+            and issubclass(kls, ModelABC)
+            and kls != ModelABC
+            and kls.register
+        ):
+            if kls.__name__ in registry:
                 raise ValueError(
                     f"Model {kls.__name__} from plugin {module_name} already exists in the registry."
                 )
-            registry[kls.__name__.lower()] = kls
+            registry[kls.__name__] = kls
+all_nn_architectures = list(registry)
 
 
 def get_model_kls_and_settings(
@@ -86,8 +84,8 @@ def build_model_from_settings(
         model_kls(
             num_input_features,
             num_output_features,
-            model_settings,
             input_shape,
+            model_settings,
             *args,
             **kwargs,
         ),
