@@ -833,11 +833,13 @@ class Grid:
 
 
 @dataclass(slots=True)
-class Settings:
+class SamplePreprocSettings:
     """
     Main settings defining the timesteps of a data sample (regardless of parameters)
+    and additional preprocessing information
     that will be used during training/inference.
-    You can interact with these values by defining a `settings` field in the configuration json file.
+    Values can be modified by defining a `settings` field in the configuration json file.
+
     """
 
     dataset_name: str
@@ -847,8 +849,7 @@ class Settings:
     file_format: Literal["npy", "grib"] = "grib"
     members: Tuple[int] = (0,)
 
-
-# This namedtuple contains attributes that are used by the Param class
+# This namedtuple contains attributes that are used by the WeatherParam class
 # These attributes are retrieved from disk in any user-defined manner.
 # It is there to define the expected type of the retrieval function.
 ParamConfig = namedtuple(
@@ -857,7 +858,12 @@ ParamConfig = namedtuple(
 
 
 @dataclass(slots=True)
-class Param:
+class WeatherParam:
+    """
+    This class represent a single weather parameter (seen as a 2D field)
+    with all attributes used to retrieve and manipulate the parameter;
+    Used in the construction of the Dataset object.
+    """
     name: str
     level: int
     grid: Grid
@@ -865,6 +871,7 @@ class Param:
     # Parameter status :
     # input = forcings, output = diagnostic, input_output = classical weather var
     kind: Literal["input", "output", "input_output"]
+    # function to retrieve the weight given to the parameter in the loss, depending on the level
     get_weight_per_level: Callable[[int, str], [float]]
     level_type: str = field(init=False)
     long_name: str = field(init=False)
@@ -902,13 +909,15 @@ class Param:
 def get_param_list(
     conf: dict,
     grid: Grid,
+    # function to retrieve all parameters information about the dataset
     load_param_info: Callable[[str], ParamConfig],
+    # function to retrieve the weight given to the parameter in the loss
     get_weight_per_level: Callable[[str], float],
-) -> List[Param]:
+) -> List[WeatherParam]:
     param_list = []
     for name, values in conf["params"].items():
         for lvl in values["levels"]:
-            param = Param(
+            param = WeatherParam(
                 name=name,
                 level=lvl,
                 grid=grid,
@@ -1110,7 +1119,6 @@ class Sample:
             frame = self.plot_frame(item, step)
             frames.append(frame)
         gif.save(frames, str(save_path), duration=250)
-
 
 @dataclass(slots=True)
 class TorchDataloaderSettings:

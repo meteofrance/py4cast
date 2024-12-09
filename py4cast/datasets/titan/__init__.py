@@ -5,7 +5,7 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 from functools import cached_property, lru_cache
 from pathlib import Path
-from typing import Callable, Dict, List, Literal, Optional, Tuple, Union
+from typing import Callable, Dict, List, Literal, Tuple, Union
 
 import gif
 import matplotlib.pyplot as plt
@@ -24,13 +24,13 @@ from py4cast.datasets.base import (
     GridConfig,
     Item,
     NamedTensor,
-    Param,
     ParamConfig,
     Period,
     Sample,
-    Settings,
+    SamplePreprocSettings,
     Stats,
     TorchDataloaderSettings,
+    WeatherParam,
     collate_fn,
     get_param_list,
 )
@@ -98,13 +98,13 @@ def load_param_info(name: str) -> ParamConfig:
     return ParamConfig(unit, level_type, long_name, grid, grib_name, grib_param)
 
 
-def get_grid_coords(param: Param) -> List[int]:
+def get_grid_coords(param: WeatherParam) -> List[int]:
     return METADATA["GRIDS"][param.grid.name]["extent"]
 
 
 def get_filepath(
     ds_name: str,
-    param: Param,
+    param: WeatherParam,
     date: dt.datetime,
     file_format: Literal["npy", "grib"],
 ) -> Path:
@@ -122,8 +122,8 @@ def get_filepath(
         return npy_path / date.strftime(FORMATSTR) / filename
 
 
-def process_sample_dataset(ds_name: str, date: dt.datetime, params: List[Param]):
-    """Saves each 2D parameter data of the given date as one NPY file."""
+def process_sample_dataset(ds_name: str, date: dt.datetime, params: List[WeatherParam]):
+  """Saves each 2D parameter data of the given date as one NPY file."""
     for param in params:
         dest_file = get_filepath(ds_name, param, date, "npy")
         dest_file.parent.mkdir(exist_ok=True)
@@ -140,11 +140,11 @@ def process_sample_dataset(ds_name: str, date: dt.datetime, params: List[Param])
 
 
 def fit_to_grid(
-    param: Param,
+    param: WeatherParam,
     arr: np.ndarray,
     lons: np.ndarray,
     lats: np.ndarray,
-    get_grid_coords: Callable[[Param], List[str]],
+    get_grid_coords: Callable[[WeatherParam], List[str]],
 ) -> np.ndarray:
     # already on good grid, nothing to do:
     if param.grid.name == param.native_grid:
@@ -166,12 +166,18 @@ def fit_to_grid(
     return resize(arr, param.grid.full_size, anti_aliasing=anti_aliasing)
 
 
+
 @lru_cache(maxsize=50)
 def read_grib(path_grib: Path) -> xr.Dataset:
     return xr.load_dataset(path_grib, engine="cfgrib", backend_kwargs={"indexpath": ""})
 
 
-def load_data_grib(param: Param, path: Path) -> np.ndarray:
+@lru_cache(maxsize=50)
+def read_grib(path_grib: Path) -> xr.Dataset:
+    return xr.load_dataset(path_grib, engine="cfgrib", backend_kwargs={"indexpath": ""})
+
+
+def load_data_grib(param: WeatherParam, path: Path) -> np.ndarray:
     ds = read_grib(path)
     assert param.grib_param is not None
     level_type = ds[param.grib_param].attrs["GRIB_typeOfLevel"]
@@ -183,10 +189,35 @@ def load_data_grib(param: Param, path: Path) -> np.ndarray:
         arr = ds[param.grib_param].sel(isobaricInhPa=param.level).values
     return arr, lons, lats
 
+def generate_forcings(
+    date: dt.datetime, output_terms: Tuple[float], grid: Grid
+) -> List[NamedTensor]:
+    """
+    Generate all the forcing in this function.
+    Return a list of NamedTensor.
+    """
+    lforcings = []
+    time_forcing = NamedTensor(  # doy : day_of_year
+        feature_names=["cos_hour", "sin_hour", "cos_doy", "sin_doy"],
+        tensor=get_year_hour_forcing(date, output_terms).type(torch.float32),
+        names=["timestep", "features"],
+    )
+    solar_forcing = NamedTensor(
+        feature_names=["toa_radiation"],
+        tensor=generate_toa_radiation_forcing(
+            grid.lat, grid.lon, date, output_terms
+        ).type(torch.float32),
+        names=["timestep", "lat", "lon", "features"],
+    )
+    lforcings.append(time_forcing)
+    lforcings.append(solar_forcing)
+
+    return lforcings
+
 
 def load_data_from_disk(
     ds_name: str,
-    param: Param,
+    param: WeatherParam,
     date: dt.datetime,
     # the member parameter is not accessed if irrelevant
     member: int = 0,
@@ -211,7 +242,7 @@ def load_data_from_disk(
 
 def exists(
     ds_name: str,
-    param: Param,
+    param: WeatherParam,
     timestamps: Timestamps,
     file_format: Literal["npy", "grib"] = "grib",
 ) -> bool:
@@ -251,12 +282,11 @@ class Timestamps:
     # validity times are complete datetimes
     validity_times: List[dt.datetime]
 
-
 def get_param_tensor(
-    param: Param,
+    param: WeatherParam,
     stats: Stats,
     timestamps: Timestamps,
-    settings: Settings,
+    settings: SamplePreprocSettings,
     standardize: bool = True,
     member: int = 0,
 ) -> torch.tensor:
@@ -285,32 +315,6 @@ def get_param_tensor(
     return torch.from_numpy(arr)
 
 
-def generate_forcings(
-    date: dt.datetime, output_terms: Tuple[float], grid: Grid
-) -> List[NamedTensor]:
-    """
-    Generate all the forcing in this function.
-    Return a list of NamedTensor.
-    """
-    lforcings = []
-    time_forcing = NamedTensor(  # doy : day_of_year
-        feature_names=["cos_hour", "sin_hour", "cos_doy", "sin_doy"],
-        tensor=get_year_hour_forcing(date, output_terms).type(torch.float32),
-        names=["timestep", "features"],
-    )
-    solar_forcing = NamedTensor(
-        feature_names=["toa_radiation"],
-        tensor=generate_toa_radiation_forcing(
-            grid.lat, grid.lon, date, output_terms
-        ).type(torch.float32),
-        names=["timestep", "lat", "lon", "features"],
-    )
-    lforcings.append(time_forcing)
-    lforcings.append(solar_forcing)
-
-    return lforcings
-
-
 #############################################################
 #                            DATASET                        #
 #############################################################
@@ -330,8 +334,8 @@ class TitanDataset(DatasetABC, Dataset):
         name: str,
         grid: Grid,
         period: Period,
-        params: List[Param],
-        settings: Settings,
+        params: List[WeatherParam],
+        settings: SamplePreprocSettings,
     ):
         self.name = name
         self.grid = grid
@@ -480,13 +484,14 @@ class TitanDataset(DatasetABC, Dataset):
 
         param_list = get_param_list(conf, grid, load_param_info, get_weight_per_lvl)
 
-        train_settings = Settings(
+        train_settings = SamplePreprocSettings(
+
             name, num_input_steps, num_pred_steps_train, **conf["settings"]
         )
         train_period = Period(**conf["periods"]["train"], name="train")
         train_ds = TitanDataset(name, grid, train_period, param_list, train_settings)
 
-        valid_settings = Settings(
+        valid_settings = SamplePreprocSettings(
             name, num_input_steps, num_pred_steps_val_test, **conf["settings"]
         )
         valid_period = Period(**conf["periods"]["valid"], name="valid")

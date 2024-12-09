@@ -20,13 +20,13 @@ from py4cast.datasets.base import (
     GridConfig,
     Item,
     NamedTensor,
-    Param,
     ParamConfig,
     Period,
     Sample,
-    Settings,
+    SamplePreprocSettings,
     Stats,
     TorchDataloaderSettings,
+    WeatherParam,
     collate_fn,
     get_param_list,
 )
@@ -80,7 +80,7 @@ def load_grid_info(grid: Grid) -> GridConfig:
 #############################################################
 
 
-def get_filepath(ds_name: str, param: Param, date: dt.datetime) -> str:
+def get_filepath(ds_name: str, param: WeatherParam, date: dt.datetime) -> str:
     """
     Return the filename.
     """
@@ -103,7 +103,7 @@ def load_param_info(name: str) -> ParamConfig:
 
 
 def load_data(
-    ds_name: str, param: Param, date: dt.datetime, term: List, member: int
+    ds_name: str, param: WeatherParam, date: dt.datetime, term: List, member: int
 ) -> np.array:
     """
     date : Date of file.
@@ -118,7 +118,7 @@ def load_data(
     ]
 
 
-def exists(ds_name: str, param: Param, date: dt.datetime) -> bool:
+def exists(ds_name: str, param: WeatherParam, date: dt.datetime) -> bool:
     flist = get_filepath(ds_name, param, date)
     return flist.exists()
 
@@ -151,12 +151,13 @@ def _is_valid(dataset_name: str, params: List[Param], timestamps: Timestamps):
 
     return True
 
-
 def get_param_tensor(
-    param: Param,
+    param: WeatherParam,
     stats: Stats,
     timestamps: Timestamps,
-    settings: Settings,
+    settings: SamplePreprocSettings,
+    terms: List,
+
     standardize: bool,
     member: int = 1,
 ) -> torch.tensor:
@@ -229,7 +230,6 @@ def generate_forcings(
 
     return lforcings
 
-
 class InferSample(Sample):
     """
     Sample dedicated to inference. No outputs terms, only inputs.
@@ -241,7 +241,11 @@ class InferSample(Sample):
 
 class PoesyDataset(DatasetABC, Dataset):
     def __init__(
-        self, grid: Grid, period: Period, params: List[Param], settings: Settings
+        self,
+        grid: Grid,
+        period: Period,
+        params: List[WeatherParam],
+        settings: SamplePreprocSettings,
     ):
         self.grid = grid
         self.period = period
@@ -304,7 +308,6 @@ class PoesyDataset(DatasetABC, Dataset):
                 METADATA["TERMS"]["timestep"],
             )
         )
-
         samples = []
         num_total_steps = self.settings.num_input_steps + self.settings.num_pred_steps
         sample_by_date = len(all_terms) // num_total_steps
@@ -333,7 +336,6 @@ class PoesyDataset(DatasetABC, Dataset):
 
                     if samp.is_valid():
                         samples.append(samp)
-
         print(f"All {len(samples)} samples are now defined")
         return samples
 
@@ -424,7 +426,7 @@ class PoesyDataset(DatasetABC, Dataset):
             grid,
             train_period,
             param_list,
-            Settings(
+            SamplePreprocSettings(
                 dataset_name=fname.stem,
                 num_pred_steps=num_pred_steps_train,
                 num_input_steps=num_input_steps,
@@ -436,7 +438,7 @@ class PoesyDataset(DatasetABC, Dataset):
             grid,
             valid_period,
             param_list,
-            Settings(
+            SamplePreprocSettings(
                 dataset_name=fname.stem,
                 num_pred_steps=num_pred_steps_val_test,
                 num_input_steps=num_input_steps,
@@ -448,7 +450,7 @@ class PoesyDataset(DatasetABC, Dataset):
             grid,
             test_period,
             param_list,
-            Settings(
+            SamplePreprocSettings(
                 dataset_name=fname.stem,
                 num_pred_steps=num_pred_steps_val_test,
                 num_input_steps=num_input_steps,
@@ -660,7 +662,7 @@ class InferPoesyDataset(PoesyDataset):
             grid,
             inference_period,
             param_list,
-            Settings(
+            SamplePreprocSettings(
                 num_pred_steps=0,
                 num_input_steps=num_input_steps,
                 members=conf["members"],
