@@ -8,7 +8,7 @@ import warnings
 from abc import ABC, abstractclassmethod, abstractmethod, abstractproperty
 from collections import namedtuple
 from copy import deepcopy
-from dataclasses import fields
+from dataclasses import dataclass, field, fields
 from functools import cached_property
 from itertools import chain
 from pathlib import Path
