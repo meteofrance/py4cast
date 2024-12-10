@@ -211,7 +211,7 @@ def exists(
     timestamps: Timestamps,
     file_format: Literal["npy", "grib"] = "grib",
 ) -> bool:
-    for date in timestamps["validity_times"]:
+    for date in timestamps.validity_times:
         filepath = get_filepath(ds_name, param, date, file_format)
         if not filepath.exists():
             return False
@@ -239,7 +239,7 @@ def get_param_tensor(
     Unless specified, normalize the samples with parameter-specific constants
     returns a tensor
     """
-    dates = timestamps["validity_times"]
+    dates = timestamps.validity_times
     arrays = [
         load_data_from_disk(
             settings.dataset_name, param, date, member, settings.file_format
@@ -341,15 +341,15 @@ class TitanDataset(DatasetABC, Dataset):
         all_timestamps = []
         for date in tqdm.tqdm(self.period.date_list):
             for term in self.period.terms_list:
-                t0 = date + dt.timedelta(hours=term)
+                t0 = date + dt.timedelta(hours=int(term))
                 validity_times = [
                     t0 + dt.timedelta(hours=ts) for ts in sample_timesteps
                 ]
-                terms = [dt.timedelta(t + term) for t in sample_timesteps]
+                terms = [dt.timedelta(hours=int(t + term)) for t in sample_timesteps]
 
                 timestamps = Timestamps(
                     datetime=date,
-                    terms=terms,
+                    terms=np.array(terms),
                     validity_times=validity_times,
                 )
                 if valid_timestamp(n_inputs, timestamps):
@@ -359,14 +359,14 @@ class TitanDataset(DatasetABC, Dataset):
         for ts in all_timestamps:
             for member in self.settings.members:
                 sample = Sample(
-                    timestamps,
+                    ts,
                     self.settings,
                     self.params,
                     stats,
                     self.grid,
                     exists,
                     get_param_tensor,
-                    member
+                    member,
                 )
                 if sample.is_valid():
                     samples.append(sample)

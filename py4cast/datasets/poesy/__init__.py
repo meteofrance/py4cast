@@ -78,7 +78,12 @@ def load_grid_info(grid: Grid) -> GridConfig:
 #############################################################
 
 
-def get_filepath(ds_name: str, param: WeatherParam, date: dt.datetime, file_format: Optional[str]=None) -> str:
+def get_filepath(
+    ds_name: str,
+    param: WeatherParam,
+    date: dt.datetime,
+    file_format: Optional[str] = None,
+) -> str:
     """
     Return the filename.
     """
@@ -108,11 +113,10 @@ def load_data(
     term : Position of leadtimes in file.
     """
     data_array = np.load(get_filepath(ds_name, param, date), mmap_mode="r")
-    
     return data_array[
         param.grid.subdomain[0] : param.grid.subdomain[1],
         param.grid.subdomain[2] : param.grid.subdomain[3],
-        (term / dt.timedelta(hours = 1)).astype(int),
+        (term / dt.timedelta(hours=1)).astype(int) - 1,
         member,
     ]
 
@@ -123,7 +127,7 @@ def exists(
     timestamps: Timestamps,
     file_format: Literal["npy", "grib"] = "grib",
 ) -> bool:
-    
+
     filepath = get_filepath(ds_name, param, timestamps.datetime, file_format)
     if not filepath.exists():
         return False
@@ -133,8 +137,9 @@ def exists(
 def valid_timestamp(n_inputs: int, timestamps: Timestamps):
     limits = METADATA["TERMS"]
     for t in timestamps.terms:
-        if (t > dt.timedelta(hours = int(limits["end"]))) or (
-            t < dt.timedelta(hours = int(limits["start"]))
+
+        if (t > dt.timedelta(hours=int(limits["end"]))) or (
+            t < dt.timedelta(hours=int(limits["start"]))
         ):
             return False
     return True
@@ -298,9 +303,8 @@ class PoesyDataset(DatasetABC, Dataset):
         sample_timesteps = [
             step_duration * step for step in range(-n_inputs + 1, n_preds + 1)
         ]
+
         all_timestamps = []
-        print("period date list", len(self.period.date_list))
-        print("period term list", len(self.period.terms_list))
         for date in tqdm.tqdm(self.period.date_list):
             for term in self.period.terms_list:
                 t0 = date + dt.timedelta(hours=int(term))
@@ -316,24 +320,24 @@ class PoesyDataset(DatasetABC, Dataset):
                 )
                 if valid_timestamp(n_inputs, timestamps):
                     all_timestamps.append(timestamps)
-
         samples = []
         for ts in all_timestamps:
             for member in self.settings.members:
                 sample = Sample(
-                    timestamps,
+                    ts,
                     self.settings,
                     self.params,
                     stats,
                     self.grid,
                     exists,
                     get_param_tensor,
-                    member
+                    member,
                 )
                 if sample.is_valid():
                     samples.append(sample)
 
         print(f"--> All {len(samples)} {self.period.name} samples are now defined")
+
         return samples
 
     @cached_property

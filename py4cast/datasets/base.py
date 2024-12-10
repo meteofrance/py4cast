@@ -729,11 +729,7 @@ class Period:
 
     @property
     def terms_list(self) -> np.array:
-        return list(range(
-            self.term_start,
-            self.term_end + 1,
-            self.step_duration
-        ))
+        return np.arange(self.term_start, self.term_end + 1, self.step_duration)
 
     @property
     def date_list(self) -> np.array:
@@ -857,22 +853,23 @@ class Grid:
 
 
 def generate_forcings(
-    date: dt.datetime, output_terms: Tuple[float], grid: Grid
+    date: dt.datetime, output_terms: np.array, grid: Grid
 ) -> List[NamedTensor]:
     """
     Generate all the forcing in this function.
     Return a list of NamedTensor.
     """
     lforcings = []
+    float_terms = (output_terms / dt.timedelta(hours=1)).astype(float)
     time_forcing = NamedTensor(  # doy : day_of_year
         feature_names=["cos_hour", "sin_hour", "cos_doy", "sin_doy"],
-        tensor=get_year_hour_forcing(date, output_terms).type(torch.float32),
+        tensor=get_year_hour_forcing(date, float_terms).type(torch.float32),
         names=["timestep", "features"],
     )
     solar_forcing = NamedTensor(
         feature_names=["toa_radiation"],
         tensor=generate_toa_radiation_forcing(
-            grid.lat, grid.lon, date, output_terms
+            grid.lat, grid.lon, date, float_terms
         ).type(torch.float32),
         names=["timestep", "lat", "lon", "features"],
     )
@@ -989,6 +986,7 @@ def get_param_list(
 @dataclass(slots=True)
 class Sample:
     """Describes a sample"""
+
     timestamps: Timestamps
     settings: SamplePreprocSettings
     params: List[WeatherParam]
@@ -1014,7 +1012,7 @@ class Sample:
             self.timestamps.validity_times
         ):
             raise Exception("Length terms does not match inputs + outputs")
-        
+
         self.input_timestamps = Timestamps(
             self.timestamps.datetime,
             self.timestamps.terms[: self.settings.num_input_steps],
@@ -1032,7 +1030,10 @@ class Sample:
     def is_valid(self) -> bool:
         for param in self.params:
             if not self.exists(
-                self.settings.dataset_name, param, self.timestamps, self.settings.file_format
+                self.settings.dataset_name,
+                param,
+                self.timestamps,
+                self.settings.file_format,
             ):
                 return False
         return True
