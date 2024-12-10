@@ -33,7 +33,6 @@
         }
     }, 
     "settings":{
-        "step_duration": 1,
         "standardize": true,
         "file_format": "npy"
     },
