@@ -8,7 +8,7 @@ import warnings
 from abc import ABC, abstractclassmethod, abstractmethod, abstractproperty
 from collections import namedtuple
 from copy import deepcopy
-from dataclasses import dataclass, field, fields
+from dataclasses import fields
 from functools import cached_property
 from itertools import chain
 from pathlib import Path
@@ -1025,7 +1025,7 @@ class Sample:
         )
 
     def __repr__(self):
-        return f"Date t0 {self.timestamps.datetime}, input leadtimes {self.input_terms}, output leadtimes {self.output_terms}"
+        return f"Date {self.timestamps.datetime}, input terms {self.input_terms}, output terms {self.output_terms}"
 
     def is_valid(self) -> bool:
         for param in self.params:
