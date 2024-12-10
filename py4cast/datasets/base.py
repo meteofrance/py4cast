@@ -7,6 +7,7 @@ import datetime as dt
 import warnings
 from abc import ABC, abstractclassmethod, abstractmethod, abstractproperty
 from collections import namedtuple
+from copy import deepcopy
 from dataclasses import dataclass, field, fields
 from functools import cached_property
 from pathlib import Path
