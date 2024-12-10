@@ -16,6 +16,8 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, List, Literal, Tuple, Uni
 
 import cartopy
 import einops
+import gif
+import matplotlib.pyplot as plt
 import numpy as np
 import torch
 from tabulate import tabulate
@@ -26,6 +28,7 @@ from tqdm import tqdm
 if TYPE_CHECKING:
     from py4cast.plots import DomainInfo
 
+from py4cast.forcingutils import generate_toa_radiation_forcing, get_year_hour_forcing
 from py4cast.utils import RegisterFieldsMixin, torch_save
 
 
@@ -534,6 +537,28 @@ def collate_fn(items: List[Item]) -> ItemBatch:
 
 
 @dataclass
+class Timestamps:
+    """
+    Describe all timestamps in a sample.
+    It contains
+        datetime, terms, validity times
+
+    If n_inputs = 2, n_preds = 2, terms will be (-1, 0, 1, 2) * step_duration
+     where step_duration is typically an integer multiple of 1 hour
+
+    validity times correspond to the addition of terms to the reference datetime
+    """
+
+    # date and hour of the reference time
+    datetime: dt.datetime
+    # terms are time deltas vis-à-vis the last input time step.
+    terms: List[np.int64]
+
+    # validity times are complete datetimes
+    validity_times: List[dt.datetime]
+
+
+@dataclass
 class Statics(RegisterFieldsMixin):
     """
     Static fields of the dataset.
@@ -832,6 +857,32 @@ class Grid:
         return func(**self.projection_kwargs)
 
 
+def generate_forcings(
+    date: dt.datetime, output_terms: Tuple[float], grid: Grid
+) -> List[NamedTensor]:
+    """
+    Generate all the forcing in this function.
+    Return a list of NamedTensor.
+    """
+    lforcings = []
+    time_forcing = NamedTensor(  # doy : day_of_year
+        feature_names=["cos_hour", "sin_hour", "cos_doy", "sin_doy"],
+        tensor=get_year_hour_forcing(date, output_terms).type(torch.float32),
+        names=["timestep", "features"],
+    )
+    solar_forcing = NamedTensor(
+        feature_names=["toa_radiation"],
+        tensor=generate_toa_radiation_forcing(
+            grid.lat, grid.lon, date, output_terms
+        ).type(torch.float32),
+        names=["timestep", "lat", "lon", "features"],
+    )
+    lforcings.append(time_forcing)
+    lforcings.append(solar_forcing)
+
+    return lforcings
+
+
 @dataclass(slots=True)
 class SamplePreprocSettings:
     """
@@ -874,7 +925,7 @@ class WeatherParam:
     # input = forcings, output = diagnostic, input_output = classical weather var
     kind: Literal["input", "output", "input_output"]
     # function to retrieve the weight given to the parameter in the loss, depending on the level
-    get_weight_per_level: Callable[[int, str], [float]]
+    get_weight_per_level: Callable[[int, str], float]
     level_type: str = field(init=False)
     long_name: str = field(init=False)
     unit: str = field(init=False)
@@ -941,8 +992,8 @@ class Sample:
     """Describes a sample"""
 
     timestamps: Timestamps
-    settings: Settings
-    params: List[Param]
+    settings: SamplePreprocSettings
+    params: List[WeatherParam]
     stats: Stats
     grid: Grid
     exists: Callable[[Any], bool]
@@ -978,7 +1029,9 @@ class Sample:
 
     def is_valid(self) -> bool:
         for param in self.params:
-            if not exists(self.dataset_name, param, self.timestamps, file_format):
+            if not self.exists(
+                self.dataset_name, param, self.timestamps, self.settings.file_format
+            ):
                 return False
         return True
 
@@ -996,7 +1049,7 @@ class Sample:
             }
             if param.kind == "input":
                 # forcing is taken for every predicted step
-                tensor = get_param_tensor(
+                tensor = self.get_param_tensor(
                     param=param,
                     stats=self.stats,
                     timestamps=self.input_timestamps,
@@ -1007,7 +1060,7 @@ class Sample:
                 tmp_state = NamedTensor(tensor=tensor, **deepcopy(state_kwargs))
 
             elif param.kind == "output":
-                tensor = get_param_tensor(
+                tensor = self.get_param_tensor(
                     param=param,
                     stats=self.stats,
                     timestamps=self.output_timestamps,
@@ -1019,7 +1072,7 @@ class Sample:
                 loutputs.append(tmp_state)
 
             else:  # input_output
-                tensor = get_param_tensor(
+                tensor = self.get_param_tensor(
                     param=param,
                     stats=self.stats,
                     timestamps=self.timestamps,

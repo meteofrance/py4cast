@@ -1,14 +1,11 @@
 import datetime as dt
 import json
 import time
-from copy import deepcopy
 from dataclasses import dataclass, field
 from functools import cached_property, lru_cache
 from pathlib import Path
 from typing import Callable, Dict, List, Literal, Tuple, Union
 
-import gif
-import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import tqdm
@@ -29,6 +26,7 @@ from py4cast.datasets.base import (
     Sample,
     SamplePreprocSettings,
     Stats,
+    Timestamps,
     TorchDataloaderSettings,
     WeatherParam,
     collate_fn,
@@ -40,7 +38,6 @@ from py4cast.datasets.titan.settings import (
     METADATA,
     SCRATCH_PATH,
 )
-from py4cast.forcingutils import generate_toa_radiation_forcing, get_year_hour_forcing
 from py4cast.plots import DomainInfo
 from py4cast.utils import merge_dicts
 
@@ -171,11 +168,6 @@ def read_grib(path_grib: Path) -> xr.Dataset:
     return xr.load_dataset(path_grib, engine="cfgrib", backend_kwargs={"indexpath": ""})
 
 
-@lru_cache(maxsize=50)
-def read_grib(path_grib: Path) -> xr.Dataset:
-    return xr.load_dataset(path_grib, engine="cfgrib", backend_kwargs={"indexpath": ""})
-
-
 def load_data_grib(param: WeatherParam, path: Path) -> np.ndarray:
     ds = read_grib(path)
     assert param.grib_param is not None
@@ -187,32 +179,6 @@ def load_data_grib(param: WeatherParam, path: Path) -> np.ndarray:
     else:
         arr = ds[param.grib_param].sel(isobaricInhPa=param.level).values
     return arr, lons, lats
-
-
-def generate_forcings(
-    date: dt.datetime, output_terms: Tuple[float], grid: Grid
-) -> List[NamedTensor]:
-    """
-    Generate all the forcing in this function.
-    Return a list of NamedTensor.
-    """
-    lforcings = []
-    time_forcing = NamedTensor(  # doy : day_of_year
-        feature_names=["cos_hour", "sin_hour", "cos_doy", "sin_doy"],
-        tensor=get_year_hour_forcing(date, output_terms).type(torch.float32),
-        names=["timestep", "features"],
-    )
-    solar_forcing = NamedTensor(
-        feature_names=["toa_radiation"],
-        tensor=generate_toa_radiation_forcing(
-            grid.lat, grid.lon, date, output_terms
-        ).type(torch.float32),
-        names=["timestep", "lat", "lon", "features"],
-    )
-    lforcings.append(time_forcing)
-    lforcings.append(solar_forcing)
-
-    return lforcings
 
 
 def load_data_from_disk(
@@ -259,28 +225,6 @@ def valid_timestamp(n_inputs: int, timestamps: Timestamps) -> bool:
     if term_0 > np.timedelta64(23, "h"):
         return False
     return True
-
-
-@dataclass
-class Timestamps:
-    """
-    Describe all timestamps in a sample.
-    It contains
-        datetime, terms, validity times
-
-    If n_inputs = 2, n_preds = 2, terms will be (-1, 0, 1, 2) * step_duration
-     where step_duration is typically an integer multiple of 1 hour
-
-    validity times correspond to the addition of terms to the reference datetime
-    """
-
-    # date and hour of the reference time
-    datetime: dt.datetime
-    # terms are time deltas vis-à-vis the last input time step.
-    terms: List[np.int64]
-
-    # validity times are complete datetimes
-    validity_times: List[dt.datetime]
 
 
 def get_param_tensor(
@@ -402,14 +346,14 @@ class TitanDataset(DatasetABC, Dataset):
                 validity_times = [
                     t0 + dt.timedelta(hours=ts) for ts in sample_timesteps
                 ]
-                terms = [dt.timedelta(t + term) for t in all_timesteps if t]
+                terms = [dt.timedelta(t + term) for t in sample_timesteps]
 
                 timestamps = Timestamps(
                     datetime=date,
                     terms=terms,
                     validity_times=validity_times,
                 )
-                if valid_timestamp(n_input, timestamps):
+                if valid_timestamp(n_inputs, timestamps):
                     all_timestamps.append(timestamps)
 
         samples = []

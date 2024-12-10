@@ -2,8 +2,7 @@ import datetime as dt
 import json
 import time
 from argparse import ArgumentParser
-from copy import deepcopy
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from functools import cached_property
 from pathlib import Path
 from typing import Dict, List, Literal, Tuple, Union
@@ -18,13 +17,13 @@ from py4cast.datasets.base import (
     DatasetInfo,
     Grid,
     GridConfig,
-    Item,
     NamedTensor,
     ParamConfig,
     Period,
     Sample,
     SamplePreprocSettings,
     Stats,
+    Timestamps,
     TorchDataloaderSettings,
     WeatherParam,
     collate_fn,
@@ -123,32 +122,13 @@ def exists(ds_name: str, param: WeatherParam, date: dt.datetime) -> bool:
     return flist.exists()
 
 
-@dataclass
-class Timestamps:
-    """
-    Describe all timestamps in a sample. It contains datetime, validitytimes and terms
-    """
-
-    datetime: dt.datetime
-    terms: List[np.int64]
-    validity_times: List[dt.datetime]
-
-
-def _is_valid(dataset_name: str, params: List[Param], timestamps: Timestamps):
-    """
-    Check that all the files necessary for this samples exists.
-
-    Args:
-        dataset_name: name of dataset
-        param_list (List): List of parameters
-        timestamps (Timestamps): class which holds datetime, all_terms and validity times
-    Returns:
-    Boolean:  Whether the sample exists or not
-    """
-    for param in params:
-        if not exists(dataset_name, param, timestamps.datetime):
+def valid_timestamp(n_inputs: int, timestamps: Timestamps):
+    limits = METADATA["TERMS"]
+    for t in timestamps.terms:
+        if (t > dt.timedelta(limits["end"], "h")) or (
+            t < dt.timedelta(limits["start"], "h")
+        ):
             return False
-
     return True
 
 
@@ -157,7 +137,6 @@ def get_param_tensor(
     stats: Stats,
     timestamps: Timestamps,
     settings: SamplePreprocSettings,
-    terms: List,
     standardize: bool,
     member: int = 1,
 ) -> torch.tensor:
@@ -298,46 +277,52 @@ class PoesyDataset(DatasetABC, Dataset):
 
     @cached_property
     def sample_list(self):
-        """
-        Create a list of sample from information
-        """
-        print("Start forming samples")
-        all_terms = list(
-            np.arange(
-                METADATA["TERMS"]["start"],
-                METADATA["TERMS"]["end"],
-                METADATA["TERMS"]["timestep"],
-            )
+        """Creates the list of samples."""
+        print("Start creating samples...")
+        stats = self.stats if self.settings.standardize else None
+
+        n_inputs, n_preds, step_duration = (
+            self.settings.num_input_steps,
+            self.settings.num_pred_steps,
+            self.period.step_duration,
         )
+
+        sample_timesteps = [
+            step_duration * step for step in range(-n_inputs + 1, n_preds + 1)
+        ]
+        all_timestamps = []
+        for date in tqdm.tqdm(self.period.date_list):
+            for term in self.period.terms_list:
+                t0 = date + dt.timedelta(hours=term)
+                validity_times = [
+                    t0 + dt.timedelta(hours=ts) for ts in sample_timesteps
+                ]
+                terms = [dt.timedelta(t + term) for t in sample_timesteps]
+
+                timestamps = Timestamps(
+                    datetime=date,
+                    terms=terms,
+                    validity_times=validity_times,
+                )
+                if valid_timestamp(n_inputs, timestamps):
+                    all_timestamps.append(timestamps)
+
         samples = []
-        num_total_steps = self.settings.num_input_steps + self.settings.num_pred_steps
-        sample_by_date = len(all_terms) // num_total_steps
-
-        for date in self.period.date_list:
+        for ts in all_timestamps:
             for member in self.settings.members:
-                for idx_sample in range(0, sample_by_date):
-                    terms = all_terms[
-                        idx_sample * num_total_steps : idx_sample * num_total_steps
-                        + num_total_steps
-                    ]
-                    validity_times = [
-                        date + dt.timedelta(hours=int(term)) for term in terms
-                    ]
-                    timestamps = Timestamps(
-                        datetime=date, terms=terms, validity_times=validity_times
-                    )
-                    samp = Sample(
-                        timestamps=timestamps,
-                        member=member,
-                        settings=self.settings,
-                        stats=self.stats,
-                        grid=self.grid,
-                        params=self.params,
-                    )
+                sample = Sample(
+                    timestamps,
+                    n_inputs,
+                    self.settings,
+                    self.params,
+                    stats,
+                    self.grid,
+                    self.member,
+                )
+                if sample.is_valid():
+                    samples.append(sample)
 
-                    if samp.is_valid():
-                        samples.append(samp)
-        print(f"All {len(samples)} samples are now defined")
+        print(f"--> All {len(samples)} {self.period.name} samples are now defined")
         return samples
 
     @cached_property
