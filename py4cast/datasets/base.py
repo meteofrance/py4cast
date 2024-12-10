@@ -551,8 +551,8 @@ class Timestamps:
 
     # date and hour of the reference time
     datetime: dt.datetime
-    # terms are time deltas vis-à-vis the last input time step.
-    terms: List[np.int64]
+    # terms are time deltas vis-à-vis the reference input time step.
+    terms: np.array
 
     # validity times are complete datetimes
     validity_times: List[dt.datetime]
@@ -724,17 +724,16 @@ class Period:
     term_end: int = 23
 
     def __post_init__(self):
-        self.start = dt.datetime.strptime(str(self.start), "%Y%m%d%H")
-        self.end = dt.datetime.strptime(str(self.end), "%Y%m%d%H")
+        self.start = np.datetime64(dt.datetime.strptime(str(self.start), "%Y%m%d%H"))
+        self.end = np.datetime64(dt.datetime.strptime(str(self.end), "%Y%m%d%H"))
 
     @property
     def terms_list(self) -> np.array:
-        return np.arange(
+        return list(range(
             self.term_start,
-            self.term_end + np.timedelta64(1, "h"),
-            np.timedelta64(self.step_duration, "h"),
-            dtype="datetime64[s]",
-        )
+            self.term_end + 1,
+            self.step_duration
+        ))
 
     @property
     def date_list(self) -> np.array:
@@ -743,8 +742,8 @@ class Period:
         """
         return np.arange(
             self.start,
-            self.end + np.timedelta64(1, "d"),
-            np.timedelta64(1, "d"),
+            self.end + np.timedelta64(1, "D"),
+            np.timedelta64(1, "D"),
             dtype="datetime64[s]",
         ).tolist()
 
@@ -990,7 +989,6 @@ def get_param_list(
 @dataclass(slots=True)
 class Sample:
     """Describes a sample"""
-
     timestamps: Timestamps
     settings: SamplePreprocSettings
     params: List[WeatherParam]
@@ -999,6 +997,9 @@ class Sample:
     exists: Callable[[Any], bool]
     get_param_tensor: Callable[[Any], torch.tensor]
     member: int = 0
+
+    input_timestamps: Timestamps = field(default=None)
+    output_timestamps: Timestamps = field(default=None)
 
     def __post_init__(self):
         """Setups time variables to be able to define a sample.
@@ -1009,10 +1010,11 @@ class Sample:
         all_dates = [24/10/22 21:00,  24/10/23 00:00, 24/10/23 03:00, 24/10/23 06:00, 24/10/23 09:00]
         """
 
-        if self.settings.num_input_steps + self.settings.num_output_steps != len(
+        if self.settings.num_input_steps + self.settings.num_pred_steps != len(
             self.timestamps.validity_times
         ):
             raise Exception("Length terms does not match inputs + outputs")
+        
         self.input_timestamps = Timestamps(
             self.timestamps.datetime,
             self.timestamps.terms[: self.settings.num_input_steps],
@@ -1030,7 +1032,7 @@ class Sample:
     def is_valid(self) -> bool:
         for param in self.params:
             if not self.exists(
-                self.dataset_name, param, self.timestamps, self.settings.file_format
+                self.settings.dataset_name, param, self.timestamps, self.settings.file_format
             ):
                 return False
         return True

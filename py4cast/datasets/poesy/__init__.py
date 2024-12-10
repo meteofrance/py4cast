@@ -4,7 +4,7 @@ import time
 from argparse import ArgumentParser
 from functools import cached_property
 from pathlib import Path
-from typing import Dict, List, Literal, Tuple, Union
+from typing import Dict, List, Literal, Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -78,7 +78,7 @@ def load_grid_info(grid: Grid) -> GridConfig:
 #############################################################
 
 
-def get_filepath(ds_name: str, param: WeatherParam, date: dt.datetime) -> str:
+def get_filepath(ds_name: str, param: WeatherParam, date: dt.datetime, file_format: Optional[str]=None) -> str:
     """
     Return the filename.
     """
@@ -101,31 +101,40 @@ def load_param_info(name: str) -> ParamConfig:
 
 
 def load_data(
-    ds_name: str, param: WeatherParam, date: dt.datetime, term: List, member: int
+    ds_name: str, param: WeatherParam, date: dt.datetime, term: np.array, member: int
 ) -> np.array:
     """
     date : Date of file.
     term : Position of leadtimes in file.
     """
     data_array = np.load(get_filepath(ds_name, param, date), mmap_mode="r")
+    
     return data_array[
         param.grid.subdomain[0] : param.grid.subdomain[1],
         param.grid.subdomain[2] : param.grid.subdomain[3],
-        term,
+        (term / dt.timedelta(hours = 1)).astype(int),
         member,
     ]
 
 
-def exists(ds_name: str, param: WeatherParam, date: dt.datetime) -> bool:
-    flist = get_filepath(ds_name, param, date)
-    return flist.exists()
+def exists(
+    ds_name: str,
+    param: WeatherParam,
+    timestamps: Timestamps,
+    file_format: Literal["npy", "grib"] = "grib",
+) -> bool:
+    
+    filepath = get_filepath(ds_name, param, timestamps.datetime, file_format)
+    if not filepath.exists():
+        return False
+    return True
 
 
 def valid_timestamp(n_inputs: int, timestamps: Timestamps):
     limits = METADATA["TERMS"]
     for t in timestamps.terms:
-        if (t > dt.timedelta(limits["end"], "h")) or (
-            t < dt.timedelta(limits["start"], "h")
+        if (t > dt.timedelta(hours = int(limits["end"]))) or (
+            t < dt.timedelta(hours = int(limits["start"]))
         ):
             return False
     return True
@@ -290,17 +299,19 @@ class PoesyDataset(DatasetABC, Dataset):
             step_duration * step for step in range(-n_inputs + 1, n_preds + 1)
         ]
         all_timestamps = []
+        print("period date list", len(self.period.date_list))
+        print("period term list", len(self.period.terms_list))
         for date in tqdm.tqdm(self.period.date_list):
             for term in self.period.terms_list:
-                t0 = date + dt.timedelta(hours=term)
+                t0 = date + dt.timedelta(hours=int(term))
                 validity_times = [
-                    t0 + dt.timedelta(hours=ts) for ts in sample_timesteps
+                    t0 + dt.timedelta(hours=int(ts)) for ts in sample_timesteps
                 ]
-                terms = [dt.timedelta(t + term) for t in sample_timesteps]
+                terms = [dt.timedelta(hours=int(t + term)) for t in sample_timesteps]
 
                 timestamps = Timestamps(
                     datetime=date,
-                    terms=terms,
+                    terms=np.array(terms),
                     validity_times=validity_times,
                 )
                 if valid_timestamp(n_inputs, timestamps):
@@ -311,12 +322,13 @@ class PoesyDataset(DatasetABC, Dataset):
             for member in self.settings.members:
                 sample = Sample(
                     timestamps,
-                    n_inputs,
                     self.settings,
                     self.params,
                     stats,
                     self.grid,
-                    self.member,
+                    exists,
+                    get_param_tensor,
+                    member
                 )
                 if sample.is_valid():
                     samples.append(sample)

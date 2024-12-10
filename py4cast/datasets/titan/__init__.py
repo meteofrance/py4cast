@@ -360,12 +360,13 @@ class TitanDataset(DatasetABC, Dataset):
             for member in self.settings.members:
                 sample = Sample(
                     timestamps,
-                    n_inputs,
                     self.settings,
                     self.params,
                     stats,
                     self.grid,
-                    self.member,
+                    exists,
+                    get_param_tensor,
+                    member
                 )
                 if sample.is_valid():
                     samples.append(sample)
