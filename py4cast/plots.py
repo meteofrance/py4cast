@@ -13,13 +13,13 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 from PIL import Image
+from torchmetrics import Metric
 from tueplots import bundles, figsizes
 
 if TYPE_CHECKING:
     from py4cast.lightning import AutoRegressiveLightning
 
-from py4cast.datasets.base import NamedTensor
-from py4cast.losses import Py4CastLoss
+from mfai.torch.namedtensor import NamedTensor
 
 
 @dataclass(slots=True)
@@ -489,7 +489,7 @@ class StateErrorPlot(Plotter):
 
     def __init__(
         self,
-        metrics: Dict[str, Py4CastLoss],
+        metrics: Dict[str, Metric],
         prefix: str = "Test",
         save_path: Path = None,
     ):

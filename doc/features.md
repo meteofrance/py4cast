@@ -11,16 +11,7 @@
 
 ## Available PyTorch's architectures
 
-Currently we support the following neural network architectures:
-
-| Model  | Research Paper  | Input Shape    | Notes  | Maintainer(s) |
-| :---:   | :---: | :---: | :---: | :---: |
-| [halfunet](../py4cast/models/vision/conv.py#L68) | [researchgate link](https://www.researchgate.net/publication/361186968_Half-UNet_A_Simplified_U-Net_Architecture_for_Medical_Image_Segmentation) | (Batch, Height, Width, features)   | In prod/oper on [Espresso](https://www.mdpi.com/2674-0494/2/4/25) V2 with 128 filters and standard conv blocks instead of ghost |  Frank Guibert |
-| [unet](../py4cast/models/vision/conv.py#L262) | [arxiv link](https://arxiv.org/pdf/1505.04597.pdf) | (Batch, Height, Width, features)   | Vanilla U-Net |  Sara Akodad / Frank Guibert |
-| [segformer](../py4cast/models/vision/transformers.py#L216) | [arxiv link](https://arxiv.org/abs/2105.15203)   | (Batch, Height, Width, features) | On par with u-net like on Deepsyg (MF internal), added an upsampling stage. Adapted from [Lucidrains' github](https://github.com/lucidrains/segformer-pytorch) |  Frank Guibert |
-| [swinunetr](../py4cast/models/vision/transformers.py#L335) | [arxiv link](https://arxiv.org/abs/2201.01266)   | (Batch, Height, Width, features) | 2D Swin  Unet transformer (Pangu and archweather uses customised 3D versions of Swin Transformers). Plugged in from [MONAI](https://github.com/Project-MONAI/MONAI/). The decoders have been modified to use Bilinear2D + Conv2d instead of Conv2dTranspose to remove artefacts/checkerboard effects |  Frank Guibert |
-| [hilam](../py4cast/models/nlam/models.py#L754), graphlam | [arxiv link](https://arxiv.org/abs/2309.17370)  | (Batch, graph_node_id, features)   | Imported and adapted from [Joel's github](https://github.com/joeloskarsson/neural-lam) |  Vincent Chabot/Frank Guibert |
-| [unetrpp](../py4cast/models/vision/unetrpp.py#L1) | [arxiv link](https://arxiv.org/abs/2212.04497)  | (Batch, features, Height, Width) or  (Batch, features, Height, Width, Depth) | Vision transformer with a reduced GFLOPS footprint adapted from [author's github](https://github.com/Amshaker/unetr_plus_plus). Modified to work both with 2d and 3d inputs. Changed Upsampling to use linear upsampling. Made stem layer downsampling rate a parameter. Add an option to use torch's scaled_dot_product_attention (to allow using flash_attention) for Channel Attention in the EPA class. Make the spatial attention proj_size tunable. | Frank Guibert |
+Currently we support the neural network architectures available in our [mfai Library](https://github.com/meteofrance/mfai)
 
 ## Available datasets
 

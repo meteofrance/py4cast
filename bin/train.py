@@ -67,7 +67,7 @@ parser.add_argument(
 parser.add_argument(
     "--model",
     type=str,
-    default="halfunet",
+    default="UNETRPP",
     help="Neural Network architecture to train",
     choices=model_registry.keys(),
 )
