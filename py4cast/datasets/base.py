@@ -723,9 +723,9 @@ class Period:
     # last term (= time delta wrt to a date start) that is admissible
     term_end: int = 23
 
-    def __post_init__(self, start: int, end: int):
-        self.start = dt.datetime.strptime(str(start), "%Y%m%d%H")
-        self.end = dt.datetime.strptime(str(end), "%Y%m%d%H")
+    def __post_init__(self):
+        self.start = dt.datetime.strptime(str(self.start), "%Y%m%d%H")
+        self.end = dt.datetime.strptime(str(self.end), "%Y%m%d%H")
 
     @property
     def terms_list(self) -> np.array:
