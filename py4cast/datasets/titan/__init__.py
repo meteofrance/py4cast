@@ -120,8 +120,8 @@ class TitanAccessor(DataAccessor):
         str_subdomain = "-".join([str(i) for i in grid.subdomain])
         subdataset_name = f"{name}_{grid.name}_{str_subdomain}"
         return SCRATCH_PATH / "subdatasets" / subdataset_name
-     
-   def load_data_from_disk(
+
+    def load_data_from_disk(
         self,
         ds_name: str,
         param: WeatherParam,
@@ -145,7 +145,7 @@ class TitanAccessor(DataAccessor):
         if file_format == "grib":
             arr = arr[::-1]
         return arr  # invert latitude
-     
+
     def get_param_tensor(
         self,
         param: WeatherParam,
@@ -178,8 +178,8 @@ class TitanAccessor(DataAccessor):
             std = np.asarray(stats[name]["std"])
             arr = (arr - means) / std
         return torch.from_numpy(arr)
-      
-     def exists(
+
+    def exists(
         self,
         ds_name: str,
         param: WeatherParam,
@@ -191,7 +191,6 @@ class TitanAccessor(DataAccessor):
             if not filepath.exists():
                 return False
         return True
-
 
     def valid_timestamp(n_inputs: int, timestamps: Timestamps) -> bool:
         """
@@ -206,9 +205,11 @@ class TitanAccessor(DataAccessor):
             return False
         return True
 
+
 ############################################################
 #                   HELPER FUNCTIONS for TITAN             #
 ############################################################
+
 
 def fit_to_grid(
     param: WeatherParam,
@@ -254,6 +255,7 @@ def load_data_grib(param: WeatherParam, path: Path) -> np.ndarray:
         arr = ds[param.grib_param].sel(isobaricInhPa=param.level).values
     return arr, lons, lats
 
+
 #############################################################
 #                            DATASET                        #
 #############################################################
@@ -271,7 +273,7 @@ class TitanDataset(DatasetABC):
         settings: SamplePreprocSettings,
     ):
         super().__init__(self, name, grid, period, params, settings, TitanAccessor)
-        
+
     @cached_property
     def sample_list(self):
         """Creates the list of samples."""

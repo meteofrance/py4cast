@@ -36,11 +36,14 @@ from py4cast.plots import DomainInfo
 from py4cast.settings import CACHE_DIR
 from py4cast.utils import merge_dicts
 
+
 class PoesyAccessor(DataAccessor):
 
+    @staticmethod
     def get_dataset_path(name: str, grid: Grid) -> Path:
         return CACHE_DIR / str(name)
 
+    @staticmethod
     def get_weight_per_level(
         level: float,
         level_type: Literal["isobaricInhPa", "heightAboveGround", "surface", "meanSea"],
@@ -54,6 +57,7 @@ class PoesyAccessor(DataAccessor):
         else:
             raise Exception(f"unknown level_type:{level_type}")
 
+    @staticmethod
     def load_grid_info(grid: Grid) -> GridConfig:
         geopotential = np.load(SCRATCH_PATH / OROGRAPHY_FNAME)
         latlon = np.load(SCRATCH_PATH / LATLON_FNAME)
@@ -63,6 +67,7 @@ class PoesyAccessor(DataAccessor):
         landsea_mask = np.where(geopotential > 0, 1.0, 0.0).astype(np.float32)
         return GridConfig(full_size, latitude, longitude, geopotential, landsea_mask)
 
+    @staticmethod
     def load_param_info(name: str) -> ParamConfig:
         info = METADATA["WEATHER_PARAMS"][name]
         unit = info["unit"]
@@ -73,9 +78,11 @@ class PoesyAccessor(DataAccessor):
         grib_param = None
         return ParamConfig(unit, level_type, long_name, grid, grib_name, grib_param)
 
+    @staticmethod
     def get_grid_coords(param: Param) -> List[float]:
         raise NotImplementedError("Poesy does not require get_grid_coords")
 
+    @staticmethod
     def get_filepath(
         ds_name: str,
         param: WeatherParam,
@@ -97,8 +104,8 @@ class PoesyAccessor(DataAccessor):
         param: WeatherParam,
         date: dt.datetime,
         term: np.array,
-        member: int
-        file_format: str = "npy", 
+        member: int,
+        file_format: str = "npy",
     ) -> np.array:
         """
         date : Date of file.
@@ -125,7 +132,6 @@ class PoesyAccessor(DataAccessor):
             return False
         return True
 
-
     def valid_timestamp(n_inputs: int, timestamps: Timestamps):
         """
         Verification function called after the creation of each timestamps.
@@ -141,7 +147,6 @@ class PoesyAccessor(DataAccessor):
             ):
                 return False
         return True
-
 
     def get_param_tensor(
         self,
@@ -174,6 +179,7 @@ class PoesyAccessor(DataAccessor):
 
         # Define which value is considered invalid
         tensor_data = torch.from_numpy(array)
+
 
 class InferSample(Sample):
     """
@@ -241,6 +247,7 @@ class PoesyDataset(DatasetABC):
         print(f"--> All {len(samples)} {self.period.name} samples are now defined")
 
         return samples
+
 
 class InferPoesyDataset(PoesyDataset):
     """

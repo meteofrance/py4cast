@@ -25,6 +25,7 @@ from tqdm import tqdm
 
 from py4cast.datasets.access import (
     DataAccessor,
+    WeatherParam,
     Grid,
     Param,
     ParamConfig,
@@ -34,7 +35,7 @@ from py4cast.datasets.access import (
 )
 from py4cast.forcingutils import generate_toa_radiation_forcing, get_year_hour_forcing
 from py4cast.plots import DomainInfo
-from py4cast.utils import RegisterFieldsMixin, torch_save
+from py4cast.utils import RegisterFieldsMixin
 
 
 @dataclass(slots=True)
@@ -389,6 +390,7 @@ class Period:
             np.timedelta64(1, "D"),
             dtype="datetime64[s]",
         ).tolist()
+
 
 def get_param_list(
     conf: dict,
