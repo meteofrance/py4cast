@@ -169,7 +169,7 @@ ParamConfig = namedtuple(
 
 
 @dataclass(slots=True)
-class Param:
+class WeatherParam:
     name: str
     level: int
     grid: Grid
@@ -299,7 +299,7 @@ class DataAccessor(ABC):
         pass
 
     @abstractmethod
-    def get_grid_coords(param: Param) -> List[float]:
+    def get_grid_coords(param: WeatherParam) -> List[float]:
         """
         Get the extent of the grid related to a given parameter
         (min and max for latitude (2 first positions) and longitude (positions 3 and 4))
@@ -318,7 +318,7 @@ class DataAccessor(ABC):
     @abstractmethod
     def get_filepath(
         dataset_name: str,
-        param: Param,
+        param: WeatherParam,
         date: dt.datetime,
         file_format: Literal["npy", "grib"],
     ) -> Path:
@@ -330,7 +330,7 @@ class DataAccessor(ABC):
     def exists(
         self,
         ds_name: str,
-        param: Param,
+        param: WeatherParam,
         date: dt.datetime,
         file_format: Literal["npy", "grib"] = "npy",
     ) -> bool:
@@ -341,7 +341,7 @@ class DataAccessor(ABC):
     def load_data_from_disk(
         self,
         dataset_name: str,  # name of the dataset or dataset version
-        param: Param,  # specific parameter (2D field associated to a grid)
+        param: WeatherParam,  # specific parameter (2D field associated to a grid)
         date: dt.datetime,  # specific timestamp at which to load the field
         members: Optional(
             Tuple[int]
@@ -357,7 +357,7 @@ class DataAccessor(ABC):
     def get_param_tensor(
         self,
         dataset_name: str,  # name of the dataset or dataset version
-        param: Param,  # specific parameter (2D field associated to a grid)
+        param: WeatherParam,  # specific parameter (2D field associated to a grid)
         stats: Stats,  # Statistical constants (mean, standard deviation, min or max to normalize the given field)
         date: dt.datetime,  # time stamp for date
         terms: List,  # time stamp for lead times

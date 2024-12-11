@@ -1,10 +1,9 @@
 import datetime as dt
 import json
-import time
 from argparse import ArgumentParser
 from functools import cached_property
 from pathlib import Path
-from typing import Dict, List, Literal, Optional, Tuple, Union
+from typing import Dict, List, Literal, Tuple, Union
 
 import numpy as np
 import torch
@@ -15,26 +14,22 @@ from py4cast.datasets.access import (
     Grid,
     GridConfig,
     ParamConfig,
-    Period,
     Sample,
     SamplePreprocSettings,
+    Settings,
     Stats,
     Timestamps,
-    TorchDataloaderSettings,
     WeatherParam,
-    collate_fn,
     get_param_list,
 )
-from py4cast.datasets.base import DatasetABC, Item, NamedTensor, Period, get_param_list
+from py4cast.datasets.base import DatasetABC, Period
 from py4cast.datasets.poesy.settings import (
     LATLON_FNAME,
     METADATA,
     OROGRAPHY_FNAME,
     SCRATCH_PATH,
 )
-from py4cast.plots import DomainInfo
 from py4cast.settings import CACHE_DIR
-from py4cast.utils import merge_dicts
 
 
 class PoesyAccessor(DataAccessor):
@@ -79,7 +74,7 @@ class PoesyAccessor(DataAccessor):
         return ParamConfig(unit, level_type, long_name, grid, grib_name, grib_param)
 
     @staticmethod
-    def get_grid_coords(param: Param) -> List[float]:
+    def get_grid_coords(param: WeatherParam) -> List[float]:
         raise NotImplementedError("Poesy does not require get_grid_coords")
 
     @staticmethod
@@ -180,6 +175,8 @@ class PoesyAccessor(DataAccessor):
         # Define which value is considered invalid
         tensor_data = torch.from_numpy(array)
 
+        return tensor_data
+
 
 class InferSample(Sample):
     """
@@ -192,7 +189,12 @@ class InferSample(Sample):
 
 class PoesyDataset(DatasetABC):
     def __init__(
-        self, name, grid: Grid, period: Period, params: List[Param], settings: Settings
+        self,
+        name,
+        grid: Grid,
+        period: Period,
+        params: List[WeatherParam],
+        settings: Settings,
     ):
         super().__init__(name, grid, period, params, settings, accessor=PoesyAccessor)
 
@@ -226,7 +228,7 @@ class PoesyDataset(DatasetABC):
                     terms=np.array(terms),
                     validity_times=validity_times,
                 )
-                if valid_timestamp(n_inputs, timestamps):
+                if self.valid_timestamp(n_inputs, timestamps):
                     all_timestamps.append(timestamps)
         samples = []
         for ts in all_timestamps:
@@ -237,8 +239,8 @@ class PoesyDataset(DatasetABC):
                     self.params,
                     stats,
                     self.grid,
-                    exists,
-                    get_param_tensor,
+                    self.exists,
+                    self.get_param_tensor,
                     member,
                 )
                 if sample.is_valid():
@@ -325,7 +327,7 @@ class InferPoesyDataset(PoesyDataset):
                 print(conf["periods"]["test"])
         conf["grid"]["load_grid_info_func"] = load_grid_info
         grid = Grid(**conf["grid"])
-        param_list = get_param_list(conf, grid, load_param_info, get_weight)
+        param_list = get_param_list(conf, grid, load_param_info, get_weight_per_level)
         inference_period = Period(**conf["periods"]["test"], name="infer")
 
         ds = InferPoesyDataset(

@@ -1,13 +1,11 @@
-import datetime as dt
+import json
+import time
 from pathlib import Path
-from typing import List
-
+import tqdm
 from typer import Typer
 
 from py4cast.datasets import compute_dataset_stats as cds
-from py4cast.datasets.access import Param
-from py4cast.datasets.base import get_param_list
-from py4cast.datasets.poesy import TitanDataset
+from py4cast.datasets.poesy import PoesyDataset
 from py4cast.datasets.poesy.settings import DEFAULT_CONFIG
 
 app = Typer()
@@ -29,7 +27,7 @@ def prepare(dataset: PoesyDataset, path_config: Path):
         num_pred_steps_train=1,
         num_pred_steps_val_test=1,
     )
-    compute_parameters_stats(PoesyDataset)
+    cds.compute_parameters_stats(PoesyDataset)
 
     print("Computing time stats on each parameters, between 2 timesteps...")
     conf["settings"]["standardize"] = True
@@ -39,7 +37,7 @@ def prepare(dataset: PoesyDataset, path_config: Path):
         num_pred_steps_train=1,
         num_pred_steps_val_test=1,
     )
-    compute_time_step_stats(PoesyDataset)
+    cds.compute_time_step_stats(PoesyDataset)
 
     return train_ds
 
@@ -69,11 +67,13 @@ def plot(path_config: Path = DEFAULT_CONFIG):
 @app.command()
 def speedtest(path_config: Path = DEFAULT_CONFIG, n_iter: int = 5):
     print("Speed test:")
+    train_ds, _, _ = PoesyDataset.from_json(path_config, 2, 1, 5)
+    data_iter = iter(train_ds.torch_dataloader())
     start_time = time.time()
     for i in tqdm.trange(n_iter, desc="Loading samples"):
         _ = next(data_iter)
     delta = time.time() - start_time
-    speed = args.n_iter / delta
+    speed = n_iter / delta
     print(f"Loading speed: {round(speed, 3)} sample(s)/sec")
 
 

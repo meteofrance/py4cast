@@ -1,7 +1,11 @@
 import datetime as dt
+import json
+import time
 from pathlib import Path
 from typing import List
 
+import numpy as np
+import tqdm
 from typer import Typer
 
 from py4cast.datasets import compute_dataset_stats as cds
@@ -18,7 +22,7 @@ def process_sample_dataset(
 ):
     """Saves each 2D parameter data of the given date as one NPY file."""
     for param in params:
-        dest_file = get_filepath(dataset.name, param, date, file_format="npy")
+        dest_file = dataset.get_filepath(dataset.name, param, date, file_format="npy")
         dest_file.parent.mkdir(exist_ok=True)
         if not dest_file.exists():
             try:
@@ -72,7 +76,10 @@ def prepare(
     if convert_grib2npy:
         print("Converting gribs to npy...")
         param_list = get_param_list(
-            conf, train_ds.grid, load_param_info, get_weight_per_lvl
+            conf,
+            train_ds.grid,
+            TitanDataset.load_param_info,
+            TitanDataset.get_weight_per_lvl,
         )
         sum_dates = (
             list(train_ds.period.date_list)

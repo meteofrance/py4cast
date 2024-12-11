@@ -1,7 +1,5 @@
-import warnings
-from typing import List, Literal
+from typing import Literal
 
-import einops
 import torch
 from base import DatasetABC
 from tqdm import tqdm

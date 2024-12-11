@@ -25,17 +25,18 @@ from tqdm import tqdm
 
 from py4cast.datasets.access import (
     DataAccessor,
-    WeatherParam,
     Grid,
     Param,
     ParamConfig,
+    SamplePreprocSettings,
     Settings,
     Stats,
+    WeatherParam,
     grid_static_features,
 )
 from py4cast.forcingutils import generate_toa_radiation_forcing, get_year_hour_forcing
 from py4cast.plots import DomainInfo
-from py4cast.utils import RegisterFieldsMixin
+from py4cast.utils import RegisterFieldsMixin, merge_dicts
 
 
 @dataclass(slots=True)
@@ -671,9 +672,7 @@ class DatasetABC(Dataset):
         self.cache_dir.mkdir(parents=True, exist_ok=True)
 
         n_input, n_pred = self.settings.num_input_steps, self.settings.num_pred_steps
-        valid_samples_filename = (
-            f"valid_samples_{self.period.name}_{n_input}_{n_pred}.txt"
-        )
+        filename = f"valid_samples_{self.period.name}_{n_input}_{n_pred}.txt"
         self.valid_samples_file = self.cache_dir / filename
 
     def __str__(self) -> str:
@@ -775,12 +774,6 @@ class DatasetABC(Dataset):
             if param.kind == "output":
                 res += 1
         return res
-
-    @abstractproperty
-    def dataset_info(self) -> DatasetInfo:
-        """
-        Return the object DatasetInfo
-        """
 
     @abstractproperty
     def cache_dir(self) -> Path:
@@ -887,7 +880,7 @@ class DatasetABC(Dataset):
             conf, grid, accessor.load_param_info, accessor.get_weight_per_level
         )
 
-        train_settings_settings = Settings(
+        train_settings = Settings(
             dataset_name=name,
             num_input_steps=num_input_steps,
             num_pred_steps=num_pred_steps_train,
@@ -943,5 +936,5 @@ class DatasetABC(Dataset):
             conf,
             num_input_steps,
             num_pred_steps_train,
-            num_pred_steps_val_test,
+            num_pred_steps_val_tests,
         )

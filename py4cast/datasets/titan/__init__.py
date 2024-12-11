@@ -1,45 +1,32 @@
 import datetime as dt
-import json
-import time
 from functools import cached_property, lru_cache
 from pathlib import Path
-from typing import Callable, Dict, List, Literal, Tuple, Union
+from typing import Callable, List, Literal
 
 import numpy as np
 import torch
 import tqdm
 import xarray as xr
 from skimage.transform import resize
-from torch.utils.data import DataLoader
 
 from py4cast.datasets.access import (
     DataAccessor,
     Grid,
     GridConfig,
     ParamConfig,
-    Period,
     Sample,
     SamplePreprocSettings,
     Stats,
     Timestamps,
-    TorchDataloaderSettings,
     WeatherParam,
-    collate_fn,
-    get_param_list,
 )
-from py4cast.datasets.base import DatasetABC, Item, Period, get_param_list
-from py4cast.datasets.titan.settings import (
-    DEFAULT_CONFIG,
-    FORMATSTR,
-    METADATA,
-    SCRATCH_PATH,
-)
-from py4cast.plots import DomainInfo
-from py4cast.utils import merge_dicts
+from py4cast.datasets.base import DatasetABC, Period
+from py4cast.datasets.titan.settings import FORMATSTR, METADATA, SCRATCH_PATH
 
 
 class TitanAccessor(DataAccessor):
 
+    @staticmethod
     def get_weight_per_level(
         level: int,
         level_type: Literal["isobaricInhPa", "heightAboveGround", "surface", "meanSea"],
@@ -52,7 +39,7 @@ class TitanAccessor(DataAccessor):
     #############################################################
     #                            GRID                           #
     #############################################################
-
+    @staticmethod
     def load_grid_info(name: str) -> GridConfig:
         if name not in ["PAAROME_1S100", "PAAROME_1S40"]:
             raise NotImplementedError(
@@ -72,13 +59,14 @@ class TitanAccessor(DataAccessor):
         )
         return grid_conf
 
-    def get_grid_coords(param: Param) -> List[int]:
+    @staticmethod
+    def get_grid_coords(param: WeatherParam) -> List[int]:
         return METADATA["GRIDS"][param.grid.name]["extent"]
 
     #############################################################
     #                              PARAMS                       #
     #############################################################
-
+    @staticmethod
     def load_param_info(name: str) -> ParamConfig:
         info = METADATA["WEATHER_PARAMS"][name]
         grib_name = info["grib"]
@@ -97,9 +85,16 @@ class TitanAccessor(DataAccessor):
     #                              LOADING                      #
     #############################################################
 
+    @staticmethod
+    def get_dataset_path(name: str, grid: Grid):
+        str_subdomain = "-".join([str(i) for i in grid.subdomain])
+        subdataset_name = f"{name}_{grid.name}_{str_subdomain}"
+        return SCRATCH_PATH / "subdatasets" / subdataset_name
+
     def get_filepath(
+        self,
         ds_name: str,
-        param: Param,
+        param: WeatherParam,
         date: dt.datetime,
         file_format: Literal["npy", "grib"],
     ) -> Path:
@@ -112,14 +107,9 @@ class TitanAccessor(DataAccessor):
             folder = SCRATCH_PATH / "grib" / date.strftime(FORMATSTR)
             return folder / param.grib_name
         else:
-            npy_path = get_dataset_path(ds_name, param.grid) / "data"
+            npy_path = self.get_dataset_path(ds_name, param.grid) / "data"
             filename = f"{param.name}_{param.level}_{param.level_type}.npy"
             return npy_path / date.strftime(FORMATSTR) / filename
-
-    def get_dataset_path(name: str, grid: Grid):
-        str_subdomain = "-".join([str(i) for i in grid.subdomain])
-        subdataset_name = f"{name}_{grid.name}_{str_subdomain}"
-        return SCRATCH_PATH / "subdatasets" / subdataset_name
 
     def load_data_from_disk(
         self,
@@ -303,7 +293,7 @@ class TitanDataset(DatasetABC):
                     terms=np.array(terms),
                     validity_times=validity_times,
                 )
-                if valid_timestamp(n_inputs, timestamps):
+                if self.valid_timestamp(n_inputs, timestamps):
                     all_timestamps.append(timestamps)
 
         samples = []
@@ -315,8 +305,8 @@ class TitanDataset(DatasetABC):
                     self.params,
                     stats,
                     self.grid,
-                    exists,
-                    get_param_tensor,
+                    self.exists,
+                    self.get_param_tensor,
                     member,
                 )
                 if sample.is_valid():
