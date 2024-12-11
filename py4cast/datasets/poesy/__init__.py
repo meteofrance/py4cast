@@ -2,11 +2,9 @@ import datetime as dt
 import json
 import time
 from argparse import ArgumentParser
-from copy import deepcopy
-from dataclasses import dataclass, field
 from functools import cached_property
 from pathlib import Path
-from typing import Dict, List, Literal, Tuple, Union
+from typing import Dict, List, Literal, Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -18,12 +16,13 @@ from py4cast.datasets.base import (
     DatasetInfo,
     Grid,
     GridConfig,
-    Item,
     NamedTensor,
     ParamConfig,
     Period,
+    Sample,
     SamplePreprocSettings,
     Stats,
+    Timestamps,
     TorchDataloaderSettings,
     WeatherParam,
     collate_fn,
@@ -79,7 +78,12 @@ def load_grid_info(grid: Grid) -> GridConfig:
 #############################################################
 
 
-def get_filepath(ds_name: str, param: WeatherParam, date: dt.datetime) -> str:
+def get_filepath(
+    ds_name: str,
+    param: WeatherParam,
+    date: dt.datetime,
+    file_format: Optional[str] = None,
+) -> str:
     """
     Return the filename.
     """
@@ -102,7 +106,7 @@ def load_param_info(name: str) -> ParamConfig:
 
 
 def load_data(
-    ds_name: str, param: WeatherParam, date: dt.datetime, term: List, member: int
+    ds_name: str, param: WeatherParam, date: dt.datetime, term: np.array, member: int
 ) -> np.array:
     """
     date : Date of file.
@@ -112,22 +116,46 @@ def load_data(
     return data_array[
         param.grid.subdomain[0] : param.grid.subdomain[1],
         param.grid.subdomain[2] : param.grid.subdomain[3],
-        term,
+        (term / dt.timedelta(hours=1)).astype(int) - 1,
         member,
     ]
 
 
-def exists(ds_name: str, param: WeatherParam, date: dt.datetime) -> bool:
-    flist = get_filepath(ds_name, param, date)
-    return flist.exists()
+def exists(
+    ds_name: str,
+    param: WeatherParam,
+    timestamps: Timestamps,
+    file_format: Literal["npy", "grib"] = "grib",
+) -> bool:
+
+    filepath = get_filepath(ds_name, param, timestamps.datetime, file_format)
+    if not filepath.exists():
+        return False
+    return True
+
+
+def valid_timestamp(n_inputs: int, timestamps: Timestamps):
+    """
+    Verification function called after the creation of each timestamps.
+    Check if computed terms respect the dataset convention.
+    Reminder:
+    Poesy terms are between +1h lead time and +45h lead time.
+    """
+    limits = METADATA["TERMS"]
+    for t in timestamps.terms:
+
+        if (t > dt.timedelta(hours=int(limits["end"]))) or (
+            t < dt.timedelta(hours=int(limits["start"]))
+        ):
+            return False
+    return True
 
 
 def get_param_tensor(
     param: WeatherParam,
     stats: Stats,
-    date: dt.datetime,
+    timestamps: Timestamps,
     settings: SamplePreprocSettings,
-    terms: List,
     standardize: bool,
     member: int = 1,
 ) -> torch.tensor:
@@ -139,7 +167,9 @@ def get_param_tensor(
         means = np.asarray(stats[name]["mean"])
         std = np.asarray(stats[name]["std"])
 
-    array = load_data(settings.dataset_name, param, date, terms, member)
+    array = load_data(
+        settings.dataset_name, param, timestamps.datetime, timestamps.terms, member
+    )
 
     # Extend dimension to match 3D (level dimension)
     if len(array.shape) != 4:
@@ -197,97 +227,6 @@ def generate_forcings(
     ]
 
     return lforcings
-
-
-@dataclass(slots=True)
-class Sample:
-    """Describes a sample"""
-
-    member: int
-    date: dt.datetime
-    settings: SamplePreprocSettings
-    input_terms: Tuple[float]
-    output_terms: Tuple[float]
-    stats: Stats
-    grid: Grid
-    params: List[WeatherParam]
-
-    # Term wrt to the date {date}. Gives validity
-    terms: Tuple[float] = field(init=False)
-
-    def __post_init__(self):
-        self.terms = self.input_terms + self.output_terms
-
-    def is_valid(self) -> bool:
-        """
-        Check that all the files necessary for this samples exists.
-
-        Args:
-            param_list (List): List of parameters
-        Returns:
-            Boolean:  Whether the sample exists or not
-        """
-        for param in self.params:
-            if not exists(self.settings.dataset_name, param, self.date):
-                return False
-
-        return True
-
-    def load(self) -> Item:
-        """
-        Return inputs, outputs, forcings as tensors concatenated into a Item.
-        """
-        linputs = []
-        loutputs = []
-
-        # Reading parameters from files
-        for param in self.params:
-            state_kwargs = {
-                "feature_names": [param.parameter_short_name],
-                "names": ["timestep", "lat", "lon", "features"],
-            }
-            try:
-                if param.kind == "input_output":
-                    # Search data for date sample.date and terms sample.terms
-                    tensor = get_param_tensor(
-                        param=param,
-                        stats=self.stats,
-                        date=self.date,
-                        settings=self.settings,
-                        terms=self.terms,
-                        standardize=self.settings.standardize,
-                        member=self.member,
-                    )
-                    state_kwargs["names"][0] = "timestep"
-                    # Save outputs
-                    tmp_state = NamedTensor(
-                        tensor=tensor[self.settings.num_input_steps :],
-                        **deepcopy(state_kwargs),
-                    )
-                    loutputs.append(tmp_state)
-                    # Save inputs
-                    tmp_state = NamedTensor(
-                        tensor=tensor[: self.settings.num_input_steps],
-                        **deepcopy(state_kwargs),
-                    )
-                    linputs.append(tmp_state)
-
-            except KeyError as e:
-                print(f"Error for param {param}")
-                raise e
-
-        # Get forcings
-        lforcings = generate_forcings(
-            date=self.date, output_terms=self.output_terms, grid=self.grid
-        )
-        for lforcing in lforcings:
-            lforcing.unsqueeze_and_expand_from_(linputs[0])
-
-        return Item(
-            inputs=NamedTensor.concat(linputs),
-            outputs=NamedTensor.concat(loutputs),
-            forcing=NamedTensor.concat(lforcings),
-        )
 
 
 class InferSample(Sample):
@@ -348,7 +287,7 @@ class PoesyDataset(DatasetABC, Dataset):
             shortnames=shortnames,
             weather_dim=self.weather_dim,
             forcing_dim=self.forcing_dim,
-            step_duration=self.settings.step_duration,
+            step_duration=self.period.step_duration,
             statics=self.statics,
             stats=self.stats,
             diff_stats=self.diff_stats,
@@ -357,52 +296,54 @@ class PoesyDataset(DatasetABC, Dataset):
 
     @cached_property
     def sample_list(self):
-        """
-        Create a list of sample from information
-        """
-        print("Start forming samples")
-        terms = list(
-            np.arange(
-                METADATA["TERMS"]["start"],
-                METADATA["TERMS"]["end"],
-                METADATA["TERMS"]["timestep"],
-            )
+        """Creates the list of samples."""
+        print("Start creating samples...")
+        stats = self.stats if self.settings.standardize else None
+
+        n_inputs, n_preds, step_duration = (
+            self.settings.num_input_steps,
+            self.settings.num_pred_steps,
+            self.period.step_duration,
         )
-        num_total_steps = self.settings.num_input_steps + self.settings.num_pred_steps
-        sample_by_date = len(terms) // num_total_steps
 
+        sample_timesteps = [
+            step_duration * step for step in range(-n_inputs + 1, n_preds + 1)
+        ]
+
+        all_timestamps = []
+        for date in tqdm.tqdm(self.period.date_list):
+            for term in self.period.terms_list:
+                t0 = date + dt.timedelta(hours=int(term))
+                validity_times = [
+                    t0 + dt.timedelta(hours=int(ts)) for ts in sample_timesteps
+                ]
+                terms = [dt.timedelta(hours=int(t + term)) for t in sample_timesteps]
+
+                timestamps = Timestamps(
+                    datetime=date,
+                    terms=np.array(terms),
+                    validity_times=validity_times,
+                )
+                if valid_timestamp(n_inputs, timestamps):
+                    all_timestamps.append(timestamps)
         samples = []
-        number = 0
-
-        for date in self.period.date_list:
+        for ts in all_timestamps:
             for member in self.settings.members:
-                for sample in range(0, sample_by_date):
-                    input_terms = terms[
-                        sample * num_total_steps : sample * num_total_steps
-                        + self.settings.num_input_steps
-                    ]
-                    output_terms = terms[
-                        sample * num_total_steps
-                        + self.settings.num_input_steps : sample * num_total_steps
-                        + self.settings.num_input_steps
-                        + self.settings.num_pred_steps
-                    ]
-                    samp = Sample(
-                        date=date,
-                        member=member,
-                        input_terms=input_terms,
-                        output_terms=output_terms,
-                        settings=self.settings,
-                        stats=self.stats,
-                        grid=self.grid,
-                        params=self.params,
-                    )
+                sample = Sample(
+                    ts,
+                    self.settings,
+                    self.params,
+                    stats,
+                    self.grid,
+                    exists,
+                    get_param_tensor,
+                    member,
+                )
+                if sample.is_valid():
+                    samples.append(sample)
 
-                    if samp.is_valid():
-                        samples.append(samp)
-                        number += 1
+        print(f"--> All {len(samples)} {self.period.name} samples are now defined")
 
-        print(f"All {len(samples)} samples are now defined")
         return samples
 
     @cached_property
