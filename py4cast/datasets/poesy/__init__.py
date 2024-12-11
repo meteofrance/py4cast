@@ -2,11 +2,9 @@ import datetime as dt
 import json
 import time
 from argparse import ArgumentParser
-from copy import deepcopy
-from dataclasses import dataclass, field
 from functools import cached_property
 from pathlib import Path
-from typing import Dict, List, Literal, Tuple, Union
+from typing import Dict, List, Literal, Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -16,10 +14,16 @@ from py4cast.datasets.access import (
     DataAccessor,
     Grid,
     GridConfig,
-    Param,
     ParamConfig,
-    Settings,
+    Period,
+    Sample,
+    SamplePreprocSettings,
     Stats,
+    Timestamps,
+    TorchDataloaderSettings,
+    WeatherParam,
+    collate_fn,
+    get_param_list,
 )
 from py4cast.datasets.base import DatasetABC, Item, NamedTensor, Period, get_param_list
 from py4cast.datasets.poesy.settings import (
@@ -31,7 +35,6 @@ from py4cast.datasets.poesy.settings import (
 from py4cast.plots import DomainInfo
 from py4cast.settings import CACHE_DIR
 from py4cast.utils import merge_dicts
-
 
 class PoesyAccessor(DataAccessor):
 
@@ -75,9 +78,9 @@ class PoesyAccessor(DataAccessor):
 
     def get_filepath(
         ds_name: str,
-        param: Param,
+        param: WeatherParam,
         date: dt.datetime,
-        file_format: Optional[str] = "npy",
+        file_format: str = "npy",
     ) -> str:
         """
         Return the filename.
@@ -90,112 +93,87 @@ class PoesyAccessor(DataAccessor):
 
     def load_data_from_disk(
         self,
-        dataset_name: str,  # name of the dataset or dataset version
-        param: Param,  # specific parameter (2D field associated to a grid)
-        date: dt.datetime,  # specific timestamp at which to load the field
-        members: Tuple[int],  # optional members id. when dealing with ensembles
-        file_format: Literal["npy", "grib"] = "npy",  # format of the base file on disk
+        ds_name: str,
+        param: WeatherParam,
+        date: dt.datetime,
+        term: np.array,
+        member: int
+        file_format: str = "npy", 
     ) -> np.array:
-
-        data_array = np.load(get_filepath(ds_name, param, date), mmap_mode="r")
+        """
+        date : Date of file.
+        term : Position of leadtimes in file.
+        """
+        data_array = np.load(self.get_filepath(ds_name, param, date), mmap_mode="r")
         return data_array[
             param.grid.subdomain[0] : param.grid.subdomain[1],
             param.grid.subdomain[2] : param.grid.subdomain[3],
-            term,
-            members,
+            (term / dt.timedelta(hours=1)).astype(int) - 1,
+            member,
         ]
 
+    def exists(
+        self,
+        ds_name: str,
+        param: WeatherParam,
+        timestamps: Timestamps,
+        file_format: str = "npy",
+    ) -> bool:
 
-@dataclass(slots=True)
-class Sample:
-    """Describes a sample"""
-
-    member: int
-    date: dt.datetime
-    settings: Settings
-    input_terms: Tuple[float]
-    output_terms: Tuple[float]
-    stats: Stats
-    grid: Grid
-    params: List[Param]
-
-    # Term wrt to the date {date}. Gives validity
-    terms: Tuple[float] = field(init=False)
-
-    def __post_init__(self):
-        self.terms = self.input_terms + self.output_terms
-
-    def is_valid(self) -> bool:
-        """
-        Check that all the files necessary for this samples exists.
-
-        Args:
-            param_list (List): List of parameters
-        Returns:
-            Boolean:  Whether the sample exists or not
-        """
-        for param in self.params:
-            if not exists(self.settings.dataset_name, param, self.date):
-                return False
-
+        filepath = self.get_filepath(ds_name, param, timestamps.datetime, file_format)
+        if not filepath.exists():
+            return False
         return True
 
-    def load(self) -> Item:
+
+    def valid_timestamp(n_inputs: int, timestamps: Timestamps):
         """
-        Return inputs, outputs, forcings as tensors concatenated into a Item.
+        Verification function called after the creation of each timestamps.
+        Check if computed terms respect the dataset convention.
+        Reminder:
+        Poesy terms are between +1h lead time and +45h lead time.
         """
-        linputs = []
-        loutputs = []
+        limits = METADATA["TERMS"]
+        for t in timestamps.terms:
 
-        # Reading parameters from files
-        for param in self.params:
-            state_kwargs = {
-                "feature_names": [param.parameter_short_name],
-                "names": ["timestep", "lat", "lon", "features"],
-            }
-            try:
-                if param.kind == "input_output":
-                    # Search data for date sample.date and terms sample.terms
-                    tensor = get_param_tensor(
-                        param=param,
-                        stats=self.stats,
-                        date=self.date,
-                        settings=self.settings,
-                        terms=self.terms,
-                        standardize=self.settings.standardize,
-                        member=self.member,
-                    )
-                    state_kwargs["names"][0] = "timestep"
-                    # Save outputs
-                    tmp_state = NamedTensor(
-                        tensor=tensor[self.settings.num_input_steps :],
-                        **deepcopy(state_kwargs),
-                    )
-                    loutputs.append(tmp_state)
-                    # Save inputs
-                    tmp_state = NamedTensor(
-                        tensor=tensor[: self.settings.num_input_steps],
-                        **deepcopy(state_kwargs),
-                    )
-                    linputs.append(tmp_state)
+            if (t > dt.timedelta(hours=int(limits["end"]))) or (
+                t < dt.timedelta(hours=int(limits["start"]))
+            ):
+                return False
+        return True
 
-            except KeyError as e:
-                print(f"Error for param {param}")
-                raise e
 
-        # Get forcings
-        lforcings = generate_forcings(
-            date=self.date, output_terms=self.output_terms, grid=self.grid
-        )
-        for lforcing in lforcings:
-            lforcing.unsqueeze_and_expand_from_(linputs[0])
+    def get_param_tensor(
+        self,
+        param: WeatherParam,
+        stats: Stats,
+        timestamps: Timestamps,
+        settings: SamplePreprocSettings,
+        standardize: bool,
+        member: int = 1,
+    ) -> torch.tensor:
+        """
+        This function load a specific parameter into a tensor
+        """
+        if standardize:
+            name = param.parameter_short_name
+            means = np.asarray(stats[name]["mean"])
+            std = np.asarray(stats[name]["std"])
 
-        return Item(
-            inputs=NamedTensor.concat(linputs),
-            outputs=NamedTensor.concat(loutputs),
-            forcing=NamedTensor.concat(lforcings),
+        array = self.load_data_from_disk(
+            settings.dataset_name, param, timestamps.datetime, timestamps.terms, member
         )
 
+        # Extend dimension to match 3D (level dimension)
+        if len(array.shape) != 4:
+            array = np.expand_dims(array, axis=-1)
+        array = np.transpose(array, axes=[2, 0, 1, 3])  # shape = (steps, lvl, x, y)
+
+        if standardize:
+            array = (array - means) / std
+
+        # Define which value is considered invalid
+        tensor_data = torch.from_numpy(array)
 
 class InferSample(Sample):
     """
@@ -214,54 +192,55 @@ class PoesyDataset(DatasetABC):
 
     @cached_property
     def sample_list(self):
-        """
-        Create a list of sample from information
-        """
-        print("Start forming samples")
-        terms = list(
-            np.arange(
-                METADATA["TERMS"]["start"],
-                METADATA["TERMS"]["end"],
-                METADATA["TERMS"]["timestep"],
-            )
+        """Creates the list of samples."""
+        print("Start creating samples...")
+        stats = self.stats if self.settings.standardize else None
+
+        n_inputs, n_preds, step_duration = (
+            self.settings.num_input_steps,
+            self.settings.num_pred_steps,
+            self.period.step_duration,
         )
-        num_total_steps = self.settings.num_input_steps + self.settings.num_pred_steps
-        sample_by_date = len(terms) // num_total_steps
 
+        sample_timesteps = [
+            step_duration * step for step in range(-n_inputs + 1, n_preds + 1)
+        ]
+
+        all_timestamps = []
+        for date in tqdm.tqdm(self.period.date_list):
+            for term in self.period.terms_list:
+                t0 = date + dt.timedelta(hours=int(term))
+                validity_times = [
+                    t0 + dt.timedelta(hours=int(ts)) for ts in sample_timesteps
+                ]
+                terms = [dt.timedelta(hours=int(t + term)) for t in sample_timesteps]
+
+                timestamps = Timestamps(
+                    datetime=date,
+                    terms=np.array(terms),
+                    validity_times=validity_times,
+                )
+                if valid_timestamp(n_inputs, timestamps):
+                    all_timestamps.append(timestamps)
         samples = []
-        number = 0
-
-        for date in self.period.date_list:
+        for ts in all_timestamps:
             for member in self.settings.members:
-                for sample in range(0, sample_by_date):
-                    input_terms = terms[
-                        sample * num_total_steps : sample * num_total_steps
-                        + self.settings.num_input_steps
-                    ]
-                    output_terms = terms[
-                        sample * num_total_steps
-                        + self.settings.num_input_steps : sample * num_total_steps
-                        + self.settings.num_input_steps
-                        + self.settings.num_pred_steps
-                    ]
-                    samp = Sample(
-                        date=date,
-                        member=member,
-                        input_terms=input_terms,
-                        output_terms=output_terms,
-                        settings=self.settings,
-                        stats=self.stats,
-                        grid=self.grid,
-                        params=self.params,
-                    )
+                sample = Sample(
+                    ts,
+                    self.settings,
+                    self.params,
+                    stats,
+                    self.grid,
+                    exists,
+                    get_param_tensor,
+                    member,
+                )
+                if sample.is_valid():
+                    samples.append(sample)
 
-                    if samp.is_valid():
-                        samples.append(samp)
-                        number += 1
+        print(f"--> All {len(samples)} {self.period.name} samples are now defined")
 
-        print(f"All {len(samples)} samples are now defined")
         return samples
-
 
 class InferPoesyDataset(PoesyDataset):
     """
@@ -346,7 +325,7 @@ class InferPoesyDataset(PoesyDataset):
             grid,
             inference_period,
             param_list,
-            Settings(
+            SamplePreprocSettings(
                 num_pred_steps=0,
                 num_input_steps=num_input_steps,
                 members=conf["members"],

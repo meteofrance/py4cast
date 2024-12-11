@@ -11,15 +11,17 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
-import onnx
-import onnxruntime
+import pytest
 import pytorch_lightning as pl
 import torch
+from mfai.torch import export_to_onnx, onnx_load_and_infer
+from mfai.torch.models.base import ModelType
+from mfai.torch.models.utils import features_last_to_second, features_second_to_last
 
 from py4cast.datasets import get_datasets
 from py4cast.datasets.base import TorchDataloaderSettings, collate_fn
 from py4cast.lightning import ArLightningHyperParam, AutoRegressiveLightning
-from py4cast.models import get_model_kls_and_settings
+from py4cast.models import all_nn_architectures, get_model_kls_and_settings
 
 
 def to_numpy(tensor):
@@ -63,28 +65,8 @@ class FakeStatics:
         return torch.from_numpy(np.asarray([xx, yy]))
 
 
-def onnx_export_load_infer(model, filepath, sample):
-    onnx_program = torch.onnx.dynamo_export(model, sample)
-    onnx_program.save(filepath)
-
-    # Check the model with onnx
-    onnx_model = onnx.load(filepath)
-    onnx.checker.check_model(onnx_model)
-
-    # Perform an inference with onnx
-    onnx_input = onnx_model.adapt_torch_inputs_to_onnx(sample)
-    ort_session = onnxruntime.InferenceSession(
-        filepath, providers=["CPUExecutionProvider"]
-    )
-
-    onnxruntime_input = {
-        k.name: to_numpy(v) for k, v in zip(ort_session.get_inputs(), onnx_input)
-    }
-
-    ort_session.run(None, onnxruntime_input)
-
-
-def test_torch_training_loop():
+@pytest.mark.parametrize("model_name", all_nn_architectures)
+def test_torch_training_loop(model_name):
     """
     Checks that our models are trainable on a toy problem (sum).
     """
@@ -93,72 +75,76 @@ def test_torch_training_loop():
     NUM_INPUTS = 2
     NUM_OUTPUTS = 1
 
-    for model_name in (
-        "swinunetr",
-        "hilam",
-        "graphlam",
-        "halfunet",
-        "unet",
-        "segformer",
-        "identity",
-        "unetrpp",
-    ):
-        model_kls, model_settings = get_model_kls_and_settings(model_name)
+    model_kls, model_settings = get_model_kls_and_settings(model_name)
 
-        # GNNs build the graph here, once at rank zero
-        if hasattr(model_kls, "rank_zero_setup"):
-            model_kls.rank_zero_setup(
-                model_settings, FakeStatics(GRID_HEIGHT, GRID_WIDTH)
-            )
-
-        model = model_kls(
-            num_input_features=NUM_INPUTS,
-            num_output_features=NUM_OUTPUTS,
-            settings=model_settings,
-            input_shape=(GRID_HEIGHT, GRID_WIDTH),
+    # GNNs build the graph here, once at rank zero
+    if hasattr(model_kls, "rank_zero_setup"):
+        model_kls.rank_zero_setup(
+            model_settings, FakeStatics(GRID_HEIGHT, GRID_WIDTH).meshgrid
         )
 
-        optimizer = torch.optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
-        loss_fn = torch.nn.MSELoss()
-        ds = FakeSumDataset(GRID_HEIGHT, GRID_WIDTH, NUM_INPUTS)
-        training_loader = torch.utils.data.DataLoader(ds, batch_size=2)
+    model = model_kls(
+        in_channels=NUM_INPUTS,
+        out_channels=NUM_OUTPUTS,
+        settings=model_settings,
+        input_shape=(GRID_HEIGHT, GRID_WIDTH),
+    )
 
-        for _, data in enumerate(training_loader):
-            # Every data instance is an input + label pair
-            inputs, targets = data
+    optimizer = torch.optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
+    loss_fn = torch.nn.MSELoss()
+    ds = FakeSumDataset(GRID_HEIGHT, GRID_WIDTH, NUM_INPUTS)
+    training_loader = torch.utils.data.DataLoader(ds, batch_size=2)
 
-            # Zero your gradients for every batch!
-            optimizer.zero_grad()
+    for _, data in enumerate(training_loader):
+        # Every data instance is an input + label pair
+        inputs, targets = data
 
-            # Flatten (H, W) -> ngrid for GNNs
-            if len(model.input_dims) == 3:
-                inputs = inputs.flatten(1, 2)
-                targets = targets.flatten(1, 2)
+        # Zero your gradients for every batch!
+        optimizer.zero_grad()
 
-            # Make predictions for this batch
+        # Flatten (H, W) -> ngrid for GNNs
+        if model.model_type == ModelType.GRAPH:
+            inputs = inputs.flatten(1, 2)
+            targets = targets.flatten(1, 2)
+
+        # Make predictions for this batch
+        if model.features_second:
+            inputs = features_last_to_second(inputs)
+            outputs = model(inputs)
+            outputs = features_second_to_last(outputs)
+        else:
             outputs = model(inputs)
 
-            # Compute the loss and its gradients
-            loss = loss_fn(outputs, targets)
-            loss.backward()
+        # Compute the loss and its gradients
+        loss = loss_fn(outputs, targets)
+        loss.backward()
 
-            # Adjust learning weights
-            optimizer.step()
+        # Adjust learning weights
+        optimizer.step()
 
     # Make a prediction in eval mode
     model.eval()
     sample = ds[0][0].unsqueeze(0)
-    sample = sample.flatten(1, 2) if len(model.input_dims) == 3 else sample
-    model(sample)
+    sample = sample.flatten(1, 2) if model.model_type == ModelType.GRAPH else sample
+
+    if model.features_second:
+        sample = features_last_to_second(sample)
+        model(sample)
+        sample = features_second_to_last(sample)
+    else:
+        model(sample)
 
     # We test if models claiming to be onnx exportable really are post training.
     # See https://pytorch.org/tutorials/beginner/onnx/export_simple_model_to_onnx_tutorial.html
     if model.onnx_supported:
         with tempfile.NamedTemporaryFile(mode="w", suffix=".onnx") as dst:
             sample = torch.rand((1, GRID_HEIGHT, GRID_WIDTH, NUM_INPUTS))
-            if len(model.input_dims) == 3:
+            if model.model_type == ModelType.GRAPH:
                 sample = sample.flatten(1, 2)
-            onnx_export_load_infer(model, dst.name, sample)
+            if model.features_second:
+                sample = features_last_to_second(sample)
+            export_to_onnx(model, sample, dst.name)
+            onnx_load_and_infer(dst.name, sample)
 
 
 def test_lightning_fit_inference():
@@ -167,7 +153,7 @@ def test_lightning_fit_inference():
     NUM_INPUTS = 2
     NUM_OUTPUTS = 1
     DATASET = "dummy"
-    MODEL = "halfunet"
+    MODEL = "HalfUNet"
     BATCH_SIZE = 2
     datasets = get_datasets(
         DATASET,
@@ -184,47 +170,56 @@ def test_lightning_fit_inference():
     train_loader = train_ds.torch_dataloader(dl_settings)
     val_loader = val_ds.torch_dataloader(dl_settings)
     test_loader = test_ds.torch_dataloader(dl_settings)
-    trainer = pl.Trainer(
-        max_epochs=3,
-        limit_train_batches=3,
-        limit_val_batches=3,
-        limit_test_batches=3,
-    )
-    save_path = Path("lightning_logs/")
-    hp = ArLightningHyperParam(
-        dataset_info=datasets[0].dataset_info,
-        dataset_name=DATASET,
-        dataset_conf=None,
-        batch_size=BATCH_SIZE,
-        model_name=MODEL,
-        model_conf=None,
-        num_input_steps=NUM_INPUTS,
-        num_pred_steps_train=NUM_OUTPUTS,
-        num_pred_steps_val_test=NUM_OUTPUTS,
-        save_path=save_path,
-    )
-    lightning_module = AutoRegressiveLightning(hp)
-    trainer.fit(
-        model=lightning_module,
-        train_dataloaders=train_loader,
-        val_dataloaders=val_loader,
-    )
-    trainer.test(ckpt_path="best", dataloaders=test_loader)
 
-    # Load model for simple inference
-    log_dir = sorted(list(save_path.glob("version_*")))[-1]
-    log_dir = log_dir / "checkpoints"
-    # finds the first .ckpt file
-    ckpt_path = next(log_dir.glob("*.ckpt"))
-    model = AutoRegressiveLightning.load_from_checkpoint(ckpt_path)
-    hparams = model.hparams["hparams"]
-    hparams.num_pred_steps_val_test = NUM_OUTPUTS
-    model.eval()
+    with tempfile.TemporaryDirectory() as tmpdir:
+        save_path = Path(tmpdir) / "logs"
+        save_path.mkdir(exist_ok=True, parents=True)
+        trainer = pl.Trainer(
+            max_epochs=3,
+            limit_train_batches=3,
+            limit_val_batches=3,
+            limit_test_batches=3,
+            callbacks=[
+                pl.callbacks.ModelCheckpoint(
+                    dirpath=save_path,
+                    filename="{epoch:02d}-{val_mean_loss:.2f}",  # Custom filename pattern
+                    monitor="val_mean_loss",
+                    mode="min",
+                    save_top_k=1,
+                    save_last=True,
+                )
+            ],
+        )
+        hp = ArLightningHyperParam(
+            dataset_info=datasets[0].dataset_info,
+            dataset_name=DATASET,
+            dataset_conf=None,
+            batch_size=BATCH_SIZE,
+            model_name=MODEL,
+            model_conf=None,
+            num_input_steps=NUM_INPUTS,
+            num_pred_steps_train=NUM_OUTPUTS,
+            num_pred_steps_val_test=NUM_OUTPUTS,
+            save_path=save_path,
+        )
+        lightning_module = AutoRegressiveLightning(hp)
+        trainer.fit(
+            model=lightning_module,
+            train_dataloaders=train_loader,
+            val_dataloaders=val_loader,
+        )
+        trainer.test(ckpt_path="best", dataloaders=test_loader)
 
-    item = test_ds[0]  # Load data directly from dataset (no dataloader)
-    batch_item = collate_fn([item])  # Transform to BatchItem
-    model(batch_item)
-    print("All good!")
+        # finds the first .ckpt file
+        ckpt_path = next(save_path.glob("*.ckpt"))
+        model = AutoRegressiveLightning.load_from_checkpoint(ckpt_path)
+        hparams = model.hparams["hparams"]
+        hparams.num_pred_steps_val_test = NUM_OUTPUTS
+        model.eval()
+
+        item = test_ds[0]  # Load data directly from dataset (no dataloader)
+        batch_item = collate_fn([item])  # Transform to BatchItem
+        model(batch_item)
 
 
 def test_model_registry():
@@ -235,13 +230,16 @@ def test_model_registry():
     from py4cast.models import registry
 
     assert set(registry.keys()) == {
-        "hilam",
-        "graphlam",
-        "halfunet",
-        "unet",
-        "segformer",
-        "identity",
-        "hilamparallel",
-        "swinunetr",
-        "unetrpp",
+        "DeepLabV3",
+        "DeepLabV3Plus",
+        "HalfUNet",
+        "Segformer",
+        "SwinUNETR",
+        "UNet",
+        "CustomUnet",
+        "UNETRPP",
+        "Identity",
+        "HiLAM",
+        "GraphLAM",
+        "HiLAMParallel",
     }

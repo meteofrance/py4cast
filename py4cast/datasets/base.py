@@ -10,20 +10,18 @@ from copy import deepcopy
 from dataclasses import dataclass, field, fields
 from functools import cached_property
 from pathlib import Path
-from typing import TYPE_CHECKING, Callable, Dict, List, Literal, Tuple, Union
+from typing import Any, Callable, Dict, List, Literal, Tuple, Union
 
 import einops
 import gif
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
+from mfai.torch.namedtensor import NamedTensor
 from tabulate import tabulate
 from torch.utils.data import DataLoader, Dataset
 from torch.utils.data._utils.collate import collate_tensor_fn
 from tqdm import tqdm
-
-if TYPE_CHECKING:
-    from py4cast.plots import DomainInfo
 
 from py4cast.datasets.access import (
     DataAccessor,
@@ -34,9 +32,9 @@ from py4cast.datasets.access import (
     Stats,
     grid_static_features,
 )
-from py4cast.datasets.named_tensors import NamedTensor
 from py4cast.forcingutils import generate_toa_radiation_forcing, get_year_hour_forcing
-from py4cast.utils import RegisterFieldsMixin
+from py4cast.plots import DomainInfo
+from py4cast.utils import RegisterFieldsMixin, torch_save
 
 
 @dataclass(slots=True)
@@ -180,6 +178,28 @@ def collate_fn(items: List[Item]) -> ItemBatch:
 
 
 @dataclass
+class Timestamps:
+    """
+    Describe all timestamps in a sample.
+    It contains
+        datetime, terms, validity times
+
+    If n_inputs = 2, n_preds = 2, terms will be (-1, 0, 1, 2) * step_duration
+     where step_duration is typically an integer multiple of 1 hour
+
+    validity times correspond to the addition of terms to the reference datetime
+    """
+
+    # date and hour of the reference time
+    datetime: dt.datetime
+    # terms are time deltas vis-à-vis the reference input time step.
+    terms: np.array
+
+    # validity times are complete datetimes
+    validity_times: List[dt.datetime]
+
+
+@dataclass
 class Statics(RegisterFieldsMixin):
     """
     Static fields of the dataset.
@@ -267,7 +287,7 @@ class DatasetInfo:
     """
 
     name: str  # Name of the dataset
-    domain_info: "DomainInfo"  # Information used for plotting
+    domain_info: DomainInfo  # Information used for plotting
     units: Dict[str, str]  # d[shortname] = unit (str)
     weather_dim: int
     forcing_dim: int
@@ -336,34 +356,52 @@ class DatasetInfo:
 
 @dataclass(slots=True)
 class Period:
+    # first day of the period (included)
+    # each day of the period will be separated from start by an integer multiple of 24h
+    # note that the start date valid hour ("t0") may not be 00h00
     start: dt.datetime
+    # last day of the period (included)
     end: dt.datetime
-    step: int  # In hours, step btw the t0 of 2 samples
+    # In hours, step btw the t0 of consecutive terms
+    step_duration: int
     name: str
+    # first term (= time delta wrt to a date t0) that is admissible
+    term_start: int = 0
+    # last term (= time delta wrt to a date start) that is admissible
+    term_end: int = 23
 
-    def __init__(self, start: int, end: int, step: int, name: str):
-        self.start = dt.datetime.strptime(str(start), "%Y%m%d%H")
-        self.end = dt.datetime.strptime(str(end), "%Y%m%d%H")
-        self.step = step
-        self.name = name
+    def __post_init__(self):
+        self.start = np.datetime64(dt.datetime.strptime(str(self.start), "%Y%m%d%H"))
+        self.end = np.datetime64(dt.datetime.strptime(str(self.end), "%Y%m%d%H"))
 
     @property
-    def date_list(self):
-        return np.arange(
-            self.start, self.end, np.timedelta64(self.step, "h"), dtype="datetime64[s]"
-        ).tolist()
+    def terms_list(self) -> np.array:
+        return np.arange(self.term_start, self.term_end + 1, self.step_duration)
 
+    @property
+    def date_list(self) -> np.array:
+        """
+        List all dates available for the period, with a 24h leap
+        """
+        return np.arange(
+            self.start,
+            self.end + np.timedelta64(1, "D"),
+            np.timedelta64(1, "D"),
+            dtype="datetime64[s]",
+        ).tolist()
 
 def get_param_list(
     conf: dict,
     grid: Grid,
+    # function to retrieve all parameters information about the dataset
     load_param_info: Callable[[str], ParamConfig],
+    # function to retrieve the weight given to the parameter in the loss
     get_weight_per_level: Callable[[str], float],
-) -> List[Param]:
+) -> List[WeatherParam]:
     param_list = []
     for name, values in conf["params"].items():
         for lvl in values["levels"]:
-            param = Param(
+            param = WeatherParam(
                 name=name,
                 level=lvl,
                 grid=grid,
@@ -375,31 +413,34 @@ def get_param_list(
     return param_list
 
 
-@dataclass(slots=True)
-class TorchDataloaderSettings:
-    """
-    Settings for the torch dataloader
-    """
-
-    batch_size: int = 1
-    num_workers: int = 1
-    pin_memory: bool = False
-    prefetch_factor: Union[int, None] = None
-    persistent_workers: bool = False
+#############################################################
+#                            SAMPLE                         #
+#############################################################
 
 
 @dataclass(slots=True)
 class Sample:
-    """Describes a sample"""
+    """
+    Describes a sample from a given dataset.
+    The description is a "light" collection of objects
+    and manipulation functions.
+    Provide "autonomous" functionalities for a Sample
+     -> load data from the description and return an Item
+     -> plot each timestep in the sample
+     -> plot a gif from the whole sample
+    """
 
-    date_t0: dt.datetime
-    settings: Settings
-    params: List[Param]
+    timestamps: Timestamps
+    settings: SamplePreprocSettings
+    params: List[WeatherParam]
     stats: Stats
     grid: Grid
-    pred_timesteps: Tuple[float] = field(init=False)  # gaps in hours btw step and t0
-    all_dates: Tuple[dt.datetime] = field(init=False)  # date of each step
-    members: List[int] = field(default_factory=[])
+    exists: Callable[[Any], bool]
+    get_param_tensor: Callable[[Any], torch.tensor]
+    member: int = 0
+
+    input_timestamps: Timestamps = field(default=None)
+    output_timestamps: Timestamps = field(default=None)
 
     def __post_init__(self):
         """Setups time variables to be able to define a sample.
@@ -409,35 +450,40 @@ class Sample:
         pred_timesteps = [3h, 6h, 9h]
         all_dates = [24/10/22 21:00,  24/10/23 00:00, 24/10/23 03:00, 24/10/23 06:00, 24/10/23 09:00]
         """
-        n_inputs, n_preds = self.settings.num_input_steps, self.settings.num_pred_steps
-        all_steps = list(range(-n_inputs + 1, n_preds + 1))
-        all_timesteps = [self.settings.step_duration * step for step in all_steps]
-        self.pred_timesteps = all_timesteps[-n_preds:]
-        self.all_dates = [self.date_t0 + dt.timedelta(hours=ts) for ts in all_timesteps]
+
+        if self.settings.num_input_steps + self.settings.num_pred_steps != len(
+            self.timestamps.validity_times
+        ):
+            raise Exception("Length terms does not match inputs + outputs")
+
+        self.input_timestamps = Timestamps(
+            self.timestamps.datetime,
+            self.timestamps.terms[: self.settings.num_input_steps],
+            self.timestamps.validity_times[: self.settings.num_input_steps],
+        )
+        self.output_timestamps = Timestamps(
+            self.timestamps.datetime,
+            self.timestamps.terms[self.settings.num_input_steps :],
+            self.timestamps.validity_times[self.settings.num_input_steps :],
+        )
 
     def __repr__(self):
-        return f"Date T0 {self.date_t0}, leadtimes {self.pred_timesteps}"
+        return f"Date {self.timestamps.datetime}, input terms {self.input_terms}, output terms {self.output_terms}"
 
     def is_valid(self) -> bool:
-        """Check that all the files necessary for this sample exist.
-
-        Args:
-            param_list (List): List of parameters
-        Returns:
-            Boolean: Whether the sample is available or not
-        """
-        for date in self.all_dates:
-            for param in self.params:
-                if not exists(
-                    self.settings.dataset_name, param, date, self.settings.file_format
-                ):
-                    print("invalid sample")
-                    return False
+        for param in self.params:
+            if not self.exists(
+                self.settings.dataset_name,
+                param,
+                self.timestamps,
+                self.settings.file_format,
+            ):
+                return False
         return True
 
-    def load(self, accessor: DataAccessor, no_standardize: bool = False) -> Item:
+    def load(self, no_standardize: bool = False) -> Item:
         """
-        Return inputs, outputs, forcings as tensors concatenated into a Item.
+        Return inputs, outputs, forcings as tensors concatenated into an Item.
         """
         linputs, loutputs = [], []
 
@@ -449,23 +495,36 @@ class Sample:
             }
             if param.kind == "input":
                 # forcing is taken for every predicted step
-                dates = self.all_dates[-self.settings.num_pred_steps :]
-                tensor = accessor.get_param_tensor(
-                    param, self.stats, dates, self.settings, no_standardize
+                tensor = self.get_param_tensor(
+                    param=param,
+                    stats=self.stats,
+                    timestamps=self.input_timestamps,
+                    settings=self.settings,
+                    standardize=(self.settings.standardize and not no_standardize),
+                    member=self.member,
                 )
                 tmp_state = NamedTensor(tensor=tensor, **deepcopy(state_kwargs))
 
             elif param.kind == "output":
-                dates = self.all_dates[-self.settings.num_pred_steps :]
-                tensor = accessor.get_param_tensor(
-                    param, self.stats, dates, self.settings, no_standardize
+                tensor = self.get_param_tensor(
+                    param=param,
+                    stats=self.stats,
+                    timestamps=self.output_timestamps,
+                    settings=self.settings,
+                    standardize=(self.settings.standardize and not no_standardize),
+                    member=self.member,
                 )
                 tmp_state = NamedTensor(tensor=tensor, **deepcopy(state_kwargs))
                 loutputs.append(tmp_state)
 
             else:  # input_output
-                tensor = accessor.get_param_tensor(
-                    param, self.stats, self.all_dates, self.settings, no_standardize
+                tensor = self.get_param_tensor(
+                    param=param,
+                    stats=self.stats,
+                    timestamps=self.timestamps,
+                    settings=self.settings,
+                    standardize=(self.settings.standardize and not no_standardize),
+                    member=self.member,
                 )
                 state_kwargs["names"][0] = "timestep"
                 tmp_state = NamedTensor(
@@ -481,7 +540,9 @@ class Sample:
                 linputs.append(tmp_state)
 
         lforcings = generate_forcings(
-            date=self.date_t0, output_terms=self.pred_timesteps, grid=self.grid
+            date=self.timestamps.datetime,
+            output_terms=self.output_timestamps.terms,
+            grid=self.grid,
         )
 
         for forcing in lforcings:
@@ -536,19 +597,30 @@ class Sample:
                 cbar = fig.colorbar(img, ax=axs[i, j], fraction=0.04, pad=0.04)
                 cbar.set_label(param.unit)
 
-        hours_delta = dt.timedelta(hours=self.settings.step_duration * step)
-        plt.suptitle(f"Run: {self.date_t0} - Valid time: {self.date_t0 + hours_delta}")
+        plt.suptitle(
+            f"Run: {self.timestamps.datetime} - Valid time: {self.timestamps.validity_times[step]}"
+        )
         plt.tight_layout()
 
+        # this function can be a interm. step for gif plotting
+        # hence the plt.fig is not closed (or saved) by default ;
+        # this is a desired behavior
         if save_path is not None:
             plt.savefig(save_path)
             plt.close()
 
     @gif.frame
     def plot_frame(self, item: Item, step: int) -> None:
+        """
+        Intermediary step, using plotting without saving, to be used in gif
+        """
         self.plot(item, step)
 
     def plot_gif(self, save_path: Path):
+        """
+        Making a gif starting from the first input step to the last output step
+        Using the functionalities of the Sample (ability to load and plot a single frame)
+        """
         # We don't want to standardize data for plots
         item = self.load(no_standardize=True)
         frames = []
@@ -558,6 +630,19 @@ class Sample:
             frame = self.plot_frame(item, step)
             frames.append(frame)
         gif.save(frames, str(save_path), duration=250)
+
+
+@dataclass(slots=True)
+class TorchDataloaderSettings:
+    """
+    Settings for the torch dataloader
+    """
+
+    batch_size: int = 1
+    num_workers: int = 1
+    pin_memory: bool = False
+    prefetch_factor: Union[int, None] = None
+    persistent_workers: bool = False
 
 
 class DatasetABC(Dataset):

@@ -1,8 +1,6 @@
 import datetime as dt
 import json
 import time
-from copy import deepcopy
-from dataclasses import dataclass, field
 from functools import cached_property, lru_cache
 from pathlib import Path
 from typing import Callable, Dict, List, Literal, Tuple, Union
@@ -14,16 +12,22 @@ import xarray as xr
 from skimage.transform import resize
 from torch.utils.data import DataLoader
 
-from py4cast.datasets.base import (
-    DatasetABC,
-    DatasetInfo,
-    Item,
-    NamedTensor,
+from py4cast.datasets.access import (
+    DataAccessor,
+    Grid,
+    GridConfig,
+    ParamConfig,
     Period,
+    Sample,
+    SamplePreprocSettings,
+    Stats,
+    Timestamps,
     TorchDataloaderSettings,
+    WeatherParam,
     collate_fn,
     get_param_list,
 )
+from py4cast.datasets.base import DatasetABC, Item, Period, get_param_list
 from py4cast.datasets.titan.settings import (
     DEFAULT_CONFIG,
     FORMATSTR,
@@ -116,17 +120,20 @@ class TitanAccessor(DataAccessor):
         str_subdomain = "-".join([str(i) for i in grid.subdomain])
         subdataset_name = f"{name}_{grid.name}_{str_subdomain}"
         return SCRATCH_PATH / "subdatasets" / subdataset_name
-
-    def load_data_from_disk(
+     
+   def load_data_from_disk(
+        self,
         ds_name: str,
-        param: Param,
+        param: WeatherParam,
         date: dt.datetime,
+        # the member parameter is not accessed if irrelevant
+        member: int = 0,
         file_format: Literal["npy", "grib"] = "grib",
-    ) -> np.ndarray:
+    ):
         """
         Function to load invidiual parameter and lead time from a file stored in disk
         """
-        data_path = get_filepath(ds_name, param, date, file_format)
+        data_path = self.get_filepath(ds_name, param, date, file_format)
         if file_format == "grib":
             arr, lons, lats = load_data_grib(param, data_path)
             arr = fit_to_grid(arr, lons, lats)
@@ -138,22 +145,25 @@ class TitanAccessor(DataAccessor):
         if file_format == "grib":
             arr = arr[::-1]
         return arr  # invert latitude
-
+     
     def get_param_tensor(
-        param: Param,
+        self,
+        param: WeatherParam,
         stats: Stats,
-        dates: List[dt.datetime],
-        settings: Settings,
-        no_standardize: bool = False,
+        timestamps: Timestamps,
+        settings: SamplePreprocSettings,
+        standardize: bool = True,
+        member: int = 0,
     ) -> torch.tensor:
         """
         Fetch data on disk fo the given parameter and all involved dates
         Unless specified, normalize the samples with parameter-specific constants
         returns a tensor
         """
+        dates = timestamps.validity_times
         arrays = [
-            load_data_from_disk(
-                settings.dataset_name, param, date, settings.file_format
+            self.load_data_from_disk(
+                settings.dataset_name, param, date, member, settings.file_format
             )
             for date in dates
         ]
@@ -162,25 +172,50 @@ class TitanAccessor(DataAccessor):
         if len(arr.shape) != 4:
             arr = np.expand_dims(arr, axis=1)
         arr = np.transpose(arr, axes=[0, 2, 3, 1])  # shape = (steps, lvl, x, y)
-        if settings.standardize and not no_standardize:
+        if standardize:
             name = param.parameter_short_name
             means = np.asarray(stats[name]["mean"])
             std = np.asarray(stats[name]["std"])
             arr = (arr - means) / std
         return torch.from_numpy(arr)
+      
+     def exists(
+        self,
+        ds_name: str,
+        param: WeatherParam,
+        timestamps: Timestamps,
+        file_format: Literal["npy", "grib"] = "grib",
+    ) -> bool:
+        for date in timestamps.validity_times:
+            filepath = self.get_filepath(ds_name, param, date, file_format)
+            if not filepath.exists():
+                return False
+        return True
 
+
+    def valid_timestamp(n_inputs: int, timestamps: Timestamps) -> bool:
+        """
+        Verification function called after the creation of each timestamps.
+        Check if computed terms respect the dataset convention.
+        Reminder:
+        Titan terms are between +0h lead time and +23h lead time wrt to the day:00h00UTC reference
+        Allowing larger terms would double-sample some samples (day+00h00 <-> (day+1)+24h00)
+        """
+        term_0 = timestamps.terms[n_inputs - 1]
+        if term_0 > np.timedelta64(23, "h"):
+            return False
+        return True
 
 ############################################################
 #                   HELPER FUNCTIONS for TITAN             #
 ############################################################
 
-
 def fit_to_grid(
-    param: Param,
+    param: WeatherParam,
     arr: np.ndarray,
     lons: np.ndarray,
     lats: np.ndarray,
-    get_grid_coords: Callable[[Param], List[str]],
+    get_grid_coords: Callable[[WeatherParam], List[str]],
 ) -> np.ndarray:
     # already on good grid, nothing to do:
     if param.grid.name == param.native_grid:
@@ -207,7 +242,7 @@ def read_grib(path_grib: Path) -> xr.Dataset:
     return xr.load_dataset(path_grib, engine="cfgrib", backend_kwargs={"indexpath": ""})
 
 
-def load_data_grib(param: Param, path: Path) -> np.ndarray:
+def load_data_grib(param: WeatherParam, path: Path) -> np.ndarray:
     ds = read_grib(path)
     assert param.grib_param is not None
     level_type = ds[param.grib_param].attrs["GRIB_typeOfLevel"]
@@ -218,7 +253,6 @@ def load_data_grib(param: Param, path: Path) -> np.ndarray:
     else:
         arr = ds[param.grib_param].sel(isobaricInhPa=param.level).values
     return arr, lons, lats
-
 
 #############################################################
 #                            DATASET                        #
@@ -233,35 +267,58 @@ class TitanDataset(DatasetABC):
         name: str,
         grid: Grid,
         period: Period,
-        params: List[Param],
-        settings: Settings,
+        params: List[WeatherParam],
+        settings: SamplePreprocSettings,
     ):
         super().__init__(self, name, grid, period, params, settings, TitanAccessor)
-
+        
     @cached_property
     def sample_list(self):
         """Creates the list of samples."""
         print("Start creating samples...")
         stats = self.stats if self.settings.standardize else None
-        if self.valid_samples_file.exists():
-            print(f"Retrieving valid samples from file {self.valid_samples_file}")
-            with open(self.valid_samples_file, "r") as f:
-                dates_str = [line[:-1] for line in f.readlines()]
-                dateformat = "%Y-%m-%d_%Hh%M"
-                dates = [dt.datetime.strptime(ds, dateformat) for ds in dates_str]
-                dates = list(set(dates).intersection(set(self.period.date_list)))
-                samples = [
-                    Sample(date, self.settings, self.params, stats, self.grid)
-                    for date in dates
+
+        n_inputs, n_preds, step_duration = (
+            self.settings.num_input_steps,
+            self.settings.num_pred_steps,
+            self.period.step_duration,
+        )
+
+        sample_timesteps = [
+            step_duration * step for step in range(-n_inputs + 1, n_preds + 1)
+        ]
+        all_timestamps = []
+        for date in tqdm.tqdm(self.period.date_list):
+            for term in self.period.terms_list:
+                t0 = date + dt.timedelta(hours=int(term))
+                validity_times = [
+                    t0 + dt.timedelta(hours=ts) for ts in sample_timesteps
                 ]
-        else:
-            print(
-                f"Valid samples file {self.valid_samples_file} does not exist. Computing samples list..."
-            )
-            samples = []
-            for date in tqdm.tqdm(self.period.date_list):
-                sample = Sample(date, self.settings, self.params, stats, self.grid)
+                terms = [dt.timedelta(hours=int(t + term)) for t in sample_timesteps]
+
+                timestamps = Timestamps(
+                    datetime=date,
+                    terms=np.array(terms),
+                    validity_times=validity_times,
+                )
+                if valid_timestamp(n_inputs, timestamps):
+                    all_timestamps.append(timestamps)
+
+        samples = []
+        for ts in all_timestamps:
+            for member in self.settings.members:
+                sample = Sample(
+                    ts,
+                    self.settings,
+                    self.params,
+                    stats,
+                    self.grid,
+                    exists,
+                    get_param_tensor,
+                    member,
+                )
                 if sample.is_valid():
                     samples.append(sample)
+
         print(f"--> All {len(samples)} {self.period.name} samples are now defined")
         return samples

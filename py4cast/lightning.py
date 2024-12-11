@@ -13,6 +13,12 @@ import pytorch_lightning as pl
 import torch
 from lightning.pytorch.loggers import MLFlowLogger
 from lightning.pytorch.utilities import rank_zero_only
+from mfai.torch.models.base import ModelType
+from mfai.torch.models.utils import (
+    expand_to_batch,
+    features_last_to_second,
+    features_second_to_last,
+)
 from torch import nn
 from torchinfo import summary
 from transformers import get_cosine_schedule_with_warmup
@@ -22,12 +28,12 @@ from py4cast.datasets.base import (
     DatasetInfo,
     ItemBatch,
     NamedTensor,
+    Statics,
     TorchDataloaderSettings,
 )
 from py4cast.losses import ScaledLoss, WeightedLoss
 from py4cast.metrics import MetricACC, MetricPSDK, MetricPSDVar
 from py4cast.models import build_model_from_settings, get_model_kls_and_settings
-from py4cast.models.base import expand_to_batch
 from py4cast.plots import (
     PredictionEpochPlot,
     PredictionTimestepPlot,
@@ -165,9 +171,9 @@ class ArLightningHyperParam:
 
 
 @rank_zero_only
-def rank_zero_init(model_kls, model_settings, statics):
+def rank_zero_init(model_kls, model_settings, statics: Statics):
     if hasattr(model_kls, "rank_zero_setup"):
-        model_kls.rank_zero_setup(model_settings, statics)
+        model_kls.rank_zero_setup(model_settings, statics.meshgrid)
 
 
 @rank_zero_only
@@ -244,7 +250,7 @@ class AutoRegressiveLightning(pl.LightningModule):
 
         # We transform and register the statics after the model has been set up
         # This change the dimension of all statics
-        if len(self.model.input_dims) == 3:
+        if self.model.model_type == ModelType.GRAPH:
             # Graph model, we flatten the statics spatial dims
             statics.grid_static_features.flatten_("ngrid", 0, 1)
             statics.border_mask = statics.border_mask.flatten(0, 1)
@@ -450,7 +456,7 @@ class AutoRegressiveLightning(pl.LightningModule):
 
         self.original_shape = None
 
-        if len(self.model.input_dims) == 3:
+        if self.model.model_type == ModelType.GRAPH:
             # Stack original shape to reshape later
             self.original_shape = batch.inputs.tensor.shape
             # Graph model, we flatten the batch spatial dims
@@ -487,7 +493,14 @@ class AutoRegressiveLightning(pl.LightningModule):
                 # Graph (B, N_grid, d_f) or Conv (B, N_lat,N_lon d_f)
                 if self.hparams["hparams"].channels_last:
                     x = x.to(memory_format=torch.channels_last)
-                y = self.model(x)
+
+                # Here we adapt our tensors to the order of dimensions of CNNs and ViTs
+                if self.model.features_second:
+                    x = features_last_to_second(x)
+                    y = self.model(x)
+                    y = features_second_to_last(y)
+                else:
+                    y = self.model(x)
 
                 # We update the latest of our prev_states with the network output
                 if scale_y:

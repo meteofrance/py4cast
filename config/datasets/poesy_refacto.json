@@ -3,17 +3,23 @@
         "train": {
             "start": 2020061521,
             "end": 2021061521,
-            "step": 1
+            "step_duration": 1,
+            "term_start": 1,
+            "term_end": 45
         },
         "test": {
             "start": 2021061621,
             "end": 2021071621,
-            "step": 1
+            "step_duration": 1,
+            "term_start": 1,
+            "term_end": 45
         },
         "valid": {
             "start": 2021071721,
             "end": 2021111521,
-            "step": 1
+            "step_duration": 1,
+            "term_start": 1,
+            "term_end": 45
         }
     },
     "grid":{
@@ -27,7 +33,6 @@
         }
     }, 
     "settings":{
-        "step_duration": 1,
         "standardize": true,
         "file_format": "npy"
     },
@@ -37,5 +42,5 @@
         "v10" : {"kind" : "input_output", "levels" : [10]},
         "tirf": {"kind" : "input_output", "levels" : [0]}
     },
-    "members": [0]
+    "members": [0,1]
 }

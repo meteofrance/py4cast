@@ -14,23 +14,22 @@
 
 ### Adding a new neural network architecture to the project
 
+There are two ways to add neural network architectures to the project: contributing to [mfai](https://github.com/meteofrance/mfai) OR creating a py4cast plugin module.
+
 1. Neural network architectures MUST be Python classes and inherit from both **ModelABC** and  **nn.Module**, in that order.
 
 ```python
 class NewModel(ModelABC, nn.Module):
     settings_kls = NewModelSettings
-    onnx_supported = True
-    input_dims: Tuple[str, ...] = ("batch", "height", "width", "features")
-    output_dims: Tuple[str, ...] = ("batch", "height", "width", "features")
+    onnx_supported: bool = True
+    supported_num_spatial_dims = (2,)
+    num_spatial_dims: int = 2
+    features_last: bool = False
+    model_type: int = ModelType.CONVOLUTIONAL
+    register: bool = True
 ```
-2. **features** MUST be the last dimension both for the input and output tensors. See our Half-UNet implementation for how to deal with that in forward pass [here](../py4cast/models/vision/conv.py#L163).
 
-3. The **onnx_supported** attribute MUST be present and set to **True** if the architecture is onnx exportable, see [our unit tests](../tests/test_models.py).
-
-4. the **input_dims** and **output_dims** attributes MUST be present to explicit the model's input and output tensor shapes.
-
-5. The **settings_kls** attribute MUST be present and set to the **dataclass_json** setting class of the architecture.
-
+An example setting file :
 
 ```python
 @dataclass_json
@@ -43,41 +42,43 @@ class NewModelSettings:
     last_activation: str = "Identity"
 ```
 
+You can browse and use the various models in [mfai](https://github.com/meteofrance/mfai/tree/main/mfai/torch/models) as examples for both Graphs, Vision Transformers and CNNs.
+
 4. The constructor of the architecture MUST have the following signature:
 
 ```python
     def __init__(
         self,
-        num_input_features: int,
-        num_output_features: int,
+        in_channels: int,
+        out_channels: int,
+        input_shape: Union[None, Tuple[int, int]] = None,
         settings: HalfUnetSettings,
         *args,
         **kwargs,
     ):
 ```
-**num_input_features** is the number of features/channels of the input tensor. **num_output_features** is the number of features/channels of the output tensor, in our case the number of weather parameters to predict. **settings** is a **dataclass** instance with the settings of the model.
-For now we support ("batch", "height", "width", "features") and ("batch", "ngrid", "features") input/output dims.
+**in_channels** is the number of features/channels of the input tensor. **out_channels** is the number of features/channels of the output tensor, in our case the number of weather parameters to predict. **settings** is a **dataclass** instance with the settings of the model.
 
-5. Finally, the **ModelABC** is a Python **ABC** which forces you to implement all the required attributes or there will an Exception raised.
+5. The **ModelABC** is a Python **ABC** which forces you to implement all the required attributes or there will an Exception raised.
 
 Now your model can be either registered explicitely in the system (in case the code is in this repository) or injected in the system as a plugin (in case the code is hosted on a third party repository).
 
-1. Model in the same git repository
+1. Model in mfai
 
-Add your **NewModel** class to the registry explicitly in the models package [__init__.py](../py4cast/models/__init__.py)
+This is the approach recommendend for stable models. In order to add your model to the **mfai** repository:
 
-```python
-registry = {}
-for kls in (HalfUnet, Unet, GraphLAM, HiLAM, HiLAMParallel, Segformer, NewModel):
-    registry[kls.__name__.lower()] = kls
-```
+* Make a **Pull Request** to [mfai](https://github.com/meteofrance/mfai)
+* Make a **Pull Request** to py4cast to update the version of mfai in the **requirements.txt** file.
 
 2. Model as a third party plugin
+
+Prefer this approach to quickly test a new model. Once it is stable consider contributing to **mfai** (see previous section).
 
 In order to be discovered, your model Python class MUST:
 
 * be contained in a python module prefixed with **py4cast_plugin_**
 * inherit from **ModelABC** and **nn.Module**
+* have the **register** attribute set to **True**
 * have a different name than the models already present in the system
 * be discoverable by the system (e.g. in the PYTHONPATH or pip installed)
 
