@@ -219,7 +219,13 @@ def exists(
 
 
 def valid_timestamp(n_inputs: int, timestamps: Timestamps) -> bool:
-    # avoiding duplicating samples on days border (00h00 +/ -1 <-> 24h00 +/- 1)
+    """
+    Verification function called after the creation of each timestamps.
+    Check if computed terms respect the dataset convention.
+    Reminder:
+    Titan terms are between +0h lead time and +23h lead time wrt to the day:00h00UTC reference
+    Allowing larger terms would double-sample some samples (day+00h00 <-> (day+1)+24h00)
+    """
     term_0 = timestamps.terms[n_inputs - 1]
     if term_0 > np.timedelta64(23, "h"):
         return False

@@ -619,7 +619,15 @@ def get_param_list(
 
 @dataclass(slots=True)
 class Sample:
-    """Describes a sample"""
+    """
+    Describes a sample from a given dataset.
+    The description is a "light" collection of objects
+    and manipulation functions.
+    Provide "autonomous" functionalities for a Sample
+     -> load data from the description and return an Item
+     -> plot each timestep in the sample
+     -> plot a gif from the whole sample
+    """
 
     timestamps: Timestamps
     settings: SamplePreprocSettings
@@ -674,7 +682,7 @@ class Sample:
 
     def load(self, no_standardize: bool = False) -> Item:
         """
-        Return inputs, outputs, forcings as tensors concatenated into a Item.
+        Return inputs, outputs, forcings as tensors concatenated into an Item.
         """
         linputs, loutputs = [], []
 
@@ -793,15 +801,25 @@ class Sample:
         )
         plt.tight_layout()
 
+        # this function can be a interm. step for gif plotting
+        # hence the plt.fig is not closed (or saved) by default ;
+        # this is a desired behavior
         if save_path is not None:
             plt.savefig(save_path)
             plt.close()
 
     @gif.frame
     def plot_frame(self, item: Item, step: int) -> None:
+        """
+        Intermediary step, using plotting without saving, to be used in gif
+        """
         self.plot(item, step)
 
     def plot_gif(self, save_path: Path):
+        """
+        Making a gif starting from the first input step to the last output step
+        Using the functionalities of the Sample (ability to load and plot a single frame)
+        """
         # We don't want to standardize data for plots
         item = self.load(no_standardize=True)
         frames = []

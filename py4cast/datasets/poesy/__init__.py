@@ -135,6 +135,12 @@ def exists(
 
 
 def valid_timestamp(n_inputs: int, timestamps: Timestamps):
+    """
+    Verification function called after the creation of each timestamps.
+    Check if computed terms respect the dataset convention.
+    Reminder:
+    Poesy terms are between +1h lead time and +45h lead time.
+    """
     limits = METADATA["TERMS"]
     for t in timestamps.terms:
 
