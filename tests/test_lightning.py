@@ -18,13 +18,12 @@ import pytorch_lightning as pl
 import torch
 import yaml
 
-from bin.launcher import cli_main
+from bin.py4cast_main import cli_main
 from py4cast.datasets import get_datasets
 from py4cast.datasets.base import TorchDataloaderSettings, collate_fn
-from py4cast.lightning import (
-    ArLightningHyperParam,
-    AutoRegressiveLightning,
-    PlDataModule,
+from py4cast import (
+    arlightningmodule,
+    titandatamodule,
 )
 from py4cast.models import get_model_kls_and_settings
 

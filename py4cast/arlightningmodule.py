@@ -9,7 +9,7 @@ import einops
 from functools import cached_property
 from copy import deepcopy
 from transformers import get_cosine_schedule_with_warmup
-
+from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
 from py4cast.models import build_model_from_settings
 from py4cast.losses import WeightedLoss
 from py4cast.metrics import MetricACC, MetricPSDK, MetricPSDVar
@@ -45,7 +45,6 @@ class AutoRegressiveLightningModule(pl.LightningModule):
         precision: str = "bf16", # degree of precision
         no_log: bool = False, # False = dont log things on tensorboard
         channels_last: bool = False, # False ~ (B,T,C,H,W)
-        save_weights_path: Path = None, # weights directory
     ):
         super().__init__()
         # exclusive args
@@ -57,11 +56,11 @@ class AutoRegressiveLightningModule(pl.LightningModule):
         self.num_input_steps = num_input_steps
         self.num_pred_steps = num_pred_steps
         self.len_train_loader = len_train_loader
+        self.save_path = save_path
         self.use_lr_scheduler = use_lr_scheduler
         self.precision = precision
         self.no_log = no_log
         self.channels_last = channels_last
-        self.save_weights_path = save_weights_path
         # linked args
         self.batch_shape = batch_shape # (B, T, H, W, C)
         self.dataset_info = dataset_info
@@ -79,13 +78,15 @@ class AutoRegressiveLightningModule(pl.LightningModule):
             input_shape=self.input_shape,
         )
 
-        save_path = Path(save_path)  # Replace with your actual path
-        self.save_path = save_path / f"{self.dataset_name}/{self.model_name}"
+        self.save_path = Path(self.save_path) / f"version_{3}"
+
         self.opt_state = (
             None  # For making restoring of optimizer state optional (slight hack)
         )
         self.max_pred_step = self.num_pred_steps - 1
-        self.metrics = self.get_metrics()
+        self.train_metrics = self.get_metrics()
+        self.val_metrics = self.get_metrics()
+        self.test_metrics = self.get_metrics()
         self.save_hyperparameters()  # write hparams.yaml in save folder
         statics = deepcopy(self.dataset_info.statics)
         self.grid_shape = statics.grid_shape
@@ -119,7 +120,7 @@ class AutoRegressiveLightningModule(pl.LightningModule):
         else:
             raise TypeError(f"Unknown loss function: {self.loss}")
         self.loss.prepare(self, statics.interior_mask, self.dataset_info)
-
+        self.batch_losses = []
     ###--------------------- MISCELLANEOUS ---------------------###
 
     @property
@@ -175,6 +176,7 @@ class AutoRegressiveLightningModule(pl.LightningModule):
             print(name, buffer.shape, buffer.dtype)
 
     def configure_optimizers(self) -> torch.optim.Optimizer:
+        # Path to the folder where checkpoints and figures are saved
         opt = torch.optim.AdamW(self.parameters(), lr=self.lr, betas=(0.9, 0.95))
         if self.opt_state:
             opt.load_state_dict(self.opt_state)
@@ -203,47 +205,68 @@ class AutoRegressiveLightningModule(pl.LightningModule):
 
     ###--------------------- SHARED ---------------------###
 
-    def shared_metrics_step(self, y, y_hat, shape):
-        """Computes metrics for a batch.
-        Step shared by train, validation and test steps."""
-        for metric_name, metric in self.metrics.items():
-            if isinstance(
-                metric, tm.Metric
-            ):  # Check if it's a PyTorch Lightning metric
+    def shared_metrics_step(self, y, y_hat, shape, label):
+        """Updates metrics for a batch."""
+        if label == 'train':
+            metric_list = self.train_metrics
+        elif label == 'val':
+            metric_list = self.val_metrics
+        elif label == 'test':
+            metric_list = self.test_metrics
+        else:
+            raise ValueError(f"Unknown label: {label}")
+
+        for metric_name, metric in metric_list.items():
+            if isinstance(metric, tm.Metric):
                 try:
-                    metric.update(y_hat, y)  # Update the metric
-                except TypeError:  # Handle metrics that require additional arguments
+                    metric.update(y_hat, y)
+                except TypeError:
                     metric.update(y_hat, y, shape=shape)
-            # Other types of metrics might need custom handling here
 
-    def shared_loss_step(self, loss, label):
-        """Computes metrics and loss for a batch.
-        Step shared by train, validation and test steps."""
-        # Log the loss on_epoch
-        self.log(f"{label}_loss", loss, on_step=False, on_epoch=True, reduce_fx="mean")
-
-    def shared_metrics_end(self, tb, label):  # Add label argument
-        dict_metrics = dict()
-        for metric_name, metric in self.metrics.items():
+    def shared_metrics_end(self, label):
+        """Computes and logs the metrics (to be used at the end of each epoch)."""
+        if label == 'train':
+            metric_list = self.train_metrics
+        elif label == 'val':
+            metric_list = self.val_metrics
+        elif label == 'test':
+            metric_list = self.test_metrics
+        else:
+            raise ValueError(f"Unknown label: {label}")
+    
+        for metric_name, metric in metric_list.items():
             try:
-                dict_metrics.update(metric.compute())
+                computed_metrics = metric.compute(label)
+                for name, elmnt in computed_metrics.items():
+                    if isinstance(elmnt, pltfig.Figure):
+                        self.logger.experiment.add_figure(
+                            f"{label}/{name}",
+                            elmnt,
+                            self.current_epoch,
+                        )
+                    elif isinstance(elmnt, torch.Tensor):
+                        if elmnt.dim() == 0:
+                            self.log(
+                                f"{label}/{name}", 
+                                elmnt.item(),
+                                prog_bar=False,
+                                on_step=False,
+                                on_epoch=True,
+                                sync_dist=True,
+                            ) 
+                        else:
+                            self.log(
+                                f"{label}/{name}",
+                                elmnt,
+                                prog_bar=False,
+                                on_step=False,
+                                on_epoch=True,
+                                sync_dist=True,
+                            )
+                    else:
+                        print(f"Error logging metric {metric_name}")
             except Exception as e:
                 print(f"Error computing metric '{metric_name}': {e}")
-        for name, elmnt in dict_metrics.items():
-            if isinstance(elmnt, pltfig.Figure):
-                tb.add_figure(
-                    f"{label}/{name}",
-                    elmnt,
-                    self.current_epoch,  # Prepend label to name
-                )
-            elif isinstance(elmnt, torch.Tensor):
-                self.log_dict(
-                    {f"{label}/{name}": elmnt},  # Prepend label to name
-                    prog_bar=False,
-                    on_step=False,
-                    on_epoch=True,
-                    sync_dist=True,
-                )
 
     def _shared_step(
         self, batch: ItemBatch, inference: bool = False
@@ -329,7 +352,7 @@ class AutoRegressiveLightningModule(pl.LightningModule):
         Handling autocast subtelty for mixed precision on GPU and CPU (only bf16 for the later).
         """
         if torch.cuda.is_available():
-            with torch.cuda.amp.autocast(dtype=self.dtype):
+            with torch.amp.autocast('cuda', dtype=self.dtype):
                 return self._shared_step(batch, inference)
         else:
             if not inference and "bf16" in self.trainer.precision:
@@ -343,40 +366,33 @@ class AutoRegressiveLightningModule(pl.LightningModule):
     def training_step(self, batch):
         y_hat, y = self.shared_step(batch)
         loss = self.loss(y_hat, y).mean()
-        self.shared_loss_step(loss, "train")
-        self.shared_metrics_step(y, y_hat, self.original_shape)
+        self.log(f"train_loss", loss, on_step=False, on_epoch=True, reduce_fx="mean", prog_bar=True, sync_dist=True)
+        self.shared_metrics_step(y, y_hat, self.original_shape, "train")
         return loss
 
     def on_train_epoch_end(self):
-        tb = self.logger.experiment
-        self.shared_metrics_end(tb, "train")
-
-    def on_train_end(self):
-        best_model_state = deepcopy(self.model.state_dict())
-        torch.save(best_model_state, self.save_weights_path)
+        self.shared_metrics_end("train")
 
     ###--------------------- VALIDATION ---------------------###
 
     def validation_step(self, batch):
         y_hat, y = self.shared_step(batch)
         loss = self.loss(y_hat, y).mean()
-        self.shared_loss_step(loss, "val")
-        self.shared_metrics_step(y, y_hat, self.original_shape)
+        self.log(f"val_loss", loss, on_step=False, on_epoch=True, reduce_fx="mean", prog_bar=True, sync_dist=True)
+        self.shared_metrics_step(y, y_hat, self.original_shape, "val")
         return loss
 
     def on_validation_epoch_end(self):
-        tb = self.logger.experiment
-        self.shared_metrics_end(tb, "val")
+        self.shared_metrics_end("val")
 
     ###--------------------- TEST ---------------------###
 
     def test_step(self, batch):
         y_hat, y = self.shared_step(batch)
         loss = self.loss(y_hat, y).mean()
-        self.shared_loss_step(loss, "test")
-        self.shared_metrics_step(y, y_hat, self.original_shape)
+        self.log(f"test_loss", loss, on_step=False, on_epoch=True, reduce_fx="mean", prog_bar=True, sync_dist=True)
+        self.shared_metrics_step(y, y_hat, self.original_shape, "test")
         return loss
 
     def on_test_epoch_end(self):
-        tb = self.logger.experiment
-        self.shared_metrics_end(tb, "test")
+        self.shared_metrics_end("test")

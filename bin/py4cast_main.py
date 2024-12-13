@@ -67,28 +67,28 @@ class MyLightningCLI(LightningCLI):
             apply_on="instantiate",
         )
 
-    def before_instantiate_classes(self):
-        """
-        Correct path of logs to add dataset/model folder
-        """
-        # Get correct config
-        if hasattr(self.config, "fit"):
-            config = self.config.fit
-        elif hasattr(self.config, "predict"):
-            config = self.config.predict
-        else:
-            config = self.config
+    # def before_instantiate_classes(self):
+    #     """
+    #     Correct path of logs to add dataset/model folder
+    #     """
+    #     # Get correct config
+    #     if hasattr(self.config, "fit"):
+    #         config = self.config.fit
+    #     elif hasattr(self.config, "predict"):
+    #         config = self.config.predict
+    #     else:
+    #         config = self.config
 
-        # Add the dataset and the model to the path
-        dataset = config.data.dataset
-        model = config.model.model_name
-        for logger in config.trainer.logger:
-            logger.init_args.save_dir += f"/{dataset}/{model}"
-            # Create a specific folder for mlflow
-            if logger.class_path == "lightning.pytorch.loggers.MLFlowLogger":
-                logger.init_args.save_dir += "/mlflow"
+    #     # Add the dataset and the model to the path
+    #     dataset = config.data.dataset
+    #     model = config.model.model_name
+    #     for logger in config.trainer.logger:
+    #         logger.init_args.save_dir += f"/{dataset}/{model}"
+    #         # Create a specific folder for mlflow
+    #         if logger.class_path == "lightning.pytorch.loggers.MLFlowLogger":
+    #             logger.init_args.save_dir += "/mlflow"
 
-        print(f"\nLogs are saved at {config.trainer.logger[0].init_args.save_dir}\n")
+    #     print(f"\nLogs are saved at {config.trainer.logger[0].init_args.save_dir}\n")
 
 def cli_main():
     cli = MyLightningCLI(

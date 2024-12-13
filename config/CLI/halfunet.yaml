@@ -8,4 +8,3 @@ model:
   precision: "32"
   no_log: False
   channels_last: False
-  save_weights_path: None
