@@ -14,13 +14,19 @@ from py4cast.datasets.access import (
     Grid,
     GridConfig,
     ParamConfig,
-    Sample,
     SamplePreprocSettings,
     Stats,
-    Timestamps,
     WeatherParam,
 )
-from py4cast.datasets.base import DatasetABC, Period
+
+from py4cast.datasets.base import (
+    DatasetABC,
+    Period,
+    Timestamps,
+    Sample,
+    get_param_list,
+)
+
 from py4cast.datasets.titan.settings import FORMATSTR, METADATA, SCRATCH_PATH
 
 
@@ -261,8 +267,9 @@ class TitanDataset(DatasetABC):
         period: Period,
         params: List[WeatherParam],
         settings: SamplePreprocSettings,
+        accessor: TitanAccessor,
     ):
-        super().__init__(self, name, grid, period, params, settings, TitanAccessor)
+        super().__init__(self, name, grid, period, params, settings, accessor)
 
     @cached_property
     def sample_list(self):
@@ -314,3 +321,6 @@ class TitanDataset(DatasetABC):
 
         print(f"--> All {len(samples)} {self.period.name} samples are now defined")
         return samples
+
+    def __len__(self):
+        return len(self.sample_list)

@@ -134,7 +134,7 @@ def grid_static_features(grid: Grid, extra_statics: List[NamedTensor]):
     )  # Rearange and divide  by maximum coordinate
 
     # (Nx, Ny, 1)
-    geopotential = torch.tensor(grid.geopotential_info).unsqueeze(2)  # (N_x, N_y, 1)
+    geopotential = torch.tensor(grid.geopotential).unsqueeze(2)  # (N_x, N_y, 1)
     gp_min = torch.min(geopotential)
     gp_max = torch.max(geopotential)
     # Rescale geopotential to [0,1]
@@ -147,7 +147,7 @@ def grid_static_features(grid: Grid, extra_statics: List[NamedTensor]):
     grid_border_mask = torch.tensor(grid.border_mask).unsqueeze(2)  # (N_x, N_y,1)
 
     feature_names = []
-    for x in grid.landsea_mask:
+    for x in extra_statics:
         feature_names += x.feature_names
     state_var = NamedTensor(
         tensor=torch.cat(
@@ -250,14 +250,14 @@ class Stats:
 
 
 @dataclass(slots=True)
-class Settings:
+class SamplePreprocSettings:
     dataset_name: str
     num_input_steps: int  # Number of input timesteps
     num_pred_steps: int  # Number of output timesteps
     step_duration: float  # duration in hour
     standardize: bool = True
     file_format: Literal["npy", "grib"] = "grib"
-    members: Optional(Tuple[int]) = None
+    members: Optional[Tuple[int]] = None
     add_landsea_mask: bool = False
 
 
@@ -343,9 +343,9 @@ class DataAccessor(ABC):
         dataset_name: str,  # name of the dataset or dataset version
         param: WeatherParam,  # specific parameter (2D field associated to a grid)
         date: dt.datetime,  # specific timestamp at which to load the field
-        members: Optional(
+        members: Optional[
             Tuple[int]
-        ) = None,  # optional members id. when dealing with ensembles
+        ] = None,  # optional members id. when dealing with ensembles
         file_format: Literal["npy", "grib"] = "npy",  # format of the base file on disk
     ) -> np.array:
         """
@@ -362,9 +362,9 @@ class DataAccessor(ABC):
         date: dt.datetime,  # time stamp for date
         terms: List,  # time stamp for lead times
         standardize: bool,  # whether or not to normalize the field with Stats
-        members: Optional(
+        members: Optional[
             Tuple[int]
-        ) = None,  # optional members id. when dealing with ensembles
+        ] = None,  # optional members id. when dealing with ensembles
         file_format: Literal["npy", "grib"] = "npy",  # format of the base file on disk
     ) -> torch.tensor:
         """

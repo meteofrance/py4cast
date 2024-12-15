@@ -10,7 +10,7 @@ from copy import deepcopy
 from dataclasses import dataclass, field, fields
 from functools import cached_property
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Literal, Tuple, Union
+from typing import Any, Callable, Dict, List, Literal, Tuple, Union, Type
 
 import einops
 import gif
@@ -26,10 +26,8 @@ from tqdm import tqdm
 from py4cast.datasets.access import (
     DataAccessor,
     Grid,
-    Param,
     ParamConfig,
     SamplePreprocSettings,
-    Settings,
     Stats,
     WeatherParam,
     grid_static_features,
@@ -658,17 +656,18 @@ class DatasetABC(Dataset):
         name: str,
         grid: Grid,
         period: Period,
-        params: List[Param],
-        settings: Settings,
-        accessor: DataAccessor,
+        params: List[WeatherParam],
+        settings: SamplePreprocSettings,
+        accessor: Type[DataAccessor],
     ):
         self.name = name
         self.grid = grid
         self.period = period
         self.params = params
         self.settings = settings
+        self.accessor = accessor
         self.shuffle = self.period.name == "train"
-        self.cache_dir = accessor.get_dataset_path(name, grid)
+        self._cache_dir = accessor.get_dataset_path(name, grid)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
 
         n_input, n_pred = self.settings.num_input_steps, self.settings.num_pred_steps
@@ -677,9 +676,6 @@ class DatasetABC(Dataset):
 
     def __str__(self) -> str:
         return f"{self.name}_{self.grid.name}"
-
-    def __len__(self):
-        return len(self.sample_list)
 
     def __getitem__(self, index):
         """
@@ -775,13 +771,13 @@ class DatasetABC(Dataset):
                 res += 1
         return res
 
-    @abstractproperty
+    @cached_property
     def cache_dir(self) -> Path:
         """
         Cache directory of the dataset.
         Used at least to get statistics.
         """
-        pass
+        return self._cache_dir
 
     @property
     def dataset_extra_statics(self) -> List[NamedTensor]:
@@ -803,10 +799,15 @@ class DatasetABC(Dataset):
         return []
 
     @cached_property
+    def grid_shape(self) -> tuple:
+        x, _ = self.grid.meshgrid
+        return x.shape
+    
+    @cached_property
     def statics(self) -> Statics:
         return Statics(
             **{
-                "grid_statics": grid_static_features(self.grid),
+                "grid_statics": grid_static_features(self.grid, self.dataset_extra_statics),
                 "grid_shape": self.grid_shape,
             }
         )
@@ -866,10 +867,10 @@ class DatasetABC(Dataset):
         num_input_steps: int,
         num_pred_steps_train: int,
         num_pred_steps_val_test: int,
-        accessor: DataAccessor,
-    ) -> Tuple["DatasetABC", "DatasetABC", "DatasetABC"]:
+        accessor_kls: Type[DataAccessor],
+    ) -> Tuple[Type["DatasetABC"], Type["DatasetABC"], Type["DatasetABC"]]:
 
-        conf["grid"]["load_grid_info_func"] = accessor.load_grid_info
+        conf["grid"]["load_grid_info_func"] = accessor_kls.load_grid_info
         grid = Grid(**conf["grid"])
         try:
             members = conf["members"]
@@ -877,36 +878,38 @@ class DatasetABC(Dataset):
             members = None
 
         param_list = get_param_list(
-            conf, grid, accessor.load_param_info, accessor.get_weight_per_level
+            conf, grid, accessor_kls.load_param_info, accessor_kls.get_weight_per_level
         )
 
-        train_settings = Settings(
+        train_settings = SamplePreprocSettings(
             dataset_name=name,
             num_input_steps=num_input_steps,
             num_pred_steps=num_pred_steps_train,
+            step_duration=conf["periods"]["train"]["step_duration"],
             members=members,
             **conf["settings"],
         )
         train_period = Period(**conf["periods"]["train"], name="train")
-        train_ds = DatasetABC(
-            name, grid, train_period, param_list, train_settings, accessor
+        train_ds = cls(
+            name, grid, train_period, param_list, train_settings, accessor_kls
         )
 
-        valid_settings = Settings(
+        valid_settings = SamplePreprocSettings(
             dataset_name=name,
             num_input_steps=num_input_steps,
             num_pred_steps=num_pred_steps_val_test,
+            step_duration=conf["periods"]["valid"]["step_duration"],
             members=members,
             **conf["settings"],
         )
         valid_period = Period(**conf["periods"]["valid"], name="valid")
-        valid_ds = DatasetABC(
-            name, grid, valid_period, param_list, valid_settings, accessor
+        valid_ds = cls(
+            name, grid, valid_period, param_list, valid_settings, accessor_kls
         )
 
         test_period = Period(**conf["periods"]["test"], name="test")
-        test_ds = DatasetABC(
-            name, grid, test_period, param_list, valid_settings, accessor
+        test_ds = cls(
+            name, grid, test_period, param_list, valid_settings, accessor_kls
         )
 
         return train_ds, valid_ds, test_ds
@@ -914,12 +917,14 @@ class DatasetABC(Dataset):
     @classmethod
     def from_json(
         cls,
+        accessor_kls: Type[DataAccessor],
+        dataset_name: str,
         fname: Path,
         num_input_steps: int,
         num_pred_steps_train: int,
         num_pred_steps_val_tests: int,
         config_override: Union[Dict, None] = None,
-    ) -> Tuple["DatasetABC", "DatasetABC", "DatasetABC"]:
+    ) -> Tuple[Type["DatasetABC"], Type["DatasetABC"], Type["DatasetABC"]]:
         """
         Load a dataset from a json file + the number of expected timesteps
         taken as inputs (num_input_steps) and to predict (num_pred_steps)
@@ -932,9 +937,10 @@ class DatasetABC(Dataset):
             if config_override is not None:
                 conf = merge_dicts(conf, config_override)
         return cls.from_dict(
-            fname.stem,
+            dataset_name,
             conf,
             num_input_steps,
             num_pred_steps_train,
             num_pred_steps_val_tests,
+            accessor_kls,
         )

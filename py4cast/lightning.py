@@ -215,7 +215,7 @@ class AutoRegressiveLightning(pl.LightningModule):
         self.validation_step_losses = []
 
         # Set model input/output grid features based on dataset tensor shapes
-        num_grid_static_features = statics.grid_static_features.dim_size("features")
+        num_grid_static_features = statics.grid_statics.dim_size("features")
 
         # Compute the number of input features for the neural network
         # Should be directly supplied by datasetinfo ?

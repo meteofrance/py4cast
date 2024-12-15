@@ -37,29 +37,42 @@ except ImportError:
 
 
 try:
-    from .titan import TitanDataset
+    from .titan import TitanDataset, TitanAccessor
 
-    registry["titan"] = (TitanDataset, default_config_root / "titan_full.json")
+    registry["titan"] = (
+        "Titan",
+        TitanDataset, 
+        TitanAccessor, 
+        default_config_root / "titan_full.json"
+        )
 
 except (ImportError, FileNotFoundError, ModuleNotFoundError):
-    warnings.warn(f"Could not import TitanDataset. {traceback.format_exc()}")
+    warnings.warn(f"Could not import TitanDataset or TitanAccessor. {traceback.format_exc()}")
 
 try:
-    from .poesy import PoesyDataset
+    from .poesy import PoesyDataset, PoesyAccessor
 
-    registry["poesy"] = (PoesyDataset, default_config_root / "poesy_refacto.json")
+    registry["poesy"] = (
+        "Poesy",
+        PoesyDataset, 
+        PoesyAccessor, 
+        default_config_root / "poesy_refacto.json"
+        )
+    
 except ImportError:
-    warnings.warn(f"Could not import PoesyDataset. {traceback.format_exc()}")
+    warnings.warn(f"Could not import PoesyDataset or PoesyAccessor. {traceback.format_exc()}")
 
 try:
-    from .poesy import InferPoesyDataset
+    from .poesy import InferPoesyDataset, PoesyAccessor
 
     registry["poesy_infer"] = (
+        "Poesy",
         InferPoesyDataset,
+        PoesyAccessor,
         default_config_root / "poesy_infer.json",
     )
 except ImportError:
-    warnings.warn(f"Could not import InferPoesyDataset. {traceback.format_exc()}")
+    warnings.warn(f"Could not import InferPoesyDataset or PoesyAccessor. {traceback.format_exc()}")
 
 try:
     from .dummy import DummyDataset
@@ -84,7 +97,7 @@ def get_datasets(
     Returns 3 instances of the dataset: train, val, test
     """
     try:
-        dataset_kls, default_config = registry[name]
+        dataset_name, dataset_kls, accessor_kls, default_config = registry[name]
     except KeyError as ke:
         raise ValueError(
             f"Dataset {name} not found in registry, available datasets are :{registry.keys()}"
@@ -93,6 +106,8 @@ def get_datasets(
     config_file = default_config if config_file is None else Path(config_file)
 
     return dataset_kls.from_json(
+        accessor_kls,
+        dataset_name,
         config_file,
         num_input_steps,
         num_pred_steps_train,
