@@ -1,6 +1,7 @@
 import json
 import time
 from pathlib import Path
+
 import tqdm
 from typer import Typer
 

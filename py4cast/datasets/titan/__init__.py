@@ -18,15 +18,7 @@ from py4cast.datasets.access import (
     Stats,
     WeatherParam,
 )
-
-from py4cast.datasets.base import (
-    DatasetABC,
-    Period,
-    Timestamps,
-    Sample,
-    get_param_list,
-)
-
+from py4cast.datasets.base import DatasetABC, Period, Sample, Timestamps, get_param_list
 from py4cast.datasets.titan.settings import FORMATSTR, METADATA, SCRATCH_PATH
 
 

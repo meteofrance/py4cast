@@ -10,7 +10,7 @@ from copy import deepcopy
 from dataclasses import dataclass, field, fields
 from functools import cached_property
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Literal, Tuple, Union, Type
+from typing import Any, Callable, Dict, List, Literal, Tuple, Type, Union
 
 import einops
 import gif
@@ -235,18 +235,20 @@ class Statics(RegisterFieldsMixin):
 
 
 def generate_forcings(
-    date: dt.datetime, output_terms: Tuple[float], grid: Grid
+    date: dt.datetime, output_timestamps: Tuple[Timestamps], grid: Grid
 ) -> List[NamedTensor]:
     """
     Generate all the forcing in this function.
     Return a list of NamedTensor.
     """
     # Datetime Forcing
-    datetime_forcing = get_year_hour_forcing(date, output_terms).type(torch.float32)
+    datetime_forcing = get_year_hour_forcing(date, output_timestamps).type(
+        torch.float32
+    )
 
     # Solar forcing, dim : [num_pred_steps, Lat, Lon, feature = 1]
     solar_forcing = generate_toa_radiation_forcing(
-        grid.lat, grid.lon, date, output_terms
+        grid.lat, grid.lon, date, output_timestamps
     ).type(torch.float32)
 
     lforcings = [
@@ -542,7 +544,7 @@ class Sample:
 
         lforcings = generate_forcings(
             date=self.timestamps.datetime,
-            output_terms=self.output_timestamps.terms,
+            output_timestamps=self.output_timestamps.terms,
             grid=self.grid,
         )
 
@@ -667,7 +669,7 @@ class DatasetABC(Dataset):
         self.settings = settings
         self.accessor = accessor
         self.shuffle = self.period.name == "train"
-        self._cache_dir = accessor.get_dataset_path(name, grid)
+        self._cache_dir = accessor.get_dataset_path("Poesy_EURW1S40_refacto", grid)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
 
         n_input, n_pred = self.settings.num_input_steps, self.settings.num_pred_steps
@@ -802,12 +804,14 @@ class DatasetABC(Dataset):
     def grid_shape(self) -> tuple:
         x, _ = self.grid.meshgrid
         return x.shape
-    
+
     @cached_property
     def statics(self) -> Statics:
         return Statics(
             **{
-                "grid_statics": grid_static_features(self.grid, self.dataset_extra_statics),
+                "grid_statics": grid_static_features(
+                    self.grid, self.dataset_extra_statics
+                ),
                 "grid_shape": self.grid_shape,
             }
         )
@@ -908,9 +912,7 @@ class DatasetABC(Dataset):
         )
 
         test_period = Period(**conf["periods"]["test"], name="test")
-        test_ds = cls(
-            name, grid, test_period, param_list, valid_settings, accessor_kls
-        )
+        test_ds = cls(name, grid, test_period, param_list, valid_settings, accessor_kls)
 
         return train_ds, valid_ds, test_ds
 

@@ -1,6 +1,7 @@
 import datetime as dt
 import json
 from argparse import ArgumentParser
+from dataclasses import dataclass
 from functools import cached_property
 from pathlib import Path
 from typing import Dict, List, Literal, Tuple, Union
@@ -8,8 +9,6 @@ from typing import Dict, List, Literal, Tuple, Union
 import numpy as np
 import torch
 import tqdm
-
-from dataclasses import dataclass
 
 from py4cast.datasets.access import (
     DataAccessor,
@@ -20,15 +19,7 @@ from py4cast.datasets.access import (
     Stats,
     WeatherParam,
 )
-
-from py4cast.datasets.base import (
-    DatasetABC,
-    Period,
-    Timestamps,
-    Sample,
-    get_param_list,
-)
-
+from py4cast.datasets.base import DatasetABC, Period, Sample, Timestamps, get_param_list
 from py4cast.datasets.poesy.settings import (
     LATLON_FNAME,
     METADATA,
@@ -36,6 +27,7 @@ from py4cast.datasets.poesy.settings import (
     SCRATCH_PATH,
 )
 from py4cast.settings import CACHE_DIR
+
 
 @dataclass
 class PoesyAccessor(DataAccessor):
@@ -204,7 +196,7 @@ class PoesyDataset(DatasetABC):
         accessor_kls: PoesyAccessor,
     ):
         super().__init__(name, grid, period, params, settings, accessor=accessor_kls())
-    
+
     @cached_property
     def sample_list(self):
         """Creates the list of samples."""
@@ -235,7 +227,9 @@ class PoesyDataset(DatasetABC):
                     terms=np.array(terms),
                     validity_times=validity_times,
                 )
-                if self.accessor.valid_timestamp(n_inputs=n_inputs, timestamps=timestamps):
+                if self.accessor.valid_timestamp(
+                    n_inputs=n_inputs, timestamps=timestamps
+                ):
                     all_timestamps.append(timestamps)
         samples = []
         for ts in all_timestamps:
@@ -259,6 +253,7 @@ class PoesyDataset(DatasetABC):
 
     def __len__(self):
         return len(self.sample_list)
+
 
 # class InferPoesyDataset(PoesyDataset):
 #     """

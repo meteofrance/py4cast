@@ -61,7 +61,6 @@ if __name__ == "__main__":
         config_override = {
             "periods": {"test": {"start": args.date, "end": args.date, "step": 1}},
             "num_inference_pred_steps": args.infer_steps,
-            
         }
     else:
         config_override = {"num_inference_pred_steps": args.infer_steps}

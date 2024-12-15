@@ -37,30 +37,34 @@ except ImportError:
 
 
 try:
-    from .titan import TitanDataset, TitanAccessor
+    from .titan import TitanAccessor, TitanDataset
 
     registry["titan"] = (
         "Titan",
-        TitanDataset, 
-        TitanAccessor, 
-        default_config_root / "titan_full.json"
-        )
+        TitanDataset,
+        TitanAccessor,
+        default_config_root / "titan_full.json",
+    )
 
 except (ImportError, FileNotFoundError, ModuleNotFoundError):
-    warnings.warn(f"Could not import TitanDataset or TitanAccessor. {traceback.format_exc()}")
+    warnings.warn(
+        f"Could not import TitanDataset or TitanAccessor. {traceback.format_exc()}"
+    )
 
 try:
-    from .poesy import PoesyDataset, PoesyAccessor
+    from .poesy import PoesyAccessor, PoesyDataset
 
     registry["poesy"] = (
         "Poesy",
-        PoesyDataset, 
-        PoesyAccessor, 
-        default_config_root / "poesy_refacto.json"
-        )
-    
+        PoesyDataset,
+        PoesyAccessor,
+        default_config_root / "poesy_refacto.json",
+    )
+
 except ImportError:
-    warnings.warn(f"Could not import PoesyDataset or PoesyAccessor. {traceback.format_exc()}")
+    warnings.warn(
+        f"Could not import PoesyDataset or PoesyAccessor. {traceback.format_exc()}"
+    )
 
 try:
     from .poesy import InferPoesyDataset, PoesyAccessor
@@ -72,7 +76,9 @@ try:
         default_config_root / "poesy_infer.json",
     )
 except ImportError:
-    warnings.warn(f"Could not import InferPoesyDataset or PoesyAccessor. {traceback.format_exc()}")
+    warnings.warn(
+        f"Could not import InferPoesyDataset or PoesyAccessor. {traceback.format_exc()}"
+    )
 
 try:
     from .dummy import DummyDataset

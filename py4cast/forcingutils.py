@@ -16,53 +16,56 @@ Useful functions:
 """
 
 
-def compute_day_of_years(date: dt.datetime, terms: List[float]) -> np.array:
+def compute_day_of_years(
+    date: dt.datetime, output_terms: List[dt.timedelta]
+) -> np.array:
     """
     Compute the day of the year for the specified terms from the date.
     First january is 1, not 0.
     """
     days = []
 
-    for term in terms:
-        date_tmp = date + dt.timedelta(hours=float(term))
+    for term in output_terms:
+        date_tmp = date + term
         starting_year = dt.datetime(date_tmp.year, 1, 1)
         days.append((date_tmp - starting_year).days + 1)
 
     return np.asarray(days)
 
 
-def compute_hours_of_day(date: dt.datetime, terms: List[float]) -> np.array:
+def compute_hours_of_day(
+    date: dt.datetime, output_terms: List[dt.timedelta]
+) -> np.array:
     """
     Compute the hour of the day for the specified terms from the date.
     """
     hours = []
-    for term in terms:
-        date_tmp = date + dt.timedelta(hours=float(term))
+    for term in output_terms:
+        date_tmp = date + term
         hours.append(date_tmp.hour + date_tmp.minute / 60)
     return np.asarray(hours)
 
 
 def compute_seconds_from_start_of_year(
-    date: dt.datetime, terms: List[float]
+    date: dt.datetime, output_terms: List[dt.timedelta]
 ) -> np.array:
     """
     Compute how many seconds have elapsed since the beginning of the year for the specified terms.
     """
     start_of_year = dt.datetime(date.year, 1, 1)
     return np.asarray(
-        [
-            (date + dt.timedelta(hours=float(term)) - start_of_year).total_seconds()
-            for term in terms
-        ]
+        [(date + term - start_of_year).total_seconds() for term in output_terms]
     )
 
 
-def get_year_hour_forcing(date: dt.datetime, terms: List[float]) -> torch.Tensor:
+def get_year_hour_forcing(
+    date: dt.datetime, output_terms: List[dt.timedelta]
+) -> torch.Tensor:
     """
     Get the forcing term dependent of the date for each terms.
     """
-    hours_of_day = compute_hours_of_day(date, terms)
-    seconds_from_start_of_year = compute_seconds_from_start_of_year(date, terms)
+    hours_of_day = compute_hours_of_day(date, output_terms)
+    seconds_from_start_of_year = compute_seconds_from_start_of_year(date, output_terms)
 
     days_in_year = 366 if date.year % 4 == 0 else 365
     seconds_in_year = days_in_year * 24 * 60 * 60
@@ -85,14 +88,17 @@ def get_year_hour_forcing(date: dt.datetime, terms: List[float]) -> torch.Tensor
 
 
 def generate_toa_radiation_forcing(
-    lat: torch.Tensor, lon: torch.Tensor, date_utc: dt.datetime, terms: List[float]
+    lat: torch.Tensor,
+    lon: torch.Tensor,
+    date_utc: dt.datetime,
+    output_terms: List[dt.timedelta],
 ) -> torch.Tensor:
     """
     Get the forcing term of the solar irradiation for each terms.
     """
 
-    day_of_years = compute_day_of_years(date_utc, terms)
-    hours_of_day = compute_hours_of_day(date_utc, terms)
+    day_of_years = compute_day_of_years(date_utc, output_terms)
+    hours_of_day = compute_hours_of_day(date_utc, output_terms)
 
     # Hour angle, convert UTC hours into solar hours
     hours_lcl = torch.Tensor(hours_of_day).unsqueeze(-1).unsqueeze(-1) + lon / 15
