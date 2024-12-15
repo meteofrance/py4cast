@@ -871,7 +871,6 @@ class DatasetABC(Dataset):
         num_input_steps: int,
         num_pred_steps_train: int,
         num_pred_steps_val_test: int,
-        accessor_kls: Type[DataAccessor],
     ) -> Tuple[Type["DatasetABC"], Type["DatasetABC"], Type["DatasetABC"]]:
 
         conf["grid"]["load_grid_info_func"] = accessor_kls.load_grid_info
@@ -919,7 +918,6 @@ class DatasetABC(Dataset):
     @classmethod
     def from_json(
         cls,
-        accessor_kls: Type[DataAccessor],
         dataset_name: str,
         fname: Path,
         num_input_steps: int,
@@ -944,5 +942,4 @@ class DatasetABC(Dataset):
             num_input_steps,
             num_pred_steps_train,
             num_pred_steps_val_tests,
-            accessor_kls,
         )

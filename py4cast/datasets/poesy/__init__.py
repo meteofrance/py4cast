@@ -34,7 +34,8 @@ class PoesyAccessor(DataAccessor):
 
     @staticmethod
     def get_dataset_path(name: str, grid: Grid) -> Path:
-        return CACHE_DIR / str(name)
+        complete_name = str(name) + "_" + grid.name
+        return CACHE_DIR / complete_name
 
     @staticmethod
     def get_weight_per_level(
