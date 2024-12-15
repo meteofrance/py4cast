@@ -43,7 +43,7 @@ try:
         "Titan",
         TitanDataset,
         TitanAccessor,
-        default_config_root / "titan_full.json",
+        default_config_root / "titan_refacto.json",
     )
 
 except (ImportError, FileNotFoundError, ModuleNotFoundError):

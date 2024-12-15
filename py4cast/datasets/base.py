@@ -669,7 +669,7 @@ class DatasetABC(Dataset):
         self.settings = settings
         self.accessor = accessor
         self.shuffle = self.period.name == "train"
-        self._cache_dir = accessor.get_dataset_path("Poesy_EURW1S40_refacto", grid)
+        self._cache_dir = accessor.get_dataset_path(name, grid)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
 
         n_input, n_pred = self.settings.num_input_steps, self.settings.num_pred_steps

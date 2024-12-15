@@ -259,9 +259,9 @@ class TitanDataset(DatasetABC):
         period: Period,
         params: List[WeatherParam],
         settings: SamplePreprocSettings,
-        accessor: TitanAccessor,
+        accessor_kls: TitanAccessor,
     ):
-        super().__init__(self, name, grid, period, params, settings, accessor)
+        super().__init__(name, grid, period, params, settings, accessor=accessor_kls())
 
     @cached_property
     def sample_list(self):

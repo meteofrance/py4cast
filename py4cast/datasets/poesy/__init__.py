@@ -188,7 +188,7 @@ class InferSample(Sample):
 class PoesyDataset(DatasetABC):
     def __init__(
         self,
-        name,
+        name: str,
         grid: Grid,
         period: Period,
         params: List[WeatherParam],
