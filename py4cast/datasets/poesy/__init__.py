@@ -1,10 +1,9 @@
 import datetime as dt
-import json
 from argparse import ArgumentParser
 from dataclasses import dataclass
 from functools import cached_property
 from pathlib import Path
-from typing import Dict, List, Literal, Tuple, Union
+from typing import List, Literal
 
 import numpy as np
 import torch
@@ -19,7 +18,7 @@ from py4cast.datasets.access import (
     Stats,
     WeatherParam,
 )
-from py4cast.datasets.base import DatasetABC, Period, Sample, Timestamps, get_param_list
+from py4cast.datasets.base import DatasetABC, Period, Sample, Timestamps
 from py4cast.datasets.poesy.settings import (
     LATLON_FNAME,
     METADATA,
@@ -197,60 +196,6 @@ class PoesyDataset(DatasetABC):
         accessor_kls: PoesyAccessor,
     ):
         super().__init__(name, grid, period, params, settings, accessor=accessor_kls())
-
-    @cached_property
-    def sample_list(self):
-        """Creates the list of samples."""
-        print("Start creating samples...")
-        stats = self.stats if self.settings.standardize else None
-
-        n_inputs, n_preds, step_duration = (
-            self.settings.num_input_steps,
-            self.settings.num_pred_steps,
-            self.period.step_duration,
-        )
-
-        sample_timesteps = [
-            step_duration * step for step in range(-n_inputs + 1, n_preds + 1)
-        ]
-
-        all_timestamps = []
-        for date in tqdm.tqdm(self.period.date_list):
-            for term in self.period.terms_list:
-                t0 = date + dt.timedelta(hours=int(term))
-                validity_times = [
-                    t0 + dt.timedelta(hours=int(ts)) for ts in sample_timesteps
-                ]
-                terms = [dt.timedelta(hours=int(t + term)) for t in sample_timesteps]
-
-                timestamps = Timestamps(
-                    datetime=date,
-                    terms=np.array(terms),
-                    validity_times=validity_times,
-                )
-                if self.accessor.valid_timestamp(
-                    n_inputs=n_inputs, timestamps=timestamps
-                ):
-                    all_timestamps.append(timestamps)
-        samples = []
-        for ts in all_timestamps:
-            for member in self.settings.members:
-                sample = Sample(
-                    ts,
-                    self.settings,
-                    self.params,
-                    stats,
-                    self.grid,
-                    self.accessor.exists,
-                    self.accessor.get_param_tensor,
-                    member,
-                )
-                if sample.is_valid():
-                    samples.append(sample)
-
-        print(f"--> All {len(samples)} {self.period.name} samples are now defined")
-
-        return samples
 
     def __len__(self):
         return len(self.sample_list)
