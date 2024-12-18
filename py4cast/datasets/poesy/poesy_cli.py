@@ -7,7 +7,6 @@ from typer import Typer
 
 from py4cast.datasets import compute_dataset_stats as cds
 from py4cast.datasets.base import DatasetABC
-from py4cast.datasets.poesy import PoesyAccessor
 from py4cast.datasets.poesy.settings import DEFAULT_CONFIG
 
 app = Typer()
@@ -47,7 +46,7 @@ def prepare(dataset: DatasetABC, path_config: Path):
 @app.command()
 def describe(path_config: Path = DEFAULT_CONFIG):
     """Describes Titan."""
-    train_ds, _, _ = dataset.from_json(path_config, 2, 1, 5)
+    train_ds, _, _ = DatasetABC.from_json(path_config, 2, 1, 5)
     train_ds.dataset_info.summary()
     print("Len dataset : ", len(train_ds))
     print("First Item description :")
@@ -57,7 +56,7 @@ def describe(path_config: Path = DEFAULT_CONFIG):
 @app.command()
 def plot(path_config: Path = DEFAULT_CONFIG):
     """Plots a png and a gif for one sample."""
-    train_ds, _, _ = dataset.from_json(path_config, 2, 1, 5)
+    train_ds, _, _ = DatasetABC.from_json(path_config, 2, 1, 5)
     print("Plot gif of one sample...")
     sample = train_ds.sample_list[0]
     sample.plot_gif("test.gif")
@@ -69,7 +68,7 @@ def plot(path_config: Path = DEFAULT_CONFIG):
 @app.command()
 def speedtest(path_config: Path = DEFAULT_CONFIG, n_iter: int = 5):
     print("Speed test:")
-    train_ds, _, _ = dataset.from_json(path_config, 2, 1, 5)
+    train_ds, _, _ = DatasetABC.from_json(path_config, 2, 1, 5)
     data_iter = iter(train_ds.torch_dataloader())
     start_time = time.time()
     for i in tqdm.trange(n_iter, desc="Loading samples"):

@@ -17,7 +17,9 @@ from py4cast.datasets.titan.settings import DEFAULT_CONFIG
 app = Typer()
 
 
-def process_sample_dataset(dataset: DatasetABC, date: dt.datetime, params: List[Param]):
+def process_sample_dataset(
+    dataset: DatasetABC, date: dt.datetime, params: List[WeatherParam]
+):
     """Saves each 2D parameter data of the given date as one NPY file."""
     for param in params:
         dest_file = dataset.get_filepath(dataset.name, param, date, file_format="npy")

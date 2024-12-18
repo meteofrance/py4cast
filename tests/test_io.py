@@ -13,7 +13,6 @@ import xarray as xr
 from mfai.torch.namedtensor import NamedTensor
 
 from py4cast.datasets.base import DatasetABC
-from py4cast.datasets.dummy import DummyAccessor
 from py4cast.io import outputs as out
 
 
