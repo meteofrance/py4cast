@@ -13,6 +13,66 @@ import numpy as np
 import torch
 from mfai.torch.namedtensor import NamedTensor
 
+
+@dataclass(slots=True)
+class Period:
+    # first day of the period (included)
+    # each day of the period will be separated from start by an integer multiple of 24h
+    # note that the start date valid hour ("t0") may not be 00h00
+    start: dt.datetime
+    # last day of the period (included)
+    end: dt.datetime
+    # In hours, step btw the t0 of consecutive terms
+    step_duration: int
+    name: str
+    # first term (= time delta wrt to a date t0) that is admissible
+    term_start: int = 0
+    # last term (= time delta wrt to a date start) that is admissible
+    term_end: int = 23
+
+    def __post_init__(self):
+        self.start = np.datetime64(dt.datetime.strptime(str(self.start), "%Y%m%d%H"))
+        self.end = np.datetime64(dt.datetime.strptime(str(self.end), "%Y%m%d%H"))
+
+    @property
+    def terms_list(self) -> np.array:
+        return np.arange(self.term_start, self.term_end + 1, self.step_duration)
+
+    @property
+    def date_list(self) -> np.array:
+        """
+        List all dates available for the period, with a 24h leap
+        """
+        return np.arange(
+            self.start,
+            self.end + np.timedelta64(1, "D"),
+            np.timedelta64(1, "D"),
+            dtype="datetime64[s]",
+        ).tolist()
+
+
+@dataclass
+class Timestamps:
+    """
+    Describe all timestamps in a sample.
+    It contains
+        datetime, terms, validity times
+
+    If n_inputs = 2, n_preds = 2, terms will be (-1, 0, 1, 2) * step_duration
+     where step_duration is typically an integer multiple of 1 hour
+
+    validity times correspond to the addition of terms to the reference datetime
+    """
+
+    # date and hour of the reference time
+    datetime: dt.datetime
+    # terms are time deltas vis-à-vis the reference input time step.
+    terms: np.array
+
+    # validity times are complete datetimes
+    validity_times: List[dt.datetime]
+
+
 GridConfig = namedtuple(
     "GridConfig", "full_size latitude longitude geopotential landsea_mask"
 )
@@ -318,7 +378,7 @@ class DataAccessor(ABC):
     def get_filepath(
         dataset_name: str,
         param: WeatherParam,
-        date: dt.datetime,
+        timestamps: Timestamps,
         file_format: Literal["npy", "grib"],
     ) -> Path:
         """
@@ -326,19 +386,8 @@ class DataAccessor(ABC):
         """
         pass
 
-    def exists(
-        self,
-        ds_name: str,
-        param: WeatherParam,
-        date: dt.datetime,
-        file_format: Literal["npy", "grib"] = "npy",
-    ) -> bool:
-        filepath = self.get_filepath(ds_name, param, date, file_format)
-        return filepath.exists()
-
     @abstractmethod
     def load_data_from_disk(
-        self,
         dataset_name: str,  # name of the dataset or dataset version
         param: WeatherParam,  # specific parameter (2D field associated to a grid)
         timestamps: Timestamps,  # specific timestamp at which to load the field
@@ -352,32 +401,3 @@ class DataAccessor(ABC):
         loads a given parameter on a given timestamp
         """
         pass
-
-    def get_param_tensor(
-        self,
-        param: WeatherParam,
-        stats: Stats,
-        timestamps: Timestamps,
-        settings: SamplePreprocSettings,
-        standardize: bool = True,
-        member: int = 0,
-    ) -> torch.tensor:
-        """
-        Fetch data on disk fo the given parameter and all involved dates
-        Unless specified, normalize the samples with parameter-specific constants
-        returns a tensor
-        """
-        arr = self.load_data_from_disk(
-                settings.dataset_name, param, timestamps, member, settings.file_format
-            )
-        # Extend dimension to match 3D (level dimension)
-        if len(arr.shape) != 4:
-            arr = np.expand_dims(arr, axis=1)
-        arr = np.transpose(arr, axes=[0, 2, 3, 1])  # shape = (steps, lvl, x, y)
-        if standardize:
-            name = param.parameter_short_name
-            means = np.asarray(stats[name]["mean"])
-            std = np.asarray(stats[name]["std"])
-            arr = (arr - means) / std
-
-        return torch.from_numpy(arr)

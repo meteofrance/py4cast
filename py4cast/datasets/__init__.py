@@ -19,29 +19,10 @@ default_config_root = Path(__file__).parents[2] / "config/datasets/"
 
 
 try:
-    from .smeagol import SmeagolDataset
-
-    registry["smeagol"] = (SmeagolDataset, default_config_root / "smeagol.json")
-except ImportError:
-    warnings.warn(f"Could not import SmeagolDataset. {traceback.format_exc()}")
-
-try:
-    from .smeagol import InferSmeagolDataset
-
-    registry["smeagol_infer"] = (
-        InferSmeagolDataset,
-        default_config_root / "smeagol.json",
-    )
-except ImportError:
-    warnings.warn(f"Could not import SmeagolDataset. {traceback.format_exc()}")
-
-
-try:
     from .titan import TitanAccessor, TitanDataset
 
     registry["titan"] = (
         "Titan",
-        TitanDataset,
         TitanAccessor,
         default_config_root / "titan_refacto.json",
     )
@@ -56,7 +37,6 @@ try:
 
     registry["poesy"] = (
         "Poesy",
-        PoesyDataset,
         PoesyAccessor,
         default_config_root / "poesy_refacto.json",
     )
@@ -64,20 +44,6 @@ try:
 except ImportError:
     warnings.warn(
         f"Could not import PoesyDataset or PoesyAccessor. {traceback.format_exc()}"
-    )
-
-try:
-    from .poesy import InferPoesyDataset, PoesyAccessor
-
-    registry["poesy_infer"] = (
-        "Poesy",
-        InferPoesyDataset,
-        PoesyAccessor,
-        default_config_root / "poesy_infer.json",
-    )
-except ImportError:
-    warnings.warn(
-        f"Could not import InferPoesyDataset or PoesyAccessor. {traceback.format_exc()}"
     )
 
 try:
@@ -103,7 +69,7 @@ def get_datasets(
     Returns 3 instances of the dataset: train, val, test
     """
     try:
-        dataset_name, dataset_kls, accessor_kls, default_config = registry[name]
+        dataset_name, accessor_kls, default_config = registry[name]
     except KeyError as ke:
         raise ValueError(
             f"Dataset {name} not found in registry, available datasets are :{registry.keys()}"
@@ -111,7 +77,7 @@ def get_datasets(
 
     config_file = default_config if config_file is None else Path(config_file)
 
-    return dataset_kls.from_json(
+    return DatasetABC.from_json(
         accessor_kls,
         dataset_name,
         config_file,

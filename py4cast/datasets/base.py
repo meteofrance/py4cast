@@ -26,8 +26,10 @@ from py4cast.datasets.access import (
     DataAccessor,
     Grid,
     ParamConfig,
+    Period,
     SamplePreprocSettings,
     Stats,
+    Timestamps,
     WeatherParam,
     grid_static_features,
 )
@@ -174,28 +176,6 @@ def collate_fn(items: List[Item]) -> ItemBatch:
         )
 
     return ItemBatch(**batch_of_items)
-
-
-@dataclass
-class Timestamps:
-    """
-    Describe all timestamps in a sample.
-    It contains
-        datetime, terms, validity times
-
-    If n_inputs = 2, n_preds = 2, terms will be (-1, 0, 1, 2) * step_duration
-     where step_duration is typically an integer multiple of 1 hour
-
-    validity times correspond to the addition of terms to the reference datetime
-    """
-
-    # date and hour of the reference time
-    datetime: dt.datetime
-    # terms are time deltas vis-à-vis the reference input time step.
-    terms: np.array
-
-    # validity times are complete datetimes
-    validity_times: List[dt.datetime]
 
 
 @dataclass
@@ -355,43 +335,6 @@ class DatasetInfo:
                 print(table)  # Print the table
 
 
-@dataclass(slots=True)
-class Period:
-    # first day of the period (included)
-    # each day of the period will be separated from start by an integer multiple of 24h
-    # note that the start date valid hour ("t0") may not be 00h00
-    start: dt.datetime
-    # last day of the period (included)
-    end: dt.datetime
-    # In hours, step btw the t0 of consecutive terms
-    step_duration: int
-    name: str
-    # first term (= time delta wrt to a date t0) that is admissible
-    term_start: int = 0
-    # last term (= time delta wrt to a date start) that is admissible
-    term_end: int = 23
-
-    def __post_init__(self):
-        self.start = np.datetime64(dt.datetime.strptime(str(self.start), "%Y%m%d%H"))
-        self.end = np.datetime64(dt.datetime.strptime(str(self.end), "%Y%m%d%H"))
-
-    @property
-    def terms_list(self) -> np.array:
-        return np.arange(self.term_start, self.term_end + 1, self.step_duration)
-
-    @property
-    def date_list(self) -> np.array:
-        """
-        List all dates available for the period, with a 24h leap
-        """
-        return np.arange(
-            self.start,
-            self.end + np.timedelta64(1, "D"),
-            np.timedelta64(1, "D"),
-            dtype="datetime64[s]",
-        ).tolist()
-
-
 def get_param_list(
     conf: dict,
     grid: Grid,
@@ -437,8 +380,7 @@ class Sample:
     params: List[WeatherParam]
     stats: Stats
     grid: Grid
-    exists: Callable[[Any], bool]
-    get_param_tensor: Callable[[Any], torch.tensor]
+    accessor: DataAccessor
     member: int = 0
 
     input_timestamps: Timestamps = field(default=None)
@@ -474,7 +416,8 @@ class Sample:
 
     def is_valid(self) -> bool:
         for param in self.params:
-            if not self.exists(
+            if not self.accessor.exists(
+                self.accessor,
                 self.settings.dataset_name,
                 param,
                 self.timestamps,
@@ -482,6 +425,28 @@ class Sample:
             ):
                 return False
         return True
+
+    def get_param_tensor(self, param: WeatherParam, standardize: bool) -> torch.tensor:
+        """
+        Fetch data on disk fo the given parameter and all involved dates
+        Unless specified, normalize the samples with parameter-specific constants
+        returns a tensor
+        """
+        arr = self.accessor.load_data_from_disk(
+            self.accessor,
+            self.settings.dataset_name,
+            param,
+            self.timestamps,
+            self.member,
+            self.settings.file_format,
+        )
+
+        if standardize:
+            name = param.parameter_short_name
+            means = np.asarray(self.stats[name]["mean"])
+            std = np.asarray(self.stats[name]["std"])
+            arr = (arr - means) / std
+        return torch.from_numpy(arr)
 
     def load(self, no_standardize: bool = False) -> Item:
         """
@@ -499,22 +464,14 @@ class Sample:
                 # forcing is taken for every predicted step
                 tensor = self.get_param_tensor(
                     param=param,
-                    stats=self.stats,
-                    timestamps=self.input_timestamps,
-                    settings=self.settings,
                     standardize=(self.settings.standardize and not no_standardize),
-                    member=self.member,
                 )
                 tmp_state = NamedTensor(tensor=tensor, **deepcopy(state_kwargs))
 
             elif param.kind == "output":
                 tensor = self.get_param_tensor(
                     param=param,
-                    stats=self.stats,
-                    timestamps=self.output_timestamps,
-                    settings=self.settings,
                     standardize=(self.settings.standardize and not no_standardize),
-                    member=self.member,
                 )
                 tmp_state = NamedTensor(tensor=tensor, **deepcopy(state_kwargs))
                 loutputs.append(tmp_state)
@@ -522,24 +479,23 @@ class Sample:
             else:  # input_output
                 tensor = self.get_param_tensor(
                     param=param,
-                    stats=self.stats,
-                    timestamps=self.timestamps,
-                    settings=self.settings,
                     standardize=(self.settings.standardize and not no_standardize),
-                    member=self.member,
                 )
                 state_kwargs["names"][0] = "timestep"
-                tmp_state = NamedTensor(
-                    tensor=tensor[-self.settings.num_pred_steps :],
-                    **deepcopy(state_kwargs),
+
+                loutputs.append(
+                    NamedTensor(
+                        tensor=tensor[-self.settings.num_pred_steps :],
+                        **deepcopy(state_kwargs),
+                    )
                 )
 
-                loutputs.append(tmp_state)
-                tmp_state = NamedTensor(
-                    tensor=tensor[: self.settings.num_input_steps],
-                    **deepcopy(state_kwargs),
+                linputs.append(
+                    NamedTensor(
+                        tensor=tensor[: self.settings.num_input_steps],
+                        **deepcopy(state_kwargs),
+                    )
                 )
-                linputs.append(tmp_state)
 
         lforcings = generate_forcings(
             date=self.timestamps.datetime,
@@ -628,7 +584,7 @@ class Sample:
         frames = []
         n_inputs, n_preds = self.settings.num_input_steps, self.settings.num_pred_steps
         steps = list(range(-n_inputs + 1, n_preds + 1))
-        for step in tqdm.tqdm(steps, desc="Making gif"):
+        for step in tqdm(steps, desc="Making gif"):
             frame = self.plot_frame(item, step)
             frames.append(frame)
         gif.save(frames, str(save_path), duration=250)
@@ -686,6 +642,9 @@ class DatasetABC(Dataset):
         item = sample.load()
         return item
 
+    def __len__(self):
+        return len(self.sample_list)
+
     @cached_property
     def dataset_info(self) -> DatasetInfo:
         """Returns a DatasetInfo object describing the dataset.
@@ -728,7 +687,7 @@ class DatasetABC(Dataset):
             step_duration * step for step in range(-n_inputs + 1, n_preds + 1)
         ]
         all_timestamps = []
-        for date in tqdm.tqdm(self.period.date_list):
+        for date in tqdm(self.period.date_list):
             for term in self.period.terms_list:
                 t0 = date + dt.timedelta(hours=int(term))
                 validity_times = [
@@ -741,7 +700,7 @@ class DatasetABC(Dataset):
                     terms=np.array(terms),
                     validity_times=validity_times,
                 )
-                if self.valid_timestamp(n_inputs, timestamps):
+                if self.accessor.valid_timestamp(n_inputs, timestamps):
                     all_timestamps.append(timestamps)
 
         samples = []
@@ -753,8 +712,7 @@ class DatasetABC(Dataset):
                     self.params,
                     stats,
                     self.grid,
-                    self.exists,
-                    self.get_param_tensor,
+                    self.accessor,
                     member,
                 )
                 if sample.is_valid():
@@ -762,16 +720,6 @@ class DatasetABC(Dataset):
 
         print(f"--> All {len(samples)} {self.period.name} samples are now defined")
         return samples
-
-    def write_list_valid_samples(self):
-        print(f"Writing list of valid samples for {self.period.name} set...")
-        with open(self.valid_samples_file, "w") as f:
-            for date in tqdm.tqdm(
-                self.period.date_list, f"{self.period.name} samples validation"
-            ):
-                sample = Sample(date, self.settings, self.params, self.stats, self.grid)
-                if sample.is_valid():
-                    f.write(f"{date.strftime('%Y-%m-%d_%Hh%M')}\n")
 
     def torch_dataloader(self, tl_settings: TorchDataloaderSettings) -> DataLoader:
         """
