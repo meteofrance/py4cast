@@ -1,11 +1,10 @@
 import datetime as dt
-from functools import cached_property, lru_cache
+from functools import lru_cache
 from pathlib import Path
 from typing import Callable, List, Literal
 
 import numpy as np
 import torch
-import tqdm
 import xarray as xr
 from skimage.transform import resize
 
@@ -18,7 +17,7 @@ from py4cast.datasets.access import (
     Stats,
     WeatherParam,
 )
-from py4cast.datasets.base import DatasetABC, Period, Sample, Timestamps, get_param_list
+from py4cast.datasets.base import DatasetABC, Period, Timestamps
 from py4cast.datasets.titan.settings import FORMATSTR, METADATA, SCRATCH_PATH
 
 
@@ -262,7 +261,6 @@ class TitanDataset(DatasetABC):
         accessor_kls: TitanAccessor,
     ):
         super().__init__(name, grid, period, params, settings, accessor=accessor_kls())
-
 
     def __len__(self):
         return len(self.sample_list)
