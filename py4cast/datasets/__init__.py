@@ -47,7 +47,7 @@ try:
 
     registry["dummy"] = ("Dummy", DummyAccessor, "")
 except ImportError:
-    warnings.warn(f"Could not import DummyDataset. {traceback.format_exc()}")
+    warnings.warn(f"Could not import DummyAccessor. {traceback.format_exc()}")
 
 
 def get_datasets(

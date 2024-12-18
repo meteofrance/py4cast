@@ -152,7 +152,7 @@ def test_lightning_fit_inference():
     that we can make a simple inference with the trained model."""
     NUM_INPUTS = 2
     NUM_OUTPUTS = 1
-    DATASET = "Dummy"
+    DATASET = "dummy"
     MODEL = "HalfUNet"
     BATCH_SIZE = 2
     datasets = get_datasets(
