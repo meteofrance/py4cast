@@ -22,15 +22,13 @@ try:
     from .titan import TitanAccessor
 
     registry["titan"] = (
-        "Titan",
+        "titan_refacto",
         TitanAccessor,
         default_config_root / "titan_refacto.json",
     )
 
 except (ImportError, FileNotFoundError, ModuleNotFoundError):
-    warnings.warn(
-        f"Could not import TitanDataset or TitanAccessor. {traceback.format_exc()}"
-    )
+    warnings.warn(f"Could not import TitanAccessor. {traceback.format_exc()}")
 
 try:
     from .poesy import PoesyAccessor
@@ -42,14 +40,12 @@ try:
     )
 
 except ImportError:
-    warnings.warn(
-        f"Could not import PoesyDataset or PoesyAccessor. {traceback.format_exc()}"
-    )
+    warnings.warn(f"Could not import PoesyAccessor. {traceback.format_exc()}")
 
 try:
-    from .dummy import DummyDataset
+    from .dummy import DummyAccessor
 
-    registry["dummy"] = (DummyDataset, "")
+    registry["dummy"] = ("Dummy", DummyAccessor, "")
 except ImportError:
     warnings.warn(f"Could not import DummyDataset. {traceback.format_exc()}")
 

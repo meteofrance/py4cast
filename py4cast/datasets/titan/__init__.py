@@ -12,7 +12,7 @@ from py4cast.datasets.access import (
     Grid,
     GridConfig,
     ParamConfig,
-    SamplePreprocSettings,
+    Timestamps,
     WeatherParam,
 )
 from py4cast.datasets.base import DatasetABC
@@ -121,7 +121,7 @@ class TitanAccessor(DataAccessor):
         dates = timestamps.validity_times
         arr_list = []
         for date in dates:
-            data_path = self.get_filepath(ds_name, param, date, file_format)
+            data_path = self.get_filepath(self, ds_name, param, date, file_format)
             if file_format == "grib":
                 arr, lons, lats = load_data_grib(param, data_path)
                 arr = fit_to_grid(arr, lons, lats)
@@ -131,9 +131,9 @@ class TitanAccessor(DataAccessor):
             subdomain = param.grid.subdomain
             arr = arr[subdomain[0] : subdomain[1], subdomain[2] : subdomain[3]]
             if file_format == "grib":
-                arr = arr[::-1]
-            arr_list.append(arr)
-        return np.stack(arr_list)  # invert latitude
+                arr = arr[::-1]  # invert latitude
+            arr_list.append(np.expand_dims(arr, axis=-1))
+        return np.stack(arr_list)
 
     def exists(
         self,
@@ -143,7 +143,7 @@ class TitanAccessor(DataAccessor):
         file_format: Literal["npy", "grib"] = "grib",
     ) -> bool:
         for date in timestamps.validity_times:
-            filepath = self.get_filepath(ds_name, param, date, file_format)
+            filepath = self.get_filepath(self, ds_name, param, date, file_format)
             if not filepath.exists():
                 return False
         return True

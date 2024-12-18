@@ -877,7 +877,7 @@ class DatasetABC(Dataset):
         try:
             members = conf["members"]
         except KeyError:
-            members = None
+            members = [0]
 
         param_list = get_param_list(
             conf, grid, accessor_kls.load_param_info, accessor_kls.get_weight_per_level

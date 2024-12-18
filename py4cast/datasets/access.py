@@ -376,6 +376,7 @@ class DataAccessor(ABC):
 
     @abstractmethod
     def get_filepath(
+        self,
         dataset_name: str,
         param: WeatherParam,
         timestamps: Timestamps,
@@ -388,12 +389,11 @@ class DataAccessor(ABC):
 
     @abstractmethod
     def load_data_from_disk(
+        self,
         dataset_name: str,  # name of the dataset or dataset version
         param: WeatherParam,  # specific parameter (2D field associated to a grid)
         timestamps: Timestamps,  # specific timestamp at which to load the field
-        members: Optional[
-            Tuple[int]
-        ] = None,  # optional members id. when dealing with ensembles
+        member: int = 0,  # optional members id. when dealing with ensembles
         file_format: Literal["npy", "grib"] = "npy",  # format of the base file on disk
     ) -> np.array:
         """
