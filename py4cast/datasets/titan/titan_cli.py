@@ -10,34 +10,14 @@ from typer import Typer
 
 from py4cast.datasets import compute_dataset_stats as cds
 from py4cast.datasets.access import WeatherParam
-from py4cast.datasets.base import get_param_list
+from py4cast.datasets.base import DatasetABC, get_param_list
 from py4cast.datasets.titan import TitanAccessor
 from py4cast.datasets.titan.settings import DEFAULT_CONFIG
 
 app = Typer()
 
 
-class TitanDataset(DatasetABC):
-    # Si on doit travailler avec plusieurs grilles, on fera un super dataset qui contient
-    # plusieurs datasets chacun sur une seule grille
-    def __init__(
-        self,
-        name: str,
-        grid: Grid,
-        period: Period,
-        params: List[WeatherParam],
-        settings: SamplePreprocSettings,
-        accessor_kls: TitanAccessor,
-    ):
-        super().__init__(name, grid, period, params, settings, accessor=accessor_kls())
-
-    def __len__(self):
-        return len(self.sample_list)
-
-
-def process_sample_dataset(
-    dataset: TitanDataset, date: dt.datetime, params: List[Param]
-):
+def process_sample_dataset(dataset: DatasetABC, date: dt.datetime, params: List[Param]):
     """Saves each 2D parameter data of the given date as one NPY file."""
     for param in params:
         dest_file = dataset.get_filepath(dataset.name, param, date, file_format="npy")
@@ -79,7 +59,7 @@ def prepare(
         conf = json.load(fp)
 
     print("Creating folders...")
-    train_ds, valid_ds, test_ds = TitanDataset.from_dict(
+    train_ds, valid_ds, test_ds = DatasetABC.from_dict(
         path_config.stem,
         conf,
         num_input_steps,
@@ -96,8 +76,8 @@ def prepare(
         param_list = get_param_list(
             conf,
             train_ds.grid,
-            TitanDataset.load_param_info,
-            TitanDataset.get_weight_per_lvl,
+            TitanAccessor.load_param_info,
+            TitanAccessor.get_weight_per_level,
         )
         sum_dates = (
             list(train_ds.period.date_list)
@@ -116,7 +96,7 @@ def prepare(
 
     if compute_stats:
         conf["settings"]["standardize"] = False
-        train_ds, valid_ds, test_ds = TitanDataset.from_dict(
+        train_ds, valid_ds, test_ds = DatasetABC.from_dict(
             path_config.stem,
             conf,
             num_input_steps,
@@ -127,7 +107,7 @@ def prepare(
         cds.compute_parameters_stats(train_ds)
 
         conf["settings"]["standardize"] = True
-        train_ds, valid_ds, test_ds = TitanDataset.from_dict(
+        train_ds, valid_ds, test_ds = DatasetABC.from_dict(
             path_config.stem,
             conf,
             num_input_steps,
@@ -141,7 +121,7 @@ def prepare(
 @app.command()
 def describe(path_config: Path = DEFAULT_CONFIG):
     """Describes Titan."""
-    train_ds, _, _ = TitanDataset.from_json(path_config, 2, 1, 5)
+    train_ds, _, _ = DatasetABC.from_json(path_config, 2, 1, 5)
     train_ds.dataset_info.summary()
     print("Len dataset : ", len(train_ds))
     print("First Item description :")
@@ -151,7 +131,7 @@ def describe(path_config: Path = DEFAULT_CONFIG):
 @app.command()
 def plot(path_config: Path = DEFAULT_CONFIG):
     """Plots a png and a gif for one sample."""
-    train_ds, _, _ = TitanDataset.from_json(path_config, 2, 1, 5)
+    train_ds, _, _ = DatasetABC.from_json(path_config, 2, 1, 5)
     print("Plot gif of one sample...")
     sample = train_ds.sample_list[0]
     sample.plot_gif("test.gif")
@@ -163,7 +143,7 @@ def plot(path_config: Path = DEFAULT_CONFIG):
 @app.command()
 def speedtest(path_config: Path = DEFAULT_CONFIG, n_iter: int = 5):
     """Makes a loading speed test."""
-    train_ds, _, _ = TitanDataset.from_json(path_config, 2, 1, 5)
+    train_ds, _, _ = DatasetABC.from_json(path_config, 2, 1, 5)
     data_iter = iter(train_ds.torch_dataloader())
     print("Dataset file_format: ", train_ds.settings.file_format)
     print("Speed test:")

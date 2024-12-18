@@ -9,7 +9,7 @@ from copy import deepcopy
 from dataclasses import dataclass, field, fields
 from functools import cached_property
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Literal, Tuple, Type, Union
+from typing import Callable, Dict, List, Literal, Tuple, Type, Union
 
 import einops
 import gif

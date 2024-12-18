@@ -6,30 +6,15 @@ import tqdm
 from typer import Typer
 
 from py4cast.datasets import compute_dataset_stats as cds
+from py4cast.datasets.base import DatasetABC
 from py4cast.datasets.poesy import PoesyAccessor
 from py4cast.datasets.poesy.settings import DEFAULT_CONFIG
 
 app = Typer()
 
 
-class PoesyDataset(DatasetABC):
-    def __init__(
-        self,
-        name: str,
-        grid: Grid,
-        period: Period,
-        params: List[WeatherParam],
-        settings: SamplePreprocSettings,
-        accessor_kls: PoesyAccessor,
-    ):
-        super().__init__(name, grid, period, params, settings, accessor=accessor_kls())
-
-    def __len__(self):
-        return len(self.sample_list)
-
-
 @app.command()
-def prepare(dataset: PoesyDataset, path_config: Path):
+def prepare(dataset: DatasetABC, path_config: Path):
     print("--> Preparing Poesy Dataset...")
 
     print("Load train dataset configuration...")
@@ -38,23 +23,23 @@ def prepare(dataset: PoesyDataset, path_config: Path):
 
     print("Computing stats on each parameter...")
     conf["settings"]["standardize"] = True
-    train_ds, _, _ = PoesyDataset.from_json(
+    train_ds, _, _ = dataset.from_json(
         fname=path_config,
         num_input_steps=2,
         num_pred_steps_train=1,
         num_pred_steps_val_test=1,
     )
-    cds.compute_parameters_stats(PoesyDataset)
+    cds.compute_parameters_stats(dataset)
 
     print("Computing time stats on each parameters, between 2 timesteps...")
     conf["settings"]["standardize"] = True
-    train_ds, _, _ = PoesyDataset.from_json(
+    train_ds, _, _ = DatasetABC.from_json(
         fname=path_config,
         num_input_steps=2,
         num_pred_steps_train=1,
         num_pred_steps_val_test=1,
     )
-    cds.compute_time_step_stats(PoesyDataset)
+    cds.compute_time_step_stats(dataset)
 
     return train_ds
 
@@ -62,7 +47,7 @@ def prepare(dataset: PoesyDataset, path_config: Path):
 @app.command()
 def describe(path_config: Path = DEFAULT_CONFIG):
     """Describes Titan."""
-    train_ds, _, _ = PoesyDataset.from_json(path_config, 2, 1, 5)
+    train_ds, _, _ = dataset.from_json(path_config, 2, 1, 5)
     train_ds.dataset_info.summary()
     print("Len dataset : ", len(train_ds))
     print("First Item description :")
@@ -72,7 +57,7 @@ def describe(path_config: Path = DEFAULT_CONFIG):
 @app.command()
 def plot(path_config: Path = DEFAULT_CONFIG):
     """Plots a png and a gif for one sample."""
-    train_ds, _, _ = PoesyDataset.from_json(path_config, 2, 1, 5)
+    train_ds, _, _ = dataset.from_json(path_config, 2, 1, 5)
     print("Plot gif of one sample...")
     sample = train_ds.sample_list[0]
     sample.plot_gif("test.gif")
@@ -84,7 +69,7 @@ def plot(path_config: Path = DEFAULT_CONFIG):
 @app.command()
 def speedtest(path_config: Path = DEFAULT_CONFIG, n_iter: int = 5):
     print("Speed test:")
-    train_ds, _, _ = PoesyDataset.from_json(path_config, 2, 1, 5)
+    train_ds, _, _ = dataset.from_json(path_config, 2, 1, 5)
     data_iter = iter(train_ds.torch_dataloader())
     start_time = time.time()
     for i in tqdm.trange(n_iter, desc="Loading samples"):

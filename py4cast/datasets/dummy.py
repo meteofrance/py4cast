@@ -1,5 +1,4 @@
-import datetime as dt
-from dataclasses import dataclass
+import os
 from functools import cached_property
 from pathlib import Path
 from typing import List, Literal
@@ -11,11 +10,9 @@ from py4cast.datasets.access import (
     Grid,
     GridConfig,
     ParamConfig,
-    SamplePreprocSettings,
     Timestamps,
     WeatherParam,
 )
-from py4cast.datasets.base import DatasetABC
 from py4cast.settings import CACHE_DIR
 
 
@@ -35,8 +32,8 @@ class DummyAccessor(DataAccessor):
         return 1.0
 
     def load_grid_info(name: str) -> GridConfig:
-        lat, _ = (np.indices((self.x, self.y)) - 16) * 0.5
-        _, lon = (np.indices((self.x, self.y)) + 30) * 0.5
+        lat, _ = (np.indices((64, 64)) - 16) * 0.5
+        _, lon = (np.indices((64, 64)) + 30) * 0.5
 
         return GridConfig(
             full_size=(64, 64),
@@ -70,7 +67,9 @@ class DummyAccessor(DataAccessor):
             self.get_dataset_path(dataset_name, "dummygrid") / "dummy_data.npy"
         ):
             arr = np.random.randn(len(timestamps.terms), 64, 64, 1).clip(-3, 3)
-            np.save(self.get_dataset_path(dataset_name, "dummygrid") / "dummy_data.npy")
+            np.save(
+                self.get_dataset_path(dataset_name, "dummygrid") / "dummy_data.npy", arr
+            )
         return self.get_dataset_path(dataset_name, "dummygrid") / "dummy_data.npy"
 
     def load_data_from_disk(

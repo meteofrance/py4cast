@@ -11,7 +11,7 @@ from py4cast.datasets.access import (
     GridConfig,
     ParamConfig,
     SamplePreprocSettings,
-    Timtestamps,
+    Timestamps,
     WeatherParam,
 )
 from py4cast.datasets.base import DatasetABC
