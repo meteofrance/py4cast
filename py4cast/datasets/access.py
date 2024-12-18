@@ -341,7 +341,7 @@ class DataAccessor(ABC):
         self,
         dataset_name: str,  # name of the dataset or dataset version
         param: WeatherParam,  # specific parameter (2D field associated to a grid)
-        date: dt.datetime,  # specific timestamp at which to load the field
+        timestamps: Timestamps,  # specific timestamp at which to load the field
         members: Optional[
             Tuple[int]
         ] = None,  # optional members id. when dealing with ensembles
@@ -355,38 +355,29 @@ class DataAccessor(ABC):
 
     def get_param_tensor(
         self,
-        dataset_name: str,  # name of the dataset or dataset version
-        param: WeatherParam,  # specific parameter (2D field associated to a grid)
-        stats: Stats,  # Statistical constants (mean, standard deviation, min or max to normalize the given field)
-        date: dt.datetime,  # time stamp for date
-        terms: List,  # time stamp for lead times
-        standardize: bool,  # whether or not to normalize the field with Stats
-        members: Optional[
-            Tuple[int]
-        ] = None,  # optional members id. when dealing with ensembles
-        file_format: Literal["npy", "grib"] = "npy",  # format of the base file on disk
+        param: WeatherParam,
+        stats: Stats,
+        timestamps: Timestamps,
+        settings: SamplePreprocSettings,
+        standardize: bool = True,
+        member: int = 0,
     ) -> torch.tensor:
         """
-        Fetch all data related to a parameter at each element of a list of timestamps.
+        Fetch data on disk fo the given parameter and all involved dates
+        Unless specified, normalize the samples with parameter-specific constants
+        returns a tensor
         """
+        arr = self.load_data_from_disk(
+                settings.dataset_name, param, timestamps, member, settings.file_format
+            )
+        # Extend dimension to match 3D (level dimension)
+        if len(arr.shape) != 4:
+            arr = np.expand_dims(arr, axis=1)
+        arr = np.transpose(arr, axes=[0, 2, 3, 1])  # shape = (steps, lvl, x, y)
         if standardize:
             name = param.parameter_short_name
             means = np.asarray(stats[name]["mean"])
             std = np.asarray(stats[name]["std"])
+            arr = (arr - means) / std
 
-        array = self.load_data_from_disk(
-            dataset_name, param, date, terms, members, file_format
-        )
-
-        # Extend dimension to match 3D (level dimension)
-        if len(array.shape) != 4:
-            array = np.expand_dims(array, axis=-1)
-        array = np.transpose(array, axes=[2, 0, 1, 3])  # shape = (steps, lvl, x, y)
-
-        if standardize:
-            array = (array - means) / std
-
-        # Define which value is considered invalid
-        tensor_data = torch.from_numpy(array)
-
-        return tensor_data
+        return torch.from_numpy(arr)

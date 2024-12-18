@@ -93,7 +93,7 @@ class PoesyAccessor(DataAccessor):
         self,
         ds_name: str,
         param: WeatherParam,
-        date: dt.datetime,
+        timestamps: Timestamps,
         term: np.array,
         member: int,
         file_format: str = "npy",
@@ -102,11 +102,11 @@ class PoesyAccessor(DataAccessor):
         date : Date of file.
         term : Position of leadtimes in file.
         """
-        data_array = np.load(self.get_filepath(ds_name, param, date), mmap_mode="r")
+        data_array = np.load(self.get_filepath(ds_name, param, timestamps.datetime), mmap_mode="r")
         return data_array[
             param.grid.subdomain[0] : param.grid.subdomain[1],
             param.grid.subdomain[2] : param.grid.subdomain[3],
-            (term / dt.timedelta(hours=1)).astype(int) - 1,
+            (timestamps.term / dt.timedelta(hours=1)).astype(int) - 1,
             member,
         ]
 
@@ -138,41 +138,6 @@ class PoesyAccessor(DataAccessor):
             ):
                 return False
         return True
-
-    def get_param_tensor(
-        self,
-        param: WeatherParam,
-        stats: Stats,
-        timestamps: Timestamps,
-        settings: SamplePreprocSettings,
-        standardize: bool,
-        member: int = 1,
-    ) -> torch.tensor:
-        """
-        This function load a specific parameter into a tensor
-        """
-        if standardize:
-            name = param.parameter_short_name
-            means = np.asarray(stats[name]["mean"])
-            std = np.asarray(stats[name]["std"])
-
-        array = self.load_data_from_disk(
-            settings.dataset_name, param, timestamps.datetime, timestamps.terms, member
-        )
-
-        # Extend dimension to match 3D (level dimension)
-        if len(array.shape) != 4:
-            array = np.expand_dims(array, axis=-1)
-        array = np.transpose(array, axes=[2, 0, 1, 3])  # shape = (steps, lvl, x, y)
-
-        if standardize:
-            array = (array - means) / std
-
-        # Define which value is considered invalid
-        tensor_data = torch.from_numpy(array)
-
-        return tensor_data
-
 
 class InferSample(Sample):
     """

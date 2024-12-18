@@ -112,7 +112,7 @@ class TitanAccessor(DataAccessor):
         self,
         ds_name: str,
         param: WeatherParam,
-        date: dt.datetime,
+        timestamps: Timestamps,
         # the member parameter is not accessed if irrelevant
         member: int = 0,
         file_format: Literal["npy", "grib"] = "grib",
@@ -120,51 +120,22 @@ class TitanAccessor(DataAccessor):
         """
         Function to load invidiual parameter and lead time from a file stored in disk
         """
-        data_path = self.get_filepath(ds_name, param, date, file_format)
-        if file_format == "grib":
-            arr, lons, lats = load_data_grib(param, data_path)
-            arr = fit_to_grid(arr, lons, lats)
-        else:
-            arr = np.load(data_path)
-
-        subdomain = param.grid.subdomain
-        arr = arr[subdomain[0] : subdomain[1], subdomain[2] : subdomain[3]]
-        if file_format == "grib":
-            arr = arr[::-1]
-        return arr  # invert latitude
-
-    def get_param_tensor(
-        self,
-        param: WeatherParam,
-        stats: Stats,
-        timestamps: Timestamps,
-        settings: SamplePreprocSettings,
-        standardize: bool = True,
-        member: int = 0,
-    ) -> torch.tensor:
-        """
-        Fetch data on disk fo the given parameter and all involved dates
-        Unless specified, normalize the samples with parameter-specific constants
-        returns a tensor
-        """
         dates = timestamps.validity_times
-        arrays = [
-            self.load_data_from_disk(
-                settings.dataset_name, param, date, member, settings.file_format
-            )
-            for date in dates
-        ]
-        arr = np.stack(arrays)
-        # Extend dimension to match 3D (level dimension)
-        if len(arr.shape) != 4:
-            arr = np.expand_dims(arr, axis=1)
-        arr = np.transpose(arr, axes=[0, 2, 3, 1])  # shape = (steps, lvl, x, y)
-        if standardize:
-            name = param.parameter_short_name
-            means = np.asarray(stats[name]["mean"])
-            std = np.asarray(stats[name]["std"])
-            arr = (arr - means) / std
-        return torch.from_numpy(arr)
+        arr_list = []
+        for d in dates:
+            data_path = self.get_filepath(ds_name, param, date, file_format)
+            if file_format == "grib":
+                arr, lons, lats = load_data_grib(param, data_path)
+                arr = fit_to_grid(arr, lons, lats)
+            else:
+                arr = np.load(data_path)
+
+            subdomain = param.grid.subdomain
+            arr = arr[subdomain[0] : subdomain[1], subdomain[2] : subdomain[3]]
+            if file_format == "grib":
+                arr = arr[::-1]
+            arr_list.append(arr)
+        return np.stack(arr_list)  # invert latitude
 
     def exists(
         self,
