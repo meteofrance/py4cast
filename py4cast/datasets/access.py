@@ -11,8 +11,7 @@ import cartopy
 import einops
 import numpy as np
 import torch
-
-from py4cast.datasets.named_tensors import NamedTensor
+from mfai.torch.namedtensor import NamedTensor
 
 GridConfig = namedtuple(
     "GridConfig", "full_size latitude longitude geopotential landsea_mask"
