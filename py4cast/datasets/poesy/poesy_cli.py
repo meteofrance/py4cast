@@ -27,6 +27,7 @@ class PoesyDataset(DatasetABC):
     def __len__(self):
         return len(self.sample_list)
 
+
 @app.command()
 def prepare(dataset: PoesyDataset, path_config: Path):
     print("--> Preparing Poesy Dataset...")

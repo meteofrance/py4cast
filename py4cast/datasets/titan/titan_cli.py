@@ -16,6 +16,7 @@ from py4cast.datasets.titan.settings import DEFAULT_CONFIG
 
 app = Typer()
 
+
 class TitanDataset(DatasetABC):
     # Si on doit travailler avec plusieurs grilles, on fera un super dataset qui contient
     # plusieurs datasets chacun sur une seule grille

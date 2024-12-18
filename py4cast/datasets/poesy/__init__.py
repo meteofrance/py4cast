@@ -139,4 +139,3 @@ class PoesyAccessor(DataAccessor):
             ):
                 return False
         return True
-
