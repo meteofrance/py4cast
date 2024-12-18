@@ -1,11 +1,9 @@
 import datetime as dt
-from argparse import ArgumentParser
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Literal
 
 import numpy as np
-import torch
 
 from py4cast.datasets.access import (
     DataAccessor,
@@ -13,10 +11,9 @@ from py4cast.datasets.access import (
     GridConfig,
     ParamConfig,
     SamplePreprocSettings,
-    Stats,
     WeatherParam,
 )
-from py4cast.datasets.base import DatasetABC, Period, Sample, Timestamps
+from py4cast.datasets.base import DatasetABC
 from py4cast.datasets.poesy.settings import (
     LATLON_FNAME,
     METADATA,
@@ -143,18 +140,3 @@ class PoesyAccessor(DataAccessor):
                 return False
         return True
 
-
-class PoesyDataset(DatasetABC):
-    def __init__(
-        self,
-        name: str,
-        grid: Grid,
-        period: Period,
-        params: List[WeatherParam],
-        settings: SamplePreprocSettings,
-        accessor_kls: PoesyAccessor,
-    ):
-        super().__init__(name, grid, period, params, settings, accessor=accessor_kls())
-
-    def __len__(self):
-        return len(self.sample_list)

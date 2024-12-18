@@ -6,11 +6,26 @@ import tqdm
 from typer import Typer
 
 from py4cast.datasets import compute_dataset_stats as cds
-from py4cast.datasets.poesy import PoesyDataset
+from py4cast.datasets.poesy import PoesyAccessor
 from py4cast.datasets.poesy.settings import DEFAULT_CONFIG
 
 app = Typer()
 
+
+class PoesyDataset(DatasetABC):
+    def __init__(
+        self,
+        name: str,
+        grid: Grid,
+        period: Period,
+        params: List[WeatherParam],
+        settings: SamplePreprocSettings,
+        accessor_kls: PoesyAccessor,
+    ):
+        super().__init__(name, grid, period, params, settings, accessor=accessor_kls())
+
+    def __len__(self):
+        return len(self.sample_list)
 
 @app.command()
 def prepare(dataset: PoesyDataset, path_config: Path):

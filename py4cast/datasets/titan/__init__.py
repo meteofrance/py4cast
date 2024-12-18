@@ -4,7 +4,6 @@ from pathlib import Path
 from typing import Callable, List, Literal
 
 import numpy as np
-import torch
 import xarray as xr
 from skimage.transform import resize
 
@@ -14,10 +13,9 @@ from py4cast.datasets.access import (
     GridConfig,
     ParamConfig,
     SamplePreprocSettings,
-    Stats,
     WeatherParam,
 )
-from py4cast.datasets.base import DatasetABC, Period, Timestamps
+from py4cast.datasets.base import DatasetABC
 from py4cast.datasets.titan.settings import FORMATSTR, METADATA, SCRATCH_PATH
 
 
@@ -122,7 +120,7 @@ class TitanAccessor(DataAccessor):
         """
         dates = timestamps.validity_times
         arr_list = []
-        for d in dates:
+        for date in dates:
             data_path = self.get_filepath(ds_name, param, date, file_format)
             if file_format == "grib":
                 arr, lons, lats = load_data_grib(param, data_path)
@@ -212,26 +210,3 @@ def load_data_grib(param: WeatherParam, path: Path) -> np.ndarray:
     else:
         arr = ds[param.grib_param].sel(isobaricInhPa=param.level).values
     return arr, lons, lats
-
-
-#############################################################
-#                            DATASET                        #
-#############################################################
-
-
-class TitanDataset(DatasetABC):
-    # Si on doit travailler avec plusieurs grilles, on fera un super dataset qui contient
-    # plusieurs datasets chacun sur une seule grille
-    def __init__(
-        self,
-        name: str,
-        grid: Grid,
-        period: Period,
-        params: List[WeatherParam],
-        settings: SamplePreprocSettings,
-        accessor_kls: TitanAccessor,
-    ):
-        super().__init__(name, grid, period, params, settings, accessor=accessor_kls())
-
-    def __len__(self):
-        return len(self.sample_list)

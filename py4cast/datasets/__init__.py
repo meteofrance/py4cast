@@ -19,7 +19,7 @@ default_config_root = Path(__file__).parents[2] / "config/datasets/"
 
 
 try:
-    from .titan import TitanAccessor, TitanDataset
+    from .titan import TitanAccessor
 
     registry["titan"] = (
         "Titan",
@@ -33,7 +33,7 @@ except (ImportError, FileNotFoundError, ModuleNotFoundError):
     )
 
 try:
-    from .poesy import PoesyAccessor, PoesyDataset
+    from .poesy import PoesyAccessor
 
     registry["poesy"] = (
         "Poesy",

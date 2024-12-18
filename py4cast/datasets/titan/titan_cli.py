@@ -9,12 +9,29 @@ import tqdm
 from typer import Typer
 
 from py4cast.datasets import compute_dataset_stats as cds
-from py4cast.datasets.access import Param
+from py4cast.datasets.access import WeatherParam
 from py4cast.datasets.base import get_param_list
-from py4cast.datasets.titan import TitanDataset
+from py4cast.datasets.titan import TitanAccessor
 from py4cast.datasets.titan.settings import DEFAULT_CONFIG
 
 app = Typer()
+
+class TitanDataset(DatasetABC):
+    # Si on doit travailler avec plusieurs grilles, on fera un super dataset qui contient
+    # plusieurs datasets chacun sur une seule grille
+    def __init__(
+        self,
+        name: str,
+        grid: Grid,
+        period: Period,
+        params: List[WeatherParam],
+        settings: SamplePreprocSettings,
+        accessor_kls: TitanAccessor,
+    ):
+        super().__init__(name, grid, period, params, settings, accessor=accessor_kls())
+
+    def __len__(self):
+        return len(self.sample_list)
 
 
 def process_sample_dataset(
