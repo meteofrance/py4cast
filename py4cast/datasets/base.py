@@ -339,9 +339,7 @@ def get_param_list(
     conf: dict,
     grid: Grid,
     # function to retrieve all parameters information about the dataset
-    load_param_info: Callable[[str], ParamConfig],
-    # function to retrieve the weight given to the parameter in the loss
-    get_weight_per_level: Callable[[str], float],
+    accessor: DataAccessor,
 ) -> List[WeatherParam]:
     param_list = []
     for name, values in conf["params"].items():
@@ -350,9 +348,9 @@ def get_param_list(
                 name=name,
                 level=lvl,
                 grid=grid,
-                load_param_info=load_param_info,
+                load_param_info=accessor.load_param_info,
                 kind=values["kind"],
-                get_weight_per_level=get_weight_per_level,
+                get_weight_per_level=accessor.get_weight_per_level,
             )
             param_list.append(param)
     return param_list
@@ -857,16 +855,14 @@ class DatasetABC(Dataset):
         num_pred_steps_val_test: int,
     ) -> Tuple[Type["DatasetABC"], Type["DatasetABC"], Type["DatasetABC"]]:
 
-        conf["grid"]["load_grid_info_func"] = accessor_kls.load_grid_info
-        grid = Grid(**conf["grid"])
+        grid = Grid(load_grid_info_func=accessor_kls.load_grid_info, **conf["grid"])
+
         try:
             members = conf["members"]
         except KeyError:
             members = [0]
 
-        param_list = get_param_list(
-            conf, grid, accessor_kls.load_param_info, accessor_kls.get_weight_per_level
-        )
+        param_list = get_param_list(conf, grid, accessor_kls)
 
         train_settings = SamplePreprocSettings(
             dataset_name=name,
