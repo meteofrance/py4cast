@@ -97,7 +97,11 @@ def test_date_forcing():
     Testing the date forcing.
     """
     date = datetime.datetime(year=2023, month=12, day=31, hour=23)
-    relativ_terms = [1, 2, 3]
+    relativ_terms = [
+        datetime.timedelta(hours=1),
+        datetime.timedelta(hours=2),
+        datetime.timedelta(hours=3),
+    ]
 
     nb_terms = len(relativ_terms)
     nb_forcing = 4
@@ -120,7 +124,7 @@ def test_solar_forcing():
     # Input data of the exercice
     lat = torch.tensor(43)
     lon = torch.tensor(-89)
-    relativ_terms = [0]
+    relativ_terms = [datetime.timedelta(hours=0)]
     # solar_date = datetime.datetime(year=2023, month=2, day=13, hour=9, minute = 30), add 5h56 to convert into utc hour
     utc_date = datetime.datetime(year=2023, month=2, day=13, hour=15, minute=26)
     E0 = 1366
@@ -141,7 +145,11 @@ def test_solar_forcing():
     lat = torch.rand(16, 16)
     lon = torch.rand(16, 16)
     utc_date = datetime.datetime(year=2023, month=5, day=20, hour=13)
-    relativ_terms = [1, 2, 3]
+    relativ_terms = [
+        datetime.timedelta(hours=1),
+        datetime.timedelta(hours=2),
+        datetime.timedelta(hours=3),
+    ]
 
     forcing = generate_toa_radiation_forcing(lat, lon, utc_date, relativ_terms)
 
