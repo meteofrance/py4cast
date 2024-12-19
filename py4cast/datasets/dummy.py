@@ -41,7 +41,7 @@ class DummyAccessor(DataAccessor):
 
     jsonconfig = json.dumps(config, sort_keys=True, indent=4)
 
-    with open(DEFAULT_CONFIG_DIR / "datasets"/ "dummy_config.json", "w") as outfile:
+    with open(DEFAULT_CONFIG_DIR / "datasets" / "dummy_config.json", "w") as outfile:
         outfile.write(jsonconfig)
 
     def cache_dir(name: str, grid: Grid) -> Path:
