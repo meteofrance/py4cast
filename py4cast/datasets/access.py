@@ -401,3 +401,11 @@ class DataAccessor(ABC):
         loads a given parameter on a given timestamp
         """
         pass
+
+    @abstractmethod
+    def valid_timestamp(n_inputs: int, timestamps: Timestamps) -> bool:
+        """
+        Verification function called after the creation of each timestamps.
+        Check if computed terms respect the dataset convention.
+        """
+        pass

@@ -45,7 +45,7 @@ except ImportError:
 try:
     from .dummy import DummyAccessor
 
-    registry["dummy"] = ("Dummy", DummyAccessor, "")
+    registry["dummy"] = ("Dummy", DummyAccessor, default_config_root / "dummy_config.json",)
 except ImportError:
     warnings.warn(f"Could not import DummyAccessor. {traceback.format_exc()}")
 
