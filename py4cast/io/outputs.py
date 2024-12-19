@@ -10,8 +10,9 @@ import torch
 import xarray as xr
 from cfgrib import xarray_to_grib as xtg
 from dataclasses_json import dataclass_json
+from mfai.torch.namedtensor import NamedTensor
 
-from py4cast.datasets.base import DatasetABC, NamedTensor
+from py4cast.datasets.base import DatasetABC
 from py4cast.forcingutils import compute_hours_of_day
 
 

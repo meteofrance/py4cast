@@ -331,12 +331,20 @@ class DataAccessor(ABC):
     as two end-to-end examples of DataAccessors.
     """
 
+    def cache_dir(name: str, grid: Grid) -> Path:
+        """
+        Return the path of cache_dir, where, e.g, stat files can be stored
+        """
+        path = CACHE_DIR / f"{name}_{grid.name}"
+        os.makedirs(path, mode=0o777, exist_ok=True)
+        return path
+
     @abstractmethod
     def get_dataset_path(name: str, grid: Grid) -> Path:
         """
         Return the path that will be used as cache for data during dataset preparation.
         """
-        pass
+        raise NotImplementedError
 
     @abstractmethod
     def get_weight_per_level(
@@ -346,7 +354,7 @@ class DataAccessor(ABC):
         """
         Attribute a weight in the final reconstruction loss depending on the height level and level_type
         """
-        pass
+        raise NotImplementedError
 
     @abstractmethod
     def load_grid_info(name: str) -> GridConfig:
@@ -355,7 +363,7 @@ class DataAccessor(ABC):
         Return an instance of the GridConfig namedtuple.
         Consumed by the 'Grid' interface object.
         """
-        pass
+        raise NotImplementedError
 
     @abstractmethod
     def get_grid_coords(param: WeatherParam) -> List[float]:
@@ -363,7 +371,7 @@ class DataAccessor(ABC):
         Get the extent of the grid related to a given parameter
         (min and max for latitude (2 first positions) and longitude (positions 3 and 4))
         """
-        pass
+        raise NotImplementedError
 
     @abstractmethod
     def load_param_info(name: str) -> ParamConfig:
@@ -372,11 +380,12 @@ class DataAccessor(ABC):
         Return a configuration to instantiate parameter data as ParamConfig.
         Consumed by the `Param` interface object.
         """
-        pass
+        raise NotImplementedError
 
+    @classmethod
     @abstractmethod
     def get_filepath(
-        self,
+        cls,
         dataset_name: str,
         param: WeatherParam,
         timestamps: Timestamps,
@@ -385,11 +394,12 @@ class DataAccessor(ABC):
         """
         Return a path to retrieve a given parameter at from a dataset
         """
-        pass
+        raise NotImplementedError
 
+    @classmethod
     @abstractmethod
     def load_data_from_disk(
-        self,
+        cls,
         dataset_name: str,  # name of the dataset or dataset version
         param: WeatherParam,  # specific parameter (2D field associated to a grid)
         timestamps: Timestamps,  # specific timestamp at which to load the field
@@ -400,7 +410,18 @@ class DataAccessor(ABC):
         Main loading function to fetch actual data on disk.
         loads a given parameter on a given timestamp
         """
-        pass
+        raise NotImplementedError
+
+    @classmethod
+    @abstractmethod
+    def exists(
+        cls,
+        ds_name: str,
+        param: WeatherParam,
+        timestamps: Timestamps,
+        file_format: Literal["npy", "grib"] = "grib",
+    ) -> bool:
+        raise NotImplementedError
 
     @abstractmethod
     def valid_timestamp(n_inputs: int, timestamps: Timestamps) -> bool:
@@ -408,4 +429,4 @@ class DataAccessor(ABC):
         Verification function called after the creation of each timestamps.
         Check if computed terms respect the dataset convention.
         """
-        pass
+        raise NotImplementedError

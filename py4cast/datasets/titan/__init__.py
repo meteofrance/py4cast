@@ -79,14 +79,19 @@ class TitanAccessor(DataAccessor):
     #                              LOADING                      #
     #############################################################
 
+    @classmethod
+    def cache_dir(cls, name: str, grid: Grid):
+        return cls.get_dataset_path(name, grid)
+
     @staticmethod
     def get_dataset_path(name: str, grid: Grid):
         str_subdomain = "-".join([str(i) for i in grid.subdomain])
         subdataset_name = f"{name}_{grid.name}_{str_subdomain}"
         return SCRATCH_PATH / "subdatasets" / subdataset_name
 
+    @classmethod
     def get_filepath(
-        self,
+        cls,
         ds_name: str,
         param: WeatherParam,
         date: dt.datetime,
@@ -101,12 +106,13 @@ class TitanAccessor(DataAccessor):
             folder = SCRATCH_PATH / "grib" / date.strftime(FORMATSTR)
             return folder / param.grib_name
         else:
-            npy_path = self.get_dataset_path(ds_name, param.grid) / "data"
+            npy_path = cls.get_dataset_path(ds_name, param.grid) / "data"
             filename = f"{param.name}_{param.level}_{param.level_type}.npy"
             return npy_path / date.strftime(FORMATSTR) / filename
 
+    @classmethod
     def load_data_from_disk(
-        self,
+        cls,
         ds_name: str,
         param: WeatherParam,
         timestamps: Timestamps,
@@ -120,7 +126,7 @@ class TitanAccessor(DataAccessor):
         dates = timestamps.validity_times
         arr_list = []
         for date in dates:
-            data_path = self.get_filepath(self, ds_name, param, date, file_format)
+            data_path = cls.get_filepath(ds_name, param, date, file_format)
             if file_format == "grib":
                 arr, lons, lats = load_data_grib(param, data_path)
                 arr = fit_to_grid(arr, lons, lats)
@@ -134,15 +140,16 @@ class TitanAccessor(DataAccessor):
             arr_list.append(np.expand_dims(arr, axis=-1))
         return np.stack(arr_list)
 
+    @classmethod
     def exists(
-        self,
+        cls,
         ds_name: str,
         param: WeatherParam,
         timestamps: Timestamps,
         file_format: Literal["npy", "grib"] = "grib",
     ) -> bool:
         for date in timestamps.validity_times:
-            filepath = self.get_filepath(self, ds_name, param, date, file_format)
+            filepath = cls.get_filepath(ds_name, param, date, file_format)
             if not filepath.exists():
                 return False
         return True

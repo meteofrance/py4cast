@@ -6,6 +6,7 @@ Test our pure PyTorch models to make sure they can be :
 4. onnx loaded and used for inference
 """
 
+import os
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -162,6 +163,7 @@ def test_lightning_fit_inference():
         NUM_OUTPUTS,
         None,
     )
+
     dl_settings = TorchDataloaderSettings(
         batch_size=BATCH_SIZE,
         num_workers=2,

@@ -417,7 +417,6 @@ class Sample:
     def is_valid(self) -> bool:
         for param in self.params:
             if not self.accessor.exists(
-                self.accessor,
                 self.settings.dataset_name,
                 param,
                 self.timestamps,
@@ -433,7 +432,6 @@ class Sample:
         returns a tensor
         """
         arr = self.accessor.load_data_from_disk(
-            self.accessor,
             self.settings.dataset_name,
             param,
             self.timestamps,
@@ -624,12 +622,9 @@ class DatasetABC(Dataset):
         self.settings = settings
         self.accessor = accessor
         self.shuffle = self.period.name == "train"
-        self._cache_dir = accessor.get_dataset_path(name, grid)
-        self.cache_dir.mkdir(parents=True, exist_ok=True)
+        self.cache_dir = accessor.cache_dir(name, grid)
 
         n_input, n_pred = self.settings.num_input_steps, self.settings.num_pred_steps
-        filename = f"valid_samples_{self.period.name}_{n_input}_{n_pred}.txt"
-        self.valid_samples_file = self.cache_dir / filename
 
     def __str__(self) -> str:
         return f"{self.name}_{self.grid.name}"
@@ -770,14 +765,6 @@ class DatasetABC(Dataset):
             if param.kind == "output":
                 res += 1
         return res
-
-    @cached_property
-    def cache_dir(self) -> Path:
-        """
-        Cache directory of the dataset.
-        Used at least to get statistics.
-        """
-        return self._cache_dir
 
     @property
     def dataset_extra_statics(self) -> List[NamedTensor]:

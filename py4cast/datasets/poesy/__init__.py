@@ -26,9 +26,13 @@ from py4cast.settings import CACHE_DIR
 class PoesyAccessor(DataAccessor):
 
     @staticmethod
-    def get_dataset_path(name: str, grid: Grid) -> Path:
+    def cache_dir(name: str, grid: Grid):
         complete_name = str(name) + "_" + grid.name
         return CACHE_DIR / complete_name
+
+    @staticmethod
+    def get_dataset_path(name: str, grid: Grid) -> Path:
+        return SCRATCH_PATH
 
     @staticmethod
     def get_weight_per_level(

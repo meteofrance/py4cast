@@ -3,6 +3,8 @@ import warnings
 from pathlib import Path
 from typing import Dict, Tuple, Union
 
+from py4cast.settings import DEFAULT_CONFIG_DIR
+
 from .base import DatasetABC  # noqa: F401
 
 registry = {}
@@ -14,17 +16,13 @@ registry = {}
 # break the code
 # NEW DATASETS MUST BE REGISTERED HERE
 
-
-default_config_root = Path(__file__).parents[2] / "config/datasets/"
-
-
 try:
     from .titan import TitanAccessor
 
     registry["titan"] = (
         "titan_refacto",
         TitanAccessor,
-        default_config_root / "titan_refacto.json",
+        DEFAULT_CONFIG_DIR / "datasets" / "titan_refacto.json",
     )
 
 except (ImportError, FileNotFoundError, ModuleNotFoundError):
@@ -36,7 +34,7 @@ try:
     registry["poesy"] = (
         "Poesy",
         PoesyAccessor,
-        default_config_root / "poesy_refacto.json",
+        DEFAULT_CONFIG_DIR / "datasets" / "poesy_refacto.json",
     )
 
 except ImportError:
@@ -48,7 +46,7 @@ try:
     registry["dummy"] = (
         "Dummy",
         DummyAccessor,
-        default_config_root / "dummy_config.json",
+        DEFAULT_CONFIG_DIR / "datasets" / "dummy_config.json",
     )
 except ImportError:
     warnings.warn(f"Could not import DummyAccessor. {traceback.format_exc()}")
