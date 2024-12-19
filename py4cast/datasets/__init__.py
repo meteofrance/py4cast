@@ -20,7 +20,6 @@ try:
     from .titan import TitanAccessor
 
     registry["titan"] = (
-        "titan_refacto",
         TitanAccessor,
         DEFAULT_CONFIG_DIR / "datasets" / "titan_refacto.json",
     )
@@ -32,7 +31,6 @@ try:
     from .poesy import PoesyAccessor
 
     registry["poesy"] = (
-        "Poesy",
         PoesyAccessor,
         DEFAULT_CONFIG_DIR / "datasets" / "poesy_refacto.json",
     )
@@ -44,7 +42,6 @@ try:
     from .dummy import DummyAccessor
 
     registry["dummy"] = (
-        "Dummy",
         DummyAccessor,
         DEFAULT_CONFIG_DIR / "datasets" / "dummy_config.json",
     )
@@ -66,18 +63,25 @@ def get_datasets(
 
     Returns 3 instances of the dataset: train, val, test
     """
+
+    # checks if name has a registry key as component
+    registered_name = ""
+    for k in registry.keys():
+        if k in name.lower():
+            registered_name = k
+            break
     try:
-        dataset_name, accessor_kls, default_config = registry[name]
+        accessor_kls, default_config = registry[registered_name]
     except KeyError as ke:
         raise ValueError(
-            f"Dataset {name} not found in registry, available datasets are :{registry.keys()}"
+            f"Dataset {name} doesn't match a registry substring, available datasets are :{registry.keys()}"
         ) from ke
 
     config_file = default_config if config_file is None else Path(config_file)
 
     return DatasetABC.from_json(
         accessor_kls,
-        dataset_name,
+        name,
         config_file,
         num_input_steps,
         num_pred_steps_train,

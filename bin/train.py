@@ -56,7 +56,6 @@ parser.add_argument(
     type=str,
     default="titan",
     help="Dataset to use",
-    choices=dataset_registry.keys(),
 )
 parser.add_argument(
     "--dataset_conf",

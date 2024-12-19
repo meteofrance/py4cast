@@ -694,6 +694,7 @@ class DatasetABC(Dataset):
                     all_timestamps.append(timestamps)
 
         samples = []
+        invalid_samples = 0
         for ts in all_timestamps:
             for member in self.settings.members:
                 sample = Sample(
@@ -707,8 +708,9 @@ class DatasetABC(Dataset):
                 )
                 if sample.is_valid():
                     samples.append(sample)
-
-        print(f"--> All {len(samples)} {self.period.name} samples are now defined")
+                else:
+                    invalid_samples+=1
+        print(f"--> {len(samples)} {self.period.name} samples are now defined, with {invalid_samples} invalid samples.")
         return samples
 
     def torch_dataloader(self, tl_settings: TorchDataloaderSettings) -> DataLoader:
