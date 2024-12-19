@@ -20,7 +20,6 @@ from mlflow.models.signature import infer_signature
 from pytorch_lightning.callbacks import LearningRateMonitor
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 
-from py4cast.datasets import registry as dataset_registry
 from py4cast.datasets.base import TorchDataloaderSettings
 from py4cast.lightning import (
     ArLightningHyperParam,
@@ -56,7 +55,6 @@ parser.add_argument(
     type=str,
     default="titan",
     help="Dataset to use",
-    choices=dataset_registry.keys(),
 )
 parser.add_argument(
     "--dataset_conf",
