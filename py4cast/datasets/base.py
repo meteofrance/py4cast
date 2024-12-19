@@ -709,8 +709,10 @@ class DatasetABC(Dataset):
                 if sample.is_valid():
                     samples.append(sample)
                 else:
-                    invalid_samples+=1
-        print(f"--> {len(samples)} {self.period.name} samples are now defined, with {invalid_samples} invalid samples.")
+                    invalid_samples += 1
+        print(
+            f"--> {len(samples)} {self.period.name} samples are now defined, with {invalid_samples} invalid samples."
+        )
         return samples
 
     def torch_dataloader(self, tl_settings: TorchDataloaderSettings) -> DataLoader:
