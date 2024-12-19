@@ -1,8 +1,9 @@
+import json
 import os
 from functools import cached_property
 from pathlib import Path
 from typing import List, Literal
-import json
+
 import numpy as np
 
 from py4cast.datasets.access import (
@@ -17,50 +18,33 @@ from py4cast.settings import CACHE_DIR
 
 
 class DummyAccessor(DataAccessor):
-    
+
     print("importing DummyAccessor automatically creates directory and dummy config")
     config = {
         "periods": {
-            "train": {
-            "start": 2023010100,
-            "end": 2023010107,
-            "step_duration": 1
-            },
-        "valid": {
-            "start": 2023010108,
-            "end": 2023010115,
-            "step_duration": 1
+            "train": {"start": 2023010100, "end": 2023010107, "step_duration": 1},
+            "valid": {"start": 2023010108, "end": 2023010115, "step_duration": 1},
+            "test": {"start": 2023010116, "end": 2023010122, "step_duration": 1},
         },
-        "test": {
-            "start": 2023010116,
-            "end": 2023010122,
-            "step_duration": 1
-        }
-        },
-        "settings":{
-        "standardize": 'true',
-        "file_format": "npy"
-        },
-        "grid":{
-        "name": "dummygrid",
-        "border_size": 0,
-        "subdomain": [0,64,0,64],
-        "proj_name": "PlateCarree",
-        "projection_kwargs": {}
+        "settings": {"standardize": "true", "file_format": "npy"},
+        "grid": {
+            "name": "dummygrid",
+            "border_size": 0,
+            "subdomain": [0, 64, 0, 64],
+            "proj_name": "PlateCarree",
+            "projection_kwargs": {},
         },
         "params": {
-        "dummy_parameter": {
-            "levels": [500],
-            "kind": "input_output"
+            "dummy_parameter": {"levels": [500], "kind": "input_output"},
         },
-        }
     }
 
-    jsonconfig = json.dumps(config,sort_keys=True, indent=4)
+    jsonconfig = json.dumps(config, sort_keys=True, indent=4)
 
-    with open(Path(__file__).parents[2] / "config/datasets/dummy_config.json", "w") as outfile:
+    with open(
+        Path(__file__).parents[2] / "config/datasets/dummy_config.json", "w"
+    ) as outfile:
         outfile.write(jsonconfig)
-
 
     @cached_property
     def get_dataset_path(name: str, grid: Grid) -> Path:
@@ -131,5 +115,5 @@ class DummyAccessor(DataAccessor):
         arr = np.load(self.get_filepath(dataset_name, param, timestamps))
         return arr
 
-    def valid_timestamp(n_inputs: int, time: Timestamps)->bool:
+    def valid_timestamp(n_inputs: int, time: Timestamps) -> bool:
         return True
