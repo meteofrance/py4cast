@@ -9,7 +9,7 @@ from copy import deepcopy
 from dataclasses import dataclass, field, fields
 from functools import cached_property
 from pathlib import Path
-from typing import Callable, Dict, List, Literal, Tuple, Type, Union
+from typing import Dict, List, Literal, Tuple, Type, Union
 
 import einops
 import gif
@@ -25,7 +25,6 @@ from tqdm import tqdm
 from py4cast.datasets.access import (
     DataAccessor,
     Grid,
-    ParamConfig,
     Period,
     SamplePreprocSettings,
     Stats,
