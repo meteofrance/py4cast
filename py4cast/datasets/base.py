@@ -624,8 +624,6 @@ class DatasetABC(Dataset):
         self.shuffle = self.period.name == "train"
         self.cache_dir = accessor.cache_dir(name, grid)
 
-        n_input, n_pred = self.settings.num_input_steps, self.settings.num_pred_steps
-
     def __str__(self) -> str:
         return f"{self.name}_{self.grid.name}"
 

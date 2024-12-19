@@ -6,7 +6,6 @@ Test our pure PyTorch models to make sure they can be :
 4. onnx loaded and used for inference
 """
 
-import os
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
