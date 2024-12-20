@@ -87,29 +87,33 @@ We provide an example module [here](../py4cast_plugin_example.py) to help you cr
 
 ### Adding a new dataset
 
-1. Your dataset **MUST** inherit from **DatasetABC** and **data.Dataset**, in thats order.
+All datasets inherit the pytorch Dataset class and a specific DatasetABC class that handles "weather-like" inputs.
+The user only needs to define the methods accessing data on disk and subclass the DataAccessor abstract base class.
+
+You must decide how to define, for your dataset :
+   * a parameter **WeatherParam**, i.e a 2D field corresponding to a weather variable (e.g geopotential at 500hPa), including long name, level, type of level
+   * a grid **Grid** i.e the way a 2D field is represented on the geoid. Regular latitude-longitude is one exemple, but it can be something else (Lambert, etc...).
+   * a **Period** (contiguous array of dates and hours describing the temporal extent of your dataset).
+   * a **Timestamp**, i.e, for a single sample, how to define the dates and hours involved. In an autoregressive framework, one is typically interested in a day D, hour h and previous / subsequent timesteps :  D:h-dt,D:h,D:h+dt, etc...
+   * **Stats** :  normalization constants used to pre-process the inputs ; these are metadata which can be pre-computed and stored in a `cache_dir`.
+
+This is done with the subsequent steps :
+
+1. Your DataAccessor **MUST** inherit from **DatasetAccessor**.
 
 ```python
-class TitanDataset(DatasetABC, Dataset):
+class TitanAccessor(DataAccessor):
     ...
 ```
+2. Your DataAccessor **MUST** implement all the abstract methods from **DataAccessor**.
+   * `load_grid_info`, `load_param_info`, `get_weight_per_level` : deciding how to load metadata
+   * `get_dataset_path`, `cache_dir`, `get_filepath` : deciding how to describe directories and files in your architecture.
+   * `load_data_from_disk`, `exists`, `valid_timestamps` : used to verify the validity of a sample and to load individual data chunks from the disk.
+3. This code must be included in a submodule under the py4cast.datasets module, with :
+   * the `__init__.py` file containing the definition of the DataAccessor class
+   * additional files, such as `settings.py` (defining constants such as directories) or `metadata.yaml` (providing general information on the dataset). While this is up to the user, we recommend following examples from `titan` or from `poesy`.
 
-2. Your dataset **MUST** implement
-    * ALL the abstract properties from **DatasetABC**: `dataset_info`, `meshgrid`, `geopotential_info` and `cache_dir`.
-    * ALL the abstract methods from **DatasetABC**: `torch_dataloader` and `from_json`.
-    * 2 methods from **data.Dataset**: `__len__` and `__getitem__`.
-
-3. Your `__getitem__` method MUST return an Item object.
-
-```python
-    def __getitem__(self, index: int) -> Item:
-        ...
-```
-
-4. It is MANDATORY that your `__getitem__` method returns [Item](../py4cast/datasets/base.py#L288) instances containing NamedTensors with precise feature and dimension names. By convention we use these names for tensor dimensions: **("batch", "timestep", "lat", "lon", "features")**.
-
-5. It is HIGHLY RECOMMENDED that your dataset implements a `prepare` method to easily compute and save all the statics needed by your dataset.
-
+4. You must modify the `registry` object in the `py4cast.datasets.__init__.py` module to include your custom DataAccessor. After that, the DataAccessor will be used each time your dataset name will include the dataAccessor name as a substring.
 
 ### Adding Training Plots
 
