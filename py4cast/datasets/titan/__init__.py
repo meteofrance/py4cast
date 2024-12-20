@@ -167,7 +167,7 @@ class TitanAccessor(DataAccessor):
         return True
 
     def parameter_namer(param: WeatherParam) -> str:
-        if param.level_type in ["surface","heightAboveGround"]:
+        if param.level_type in ["surface", "heightAboveGround"]:
             level_type = "m"
         else:
             level_type = "hpa"
