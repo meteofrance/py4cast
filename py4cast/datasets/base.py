@@ -213,20 +213,18 @@ class Statics(RegisterFieldsMixin):
 
 
 def generate_forcings(
-    date: dt.datetime, output_timestamps: Tuple[Timestamps], grid: Grid
+    date: dt.datetime, output_terms: List[dt.timedelta], grid: Grid
 ) -> List[NamedTensor]:
     """
     Generate all the forcing in this function.
     Return a list of NamedTensor.
     """
     # Datetime Forcing
-    datetime_forcing = get_year_hour_forcing(date, output_timestamps).type(
-        torch.float32
-    )
+    datetime_forcing = get_year_hour_forcing(date, output_terms).type(torch.float32)
 
     # Solar forcing, dim : [num_pred_steps, Lat, Lon, feature = 1]
     solar_forcing = generate_toa_radiation_forcing(
-        grid.lat, grid.lon, date, output_timestamps
+        grid.lat, grid.lon, date, output_terms
     ).type(torch.float32)
 
     lforcings = [
@@ -380,7 +378,6 @@ class Sample:
     accessor: DataAccessor
     member: int = 0
 
-    input_timestamps: Timestamps = field(default=None)
     output_timestamps: Timestamps = field(default=None)
 
     def __post_init__(self):
@@ -397,11 +394,6 @@ class Sample:
         ):
             raise Exception("Length terms does not match inputs + outputs")
 
-        self.input_timestamps = Timestamps(
-            self.timestamps.datetime,
-            self.timestamps.terms[: self.settings.num_input_steps],
-            self.timestamps.validity_times[: self.settings.num_input_steps],
-        )
         self.output_timestamps = Timestamps(
             self.timestamps.datetime,
             self.timestamps.terms[self.settings.num_input_steps :],
@@ -422,22 +414,25 @@ class Sample:
                 return False
         return True
 
-    def get_param_tensor(self, param: WeatherParam, standardize: bool) -> torch.tensor:
+    def get_param_tensor(
+        self, param: WeatherParam, timestamps: Timestamps, standardize: bool
+    ) -> torch.tensor:
         """
         Fetch data on disk fo the given parameter and all involved dates
         Unless specified, normalize the samples with parameter-specific constants
         returns a tensor
         """
+
         arr = self.accessor.load_data_from_disk(
             self.settings.dataset_name,
             param,
-            self.timestamps,
+            timestamps,
             self.member,
             self.settings.file_format,
         )
 
         if standardize:
-            name = param.parameter_short_name
+            name = self.accessor.parameter_namer(param)
             means = np.asarray(self.stats[name]["mean"])
             std = np.asarray(self.stats[name]["std"])
             arr = (arr - means) / std
@@ -447,37 +442,36 @@ class Sample:
         """
         Return inputs, outputs, forcings as tensors concatenated into an Item.
         """
-        linputs, loutputs = [], []
+        linputs, loutputs, lforcings = [], [], []
 
         # Reading parameters from files
         for param in self.params:
             state_kwargs = {
-                "feature_names": [param.parameter_short_name],
+                "feature_names": [self.accessor.parameter_namer(param)],
                 "names": ["timestep", "lat", "lon", "features"],
             }
+
+            stamps = (
+                self.timestamps
+                if param.kind == "input_output"
+                else self.output_timestamps
+            )
+            tensor = self.get_param_tensor(
+                param=param,
+                timestamps=stamps,
+                standardize=(self.settings.standardize and not no_standardize),
+            )
+            tmp_state = NamedTensor(tensor=tensor, **deepcopy(state_kwargs))
+
             if param.kind == "input":
-                # forcing is taken for every predicted step
-                tensor = self.get_param_tensor(
-                    param=param,
-                    standardize=(self.settings.standardize and not no_standardize),
-                )
-                tmp_state = NamedTensor(tensor=tensor, **deepcopy(state_kwargs))
+                # forcing is an input, taken for every predicted step (= output timestamps)
+                lforcings.append(tmp_state)
 
             elif param.kind == "output":
-                tensor = self.get_param_tensor(
-                    param=param,
-                    standardize=(self.settings.standardize and not no_standardize),
-                )
-                tmp_state = NamedTensor(tensor=tensor, **deepcopy(state_kwargs))
+                # output-only params count in the loss
                 loutputs.append(tmp_state)
 
-            else:  # input_output
-                tensor = self.get_param_tensor(
-                    param=param,
-                    standardize=(self.settings.standardize and not no_standardize),
-                )
-                state_kwargs["names"][0] = "timestep"
-
+            else:  # input_output, separated along the steps
                 loutputs.append(
                     NamedTensor(
                         tensor=tensor[-self.settings.num_pred_steps :],
@@ -492,14 +486,15 @@ class Sample:
                     )
                 )
 
-        lforcings = generate_forcings(
+        external_forcings = generate_forcings(
             date=self.timestamps.datetime,
-            output_timestamps=self.output_timestamps.terms,
+            output_terms=self.output_timestamps.terms,
             grid=self.grid,
         )
 
-        for forcing in lforcings:
+        for forcing in external_forcings:
             forcing.unsqueeze_and_expand_from_(linputs[0])
+        lforcings = lforcings + external_forcings
 
         return Item(
             inputs=NamedTensor.concat(linputs),
@@ -521,7 +516,8 @@ class Sample:
         levels = sorted(list(set([p.level for p in self.params])))
         dict_params = {level: [] for level in levels}
         for param in self.params:
-            if param.parameter_short_name in ntensor.feature_names:
+            name = self.accessor.parameter_namer(param)
+            if name in ntensor.feature_names:
                 dict_params[param.level].append(param)
 
         # Groups levels 0m, 2m and 10m on one "surf" level
@@ -538,7 +534,7 @@ class Sample:
 
         for i, level in enumerate(dict_params.keys()):
             for j, param in enumerate(dict_params[level]):
-                pname = param.parameter_short_name
+                pname = self.accessor.parameter_namer(param)
                 tensor = ntensor[pname][index_tensor, :, :, 0]
                 arr = tensor.numpy()[::-1]  # invert latitude
                 vmin, vmax = self.stats[pname]["min"], self.stats[pname]["max"]
@@ -821,21 +817,21 @@ class DatasetABC(Dataset):
         Does not include grid information (such as geopotentiel and LandSeaMask).
         Make the difference between inputs, outputs.
         """
-        return [p.parameter_short_name for p in self.params if p.kind == kind]
+        return [self.accessor.parameter_namer(p) for p in self.params if p.kind == kind]
 
     @cached_property
     def units(self) -> Dict[str, str]:
         """
         Return a dictionnary with name and units
         """
-        return {p.parameter_short_name: p.unit for p in self.params}
+        return {self.accessor.parameter_namer(p): p.unit for p in self.params}
 
     @cached_property
     def state_weights(self):
         """Weights used in the loss function."""
         kinds = ["output", "input_output"]
         return {
-            p.parameter_short_name: p.state_weight
+            self.accessor.parameter_namer(p): p.state_weight
             for p in self.params
             if p.kind in kinds
         }

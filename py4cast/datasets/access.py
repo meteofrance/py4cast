@@ -268,10 +268,6 @@ class WeatherParam:
     def parameter_name(self) -> str:
         return f"{self.long_name}_{self.level}_{self.level_type}"
 
-    @property
-    def parameter_short_name(self) -> str:
-        return f"{self.name}_{self.level}_{self.level_type}"
-
 
 @dataclass
 class Stats:
@@ -433,3 +429,10 @@ class DataAccessor(ABC):
         Check if computed terms respect the dataset convention.
         """
         raise NotImplementedError
+
+    @abstractmethod
+    def parameter_namer(param: WeatherParam) -> str:
+        """
+        Return a string used to identify parameters names on files and stats metadata
+        """
+        return f"{param.name}_{param.level}_{param.level_type}"

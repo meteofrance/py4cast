@@ -106,8 +106,9 @@ class TitanAccessor(DataAccessor):
             folder = SCRATCH_PATH / "grib" / date.strftime(FORMATSTR)
             return folder / param.grib_name
         else:
+
             npy_path = cls.get_dataset_path(ds_name, param.grid) / "data"
-            filename = f"{param.name}_{param.level}_{param.level_type}.npy"
+            filename = f"{cls.parameter_namer(param)}.npy"
             return npy_path / date.strftime(FORMATSTR) / filename
 
     @classmethod
@@ -133,8 +134,6 @@ class TitanAccessor(DataAccessor):
             else:
                 arr = np.load(data_path)
 
-            subdomain = param.grid.subdomain
-            arr = arr[subdomain[0] : subdomain[1], subdomain[2] : subdomain[3]]
             if file_format == "grib":
                 arr = arr[::-1]  # invert latitude
             arr_list.append(np.expand_dims(arr, axis=-1))
@@ -166,6 +165,13 @@ class TitanAccessor(DataAccessor):
         if term_0 > np.timedelta64(23, "h"):
             return False
         return True
+
+    def parameter_namer(param: WeatherParam) -> str:
+        if param.level_type in ["surface","heightAboveGround"]:
+            level_type = "m"
+        else:
+            level_type = "hpa"
+        return f"{param.name}_{param.level}{level_type}"
 
 
 ############################################################
