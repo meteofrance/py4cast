@@ -162,6 +162,7 @@ def test_lightning_fit_inference():
         NUM_OUTPUTS,
         None,
     )
+
     dl_settings = TorchDataloaderSettings(
         batch_size=BATCH_SIZE,
         num_workers=2,
