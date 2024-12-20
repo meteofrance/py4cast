@@ -111,7 +111,7 @@ class TitanAccessor(DataAccessor):
    * `load_data_from_disk`, `exists`, `valid_timestamps` : used to verify the validity of a sample and to load individual data chunks from the disk.
 3. This code must be included in a submodule under the py4cast.datasets module, with :
    * the `__init__.py` file containing the definition of the DataAccessor class
-   * additional files, such as `settings.py` (defining constants such as directories) or `metadata.yaml` (providing general information on the dataset). While this is up to the user, we recommend following examples from `titan` or from `poesy`.
+   * additional files, such as `settings.py` (defining constants such as directories) or `metadata.yaml` (providing general information on the dataset). While this is up to the user, we recommend following examples from `titan`(reanalysis dataset) or from `poesy` (ensemble reforecast dataset).
 
 4. You must modify the `registry` object in the `py4cast.datasets.__init__.py` module to include your custom DataAccessor. After that, the DataAccessor will be used each time your dataset name will include the dataAccessor name as a substring.
 
