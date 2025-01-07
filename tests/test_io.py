@@ -12,8 +12,10 @@ import torch
 import xarray as xr
 from mfai.torch.namedtensor import NamedTensor
 
-from py4cast.datasets.dummy import DummyDataset
+from py4cast.datasets.base import DatasetABC
+from py4cast.datasets.dummy import DummyAccessor
 from py4cast.io import outputs as out
+from py4cast.settings import DEFAULT_CONFIG_DIR
 
 
 class FakeXarrayLatLon(xr.Dataset):
@@ -34,7 +36,14 @@ class FakeXarrayLatLon(xr.Dataset):
 def test_nan_mask():
     """Test the make_nan_mask function"""
 
-    _, _, dummy_ds = DummyDataset.from_json("fakepath.json", 1, 2, 4)
+    _, _, dummy_ds = DatasetABC.from_json(
+        DummyAccessor,
+        "dummy",
+        f"{DEFAULT_CONFIG_DIR}/datasets/dummy_config.json",
+        num_input_steps=1,
+        num_pred_steps_train=2,
+        num_pred_steps_val_tests=2,
+    )
 
     exact_lat = (np.arange(64) - 16) * 0.5
     exact_lon = (np.arange(64) + 30) * 0.5
@@ -293,7 +302,15 @@ def test_write_template_dataset():
     validtime = 1.0
     leadtime = 1.0
     sample = FakeSample("1911-10-30", "first solvay congress")
-    _, _, dummy_ds = DummyDataset.from_json("fakepath.json", 1, 2, 4)
+    _, _, dummy_ds = DatasetABC.from_json(
+        DummyAccessor,
+        "dummy",
+        f"{DEFAULT_CONFIG_DIR}/datasets/dummy_config.json",
+        num_input_steps=1,
+        num_pred_steps_train=2,
+        num_pred_steps_val_tests=2,
+    )
+
     pred = NamedTensor(
         torch.ones((1, 5, 2, 64, 64), dtype=torch.float32) * 3.14160000,
         names=["batch", "timestep", "features", "lat", "lon"],
@@ -348,7 +365,14 @@ def test_write_template_dataset():
     validtime = 1.0
     leadtime = 1.0
     sample = FakeSample("1911-10-30", "first solvay congress")
-    _, _, dummy_ds = DummyDataset.from_json("fakepath.json", 1, 2, 4)
+    _, _, dummy_ds = DatasetABC.from_json(
+        DummyAccessor,
+        "dummy",
+        f"{DEFAULT_CONFIG_DIR}/datasets/dummy_config.json",
+        num_input_steps=1,
+        num_pred_steps_train=2,
+        num_pred_steps_val_tests=2,
+    )
     pred = NamedTensor(
         torch.ones((1, 5, 2, 64, 64), dtype=torch.float32) * 3.14160000,
         names=["batch", "timestep", "features", "lat", "lon"],
@@ -400,7 +424,15 @@ def test_write_template_dataset():
     validtime = 1.0
     leadtime = 1.0
     sample = FakeSample("1911-10-30", "first solvay congress")
-    _, _, dummy_ds = DummyDataset.from_json("fakepath.json", 1, 2, 4)
+    _, _, dummy_ds = DatasetABC.from_json(
+        DummyAccessor,
+        "dummy",
+        f"{DEFAULT_CONFIG_DIR}/datasets/dummy_config.json",
+        num_input_steps=1,
+        num_pred_steps_train=2,
+        num_pred_steps_val_tests=2,
+    )
+
     pred = NamedTensor(
         torch.ones((1, 5, 1, 64, 64), dtype=torch.float32) * 3.14160000,
         names=["batch", "timestep", "features", "lat", "lon"],
@@ -449,7 +481,15 @@ def test_write_template_dataset():
     validtime = 1.0
     leadtime = 1.0
     sample = FakeSample("1911-10-30", "first solvay congress")
-    _, _, dummy_ds = DummyDataset.from_json("fakepath.json", 1, 2, 4)
+    _, _, dummy_ds = DatasetABC.from_json(
+        DummyAccessor,
+        "dummy",
+        f"{DEFAULT_CONFIG_DIR}/datasets/dummy_config.json",
+        num_input_steps=1,
+        num_pred_steps_train=2,
+        num_pred_steps_val_tests=2,
+    )
+
     pred = NamedTensor(
         torch.ones((1, 5, 1, 64, 64), dtype=torch.float32) * 3.14160000,
         names=["batch", "timestep", "features", "lat", "lon"],

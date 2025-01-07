@@ -75,6 +75,7 @@ class PlDataModule(pl.LightningDataModule):
             self.dataset_conf,
             self.config_override,
         )
+        self.train_ds[0]
 
     @property
     def len_train_dl(self):
@@ -215,7 +216,7 @@ class AutoRegressiveLightning(pl.LightningModule):
         self.validation_step_losses = []
 
         # Set model input/output grid features based on dataset tensor shapes
-        num_grid_static_features = statics.grid_static_features.dim_size("features")
+        num_grid_static_features = statics.grid_statics.dim_size("features")
 
         # Compute the number of input features for the neural network
         # Should be directly supplied by datasetinfo ?
@@ -252,18 +253,18 @@ class AutoRegressiveLightning(pl.LightningModule):
         # This change the dimension of all statics
         if self.model.model_type == ModelType.GRAPH:
             # Graph model, we flatten the statics spatial dims
-            statics.grid_static_features.flatten_("ngrid", 0, 1)
+            statics.grid_statics.flatten_("ngrid", 0, 1)
             statics.border_mask = statics.border_mask.flatten(0, 1)
             statics.interior_mask = statics.interior_mask.flatten(0, 1)
 
         # Register interior and border mask.
         statics.register_buffers(self)
 
-        self.num_spatial_dims = statics.grid_static_features.num_spatial_dims
+        self.num_spatial_dims = statics.grid_statics.num_spatial_dims
 
         self.register_buffer(
             "grid_static_features",
-            expand_to_batch(statics.grid_static_features.tensor, hparams.batch_size),
+            expand_to_batch(statics.grid_statics.tensor, hparams.batch_size),
             persistent=False,
         )
         # We need to instantiate the loss after statics had been transformed.

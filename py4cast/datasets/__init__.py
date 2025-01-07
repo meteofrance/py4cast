@@ -3,6 +3,8 @@ import warnings
 from pathlib import Path
 from typing import Dict, Tuple, Union
 
+from py4cast.settings import DEFAULT_CONFIG_DIR
+
 from .base import DatasetABC  # noqa: F401
 
 registry = {}
@@ -14,59 +16,37 @@ registry = {}
 # break the code
 # NEW DATASETS MUST BE REGISTERED HERE
 
-
-default_config_root = Path(__file__).parents[2] / "config/datasets/"
-
-
 try:
-    from .smeagol import SmeagolDataset
+    from .titan import TitanAccessor
 
-    registry["smeagol"] = (SmeagolDataset, default_config_root / "smeagol.json")
-except ImportError:
-    warnings.warn(f"Could not import SmeagolDataset. {traceback.format_exc()}")
-
-try:
-    from .smeagol import InferSmeagolDataset
-
-    registry["smeagol_infer"] = (
-        InferSmeagolDataset,
-        default_config_root / "smeagol.json",
+    registry["titan"] = (
+        TitanAccessor,
+        DEFAULT_CONFIG_DIR / "datasets" / "titan_refacto.json",
     )
-except ImportError:
-    warnings.warn(f"Could not import SmeagolDataset. {traceback.format_exc()}")
-
-
-try:
-    from .titan import TitanDataset
-
-    registry["titan"] = (TitanDataset, default_config_root / "titan_full.json")
 
 except (ImportError, FileNotFoundError, ModuleNotFoundError):
-    warnings.warn(f"Could not import TitanDataset. {traceback.format_exc()}")
+    warnings.warn(f"Could not import TitanAccessor. {traceback.format_exc()}")
 
 try:
-    from .poesy import PoesyDataset
+    from .poesy import PoesyAccessor
 
-    registry["poesy"] = (PoesyDataset, default_config_root / "poesy_refacto.json")
+    registry["poesy"] = (
+        PoesyAccessor,
+        DEFAULT_CONFIG_DIR / "datasets" / "poesy_refacto.json",
+    )
+
 except ImportError:
-    warnings.warn(f"Could not import PoesyDataset. {traceback.format_exc()}")
+    warnings.warn(f"Could not import PoesyAccessor. {traceback.format_exc()}")
 
 try:
-    from .poesy import InferPoesyDataset
+    from .dummy import DummyAccessor
 
-    registry["poesy_infer"] = (
-        InferPoesyDataset,
-        default_config_root / "poesy_infer.json",
+    registry["dummy"] = (
+        DummyAccessor,
+        DEFAULT_CONFIG_DIR / "datasets" / "dummy_config.json",
     )
 except ImportError:
-    warnings.warn(f"Could not import InferPoesyDataset. {traceback.format_exc()}")
-
-try:
-    from .dummy import DummyDataset
-
-    registry["dummy"] = (DummyDataset, "")
-except ImportError:
-    warnings.warn(f"Could not import DummyDataset. {traceback.format_exc()}")
+    warnings.warn(f"Could not import DummyAccessor. {traceback.format_exc()}")
 
 
 def get_datasets(
@@ -83,16 +63,25 @@ def get_datasets(
 
     Returns 3 instances of the dataset: train, val, test
     """
+
+    # checks if name has a registry key as component (substring)
+    registered_name = ""
+    for k in registry:
+        if k in name.lower():
+            registered_name = k
+            break
     try:
-        dataset_kls, default_config = registry[name]
+        accessor_kls, default_config = registry[registered_name]
     except KeyError as ke:
         raise ValueError(
-            f"Dataset {name} not found in registry, available datasets are :{registry.keys()}"
+            f"Dataset {name} doesn't match a registry substring, available datasets are :{registry.keys()}"
         ) from ke
 
     config_file = default_config if config_file is None else Path(config_file)
 
-    return dataset_kls.from_json(
+    return DatasetABC.from_json(
+        accessor_kls,
+        name,
         config_file,
         num_input_steps,
         num_pred_steps_train,

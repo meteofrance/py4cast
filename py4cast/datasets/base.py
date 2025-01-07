@@ -4,16 +4,13 @@ and their interfaces
 """
 
 import datetime as dt
-import warnings
-from abc import ABC, abstractclassmethod, abstractmethod, abstractproperty
-from collections import namedtuple
+import json
 from copy import deepcopy
 from dataclasses import dataclass, field, fields
 from functools import cached_property
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Literal, Tuple, Union
+from typing import Dict, List, Literal, Tuple, Type, Union
 
-import cartopy
 import einops
 import gif
 import matplotlib.pyplot as plt
@@ -21,13 +18,23 @@ import numpy as np
 import torch
 from mfai.torch.namedtensor import NamedTensor
 from tabulate import tabulate
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Dataset
 from torch.utils.data._utils.collate import collate_tensor_fn
 from tqdm import tqdm
 
+from py4cast.datasets.access import (
+    DataAccessor,
+    Grid,
+    Period,
+    SamplePreprocSettings,
+    Stats,
+    Timestamps,
+    WeatherParam,
+    grid_static_features,
+)
 from py4cast.forcingutils import generate_toa_radiation_forcing, get_year_hour_forcing
 from py4cast.plots import DomainInfo
-from py4cast.utils import RegisterFieldsMixin, torch_save
+from py4cast.utils import RegisterFieldsMixin, merge_dicts
 
 
 @dataclass(slots=True)
@@ -171,28 +178,6 @@ def collate_fn(items: List[Item]) -> ItemBatch:
 
 
 @dataclass
-class Timestamps:
-    """
-    Describe all timestamps in a sample.
-    It contains
-        datetime, terms, validity times
-
-    If n_inputs = 2, n_preds = 2, terms will be (-1, 0, 1, 2) * step_duration
-     where step_duration is typically an integer multiple of 1 hour
-
-    validity times correspond to the addition of terms to the reference datetime
-    """
-
-    # date and hour of the reference time
-    datetime: dt.datetime
-    # terms are time deltas vis-à-vis the reference input time step.
-    terms: np.array
-
-    # validity times are complete datetimes
-    validity_times: List[dt.datetime]
-
-
-@dataclass
 class Statics(RegisterFieldsMixin):
     """
     Static fields of the dataset.
@@ -201,13 +186,13 @@ class Statics(RegisterFieldsMixin):
     """
 
     # border_mask: torch.Tensor
-    grid_static_features: NamedTensor
+    grid_statics: NamedTensor
     grid_shape: Tuple[int, int]
     border_mask: torch.Tensor = field(init=False)
     interior_mask: torch.Tensor = field(init=False)
 
     def __post_init__(self):
-        self.border_mask = self.grid_static_features["border_mask"]
+        self.border_mask = self.grid_statics["border_mask"]
         self.interior_mask = 1.0 - self.border_mask
 
     @cached_property
@@ -218,8 +203,8 @@ class Statics(RegisterFieldsMixin):
         return einops.rearrange(
             torch.cat(
                 [
-                    self.grid_static_features["x"],
-                    self.grid_static_features["y"],
+                    self.grid_statics["x"],
+                    self.grid_statics["y"],
                 ],
                 dim=-1,
             ),
@@ -227,42 +212,48 @@ class Statics(RegisterFieldsMixin):
         )
 
 
-@dataclass
-class Stats:
-    fname: Path
+def generate_forcings(
+    date: dt.datetime, output_terms: List[dt.timedelta], grid: Grid
+) -> List[NamedTensor]:
+    """
+    Generate all the forcing in this function.
+    Return a list of NamedTensor.
+    """
+    # Datetime Forcing
+    datetime_forcing = get_year_hour_forcing(date, output_terms).type(torch.float32)
 
-    def __post_init__(self):
-        self.stats = torch.load(self.fname, "cpu", weights_only=True)
+    # Solar forcing, dim : [num_pred_steps, Lat, Lon, feature = 1]
+    solar_forcing = generate_toa_radiation_forcing(
+        grid.lat, grid.lon, date, output_terms
+    ).type(torch.float32)
 
-    def items(self):
-        return self.stats.items()
+    lforcings = [
+        NamedTensor(
+            feature_names=[
+                "cos_hour",
+                "sin_hour",
+            ],  # doy : day_of_year
+            tensor=datetime_forcing[:, :2],
+            names=["timestep", "features"],
+        ),
+        NamedTensor(
+            feature_names=[
+                "cos_doy",
+                "sin_doy",
+            ],  # doy : day_of_year
+            tensor=datetime_forcing[:, 2:],
+            names=["timestep", "features"],
+        ),
+        NamedTensor(
+            feature_names=[
+                "toa_radiation",
+            ],
+            tensor=solar_forcing,
+            names=["timestep", "lat", "lon", "features"],
+        ),
+    ]
 
-    def __getitem__(self, shortname: str):
-        return self.stats[shortname]
-
-    def to_list(
-        self,
-        aggregate: Literal["mean", "std", "min", "max"],
-        shortnames: List[str],
-        dtype: torch.dtype = torch.float32,
-    ) -> list:
-        """
-        Get a tensor with the stats inside.
-        The order is the one of the shortnames.
-
-        Args:
-            aggregate : Statistics wanted
-            names (List[str]): Field for which we want stats
-
-        Returns:
-            _type_: _description_
-        """
-        if len(shortnames) > 0:
-            return torch.stack(
-                [self[name][aggregate] for name in shortnames], dim=0
-            ).type(dtype)
-        else:
-            return []
+    return lforcings
 
 
 @dataclass(slots=True)
@@ -293,8 +284,8 @@ class DatasetInfo:
         """
         print(f"\n Summarizing {self.name} \n")
         print(f"Step_duration {self.step_duration}")
-        print(f"Static fields {self.statics.grid_static_features.feature_names}")
-        print(f"Grid static features {self.statics.grid_static_features}")
+        print(f"Static fields {self.statics.grid_statics.feature_names}")
+        print(f"Grid static features {self.statics.grid_statics}")
         print(f"Features shortnames {self.shortnames}")
         for p in ["input", "input_output", "output"]:
             names = self.shortnames[p]
@@ -341,261 +332,11 @@ class DatasetInfo:
                 print(table)  # Print the table
 
 
-@dataclass(slots=True)
-class Period:
-    # first day of the period (included)
-    # each day of the period will be separated from start by an integer multiple of 24h
-    # note that the start date valid hour ("t0") may not be 00h00
-    start: dt.datetime
-    # last day of the period (included)
-    end: dt.datetime
-    # In hours, step btw the t0 of consecutive terms
-    step_duration: int
-    name: str
-    # first term (= time delta wrt to a date t0) that is admissible
-    term_start: int = 0
-    # last term (= time delta wrt to a date start) that is admissible
-    term_end: int = 23
-
-    def __post_init__(self):
-        self.start = np.datetime64(dt.datetime.strptime(str(self.start), "%Y%m%d%H"))
-        self.end = np.datetime64(dt.datetime.strptime(str(self.end), "%Y%m%d%H"))
-
-    @property
-    def terms_list(self) -> np.array:
-        return np.arange(self.term_start, self.term_end + 1, self.step_duration)
-
-    @property
-    def date_list(self) -> np.array:
-        """
-        List all dates available for the period, with a 24h leap
-        """
-        return np.arange(
-            self.start,
-            self.end + np.timedelta64(1, "D"),
-            np.timedelta64(1, "D"),
-            dtype="datetime64[s]",
-        ).tolist()
-
-
-# This namedtuple contains attributes that are used by the Grid class
-# These attributes are retrieved from disk in any user-defined manner.
-# It is there to define the expected type of the retrieval function.
-GridConfig = namedtuple(
-    "GridConfig", "full_size latitude longitude geopotential landsea_mask"
-)
-
-
-@dataclass
-class Grid:
-    name: str
-    load_grid_info_func: Callable[
-        [Any], GridConfig
-    ]  # function to load grid data (customizable)
-    border_size: int = 10
-
-    # subdomain selection: If (0,0,0,0) the whole domain is kept.
-    subdomain: Tuple[int] = (0, 0, 0, 0)
-    # Note : training won't work with the full domain on some NN because the size
-    # can't be divided by 2. Minimal domain : [0,1776,0,2800]
-    x: int = field(init=False)  # X dimension of the grid (longitudes)
-    y: int = field(init=False)  # Y dimension of the grid (latitudes)
-    # projection information (e.g for plotting)
-    proj_name: str = "PlateCarree"
-    projection_kwargs: dict = field(default_factory={})
-
-    def __post_init__(self):
-        self.grid_config = self.get_grid_info()
-        # Setting correct subdomain if no subdomain is selected.
-        if sum(self.subdomain) == 0:
-            self.subdomain = (
-                0,
-                self.grid_config.full_size[0],
-                0,
-                self.grid_config.full_size[1],
-            )
-        self.x = self.subdomain[1] - self.subdomain[0]
-        self.y = self.subdomain[3] - self.subdomain[2]
-
-    def get_grid_info(self) -> GridConfig:
-        return self.load_grid_info_func(self.name)
-
-    @cached_property
-    def lat(self) -> np.array:
-        latitudes = self.grid_config.latitude[self.subdomain[0] : self.subdomain[1]]
-        return np.transpose(np.tile(latitudes, (self.y, 1)))
-
-    @cached_property
-    def lon(self) -> np.array:
-        longitudes = self.grid_config.longitude[self.subdomain[2] : self.subdomain[3]]
-        return np.tile(longitudes, (self.x, 1))
-
-    # TODO : from the grib, save a npy lat lon h mask for each grid
-    @property
-    def geopotential(self) -> np.array:
-        return self.grid_config.geopotential[
-            self.subdomain[0] : self.subdomain[1], self.subdomain[2] : self.subdomain[3]
-        ]
-
-    @property
-    def landsea_mask(self) -> np.array:
-        if self.grid_config.landsea_mask is not None:
-            return self.grid_config.landsea_mask[
-                self.subdomain[0] : self.subdomain[1],
-                self.subdomain[2] : self.subdomain[3],
-            ]
-        return np.zeros((self.x, self.y))  # TODO : add real mask
-
-    @property
-    def border_mask(self) -> np.array:
-        if self.border_size > 0:
-            border_mask = np.ones((self.x, self.y)).astype(bool)
-            size = self.border_size
-            border_mask[size:-size, size:-size] *= False
-        elif self.border_size == 0:
-            border_mask = np.ones((self.x, self.y)).astype(bool) * False
-        else:
-            raise ValueError(f"Bordersize should be positive. Get {self.border_size}")
-        return border_mask
-
-    @property
-    def N_grid(self) -> int:
-        return self.x * self.y
-
-    @cached_property
-    def grid_limits(self):
-        grid_limits = [  # In projection (llon, ulon, llat, ulat)
-            float(self.grid_config.longitude[self.subdomain[2]]),  # min y
-            float(self.grid_config.longitude[self.subdomain[3] - 1]),  # max y
-            float(self.grid_config.latitude[self.subdomain[1] - 1]),  # max x
-            float(self.grid_config.latitude[self.subdomain[0]]),  # min x
-        ]
-        return grid_limits
-
-    @cached_property
-    def meshgrid(self) -> np.array:
-        """Build a meshgrid from coordinates position."""
-        latitudes = self.grid_config.latitude[self.subdomain[0] : self.subdomain[1]]
-        longitudes = self.grid_config.longitude[self.subdomain[2] : self.subdomain[3]]
-        meshgrid = np.array(np.meshgrid(longitudes, latitudes))
-        return meshgrid  # shape (2, x, y)
-
-    @cached_property
-    def projection(self):
-        func = getattr(cartopy.crs, self.proj_name)
-        return func(**self.projection_kwargs)
-
-
-def generate_forcings(
-    date: dt.datetime, output_terms: np.array, grid: Grid
-) -> List[NamedTensor]:
-    """
-    Generate all the forcing in this function.
-    Return a list of NamedTensor.
-    """
-    lforcings = []
-    float_terms = (output_terms / dt.timedelta(hours=1)).astype(float)
-    time_forcing = NamedTensor(  # doy : day_of_year
-        feature_names=["cos_hour", "sin_hour", "cos_doy", "sin_doy"],
-        tensor=get_year_hour_forcing(date, float_terms).type(torch.float32),
-        names=["timestep", "features"],
-    )
-    solar_forcing = NamedTensor(
-        feature_names=["toa_radiation"],
-        tensor=generate_toa_radiation_forcing(
-            grid.lat, grid.lon, date, float_terms
-        ).type(torch.float32),
-        names=["timestep", "lat", "lon", "features"],
-    )
-    lforcings.append(time_forcing)
-    lforcings.append(solar_forcing)
-
-    return lforcings
-
-
-@dataclass(slots=True)
-class SamplePreprocSettings:
-    """
-    Main settings defining the timesteps of a data sample (regardless of parameters)
-    and additional preprocessing information
-    that will be used during training/inference.
-    Values can be modified by defining a `settings` field in the configuration json file.
-
-    """
-
-    dataset_name: str
-    num_input_steps: int  # Number of input timesteps
-    num_pred_steps: int  # Number of output timesteps
-    standardize: bool = True
-    file_format: Literal["npy", "grib"] = "grib"
-    members: Tuple[int] = (0,)
-
-
-# This namedtuple contains attributes that are used by the WeatherParam class
-# These attributes are retrieved from disk in any user-defined manner.
-# It is there to define the expected type of the retrieval function.
-ParamConfig = namedtuple(
-    "ParamConfig", "unit level_type long_name grid grib_name grib_param"
-)
-
-
-@dataclass(slots=True)
-class WeatherParam:
-    """
-    This class represent a single weather parameter (seen as a 2D field)
-    with all attributes used to retrieve and manipulate the parameter;
-    Used in the construction of the Dataset object.
-    """
-
-    name: str
-    level: int
-    grid: Grid
-    load_param_info: Callable[[str], ParamConfig]
-    # Parameter status :
-    # input = forcings, output = diagnostic, input_output = classical weather var
-    kind: Literal["input", "output", "input_output"]
-    # function to retrieve the weight given to the parameter in the loss, depending on the level
-    get_weight_per_level: Callable[[int, str], float]
-    level_type: str = field(init=False)
-    long_name: str = field(init=False)
-    unit: str = field(init=False)
-    native_grid: str = field(init=False)
-    grib_name: str = field(init=False)
-    grib_param: str = field(init=False)
-
-    def __post_init__(self):
-        param_info = self.load_param_info(self.name)
-        self.unit = param_info.unit
-        if param_info.level_type in ["heightAboveGround", "meanSea", "surface"]:
-            self.level_type = param_info.level_type
-        else:
-            self.level_type = "isobaricInhPa"
-        self.long_name = param_info.long_name
-        self.native_grid = param_info.grid
-        self.grib_name = param_info.grib_name
-        self.grib_param = param_info.grib_param
-
-    @property
-    def state_weight(self) -> float:
-        """Weight to confer to the param in the loss function"""
-        return self.get_weight_per_level(self.level, self.level_type)
-
-    @property
-    def parameter_name(self) -> str:
-        return f"{self.long_name}_{self.level}_{self.level_type}"
-
-    @property
-    def parameter_short_name(self) -> str:
-        return f"{self.name}_{self.level}_{self.level_type}"
-
-
 def get_param_list(
     conf: dict,
     grid: Grid,
     # function to retrieve all parameters information about the dataset
-    load_param_info: Callable[[str], ParamConfig],
-    # function to retrieve the weight given to the parameter in the loss
-    get_weight_per_level: Callable[[str], float],
+    accessor: DataAccessor,
 ) -> List[WeatherParam]:
     param_list = []
     for name, values in conf["params"].items():
@@ -604,9 +345,9 @@ def get_param_list(
                 name=name,
                 level=lvl,
                 grid=grid,
-                load_param_info=load_param_info,
+                load_param_info=accessor.load_param_info,
                 kind=values["kind"],
-                get_weight_per_level=get_weight_per_level,
+                get_weight_per_level=accessor.get_weight_per_level,
             )
             param_list.append(param)
     return param_list
@@ -634,11 +375,9 @@ class Sample:
     params: List[WeatherParam]
     stats: Stats
     grid: Grid
-    exists: Callable[[Any], bool]
-    get_param_tensor: Callable[[Any], torch.tensor]
+    accessor: DataAccessor
     member: int = 0
 
-    input_timestamps: Timestamps = field(default=None)
     output_timestamps: Timestamps = field(default=None)
 
     def __post_init__(self):
@@ -655,11 +394,6 @@ class Sample:
         ):
             raise Exception("Length terms does not match inputs + outputs")
 
-        self.input_timestamps = Timestamps(
-            self.timestamps.datetime,
-            self.timestamps.terms[: self.settings.num_input_steps],
-            self.timestamps.validity_times[: self.settings.num_input_steps],
-        )
         self.output_timestamps = Timestamps(
             self.timestamps.datetime,
             self.timestamps.terms[self.settings.num_input_steps :],
@@ -671,7 +405,7 @@ class Sample:
 
     def is_valid(self) -> bool:
         for param in self.params:
-            if not self.exists(
+            if not self.accessor.exists(
                 self.settings.dataset_name,
                 param,
                 self.timestamps,
@@ -680,72 +414,87 @@ class Sample:
                 return False
         return True
 
+    def get_param_tensor(
+        self, param: WeatherParam, timestamps: Timestamps, standardize: bool
+    ) -> torch.tensor:
+        """
+        Fetch data on disk fo the given parameter and all involved dates
+        Unless specified, normalize the samples with parameter-specific constants
+        returns a tensor
+        """
+
+        arr = self.accessor.load_data_from_disk(
+            self.settings.dataset_name,
+            param,
+            timestamps,
+            self.member,
+            self.settings.file_format,
+        )
+
+        if standardize:
+            name = self.accessor.parameter_namer(param)
+            means = np.asarray(self.stats[name]["mean"])
+            std = np.asarray(self.stats[name]["std"])
+            arr = (arr - means) / std
+        return torch.from_numpy(arr)
+
     def load(self, no_standardize: bool = False) -> Item:
         """
         Return inputs, outputs, forcings as tensors concatenated into an Item.
         """
-        linputs, loutputs = [], []
+        linputs, loutputs, lforcings = [], [], []
 
         # Reading parameters from files
         for param in self.params:
             state_kwargs = {
-                "feature_names": [param.parameter_short_name],
+                "feature_names": [self.accessor.parameter_namer(param)],
                 "names": ["timestep", "lat", "lon", "features"],
             }
+
+            stamps = (
+                self.timestamps
+                if param.kind == "input_output"
+                else self.output_timestamps
+            )
+            tensor = self.get_param_tensor(
+                param=param,
+                timestamps=stamps,
+                standardize=(self.settings.standardize and not no_standardize),
+            )
+            tmp_state = NamedTensor(tensor=tensor, **deepcopy(state_kwargs))
+
             if param.kind == "input":
-                # forcing is taken for every predicted step
-                tensor = self.get_param_tensor(
-                    param=param,
-                    stats=self.stats,
-                    timestamps=self.input_timestamps,
-                    settings=self.settings,
-                    standardize=(self.settings.standardize and not no_standardize),
-                    member=self.member,
-                )
-                tmp_state = NamedTensor(tensor=tensor, **deepcopy(state_kwargs))
+                # forcing is an input, taken for every predicted step (= output timestamps)
+                lforcings.append(tmp_state)
 
             elif param.kind == "output":
-                tensor = self.get_param_tensor(
-                    param=param,
-                    stats=self.stats,
-                    timestamps=self.output_timestamps,
-                    settings=self.settings,
-                    standardize=(self.settings.standardize and not no_standardize),
-                    member=self.member,
-                )
-                tmp_state = NamedTensor(tensor=tensor, **deepcopy(state_kwargs))
+                # output-only params count in the loss
                 loutputs.append(tmp_state)
 
-            else:  # input_output
-                tensor = self.get_param_tensor(
-                    param=param,
-                    stats=self.stats,
-                    timestamps=self.timestamps,
-                    settings=self.settings,
-                    standardize=(self.settings.standardize and not no_standardize),
-                    member=self.member,
-                )
-                state_kwargs["names"][0] = "timestep"
-                tmp_state = NamedTensor(
-                    tensor=tensor[-self.settings.num_pred_steps :],
-                    **deepcopy(state_kwargs),
+            else:  # input_output, separated along the steps
+                loutputs.append(
+                    NamedTensor(
+                        tensor=tensor[-self.settings.num_pred_steps :],
+                        **deepcopy(state_kwargs),
+                    )
                 )
 
-                loutputs.append(tmp_state)
-                tmp_state = NamedTensor(
-                    tensor=tensor[: self.settings.num_input_steps],
-                    **deepcopy(state_kwargs),
+                linputs.append(
+                    NamedTensor(
+                        tensor=tensor[: self.settings.num_input_steps],
+                        **deepcopy(state_kwargs),
+                    )
                 )
-                linputs.append(tmp_state)
 
-        lforcings = generate_forcings(
+        external_forcings = generate_forcings(
             date=self.timestamps.datetime,
             output_terms=self.output_timestamps.terms,
             grid=self.grid,
         )
 
-        for forcing in lforcings:
+        for forcing in external_forcings:
             forcing.unsqueeze_and_expand_from_(linputs[0])
+        lforcings = lforcings + external_forcings
 
         return Item(
             inputs=NamedTensor.concat(linputs),
@@ -767,7 +516,8 @@ class Sample:
         levels = sorted(list(set([p.level for p in self.params])))
         dict_params = {level: [] for level in levels}
         for param in self.params:
-            if param.parameter_short_name in ntensor.feature_names:
+            name = self.accessor.parameter_namer(param)
+            if name in ntensor.feature_names:
                 dict_params[param.level].append(param)
 
         # Groups levels 0m, 2m and 10m on one "surf" level
@@ -784,7 +534,7 @@ class Sample:
 
         for i, level in enumerate(dict_params.keys()):
             for j, param in enumerate(dict_params[level]):
-                pname = param.parameter_short_name
+                pname = self.accessor.parameter_namer(param)
                 tensor = ntensor[pname][index_tensor, :, :, 0]
                 arr = tensor.numpy()[::-1]  # invert latitude
                 vmin, vmax = self.stats[pname]["min"], self.stats[pname]["max"]
@@ -825,7 +575,7 @@ class Sample:
         frames = []
         n_inputs, n_preds = self.settings.num_input_steps, self.settings.num_pred_steps
         steps = list(range(-n_inputs + 1, n_preds + 1))
-        for step in tqdm.tqdm(steps, desc="Making gif"):
+        for step in tqdm(steps, desc="Making gif"):
             frame = self.plot_frame(item, step)
             frames.append(frame)
         gif.save(frames, str(save_path), duration=250)
@@ -844,221 +594,204 @@ class TorchDataloaderSettings:
     persistent_workers: bool = False
 
 
-class DatasetABC(ABC):
+class DatasetABC(Dataset):
     """
-    Abstract Base class defining the mandatory
-    properties and methods a dataset MUST
-    implement.
+    Base class for gridded datasets used in weather forecasts
     """
 
-    @abstractmethod
+    def __init__(
+        self,
+        name: str,
+        grid: Grid,
+        period: Period,
+        params: List[WeatherParam],
+        settings: SamplePreprocSettings,
+        accessor: Type[DataAccessor],
+    ):
+        self.name = name
+        self.grid = grid
+        self.period = period
+        self.params = params
+        self.settings = settings
+        self.accessor = accessor
+        self.shuffle = self.period.name == "train"
+        self.cache_dir = accessor.cache_dir(name, grid)
+
+    def __str__(self) -> str:
+        return f"{self.name}_{self.grid.name}"
+
+    def __getitem__(self, index):
+        """
+        Return an item from an index of the sample_list
+        """
+        sample = self.sample_list[index]
+        item = sample.load()
+        return item
+
+    def __len__(self):
+        return len(self.sample_list)
+
+    @cached_property
+    def dataset_info(self) -> DatasetInfo:
+        """Returns a DatasetInfo object describing the dataset.
+
+        Returns:
+            DatasetInfo: _description_
+        """
+        shortnames = {
+            "input": self.shortnames("input"),
+            "input_output": self.shortnames("input_output"),
+            "output": self.shortnames("output"),
+        }
+        return DatasetInfo(
+            name=str(self),
+            domain_info=self.domain_info,
+            shortnames=shortnames,
+            units=self.units,
+            weather_dim=self.input_output_dim,
+            forcing_dim=self.input_dim,
+            step_duration=self.settings.step_duration,
+            statics=self.statics,
+            stats=self.stats,
+            diff_stats=self.diff_stats,
+            state_weights=self.state_weights,
+        )
+
+    @cached_property
+    def sample_list(self):
+        """Creates the list of samples."""
+        print("Start creating samples...")
+        stats = self.stats if self.settings.standardize else None
+
+        n_inputs, n_preds, step_duration = (
+            self.settings.num_input_steps,
+            self.settings.num_pred_steps,
+            self.period.step_duration,
+        )
+
+        sample_timesteps = [
+            step_duration * step for step in range(-n_inputs + 1, n_preds + 1)
+        ]
+        all_timestamps = []
+        for date in tqdm(self.period.date_list):
+            for term in self.period.terms_list:
+                t0 = date + dt.timedelta(hours=int(term))
+                validity_times = [
+                    t0 + dt.timedelta(hours=ts) for ts in sample_timesteps
+                ]
+                terms = [dt.timedelta(hours=int(t + term)) for t in sample_timesteps]
+
+                timestamps = Timestamps(
+                    datetime=date,
+                    terms=np.array(terms),
+                    validity_times=validity_times,
+                )
+                if self.accessor.valid_timestamp(n_inputs, timestamps):
+                    all_timestamps.append(timestamps)
+
+        samples = []
+        invalid_samples = 0
+        for ts in all_timestamps:
+            for member in self.settings.members:
+                sample = Sample(
+                    ts,
+                    self.settings,
+                    self.params,
+                    stats,
+                    self.grid,
+                    self.accessor,
+                    member,
+                )
+                if sample.is_valid():
+                    samples.append(sample)
+                else:
+                    invalid_samples += 1
+        print(
+            f"--> {len(samples)} {self.period.name} samples are now defined, with {invalid_samples} invalid samples."
+        )
+        return samples
+
     def torch_dataloader(self, tl_settings: TorchDataloaderSettings) -> DataLoader:
         """
         Builds a torch dataloader from self.
         """
-
-    @abstractproperty
-    def dataset_info(self) -> DatasetInfo:
-        """
-        Return the object DatasetInfo
-        """
-
-    @abstractproperty
-    def meshgrid(self) -> np.array:
-        """
-        array of shape (2, num_lat, num_lon)
-        of (lat, lon) values
-        """
+        return DataLoader(
+            self,
+            batch_size=tl_settings.batch_size,
+            num_workers=tl_settings.num_workers,
+            shuffle=self.shuffle,
+            prefetch_factor=tl_settings.prefetch_factor,
+            collate_fn=collate_fn,
+            pin_memory=tl_settings.pin_memory,
+        )
 
     @cached_property
-    def grid_shape(self) -> tuple:
-        x, _ = self.meshgrid
-        return x.shape
-
-    @abstractproperty
-    def geopotential_info(self) -> np.array:
+    def input_dim(self) -> int:
         """
-        array of shape (num_lat, num_lon)
-        with geopotential value for each datapoint
+        Return the number of forcings.
         """
+        res = 4  # For date
+        res += 1  # For solar forcing
 
-    @abstractproperty
-    def cache_dir(self) -> Path:
+        for param in self.params:
+            if param.kind == "input":
+                res += 1
+        return res
+
+    @cached_property
+    def input_output_dim(self) -> int:
         """
-        Cache directory of the dataset.
-        Used at least to get statistics.
+        Return the dimension of pronostic variable.
         """
-        pass
+        res = 0
+        for param in self.params:
+            if param.kind == "input_output":
+                res += 1
+        return res
 
-    def compute_mean_std_min_max(
-        self, type_tensor: Literal["inputs", "outputs", "forcing"]
-    ):
+    @cached_property
+    def output_dim(self):
         """
-        Compute mean and standard deviation for this dataset.
+        Return dimensions of output variable only
+        Not used yet
         """
-        random_batch = next(iter(self.torch_dataloader()))
-        named_tensor = getattr(random_batch, type_tensor)
-        n_features = len(named_tensor.feature_names)
-        sum_means = torch.zeros(n_features)
-        sum_squares = torch.zeros(n_features)
-        ndim_features = len(named_tensor.tensor.shape) - 1
-        flat_input = named_tensor.tensor.flatten(0, ndim_features - 1)  # (X, Features)
-        best_min = torch.min(flat_input, dim=0).values
-        best_max = torch.max(flat_input, dim=0).values
-        counter = 0
-        if self.settings.standardize:
-            raise ValueError("Your dataset should not be standardized.")
-
-        for batch in tqdm(
-            self.torch_dataloader(), desc=f"Computing {type_tensor} stats"
-        ):
-            tensor = getattr(batch, type_tensor).tensor
-            tensor = tensor.flatten(1, 3)  # Flatten to be (Batch, X, Features)
-            counter += tensor.shape[0]  # += batch size
-
-            sum_means += torch.sum(tensor.mean(dim=1), dim=0)  # (d_features)
-            sum_squares += torch.sum((tensor**2).mean(dim=1), dim=0)  # (d_features)
-
-            mini = torch.min(tensor, 1).values[0]
-            stack_mini = torch.stack([best_min, mini], dim=0)
-            best_min = torch.min(stack_mini, dim=0).values  # (d_features)
-
-            maxi = torch.max(tensor, 1).values[0]
-            stack_maxi = torch.stack([best_max, maxi], dim=0)
-            best_max = torch.max(stack_maxi, dim=0).values  # (d_features)
-
-        mean = sum_means / counter
-        second_moment = sum_squares / counter
-        std = torch.sqrt(second_moment - mean**2)  # (d_features)
-
-        stats = {}
-        for i, name in enumerate(named_tensor.feature_names):
-            stats[name] = {
-                "mean": mean[i],
-                "std": std[i],
-                "min": best_min[i],
-                "max": best_max[i],
-            }
-        return stats
-
-    def compute_parameters_stats(self):
-        """
-        Compute mean and standard deviation for this dataset.
-        """
-        all_stats = {}
-        for type_tensor in ["inputs", "outputs", "forcing"]:
-            stats_dict = self.compute_mean_std_min_max(type_tensor)
-            for feature, stats in stats_dict.items():
-                # If feature was computed multiple times we keep only first occurence
-                if feature not in all_stats.keys():
-                    all_stats[feature] = stats
-
-        dest_file = self.cache_dir / "parameters_stats.pt"
-        torch_save(all_stats, dest_file)
-        print(f"Parameters statistics saved in {dest_file}")
-
-    def compute_time_step_stats(self):
-        random_inputs = next(iter(self.torch_dataloader())).inputs
-        n_features = len(random_inputs.feature_names)
-        sum_means = torch.zeros(n_features)
-        sum_squares = torch.zeros(n_features)
-        counter = 0
-        if not self.settings.standardize:
-            raise ValueError("Your dataset should be standardized.")
-
-        for batch in tqdm(self.torch_dataloader()):
-            # Here we assume that data are in 2 or 3 D
-            inputs = batch.inputs.tensor
-            outputs = batch.outputs.tensor
-
-            in_out = torch.cat([inputs, outputs], dim=1)
-            diff = (
-                in_out[:, 1:] - in_out[:, :-1]
-            )  # Substract information on time dimension
-            diff = diff.flatten(1, 3)  # Flatten everybody to be (Batch, X, Features)
-
-            counter += in_out.shape[0]  # += batch size
-            sum_means += torch.sum(diff.mean(dim=1), dim=0)  # (d_features)
-            sum_squares += torch.sum((diff**2).mean(dim=1), dim=0)  # (d_features)
-
-        diff_mean = sum_means / counter
-        diff_second_moment = sum_squares / counter
-        diff_std = torch.sqrt(diff_second_moment - diff_mean**2)  # (d_features)
-        store_d = {}
-
-        # Storing variable statistics
-        for i, name in enumerate(batch.inputs.feature_names):
-            store_d[name] = {
-                "mean": diff_mean[i],
-                "std": diff_std[i],
-            }
-        # Diff mean and std of forcing variables are not used during training so we
-        # store fixed values : mean = 0, std = 1
-        for name in batch.forcing.feature_names:
-            store_d[name] = {"mean": torch.tensor(0), "std": torch.tensor(1)}
-        dest_file = self.cache_dir / "diff_stats.pt"
-        torch_save(store_d, self.cache_dir / "diff_stats.pt")
-        print(f"Parameters time diff stats saved in {dest_file}")
+        res = 0
+        for param in self.params:
+            if param.kind == "output":
+                res += 1
+        return res
 
     @property
     def dataset_extra_statics(self) -> List[NamedTensor]:
         """
         Datasets can override this method to add
         more static data.
-        """
+        Optionally, add the LandSea Mask to the statics."""
+
+        if self.settings.add_landsea_mask:
+            return [
+                NamedTensor(
+                    feature_names=["LandSeaMask"],
+                    tensor=torch.from_numpy(self.grid.landsea_mask)
+                    .type(torch.float32)
+                    .unsqueeze(2),
+                    names=["lat", "lon", "features"],
+                )
+            ]
         return []
 
     @cached_property
-    def grid_static_features(self):
-        """
-        Grid static features
-        """
-        # -- Static grid node features --
-        xy = self.meshgrid  # (2, N_x, N_y)
-        grid_xy = torch.tensor(xy)
-        # Need to rearange
-        pos_max = torch.max(torch.max(grid_xy, dim=1).values, dim=1).values
-        pos_min = torch.min(torch.min(grid_xy, dim=1).values, dim=1).values
-        grid_xy = (einops.rearrange(grid_xy, ("n x y -> x y n")) - pos_min) / (
-            pos_max - pos_min
-        )  # Rearange and divide  by maximum coordinate
-
-        # (Nx, Ny, 1)
-        geopotential = torch.tensor(self.geopotential_info).unsqueeze(
-            2
-        )  # (N_x, N_y, 1)
-        gp_min = torch.min(geopotential)
-        gp_max = torch.max(geopotential)
-        # Rescale geopotential to [0,1]
-        if gp_max != gp_min:
-            geopotential = (geopotential - gp_min) / (gp_max - gp_min)  # (N_x,N_y, 1)
-        else:
-            warnings.warn("Geopotential is constant. Set it to 1")
-            geopotential = geopotential / gp_max
-
-        grid_border_mask = torch.tensor(self.border_mask).unsqueeze(2)  # (N_x, N_y,1)
-
-        feature_names = []
-        for x in self.dataset_extra_statics:
-            feature_names += x.feature_names
-        state_var = NamedTensor(
-            tensor=torch.cat(
-                [grid_xy, geopotential, grid_border_mask]
-                + [x.tensor for x in self.dataset_extra_statics],
-                dim=-1,
-            ),
-            feature_names=["x", "y", "geopotential", "border_mask"]
-            + feature_names,  # Noms des champs 2D
-            names=["lat", "lon", "features"],
-        )
-        state_var.type_(torch.float32)
-        return state_var
+    def grid_shape(self) -> tuple:
+        x, _ = self.grid.meshgrid
+        return x.shape
 
     @cached_property
     def statics(self) -> Statics:
         return Statics(
             **{
-                "grid_static_features": self.grid_static_features,
+                "grid_statics": grid_static_features(
+                    self.grid, self.dataset_extra_statics
+                ),
                 "grid_shape": self.grid_shape,
             }
         )
@@ -1071,15 +804,107 @@ class DatasetABC(ABC):
     def diff_stats(self) -> Stats:
         return Stats(fname=self.cache_dir / "diff_stats.pt")
 
-    @abstractclassmethod
+    def shortnames(
+        self,
+        kind: List[Literal["input", "output", "input_output"]] = [
+            "input",
+            "output",
+            "input_output",
+        ],
+    ) -> List[str]:
+        """
+        List of readable names for the parameters in the dataset.
+        Does not include grid information (such as geopotentiel and LandSeaMask).
+        Make the difference between inputs, outputs.
+        """
+        return [self.accessor.parameter_namer(p) for p in self.params if p.kind == kind]
+
+    @cached_property
+    def units(self) -> Dict[str, str]:
+        """
+        Return a dictionnary with name and units
+        """
+        return {self.accessor.parameter_namer(p): p.unit for p in self.params}
+
+    @cached_property
+    def state_weights(self):
+        """Weights used in the loss function."""
+        kinds = ["output", "input_output"]
+        return {
+            self.accessor.parameter_namer(p): p.state_weight
+            for p in self.params
+            if p.kind in kinds
+        }
+
+    @cached_property
+    def domain_info(self) -> DomainInfo:
+        """Information on the domain considered. Usefull information for plotting."""
+        return DomainInfo(
+            grid_limits=self.grid.grid_limits, projection=self.grid.projection
+        )
+
+    @classmethod
+    def from_dict(
+        cls,
+        accessor_kls: Type[DataAccessor],
+        name: str,
+        conf: dict,
+        num_input_steps: int,
+        num_pred_steps_train: int,
+        num_pred_steps_val_test: int,
+    ) -> Tuple[Type["DatasetABC"], Type["DatasetABC"], Type["DatasetABC"]]:
+
+        grid = Grid(load_grid_info_func=accessor_kls.load_grid_info, **conf["grid"])
+
+        try:
+            members = conf["members"]
+        except KeyError:
+            members = [0]
+
+        param_list = get_param_list(conf, grid, accessor_kls)
+
+        train_settings = SamplePreprocSettings(
+            dataset_name=name,
+            num_input_steps=num_input_steps,
+            num_pred_steps=num_pred_steps_train,
+            step_duration=conf["periods"]["train"]["step_duration"],
+            members=members,
+            **conf["settings"],
+        )
+        train_period = Period(**conf["periods"]["train"], name="train")
+        train_ds = cls(
+            name, grid, train_period, param_list, train_settings, accessor_kls
+        )
+
+        valid_settings = SamplePreprocSettings(
+            dataset_name=name,
+            num_input_steps=num_input_steps,
+            num_pred_steps=num_pred_steps_val_test,
+            step_duration=conf["periods"]["valid"]["step_duration"],
+            members=members,
+            **conf["settings"],
+        )
+        valid_period = Period(**conf["periods"]["valid"], name="valid")
+        valid_ds = cls(
+            name, grid, valid_period, param_list, valid_settings, accessor_kls
+        )
+
+        test_period = Period(**conf["periods"]["test"], name="test")
+        test_ds = cls(name, grid, test_period, param_list, valid_settings, accessor_kls)
+
+        return train_ds, valid_ds, test_ds
+
+    @classmethod
     def from_json(
         cls,
+        accessor_kls: Type[DataAccessor],
+        dataset_name: str,
         fname: Path,
         num_input_steps: int,
         num_pred_steps_train: int,
         num_pred_steps_val_tests: int,
         config_override: Union[Dict, None] = None,
-    ) -> Tuple["DatasetABC", "DatasetABC", "DatasetABC"]:
+    ) -> Tuple[Type["DatasetABC"], Type["DatasetABC"], Type["DatasetABC"]]:
         """
         Load a dataset from a json file + the number of expected timesteps
         taken as inputs (num_input_steps) and to predict (num_pred_steps)
@@ -1087,4 +912,15 @@ class DatasetABC(ABC):
         config_override is a dictionary that can be used to override
         some keys of the config file.
         """
-        pass
+        with open(fname, "r") as fp:
+            conf = json.load(fp)
+            if config_override is not None:
+                conf = merge_dicts(conf, config_override)
+        return cls.from_dict(
+            accessor_kls,
+            dataset_name,
+            conf,
+            num_input_steps,
+            num_pred_steps_train,
+            num_pred_steps_val_tests,
+        )

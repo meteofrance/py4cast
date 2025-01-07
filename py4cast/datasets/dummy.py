@@ -1,336 +1,156 @@
-"""
-A dummy dataset for documentation and testing purposes.
-Can be used as a starting point to implement your own dataset.
-inputs, outputs and forcing are filled with random tensors.
-"""
-
-from dataclasses import dataclass
-from functools import cached_property
-from io import BytesIO
+import json
+import os
 from pathlib import Path
-from typing import Dict, Literal, Tuple, Union
+from typing import List, Literal
 
-import cartopy
 import numpy as np
-import torch
-from torch.utils.data import DataLoader, Dataset
+from torch import save, tensor
 
-from py4cast.datasets.base import (
-    DatasetABC,
-    DatasetInfo,
-    Item,
-    NamedTensor,
-    Stats,
-    TorchDataloaderSettings,
-    collate_fn,
+from py4cast.datasets.access import (
+    DataAccessor,
+    Grid,
+    GridConfig,
+    ParamConfig,
+    Timestamps,
+    WeatherParam,
 )
-from py4cast.plots import DomainInfo
-from py4cast.settings import CACHE_DIR
+from py4cast.settings import CACHE_DIR, DEFAULT_CONFIG_DIR
 
 
-@dataclass
-class Grid:
-    border_size: int = 10
-    x: int = 64  # X dimension
-    y: int = 64  # Y dimension
+class DummyAccessor(DataAccessor):
 
-    @cached_property
-    def lat(self) -> np.array:
-        x_grid, _ = (np.indices((self.x, self.y)) - 16) * 0.5
-        return x_grid
+    print("importing DummyAccessor automatically creates directory and dummy config")
+    config = {
+        "periods": {
+            "train": {"start": 2023010100, "end": 2023010107, "step_duration": 1},
+            "valid": {"start": 2023010108, "end": 2023010115, "step_duration": 1},
+            "test": {"start": 2023010116, "end": 2023010122, "step_duration": 1},
+        },
+        "settings": {"standardize": "true", "file_format": "npy"},
+        "grid": {
+            "name": "dummygrid",
+            "border_size": 0,
+            "subdomain": [0, 64, 0, 64],
+            "proj_name": "PlateCarree",
+            "projection_kwargs": {},
+        },
+        "params": {
+            "dummy_parameter": {"levels": [500], "kind": "input_output"},
+        },
+    }
 
-    @cached_property
-    def lon(self) -> np.array:
-        _, y_grid = (np.indices((self.x, self.y)) + 30) * 0.5
-        return y_grid
+    jsonconfig = json.dumps(config, sort_keys=True, indent=4)
 
-    @property
-    def geopotential(self) -> np.array:
-        return np.ones((self.x, self.y))
+    with open(DEFAULT_CONFIG_DIR / "datasets" / "dummy_config.json", "w") as outfile:
+        outfile.write(jsonconfig)
 
-    @property
-    def border_mask(self) -> np.array:
-        if self.border_size > 0:
-            border_mask = np.ones((self.x, self.y)).astype(bool)
-            size = self.border_size
-            border_mask[size:-size, size:-size] *= False
-        elif self.border_size == 0:
-            border_mask = np.ones((self.x, self.y)).astype(bool) * False
-        else:
-            raise ValueError(f"Bordersize should be positive. Get {self.border_size}")
-        return border_mask
+    def cache_dir(name: str, grid: Grid) -> Path:
 
-    @cached_property
-    def meshgrid(self) -> np.array:
-        """
-        Build a meshgrid from coordinates position.
-        Be careful. It's used for the graph generation and can lead to error.
-        """
-        return np.stack((self.lon, self.lat))
+        path = CACHE_DIR / f"{name}_{grid.name}"
+        os.makedirs(path, mode=0o777, exist_ok=True)
 
-    @cached_property
-    def projection(self):
-        # Create projection
-        return cartopy.crs.PlateCarree(central_longitude=self.lon.mean())
+        if not os.path.exists(path / "parameters_stats.pt"):
+            stats = {
+                "dummy_parameter_500_isobaricInhPa": {
+                    "mean": tensor(0.0),
+                    "std": tensor(1.0),
+                    "max": tensor(3.0),
+                    "min": tensor(-3.0),
+                }
+            }
+            save(stats, path / "parameters_stats.pt")
+        if not os.path.exists(path / "diff_stats.pt"):
+            dstats = {
+                "dummy_parameter_500_isobaricInhPa": {
+                    "mean": tensor(0.0),
+                    "std": tensor(1.42),
+                }
+            }
 
-    @cached_property
-    def grid_limits(self):
-        return [  # In projection
-            self.lon[0, 0],  # min x
-            self.lon[-1, -1],  # max x
-            self.lat[0, 0],  # min y
-            self.lat[-1, -1],  # max y
-        ]
+            save(dstats, path / "diff_stats.pt")
 
+        return path
 
-@dataclass(slots=True)
-class DummySettings:
-    num_input_steps: int = 2  # Number of input timesteps
-    num_pred_steps: int = 1  # Number of output timesteps
-    standardize: bool = True
+    def get_dataset_path(name: str, grid: Grid) -> Path:
+        path = CACHE_DIR / f"{name}_{grid.name}"
+        os.makedirs(path, mode=0o777, exist_ok=True)
 
-    @property
-    def num_total_steps(self):
-        """
-        Total number of timesteps for one sample.
-        """
-        return self.num_input_steps + self.num_pred_steps
+        return path
 
+    def get_weight_per_level(
+        level: int,
+        level_type: Literal["isobaricInhPa", "heightAboveGround", "surface", "meanSea"],
+    ) -> float:
 
-class DummyDataset(DatasetABC, Dataset):
-    def __init__(self, grid: Grid, settings: DummySettings):
-        self.grid = grid
-        self.settings = settings
-        self._cache_dir = CACHE_DIR / str(self)
-        self.len = 10
-        self.shuffle = False
+        return 1.0
 
-    @cached_property
-    def cache_dir(self):
-        return self._cache_dir
+    def load_grid_info(name: str) -> GridConfig:
+        lat = (np.indices((64,)) - 16) * 0.5
+        lon = (np.indices((64,)) + 30) * 0.5
 
-    def __str__(self):
-        return "DummyDataset"
-
-    def __len__(self):
-        return self.len
-
-    def __getitem__(self, index):
-        inputs = NamedTensor(
-            tensor=torch.randn(
-                self.settings.num_input_steps,
-                self.grid.x,
-                self.grid.y,
-                self.weather_dim,
-            ).clamp(-3, 3),
-            feature_names=self.shortnames("input_output"),
-            names=["timestep", "lat", "lon", "features"],
-        )
-        outputs = NamedTensor(
-            tensor=torch.randn(
-                self.settings.num_pred_steps,
-                self.grid.x,
-                self.grid.y,
-                self.weather_dim,
-            ).clamp(-3, 3),
-            feature_names=self.shortnames("input_output"),
-            names=["timestep", "lat", "lon", "features"],
-        )
-        forcing = NamedTensor(
-            tensor=torch.randn(
-                self.settings.num_pred_steps,
-                self.grid.x,
-                self.grid.y,
-                self.forcing_dim,
-            ).clamp(-3, 3),
-            feature_names=self.shortnames("input"),
-            names=["timestep", "lat", "lon", "features"],
-        )
-        return Item(
-            inputs=inputs,
-            outputs=outputs,
-            forcing=forcing,
+        return GridConfig(
+            full_size=(64, 64),
+            latitude=lat.squeeze(),
+            longitude=lon.squeeze(),
+            geopotential=np.ones((64, 64)),
+            landsea_mask=None,
         )
 
-    def torch_dataloader(
-        self, tl_settings: TorchDataloaderSettings = TorchDataloaderSettings()
-    ) -> DataLoader:
-        return DataLoader(
-            self,
-            batch_size=tl_settings.batch_size,
-            num_workers=tl_settings.num_workers,
-            shuffle=self.shuffle,
-            prefetch_factor=tl_settings.prefetch_factor,
-            collate_fn=collate_fn,
-            pin_memory=tl_settings.pin_memory,
-        )
+    def get_grid_coords(param: WeatherParam) -> List[float]:
+        return [-8.0, 24.0, 15.0, 47.0]
 
-    @cached_property
-    def meshgrid(self) -> np.array:
-        return self.grid.meshgrid
-
-    @cached_property
-    def geopotential_info(self) -> np.array:
-        return self.grid.geopotential
-
-    @cached_property
-    def border_mask(self) -> np.array:
-        return self.grid.border_mask
-
-    @cached_property
-    def forcing_dim(self):
-        return 2
-
-    @cached_property
-    def weather_dim(self):
-        return 3
-
-    def shortnames(self, kind: Literal["input", "input_output", "output"]):
-        """
-        Define the variable names
-        """
-        number = 0
-        if kind == "input":
-            number = self.forcing_dim
-        elif kind == "input_output":
-            number = self.weather_dim
-        return [f"{kind}_{str(x).zfill(2)}" for x in range(number)]
-
-    @cached_property
-    def state_weights(self):
-        """
-        Weights used in the loss function.
-        """
-        w_dict = {}
-        for name in self.shortnames("input_output"):
-            w_dict[name] = np.abs(np.random.randn())
-        return w_dict
-
-    @cached_property
-    def units(self) -> Dict[str, int]:
-        """
-        Return a dictionnary with name and units
-        """
-        dout = {}
-        for name in self.shortnames("input_output") + self.shortnames("input"):
-            dout[name] = "FakeUnit"
-        return dout
-
-    @cached_property
-    def domain_info(self) -> DomainInfo:
-        """Information on the domain considered.
-        Usefull information for plotting.
-        """
-        return DomainInfo(
-            grid_limits=self.grid.grid_limits, projection=self.grid.projection
-        )
-
-    @cached_property
-    def dataset_info(self) -> DatasetInfo:
-        """
-        Return a DatasetInfo object.
-        This object describes the dataset.
-
-        Returns:
-            DatasetInfo: _description_
-        """
-        shortnames = {
-            "input": self.shortnames("input"),
-            "input_output": self.shortnames("input_output"),
-            "output": self.shortnames("output"),
-        }
-        return DatasetInfo(
-            name=str(self),
-            domain_info=self.domain_info,
-            units=self.units,
-            shortnames=shortnames,
-            weather_dim=self.weather_dim,
-            forcing_dim=self.forcing_dim,
-            step_duration=1,
-            statics=self.statics,
-            stats=self.stats,
-            diff_stats=self.diff_stats,
-            state_weights=self.state_weights,
+    def load_param_info(name: str) -> ParamConfig:
+        return ParamConfig(
+            unit="adimensional",
+            level_type="isobaricInhPa",
+            long_name="dummy_parameter",
+            grid="dummygrid",
+            grib_name=None,
+            grib_param=None,
         )
 
     @classmethod
-    def from_json(
+    def get_filepath(
         cls,
-        fname: Path,
-        num_input_steps: int,
-        num_pred_steps_train: int,
-        num_pred_steps_val_tests: int,
-        config_overrides: Union[Dict, None] = None,
-    ) -> Tuple["DummyDataset", "DummyDataset", "DummyDataset"]:
-        """
-        The path is not used for DummyDataset.
-        Return the train, valid and test datasets, in that order
-        """
-        grid = Grid()
-        train_settings = DummySettings(
-            num_input_steps=num_input_steps, num_pred_steps=num_pred_steps_train
-        )
-        val_test_settings = DummySettings(
-            num_input_steps=num_input_steps, num_pred_steps=num_pred_steps_val_tests
-        )
-        train_dataset = DummyDataset(grid, train_settings)
-        val_dataset = DummyDataset(grid, val_test_settings)
-        test_dataset = DummyDataset(grid, val_test_settings)
-        return train_dataset, val_dataset, test_dataset
+        dataset_name: str,
+        param: WeatherParam,
+        timestamps: Timestamps,
+        file_format: str = "npy",
+    ) -> Path:
+        if not os.path.exists(
+            cls.get_dataset_path(dataset_name, param.grid) / "dummy_data.npy"
+        ):
+            arr = np.random.randn(len(timestamps.terms), 64, 64, 1).clip(-3, 3)
+            np.save(
+                cls.get_dataset_path(dataset_name, param.grid) / "dummy_data.npy", arr
+            )
+        return cls.get_dataset_path(dataset_name, param.grid) / "dummy_data.npy"
 
-    @cached_property
-    def stats(self) -> Stats:
+    @classmethod
+    def load_data_from_disk(
+        cls,
+        dataset_name: str,  # name of the dataset or dataset version
+        param: WeatherParam,  # specific parameter (2D field associated to a grid)
+        timestamps: Timestamps,  # specific timestamp at which to load the field
+        member: int = 0,  # optional members id. when dealing with ensembles
+        file_format: Literal["npy", "grib"] = "npy",  # format of the base file on disk
+    ) -> np.array:
         """
-        Read fake statistics from BytesIO files
+        Main loading function to fetch actual data on disk.
+        loads a given parameter on a given timestamp
         """
-        # Generate fake stats
-        d_stats = {}
-        features = (
-            self.shortnames("input")
-            + self.shortnames("input_output")
-            + self.shortnames("output")
-        )
-        features = list(set(features))
-        for name in features:
-            d_stats[name] = {
-                "mean": torch.tensor(0.0),
-                "std": torch.tensor(1.0),
-                "max": torch.tensor(3.0),
-                "min": torch.tensor(-3.0),
-            }
-        # Save them in byteIo
-        buffer = BytesIO()
-        torch.save(d_stats, buffer)
-        buffer.seek(0)
-        # Read them
-        return Stats(buffer)
+        arr = np.load(cls.get_filepath(dataset_name, param, timestamps))
+        return arr
 
-    @cached_property
-    def diff_stats(self) -> Stats:
-        """
-        Read fake statistics from BytesIO files
-        """
-        d_stats = {}
-        features = (
-            self.shortnames("input")
-            + self.shortnames("input_output")
-            + self.shortnames("output")
-        )
-        features = list(set(features))
-        for name in features:
-            d_stats[name] = {"mean": torch.tensor(0.0), "std": torch.tensor(1.42)}
-        # Save them in byteIo
-        buffer = BytesIO()
-        torch.save(d_stats, buffer)
-        buffer.seek(0)
-        # Read them
-        return Stats(buffer)
+    def valid_timestamp(n_inputs: int, time: Timestamps) -> bool:
+        return True
 
-
-if __name__ == "__main__":
-    train_ds, val_ds, test_ds = DummyDataset.from_json("fakepath.json", 1, 2, 4)
-    dataset_info = train_ds.dataset_info
-    dataset_info.summary()
-    print(dataset_info.domain_info)
-    print(train_ds.__getitem__(0))
-    print("Number of elment in dataset", train_ds.__len__())
+    @classmethod
+    def exists(
+        cls,
+        ds_name: str,
+        param: WeatherParam,
+        timestamps: Timestamps,
+        file_format: Literal["npy", "grib"] = "grib",
+    ) -> bool:
+        return True
