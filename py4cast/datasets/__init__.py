@@ -64,9 +64,9 @@ def get_datasets(
     Returns 3 instances of the dataset: train, val, test
     """
 
-    # checks if name has a registry key as component
+    # checks if name has a registry key as component (substring)
     registered_name = ""
-    for k in registry.keys():
+    for k in registry:
         if k in name.lower():
             registered_name = k
             break

@@ -420,7 +420,7 @@ class DataAccessor(ABC):
         file_format: Literal["npy", "grib"] = "grib",
     ) -> bool:
         """
-        Verfication functions to check whether actual data exists, 
+        Verfication functions to check whether actual data exists,
         corresponding to the given timestamp and WeatherParam.
         Concrete implementations can typically verify that the file where the data is exists.
         """
