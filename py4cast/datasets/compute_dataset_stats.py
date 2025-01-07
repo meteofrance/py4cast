@@ -1,9 +1,9 @@
 from typing import Literal
 
 import torch
-from py4cast.datasets.base import DatasetABC
 from tqdm import tqdm
 
+from py4cast.datasets.base import DatasetABC, TorchDataloaderSettings
 from py4cast.utils import torch_save
 
 
@@ -13,7 +13,7 @@ def compute_mean_std_min_max(
     """
     Compute mean and standard deviation for this dataset.
     """
-    random_batch = next(iter(dataset.torch_dataloader()))
+    random_batch = next(iter(dataset.torch_dataloader(TorchDataloaderSettings())))
     named_tensor = getattr(random_batch, type_tensor)
     n_features = len(named_tensor.feature_names)
     sum_means = torch.zeros(n_features)
@@ -27,7 +27,8 @@ def compute_mean_std_min_max(
         raise ValueError("Your dataset should not be standardized.")
 
     for batch in tqdm(
-        dataset.torch_dataloader(), desc=f"Computing {type_tensor} stats"
+        dataset.torch_dataloader(TorchDataloaderSettings()),
+        desc=f"Computing {type_tensor} stats",
     ):
         tensor = getattr(batch, type_tensor).tensor
         tensor = tensor.flatten(1, 3)  # Flatten to be (Batch, X, Features)
@@ -65,7 +66,7 @@ def compute_parameters_stats(dataset: DatasetABC):
     """
     all_stats = {}
     for type_tensor in ["inputs", "outputs", "forcing"]:
-        stats_dict = compute_mean_std_min_max(dataset,type_tensor)
+        stats_dict = compute_mean_std_min_max(dataset, type_tensor)
         for feature, stats in stats_dict.items():
             # If feature was computed multiple times we keep only first occurence
             if feature not in all_stats.keys():
@@ -77,7 +78,9 @@ def compute_parameters_stats(dataset: DatasetABC):
 
 
 def compute_time_step_stats(dataset: DatasetABC):
-    random_inputs = next(iter(dataset.torch_dataloader())).inputs
+    random_inputs = next(
+        iter(dataset.torch_dataloader(TorchDataloaderSettings()))
+    ).inputs
     n_features = len(random_inputs.feature_names)
     sum_means = torch.zeros(n_features)
     sum_squares = torch.zeros(n_features)
@@ -85,7 +88,7 @@ def compute_time_step_stats(dataset: DatasetABC):
     if not dataset.settings.standardize:
         raise ValueError("Your dataset should be standardized.")
 
-    for batch in tqdm(dataset.torch_dataloader()):
+    for batch in tqdm(dataset.torch_dataloader(TorchDataloaderSettings())):
         # Here we assume that data are in 2 or 3 D
         inputs = batch.inputs.tensor
         outputs = batch.outputs.tensor

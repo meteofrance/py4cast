@@ -12,9 +12,9 @@ registry = {}
 
 # we try to import and register the datasets
 # with loose coupling
-# missing dependencies for a dataset should not
+# missing dependencies for a single dataset should not
 # break the code
-# NEW DATASETS MUST BE REGISTERED HERE
+# NEW ACCESSORS MUST BE REGISTERED HERE
 
 try:
     from .titan import TitanAccessor

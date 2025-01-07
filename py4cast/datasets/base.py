@@ -411,6 +411,9 @@ class Sample:
                 self.timestamps,
                 self.settings.file_format,
             ):
+                print(
+                    f"invalid sample, {self.timestamps.validity_times[0]}, {self.accessor.parameter_namer(param)}. Check filename."
+                )
                 return False
         return True
 
@@ -658,7 +661,7 @@ class DatasetABC(Dataset):
         )
 
     @cached_property
-    def sample_list(self):
+    def sample_list(self) -> List[Sample]:
         """Creates the list of samples."""
         print("Start creating samples...")
         stats = self.stats if self.settings.standardize else None
@@ -702,7 +705,7 @@ class DatasetABC(Dataset):
                     self.accessor,
                     member,
                 )
-                if sample.is_valid():
+                if (not self.settings.check_validity) or sample.is_valid():
                     samples.append(sample)
                 else:
                     invalid_samples += 1

@@ -125,12 +125,13 @@ class TitanAccessor(DataAccessor):
         Function to load invidiual parameter and lead time from a file stored in disk
         """
         dates = timestamps.validity_times
+        print(dates)
         arr_list = []
         for date in dates:
             data_path = cls.get_filepath(ds_name, param, date, file_format)
             if file_format == "grib":
                 arr, lons, lats = load_data_grib(param, data_path)
-                arr = fit_to_grid(arr, lons, lats)
+                arr = fit_to_grid(param, arr, lons, lats, cls.get_grid_coords)
             else:
                 arr = np.load(data_path)
 
@@ -167,6 +168,9 @@ class TitanAccessor(DataAccessor):
         return True
 
     def parameter_namer(param: WeatherParam) -> str:
+        """
+        Retrieve a filename from a parameter
+        """
         if param.level_type in ["surface", "heightAboveGround"]:
             level_type = "m"
         else:
@@ -221,4 +225,5 @@ def load_data_grib(param: WeatherParam, path: Path) -> np.ndarray:
         arr = ds[param.grib_param].values
     else:
         arr = ds[param.grib_param].sel(isobaricInhPa=param.level).values
+    print("grib data loaded", type(arr))
     return arr, lons, lats
