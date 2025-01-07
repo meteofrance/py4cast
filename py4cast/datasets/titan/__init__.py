@@ -194,7 +194,7 @@ def load_data_from_disk(
     data_path = get_filepath(ds_name, param, date, file_format)
     if file_format == "grib":
         arr, lons, lats = load_data_grib(param, data_path)
-        arr = fit_to_grid(arr, lons, lats)
+        arr = fit_to_grid(param, arr, lons, lats, get_grid_coords)
     else:
         arr = np.load(data_path)
 
