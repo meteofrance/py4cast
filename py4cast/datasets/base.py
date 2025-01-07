@@ -766,7 +766,7 @@ class DatasetABC(Dataset):
         """
         Datasets can override this method to add
         more static data.
-        Otionally, add the LandSea Mask to the statics."""
+        Optionally, add the LandSea Mask to the statics."""
 
         if self.settings.add_landsea_mask:
             return [
