@@ -283,7 +283,7 @@ class Stats:
 
     def to_list(
         self,
-        aggregate: Literal["mean", "std", "min", "max"],
+        stat_name: Literal["mean", "std", "min", "max"],
         shortnames: List[str],
         dtype: torch.dtype = torch.float32,
     ) -> list:
