@@ -711,18 +711,18 @@ class DatasetABC(Dataset):
         )
         return samples
 
-    def torch_dataloader(self, tl_settings: TorchDataloaderSettings) -> DataLoader:
+    def torch_dataloader(self, batch_size, num_workers, shuffle, prefetch_factor, pin_memory) -> DataLoader:
         """
         Builds a torch dataloader from self.
         """
         return DataLoader(
             self,
-            batch_size=tl_settings.batch_size,
-            num_workers=tl_settings.num_workers,
-            shuffle=self.shuffle,
-            prefetch_factor=tl_settings.prefetch_factor,
+            batch_size=batch_size,
+            num_workers=num_workers,
+            shuffle=shuffle,
+            prefetch_factor=prefetch_factor,
             collate_fn=collate_fn,
-            pin_memory=tl_settings.pin_memory,
+            pin_memory=pin_memory,
         )
 
     @cached_property

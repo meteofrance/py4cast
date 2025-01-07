@@ -237,20 +237,16 @@ if args.dev_mode:
 run_id = date.strftime("%b-%d-%Y-%M-%S")
 seed.seed_everything(args.seed)
 
-dl_settings = TorchDataloaderSettings(
-    batch_size=args.batch_size,
-    num_workers=args.num_workers,
-    prefetch_factor=args.prefetch_factor,
-    pin_memory=args.pin_memory,
-)
-
 # Wrap dataset with lightning datamodule
 dm = PlDataModule(
     dataset=args.dataset,
     num_input_steps=args.num_input_steps,
     num_pred_steps_train=args.num_pred_steps_train,
     num_pred_steps_val_test=args.num_pred_steps_val_test,
-    dl_settings=dl_settings,
+    batch_size = args.batch_size,
+    num_workers = args.num_workers,
+    prefetch_factor = args.prefetch_factor,
+    pin_memory = args.pin_memory,
     dataset_conf=args.dataset_conf,
     config_override=None,
 )
