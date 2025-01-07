@@ -292,7 +292,7 @@ class Stats:
         The order is the one of the shortnames.
 
         Args:
-            aggregate : Statistics wanted
+            stat_name : Statistics wanted
             names (List[str]): Field for which we want stats
 
         Returns:
@@ -300,7 +300,7 @@ class Stats:
         """
         if len(shortnames) > 0:
             return torch.stack(
-                [self[name][aggregate] for name in shortnames], dim=0
+                [self[name][stat_name] for name in shortnames], dim=0
             ).type(dtype)
         else:
             return []
