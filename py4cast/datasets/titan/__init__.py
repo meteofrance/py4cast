@@ -139,8 +139,7 @@ def fit_to_grid(
     param: WeatherParam,
     arr: np.ndarray,
     lons: np.ndarray,
-    lats: np.ndarray,
-    get_grid_coords: Callable[[WeatherParam], List[str]],
+    lats: np.ndarray
 ) -> np.ndarray:
     # already on good grid, nothing to do:
     if param.grid.name == param.native_grid:
@@ -194,7 +193,7 @@ def load_data_from_disk(
     data_path = get_filepath(ds_name, param, date, file_format)
     if file_format == "grib":
         arr, lons, lats = load_data_grib(param, data_path)
-        arr = fit_to_grid(arr, lons, lats)
+        arr = fit_to_grid(param, arr, lons, lats)
     else:
         arr = np.load(data_path)
 
