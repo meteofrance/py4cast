@@ -342,7 +342,6 @@ class DataAccessor(ABC):
         """
         Return the path that will be used as cache for data during dataset preparation.
         """
-        raise NotImplementedError
 
     @abstractmethod
     def get_weight_per_level(
