@@ -9,17 +9,23 @@ import einops
 from functools import cached_property
 from copy import deepcopy
 from transformers import get_cosine_schedule_with_warmup
-from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
 from py4cast.models import build_model_from_settings
 from py4cast.losses import WeightedLoss
 from py4cast.metrics import MetricACC, MetricPSDK, MetricPSDVar
 from py4cast.models.base import expand_to_batch
 from py4cast.utils import str_to_dtype
 from py4cast.datasets.base import ItemBatch, NamedTensor
+from py4cast.plots import (
+    PredictionEpochPlot,
+    PredictionTimestepPlot,
+    SpatialErrorPlot,
+    StateErrorPlot,
+)
 
 # learning rate scheduling period in steps (update every nth step)
 LR_SCHEDULER_PERIOD: int = 10
-
+# PNG plots period in epochs. Plots are made, logged and saved every nth epoch.
+PLOT_PERIOD: int = 1
 
 class AutoRegressiveLightningModule(pl.LightningModule):
     """A lightning module adapted for test.
@@ -40,7 +46,7 @@ class AutoRegressiveLightningModule(pl.LightningModule):
         model_name: str = "halfunet",
         lr: float = 0.1, # initial value of learning rate
         loss_name: str = "mse",
-        save_path: Path = None, # MetricPSDK directory
+        save_path: Path = None, # Metrics and Plots directory
         use_lr_scheduler: bool = False,
         precision: str = "bf16", # degree of precision
         no_log: bool = False, # False = dont log things on tensorboard
@@ -121,6 +127,8 @@ class AutoRegressiveLightningModule(pl.LightningModule):
             raise TypeError(f"Unknown loss function: {self.loss}")
         self.loss.prepare(self, statics.interior_mask, self.dataset_info)
         self.batch_losses = []
+        self.loss_for_plot = {self.loss_name : self.loss}
+
     ###--------------------- MISCELLANEOUS ---------------------###
 
     @property
@@ -375,24 +383,65 @@ class AutoRegressiveLightningModule(pl.LightningModule):
 
     ###--------------------- VALIDATION ---------------------###
 
+    def on_validation_start(self):
+        self.valid_plotters = [
+            StateErrorPlot(self.loss_for_plot, prefix="Validation"),
+            PredictionTimestepPlot(
+                num_samples_to_plot=1,
+                num_features_to_plot=4,
+                prefix="Validation",
+                save_path=self.save_path,
+            ),
+            PredictionEpochPlot(
+                num_samples_to_plot=1,
+                num_features_to_plot=4,
+                prefix="Validation",
+                save_path=self.save_path,
+            ),
+        ]
+
     def validation_step(self, batch):
         y_hat, y = self.shared_step(batch)
         loss = self.loss(y_hat, y).mean()
         self.log(f"val_loss", loss, on_step=False, on_epoch=True, reduce_fx="mean", prog_bar=True, sync_dist=True)
         self.shared_metrics_step(y, y_hat, self.original_shape, "val")
+        if self.current_epoch % PLOT_PERIOD == 0:
+            for plotter in self.valid_plotters:
+                plotter.update(self, prediction=y_hat, target=y)
         return loss
-
+    
     def on_validation_epoch_end(self):
         self.shared_metrics_end("val")
+        if self.current_epoch % PLOT_PERIOD == 0:
+            for plotter in self.valid_plotters:
+                plotter.on_step_end(self, label="Valid")
 
     ###--------------------- TEST ---------------------###
+
+    def on_test_start(self):
+        self.test_plotters = [
+            StateErrorPlot(self.loss_for_plot, save_path=self.save_path),
+            SpatialErrorPlot(),
+            PredictionTimestepPlot(
+                num_samples_to_plot=1,
+                num_features_to_plot=4,
+                prefix="Test",
+                save_path=self.save_path,
+            ),
+        ]
 
     def test_step(self, batch):
         y_hat, y = self.shared_step(batch)
         loss = self.loss(y_hat, y).mean()
         self.log(f"test_loss", loss, on_step=False, on_epoch=True, reduce_fx="mean", prog_bar=True, sync_dist=True)
         self.shared_metrics_step(y, y_hat, self.original_shape, "test")
+        if self.current_epoch % PLOT_PERIOD == 0:
+            for plotter in self.test_plotters:
+                plotter.update(self, prediction=y_hat, target=y)
         return loss
 
     def on_test_epoch_end(self):
         self.shared_metrics_end("test")
+        if self.current_epoch % PLOT_PERIOD == 0:
+            for plotter in self.test_plotters:
+                plotter.on_step_end(self, label="Test")
