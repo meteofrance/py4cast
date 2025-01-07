@@ -125,7 +125,6 @@ class Grid:
         longitudes = self.grid_config.longitude[self.subdomain[2] : self.subdomain[3]]
         return np.tile(longitudes, (self.x, 1))
 
-    # TODO : from the grib, save a npy lat lon h mask for each grid
     @property
     def geopotential(self) -> np.array:
         return self.grid_config.geopotential[
@@ -420,6 +419,10 @@ class DataAccessor(ABC):
         timestamps: Timestamps,
         file_format: Literal["npy", "grib"] = "grib",
     ) -> bool:
+        """
+        Verfication functions to check whether actual data exists, corresponding to the given timestamp and WeatherParam.
+        Concrete implementations can typically verify that the file where the data is exists.
+        """
         raise NotImplementedError
 
     @abstractmethod
