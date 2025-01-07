@@ -198,9 +198,9 @@ class AutoRegressiveLightningModule(pl.LightningModule):
         else:
             return opt
 
-    def forward(self, inputs):
+    def forward(self, batch: ItemBatch):
         """Runs data through the model. Separate from training step."""
-        y_hat = self.model(inputs)
+        y_hat, _ = self.shared_step(batch)
         return y_hat
 
     ###--------------------- SHARED ---------------------###
