@@ -351,7 +351,6 @@ class DataAccessor(ABC):
         """
         Attribute a weight in the final reconstruction loss depending on the height level and level_type
         """
-        raise NotImplementedError
 
     @abstractmethod
     def load_grid_info(name: str) -> GridConfig:
@@ -360,7 +359,6 @@ class DataAccessor(ABC):
         Return an instance of the GridConfig namedtuple.
         Consumed by the 'Grid' interface object.
         """
-        raise NotImplementedError
 
     @abstractmethod
     def get_grid_coords(param: WeatherParam) -> List[float]:
@@ -368,7 +366,6 @@ class DataAccessor(ABC):
         Get the extent of the grid related to a given parameter
         (min and max for latitude (2 first positions) and longitude (positions 3 and 4))
         """
-        raise NotImplementedError
 
     @abstractmethod
     def load_param_info(name: str) -> ParamConfig:
@@ -377,7 +374,6 @@ class DataAccessor(ABC):
         Return a configuration to instantiate parameter data as ParamConfig.
         Consumed by the `Param` interface object.
         """
-        raise NotImplementedError
 
     @classmethod
     @abstractmethod
@@ -391,7 +387,6 @@ class DataAccessor(ABC):
         """
         Return a path to retrieve a given parameter at from a dataset
         """
-        raise NotImplementedError
 
     @classmethod
     @abstractmethod
@@ -407,7 +402,6 @@ class DataAccessor(ABC):
         Main loading function to fetch actual data on disk.
         loads a given parameter on a given timestamp
         """
-        raise NotImplementedError
 
     @classmethod
     @abstractmethod
@@ -423,7 +417,6 @@ class DataAccessor(ABC):
         corresponding to the given timestamp and WeatherParam.
         Concrete implementations can typically verify that the file where the data is exists.
         """
-        raise NotImplementedError
 
     @abstractmethod
     def valid_timestamp(n_inputs: int, timestamps: Timestamps) -> bool:
@@ -431,7 +424,6 @@ class DataAccessor(ABC):
         Verification function called after the creation of each timestamps.
         Check if computed terms respect the dataset convention.
         """
-        raise NotImplementedError
 
     @abstractmethod
     def parameter_namer(param: WeatherParam) -> str:
