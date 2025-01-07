@@ -46,7 +46,6 @@ def prepare(
     num_pred_steps_val_test: int = 1,
     convert_grib2npy: bool = False,
     compute_stats: bool = True,
-    write_valid_samples_list: bool = True,
 ):
     """Prepares Titan dataset for training.
     This command will:
@@ -62,11 +61,12 @@ def prepare(
 
     print("Creating folders...")
     train_ds, valid_ds, test_ds = DatasetABC.from_dict(
-        path_config.stem,
-        conf,
-        num_input_steps,
-        num_pred_steps_train,
-        num_pred_steps_val_test,
+        TitanAccessor,
+        name=path_config.stem,
+        conf=conf,
+        num_input_steps=num_input_steps,
+        num_pred_steps_train=num_pred_steps_train,
+        num_pred_steps_val_test=num_pred_steps_val_test,
     )
     train_ds.cache_dir.mkdir(exist_ok=True)
     data_dir = train_ds.cache_dir / "data"
@@ -76,11 +76,10 @@ def prepare(
     if convert_grib2npy:
         print("Converting gribs to npy...")
         param_list = get_param_list(
-            conf,
-            train_ds.grid,
-            TitanAccessor.load_param_info,
-            TitanAccessor.get_weight_per_level,
-        )
+            conf=conf,
+            grid=train_ds.grid,
+            accessor=TitanAccessor
+            )
         sum_dates = (
             list(train_ds.period.date_list)
             + list(valid_ds.period.date_list)
@@ -91,39 +90,43 @@ def prepare(
             process_sample_dataset(train_ds, date, param_list)
         print("Done!")
 
-    if write_valid_samples_list:
-        train_ds.write_list_valid_samples()
-        valid_ds.write_list_valid_samples()
-        test_ds.write_list_valid_samples()
-
     if compute_stats:
         conf["settings"]["standardize"] = False
         train_ds, valid_ds, test_ds = DatasetABC.from_dict(
-            path_config.stem,
-            conf,
-            num_input_steps,
-            num_pred_steps_train,
-            num_pred_steps_val_test,
+            TitanAccessor,
+            name=path_config.stem,
+            conf=conf,
+            num_input_steps=num_input_steps,
+            num_pred_steps_train=num_pred_steps_train,
+            num_pred_steps_val_test=num_pred_steps_val_test,
         )
         print("Computing stats on each parameter...")
         cds.compute_parameters_stats(train_ds)
 
         conf["settings"]["standardize"] = True
         train_ds, valid_ds, test_ds = DatasetABC.from_dict(
-            path_config.stem,
-            conf,
-            num_input_steps,
-            num_pred_steps_train,
-            num_pred_steps_val_test,
+            TitanAccessor,
+            name=path_config.stem,
+            conf=conf,
+            num_input_steps=num_input_steps,
+            num_pred_steps_train=num_pred_steps_train,
+            num_pred_steps_val_test=num_pred_steps_val_test,
         )
         print("Computing time stats on each parameters, between 2 timesteps...")
         cds.compute_time_step_stats(train_ds)
 
 
 @app.command()
-def describe(path_config: Path = DEFAULT_CONFIG):
+def describe(path_config: Path = DEFAULT_CONFIG, dataset_name: str = "titan"):
     """Describes Titan."""
-    train_ds, _, _ = DatasetABC.from_json(path_config, 2, 1, 5)
+    train_ds, _, _ = DatasetABC.from_json(
+        TitanAccessor,
+        dataset_name=dataset_name,
+        fname=path_config, 
+        num_input_steps=2,
+        num_pred_steps_train=1,
+        num_pred_steps_val_tests=5
+        )
     train_ds.dataset_info.summary()
     print("Len dataset : ", len(train_ds))
     print("First Item description :")
@@ -131,9 +134,16 @@ def describe(path_config: Path = DEFAULT_CONFIG):
 
 
 @app.command()
-def plot(path_config: Path = DEFAULT_CONFIG):
+def plot(path_config: Path = DEFAULT_CONFIG, dataset_name: str = "titan"):
     """Plots a png and a gif for one sample."""
-    train_ds, _, _ = DatasetABC.from_json(path_config, 2, 1, 5)
+    train_ds, _, _ = DatasetABC.from_json(
+        TitanAccessor,
+        dataset_name=dataset_name,
+        fname=path_config, 
+        num_input_steps=2,
+        num_pred_steps_train=1,
+        num_pred_steps_val_tests=5
+        )
     print("Plot gif of one sample...")
     sample = train_ds.sample_list[0]
     sample.plot_gif("test.gif")
@@ -143,9 +153,16 @@ def plot(path_config: Path = DEFAULT_CONFIG):
 
 
 @app.command()
-def speedtest(path_config: Path = DEFAULT_CONFIG, n_iter: int = 5):
+def speedtest(path_config: Path = DEFAULT_CONFIG, n_iter: int = 5, dataset_name: str = "titan"):
     """Makes a loading speed test."""
-    train_ds, _, _ = DatasetABC.from_json(path_config, 2, 1, 5)
+    train_ds, _, _ = DatasetABC.from_json(
+        TitanAccessor,
+        dataset_name=dataset_name,
+        fname=path_config, 
+        num_input_steps=2,
+        num_pred_steps_train=1,
+        num_pred_steps_val_tests=5
+        )
     data_iter = iter(train_ds.torch_dataloader())
     print("Dataset file_format: ", train_ds.settings.file_format)
     print("Speed test:")
