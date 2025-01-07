@@ -3,18 +3,17 @@
         "train": {
             "start": 2021010103,
             "end": 2022123123,
-            "step_duration": 3
-
+            "step": 1
         },
         "valid": {
             "start": 2023010103,
             "end": 2023123123,
-            "step_duration": 3
+            "step": 3
         },
         "test": {
             "start": 2023010103,
             "end": 2023123123,
-            "step_duration": 3
+            "step": 3
         }
     },
     "grid":{
