@@ -417,7 +417,7 @@ class Grid:
         self.x = self.subdomain[1] - self.subdomain[0]
         self.y = self.subdomain[3] - self.subdomain[2]
         self.full_size = self.grid_config.full_size
-        
+
     def get_grid_info(self) -> GridConfig:
         return self.load_grid_info_func(self.name)
 
