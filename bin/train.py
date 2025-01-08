@@ -10,21 +10,17 @@ from argparse import ArgumentParser, BooleanOptionalAction
 from datetime import datetime
 from pathlib import Path
 
+import lightning.pytorch as pl
 import mlflow.pytorch
-import pytorch_lightning as pl
 import torch
+from lightning.pytorch.callbacks import LearningRateMonitor
+from lightning.pytorch.callbacks.early_stopping import EarlyStopping
 from lightning.pytorch.loggers import MLFlowLogger, TensorBoardLogger
 from lightning.pytorch.profilers import AdvancedProfiler, PyTorchProfiler
 from lightning_fabric.utilities import seed
 from mlflow.models.signature import infer_signature
-from pytorch_lightning.callbacks import LearningRateMonitor
-from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 
-from py4cast.lightning import (
-    ArLightningHyperParam,
-    AutoRegressiveLightning,
-    PlDataModule,
-)
+from py4cast.lightning import AutoRegressiveLightning, PlDataModule
 from py4cast.models import registry as model_registry
 from py4cast.settings import ROOTDIR
 
@@ -238,7 +234,7 @@ seed.seed_everything(args.seed)
 
 # Wrap dataset with lightning datamodule
 dm = PlDataModule(
-    dataset=args.dataset,
+    dataset_name=args.dataset,
     num_input_steps=args.num_input_steps,
     num_pred_steps_train=args.num_pred_steps_train,
     num_pred_steps_val_test=args.num_pred_steps_val_test,
@@ -276,27 +272,6 @@ version = 0 if list_subdirs == [] else list_versions[-1] + 1
 subfolder = f"{run_name}_{version}"
 save_path = log_dir / folder / subfolder
 
-hp = ArLightningHyperParam(
-    dataset_info=dataset_info,
-    dataset_name=args.dataset,
-    dataset_conf=args.dataset_conf,
-    batch_size=args.batch_size,
-    model_name=args.model,
-    model_conf=args.model_conf,
-    num_input_steps=args.num_input_steps,
-    num_pred_steps_train=args.num_pred_steps_train,
-    num_pred_steps_val_test=args.num_pred_steps_val_test,
-    num_inter_steps=args.num_inter_steps,
-    lr=args.lr,
-    loss=args.loss,
-    training_strategy=args.strategy,
-    len_train_loader=len_loader,
-    save_path=save_path,
-    use_lr_scheduler=args.use_lr_scheduler,
-    precision=args.precision,
-    no_log=args.no_log,
-    channels_last=args.channels_last,
-)
 
 # Logger & checkpoint callback
 callback_list = []
@@ -380,12 +355,33 @@ trainer = pl.Trainer(
     limit_test_batches=args.limit_train_batches,
 )
 
+dict_args = {
+    "dataset_conf": args.dataset_conf,
+    "batch_size": args.batch_size,
+    "model_name": args.model,
+    "model_conf": args.model_conf,
+    "num_input_steps": args.num_input_steps,
+    "num_pred_steps_train": args.num_pred_steps_train,
+    "num_pred_steps_val_test": args.num_pred_steps_val_test,
+    "num_inter_steps": args.num_inter_steps,
+    "lr": args.lr,
+    "loss_name": args.loss,
+    "training_strategy": args.strategy,
+    "len_train_loader": len_loader,
+    "save_path": save_path,
+    "use_lr_scheduler": args.use_lr_scheduler,
+    "precision": args.precision,
+    "no_log": args.no_log,
+    "channels_last": args.channels_last,
+    "dataset_info": dataset_info,
+}
+
 if args.load_model_ckpt and not args.resume_from_ckpt:
     lightning_module = AutoRegressiveLightning.load_from_checkpoint(
-        args.load_model_ckpt, hparams=hp
+        args.load_model_ckpt, **dict_args
     )
 else:
-    lightning_module = AutoRegressiveLightning(hp)
+    lightning_module = AutoRegressiveLightning(**dict_args)
 
 # Train model
 print("Starting training !")
