@@ -4,12 +4,13 @@ from pathlib import Path
 
 import numpy as np
 import tqdm
+from typer import Typer
+
 from py4cast.datasets import compute_dataset_stats as cds
 from py4cast.datasets.access import Timestamps
 from py4cast.datasets.base import DatasetABC
 from py4cast.datasets.titan import TitanAccessor
 from py4cast.datasets.titan.settings import DEFAULT_CONFIG, FORMATSTR
-from typer import Typer
 
 app = Typer()
 
@@ -54,6 +55,7 @@ def convert_sample_grib2_numpy(dataset: DatasetABC):
                         f"WARNING: Could not load grib {dataset.accessor.parameter_namer(p)} {p.level} {v}. Skipping."
                     )
                     break
+    dataset.settings.file_format = "npy"
 
 
 @app.command()
@@ -109,10 +111,11 @@ def prepare(
         test_ds.settings.standardize = True
 
     if compute_stats:
+        del train_ds.sample_list
         train_ds.settings.standardize = False
         print("Computing stats on each parameter...")
         cds.compute_parameters_stats(train_ds)
-
+        del train_ds.sample_list
         train_ds.settings.standardize = True
         print("Computing time stats on each parameters, between 2 timesteps...")
         cds.compute_time_step_stats(train_ds)

@@ -4,6 +4,8 @@ from pathlib import Path
 from typing import List, Literal
 
 import numpy as np
+from torch import save, tensor
+
 from py4cast.datasets.access import (
     DataAccessor,
     Grid,
@@ -13,7 +15,6 @@ from py4cast.datasets.access import (
     WeatherParam,
 )
 from py4cast.settings import CACHE_DIR, DEFAULT_CONFIG_DIR
-from torch import save, tensor
 
 
 class DummyAccessor(DataAccessor):

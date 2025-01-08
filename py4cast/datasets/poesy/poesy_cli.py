@@ -3,11 +3,12 @@ import time
 from pathlib import Path
 
 import tqdm
+from typer import Typer
+
 from py4cast.datasets import compute_dataset_stats as cds
 from py4cast.datasets.base import DatasetABC
 from py4cast.datasets.poesy import PoesyAccessor
 from py4cast.datasets.poesy.settings import DEFAULT_CONFIG
-from typer import Typer
 
 app = Typer()
 
