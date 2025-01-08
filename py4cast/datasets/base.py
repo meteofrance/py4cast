@@ -401,7 +401,7 @@ class Sample:
         )
 
     def __repr__(self):
-        return f"Date {self.timestamps.datetime}, terms {self.timestamps.terms}, n_inputs {self.settings.num_input_steps}"
+        return f"{self.timestamps.datetime}, terms {self.timestamps.terms}, {self.settings.num_input_steps} inputs"
 
     def is_valid(self) -> bool:
         for param in self.params:
