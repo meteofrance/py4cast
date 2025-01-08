@@ -412,7 +412,8 @@ class Sample:
                 self.settings.file_format,
             ):
                 print(
-                    f"invalid sample, {self.timestamps.validity_times[0]}, {self.accessor.parameter_namer(param)}. Check filename."
+                    f"invalid: {self.timestamps.validity_times[0]}, \
+                        {self.accessor.parameter_namer(param)}. Check file."
                 )
                 return False
         return True

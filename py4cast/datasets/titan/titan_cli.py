@@ -1,16 +1,14 @@
-import datetime as dt
 import json
 import time
 from pathlib import Path
-from typing import List
 
 import numpy as np
 import tqdm
 from typer import Typer
 
 from py4cast.datasets import compute_dataset_stats as cds
-from py4cast.datasets.access import Timestamps, WeatherParam
-from py4cast.datasets.base import DatasetABC, get_param_list
+from py4cast.datasets.access import Timestamps
+from py4cast.datasets.base import DatasetABC
 from py4cast.datasets.titan import TitanAccessor
 from py4cast.datasets.titan.settings import DEFAULT_CONFIG, FORMATSTR
 
@@ -38,7 +36,6 @@ def convert_sample_grib2_numpy(dataset: DatasetABC):
             dest_file = dataset.accessor.get_filepath(
                 dataset.name, p, v, file_format="npy"
             )
-            pname = dataset.accessor.parameter_namer(p)
             if not dest_file.exists():
                 try:
                     arr = dataset.accessor.load_data_from_disk(
@@ -54,7 +51,7 @@ def convert_sample_grib2_numpy(dataset: DatasetABC):
                 except Exception as e:
                     print(e)
                     print(
-                        f"WARNING: Could not load grib data {p.name} {p.level} {v}. Skipping sample."
+                        f"WARNING: Could not load grib data {dataset.accessor.parameter_namer(p)} {p.level} {v}. Skipping sample."
                     )
                     break
 
@@ -97,13 +94,9 @@ def prepare(
 
     if convert_grib2npy:
         train_ds.settings.standardize = False
-        train_ds.settings.check_validity = False
-
         valid_ds.settings.standardize = False
-        valid_ds.settings.check_validity = False
-
         test_ds.settings.standardize = False
-        test_ds.settings.check_validity = False
+        
         print("Converting gribs to npy...")
         print("train")
         convert_sample_grib2_numpy(train_ds)
@@ -114,13 +107,8 @@ def prepare(
         print("Done!")
 
         train_ds.settings.standardize = True
-        train_ds.settings.check_validity = True
-
         valid_ds.settings.standardize = True
-        valid_ds.settings.check_validity = True
-
         test_ds.settings.standardize = True
-        test_ds.settings.check_validity = True
 
     if compute_stats:
         train_ds.settings.standardize = False
