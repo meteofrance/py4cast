@@ -1,0 +1,10 @@
+model:
+  model_name: "halfunet"
+  model_conf: null
+  lr: 1e-4
+  loss_name: "mse"
+  save_path: /scratch/shared/py4cast/logs/camp0/test_cli_clement/
+  use_lr_scheduler: False
+  precision: "32"
+  no_log: False
+  channels_last: False

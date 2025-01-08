@@ -711,7 +711,7 @@ class DatasetABC(Dataset):
         )
         return samples
 
-    def torch_dataloader(self, batch_size, num_workers, shuffle, prefetch_factor, pin_memory) -> DataLoader:
+    def torch_dataloader(self, batch_size=1, num_workers=1, shuffle=False, prefetch_factor=None, pin_memory=False) -> DataLoader:
         """
         Builds a torch dataloader from self.
         """

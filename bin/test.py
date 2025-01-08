@@ -86,7 +86,6 @@ trainer = pl.Trainer(
 )
 
 # Initializing data loader
-dl_settings = TorchDataloaderSettings(batch_size=1, num_workers=5, prefetch_factor=2)
 _, val_ds, _ = get_datasets(
     hparams.dataset_name,
     hparams.num_input_steps,
@@ -94,7 +93,7 @@ _, val_ds, _ = get_datasets(
     hparams.num_pred_steps_val_test,
     hparams.dataset_conf,
 )
-dataloader = val_ds.torch_dataloader(dl_settings)
+dataloader = val_ds.torch_dataloader(batch_size=1, num_workers=5, prefetch_factor=2)
 
 print("Testing...")
-trainer.test(model=model, dataloaders=val_ds.torch_dataloader(dl_settings))
+trainer.test(model=model, dataloaders=val_ds.torch_dataloader(batch_size=1, num_workers=5, prefetch_factor=2))

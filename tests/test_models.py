@@ -163,14 +163,10 @@ def test_lightning_fit_inference():
         None,
     )
 
-    dl_settings = TorchDataloaderSettings(
-        batch_size=BATCH_SIZE,
-        num_workers=2,
-    )
     train_ds, val_ds, test_ds = datasets
-    train_loader = train_ds.torch_dataloader(dl_settings)
-    val_loader = val_ds.torch_dataloader(dl_settings)
-    test_loader = test_ds.torch_dataloader(dl_settings)
+    train_loader = train_ds.torch_dataloader(batch_size=BATCH_SIZE, num_workers=2)
+    val_loader = val_ds.torch_dataloader(batch_size=BATCH_SIZE, num_workers=2)
+    test_loader = test_ds.torch_dataloader(batch_size=BATCH_SIZE, num_workers=2)
 
     with tempfile.TemporaryDirectory() as tmpdir:
         save_path = Path(tmpdir) / "logs"
