@@ -24,13 +24,7 @@ from torchinfo import summary
 from transformers import get_cosine_schedule_with_warmup
 
 from py4cast.datasets import get_datasets
-from py4cast.datasets.base import (
-    DatasetInfo,
-    ItemBatch,
-    NamedTensor,
-    Statics,
-    TorchDataloaderSettings,
-)
+from py4cast.datasets.base import DatasetInfo, ItemBatch, NamedTensor, Statics
 from py4cast.losses import ScaledLoss, WeightedLoss
 from py4cast.metrics import MetricACC, MetricPSDK, MetricPSDVar
 from py4cast.models import build_model_from_settings, get_model_kls_and_settings
@@ -59,7 +53,10 @@ class PlDataModule(pl.LightningDataModule):
     num_input_steps: int
     num_pred_steps_train: int
     num_pred_steps_val_test: int
-    dl_settings: TorchDataloaderSettings
+    batch_size: int = 1
+    num_workers: int = 1
+    prefetch_factor: int | None
+    pin_memory: bool = False
     dataset_conf: Union[Path, None] = None
     config_override: Union[Dict, None] = (None,)
 
@@ -79,7 +76,15 @@ class PlDataModule(pl.LightningDataModule):
 
     @property
     def len_train_dl(self):
-        return len(self.train_ds.torch_dataloader(self.dl_settings))
+        return len(
+            self.train_ds.torch_dataloader(
+                batch_size=self.batch_size,
+                num_workers=self.num_workers,
+                shuffle=False,
+                prefetch_factor=self.prefetch_factor,
+                pin_memory=self.pin_memory,
+            )
+        )
 
     @property
     def train_dataset_info(self):
@@ -90,16 +95,40 @@ class PlDataModule(pl.LightningDataModule):
         return self.test_ds
 
     def train_dataloader(self):
-        return self.train_ds.torch_dataloader(self.dl_settings)
+        return self.train_ds.torch_dataloader(
+            batch_size=self.batch_size,
+            num_workers=self.num_workers,
+            shuffle=True,
+            prefetch_factor=self.prefetch_factor,
+            pin_memory=self.pin_memory,
+        )
 
     def val_dataloader(self):
-        return self.val_ds.torch_dataloader(self.dl_settings)
+        return self.val_ds.torch_dataloader(
+            batch_size=self.batch_size,
+            num_workers=self.num_workers,
+            shuffle=True,
+            prefetch_factor=self.prefetch_factor,
+            pin_memory=self.pin_memory,
+        )
 
     def test_dataloader(self):
-        return self.test_ds.torch_dataloader(self.dl_settings)
+        return self.test_ds.torch_dataloader(
+            batch_size=self.batch_size,
+            num_workers=self.num_workers,
+            shuffle=True,
+            prefetch_factor=self.prefetch_factor,
+            pin_memory=self.pin_memory,
+        )
 
     def predict_dataloader(self):
-        return self.test_ds.torch_dataloader(self.dl_settings)
+        return self.test_ds.torch_dataloader(
+            batch_size=self.batch_size,
+            num_workers=self.num_workers,
+            shuffle=True,
+            prefetch_factor=self.prefetch_factor,
+            pin_memory=self.pin_memory,
+        )
 
 
 @dataclass

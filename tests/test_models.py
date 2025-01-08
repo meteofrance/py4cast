@@ -19,7 +19,7 @@ from mfai.torch.models.base import ModelType
 from mfai.torch.models.utils import features_last_to_second, features_second_to_last
 
 from py4cast.datasets import get_datasets
-from py4cast.datasets.base import TorchDataloaderSettings, collate_fn
+from py4cast.datasets.base import collate_fn
 from py4cast.lightning import ArLightningHyperParam, AutoRegressiveLightning
 from py4cast.models import all_nn_architectures, get_model_kls_and_settings
 
@@ -163,14 +163,10 @@ def test_lightning_fit_inference():
         None,
     )
 
-    dl_settings = TorchDataloaderSettings(
-        batch_size=BATCH_SIZE,
-        num_workers=2,
-    )
     train_ds, val_ds, test_ds = datasets
-    train_loader = train_ds.torch_dataloader(dl_settings)
-    val_loader = val_ds.torch_dataloader(dl_settings)
-    test_loader = test_ds.torch_dataloader(dl_settings)
+    train_loader = train_ds.torch_dataloader(batch_size=BATCH_SIZE, num_workers=2)
+    val_loader = val_ds.torch_dataloader(batch_size=BATCH_SIZE, num_workers=2)
+    test_loader = test_ds.torch_dataloader(batch_size=BATCH_SIZE, num_workers=2)
 
     with tempfile.TemporaryDirectory() as tmpdir:
         save_path = Path(tmpdir) / "logs"
