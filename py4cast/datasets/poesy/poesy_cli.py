@@ -58,6 +58,10 @@ def prepare(
 
         print("Computing time stats on each parameters, between 2 timesteps...")
         train_ds.settings.standardize = True
+        try:
+            del train_ds.sample_list
+        except AttributeError:
+            pass
         cds.compute_time_step_stats(train_ds)
 
     return train_ds

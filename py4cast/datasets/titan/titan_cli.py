@@ -111,11 +111,17 @@ def prepare(
         test_ds.settings.standardize = True
 
     if compute_stats:
-        del train_ds.sample_list
+        try:
+            del train_ds.sample_list
+        except AttributeError:
+            pass
         train_ds.settings.standardize = False
         print("Computing stats on each parameter...")
         cds.compute_parameters_stats(train_ds)
-        del train_ds.sample_list
+        try:
+            del train_ds.sample_list
+        except AttributeError:
+            pass
         train_ds.settings.standardize = True
         print("Computing time stats on each parameters, between 2 timesteps...")
         cds.compute_time_step_stats(train_ds)
