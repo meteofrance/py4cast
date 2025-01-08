@@ -7,7 +7,6 @@ import cartopy.crs as ccrs
 import cartopy.feature as cfeature
 import matplotlib.pyplot as plt
 import xarray as xr
-
 from settings import METADATA, SCRATCH_PATH
 
 ulat, llat, llon, ulon = METADATA["GRIDS"]["PAAROME_1S100"]["extent"]

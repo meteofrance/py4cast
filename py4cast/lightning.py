@@ -11,6 +11,8 @@ import einops
 import matplotlib
 import pytorch_lightning as pl
 import torch
+from lightning.pytorch.loggers import MLFlowLogger
+from lightning.pytorch.utilities import rank_zero_only
 from mfai.torch.models.base import ModelType
 from mfai.torch.models.utils import (
     expand_to_batch,
@@ -21,8 +23,6 @@ from torch import nn
 from torchinfo import summary
 from transformers import get_cosine_schedule_with_warmup
 
-from lightning.pytorch.loggers import MLFlowLogger
-from lightning.pytorch.utilities import rank_zero_only
 from py4cast.datasets import get_datasets
 from py4cast.datasets.base import (
     DatasetInfo,
