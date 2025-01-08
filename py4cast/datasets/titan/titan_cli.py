@@ -51,7 +51,7 @@ def convert_sample_grib2_numpy(dataset: DatasetABC):
                 except Exception as e:
                     print(e)
                     print(
-                        f"WARNING: Could not load grib data {dataset.accessor.parameter_namer(p)} {p.level} {v}. Skipping sample."
+                        f"WARNING: Could not load grib {dataset.accessor.parameter_namer(p)} {p.level} {v}. Skipping."
                     )
                     break
 
@@ -69,7 +69,6 @@ def prepare(
     This command will:
         - create all needed folders
         - convert gribs to npy and rescale data to the wanted grid
-        - establish a list of valid samples for each set
         - computes statistics on all weather parameters."""
     print("--> Preparing Titan Dataset...")
 
@@ -78,7 +77,6 @@ def prepare(
         conf = json.load(fp)
 
     print("Creating folders...")
-    print(path_config.stem)
     train_ds, valid_ds, test_ds = DatasetABC.from_dict(
         TitanAccessor,
         name=path_config.stem,
@@ -96,7 +94,7 @@ def prepare(
         train_ds.settings.standardize = False
         valid_ds.settings.standardize = False
         test_ds.settings.standardize = False
-        
+
         print("Converting gribs to npy...")
         print("train")
         convert_sample_grib2_numpy(train_ds)
@@ -115,15 +113,7 @@ def prepare(
         print("Computing stats on each parameter...")
         cds.compute_parameters_stats(train_ds)
 
-        train_ds.settings.standardize = False
-        train_ds, valid_ds, test_ds = DatasetABC.from_dict(
-            TitanAccessor,
-            name=path_config.stem,
-            conf=conf,
-            num_input_steps=num_input_steps,
-            num_pred_steps_train=num_pred_steps_train,
-            num_pred_steps_val_test=num_pred_steps_val_test,
-        )
+        train_ds.settings.standardize = True
         print("Computing time stats on each parameters, between 2 timesteps...")
         cds.compute_time_step_stats(train_ds)
 
