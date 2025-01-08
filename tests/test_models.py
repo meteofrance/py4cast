@@ -20,7 +20,7 @@ from mfai.torch.models.utils import features_last_to_second, features_second_to_
 
 from py4cast.datasets import get_datasets
 from py4cast.datasets.base import collate_fn
-from py4cast.lightning import ArLightningHyperParam, AutoRegressiveLightning
+from py4cast.lightning import AutoRegressiveLightning
 from py4cast.models import all_nn_architectures, get_model_kls_and_settings
 
 
@@ -187,7 +187,7 @@ def test_lightning_fit_inference():
                 )
             ],
         )
-        hp = ArLightningHyperParam(
+        lightning_module = AutoRegressiveLightning(
             dataset_info=datasets[0].dataset_info,
             dataset_name=DATASET,
             dataset_conf=None,
@@ -199,7 +199,6 @@ def test_lightning_fit_inference():
             num_pred_steps_val_test=NUM_OUTPUTS,
             save_path=save_path,
         )
-        lightning_module = AutoRegressiveLightning(hp)
         trainer.fit(
             model=lightning_module,
             train_dataloaders=train_loader,
@@ -210,8 +209,7 @@ def test_lightning_fit_inference():
         # finds the first .ckpt file
         ckpt_path = next(save_path.glob("*.ckpt"))
         model = AutoRegressiveLightning.load_from_checkpoint(ckpt_path)
-        hparams = model.hparams["hparams"]
-        hparams.num_pred_steps_val_test = NUM_OUTPUTS
+        model.num_pred_steps_val_test = NUM_OUTPUTS
         model.eval()
 
         item = test_ds[0]  # Load data directly from dataset (no dataloader)
