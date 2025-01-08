@@ -40,7 +40,7 @@ data:
   num_pred_steps_train: 1
   num_pred_steps_val_test: 1
   batch_size: 1
-  num_workers: 1
+  num_workers: 10
 # optimizer: null
 # lr_scheduler: null
 ckpt_path: null

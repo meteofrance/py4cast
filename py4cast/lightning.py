@@ -114,7 +114,7 @@ class PlDataModule(LightningDataModule):
         return self.val_ds.torch_dataloader(
             batch_size=self.batch_size,
             num_workers=self.num_workers,
-            shuffle=True,
+            shuffle=False,
             prefetch_factor=self.prefetch_factor,
             pin_memory=self.pin_memory,
         )
@@ -123,7 +123,7 @@ class PlDataModule(LightningDataModule):
         return self.test_ds.torch_dataloader(
             batch_size=self.batch_size,
             num_workers=self.num_workers,
-            shuffle=True,
+            shuffle=False,
             prefetch_factor=self.prefetch_factor,
             pin_memory=self.pin_memory,
         )
@@ -132,7 +132,7 @@ class PlDataModule(LightningDataModule):
         return self.test_ds.torch_dataloader(
             batch_size=self.batch_size,
             num_workers=self.num_workers,
-            shuffle=True,
+            shuffle=False,
             prefetch_factor=self.prefetch_factor,
             pin_memory=self.pin_memory,
         )
