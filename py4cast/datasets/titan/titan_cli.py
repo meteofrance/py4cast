@@ -39,14 +39,11 @@ def convert_sample_grib2_numpy(dataset: DatasetABC):
                 dataset.name, p, v, file_format="npy"
             )
             pname = dataset.accessor.parameter_namer(p)
-            print(dest_file)
             if not dest_file.exists():
                 try:
                     arr = dataset.accessor.load_data_from_disk(
                         dataset.name, p, t, file_format="grib"
-                    )
-                    print(type(arr))
-                    print(arr.shape)
+                    ).squeeze()
                     np.save(
                         dest_file,
                         arr[
@@ -116,20 +113,21 @@ def prepare(
         convert_sample_grib2_numpy(test_ds)
         print("Done!")
 
+        train_ds.settings.standardize = True
+        train_ds.settings.check_validity = True
+
+        valid_ds.settings.standardize = True
+        valid_ds.settings.check_validity = True
+
+        test_ds.settings.standardize = True
+        test_ds.settings.check_validity = True
+
     if compute_stats:
-        conf["settings"]["standardize"] = False
-        train_ds, valid_ds, test_ds = DatasetABC.from_dict(
-            TitanAccessor,
-            name=path_config.stem,
-            conf=conf,
-            num_input_steps=num_input_steps,
-            num_pred_steps_train=num_pred_steps_train,
-            num_pred_steps_val_test=num_pred_steps_val_test,
-        )
+        train_ds.settings.standardize = False
         print("Computing stats on each parameter...")
         cds.compute_parameters_stats(train_ds)
 
-        conf["settings"]["standardize"] = True
+        train_ds.settings.standardize = False
         train_ds, valid_ds, test_ds = DatasetABC.from_dict(
             TitanAccessor,
             name=path_config.stem,

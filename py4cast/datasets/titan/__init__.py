@@ -125,7 +125,6 @@ class TitanAccessor(DataAccessor):
         Function to load invidiual parameter and lead time from a file stored in disk
         """
         dates = timestamps.validity_times
-        print(dates)
         arr_list = []
         for date in dates:
             data_path = cls.get_filepath(ds_name, param, date, file_format)
@@ -225,5 +224,5 @@ def load_data_grib(param: WeatherParam, path: Path) -> np.ndarray:
         arr = ds[param.grib_param].values
     else:
         arr = ds[param.grib_param].sel(isobaricInhPa=param.level).values
-    print("grib data loaded", type(arr))
+    print("grib data loaded", (arr.shape))
     return arr, lons, lats
