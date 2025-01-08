@@ -5,7 +5,7 @@ from copy import deepcopy
 from dataclasses import asdict, dataclass
 from functools import cached_property
 from pathlib import Path
-from typing import Dict, List, Tuple, Union
+from typing import Dict, List, Tuple, Union, Literal
 
 import einops
 import matplotlib
@@ -34,6 +34,7 @@ from py4cast.plots import (
     SpatialErrorPlot,
     StateErrorPlot,
 )
+from py4cast.models import registry as model_registry
 from py4cast.utils import str_to_dtype
 
 # learning rate scheduling period in steps (update every nth step)
@@ -58,7 +59,7 @@ class PlDataModule(LightningDataModule):
     prefetch_factor: int | None = None
     pin_memory: bool = False
     dataset_conf: Union[Path, None] = None
-    config_override: Union[Dict, None] = (None,)
+    config_override: Union[Dict, None] = None
 
     def __post_init__(self):
         super().__init__()
@@ -143,10 +144,10 @@ class ArLightningHyperParam:
     batch_size: int
 
     model_conf: Union[Path, None] = None
-    model_name: str = "halfunet"
+    model_name: Literal[tuple(model_registry.keys())] = "HalfUNet"
 
     lr: float = 0.1
-    loss: str = "mse"
+    loss: Literal["mse", "mae"] = "mse"
 
     num_input_steps: int = 2
     num_pred_steps_train: int = 2
