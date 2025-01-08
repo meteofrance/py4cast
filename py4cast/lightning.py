@@ -151,6 +151,7 @@ class AutoRegressiveLightning(LightningModule):
 
     def __init__(
         self,
+        dataset_name: str,
         dataset_conf: Path,
         dataset_info,
         batch_size: int,
@@ -174,7 +175,7 @@ class AutoRegressiveLightning(LightningModule):
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
-
+        self.dataset_name = dataset_name
         self.dataset_conf = dataset_conf
         self.dataset_info = dataset_info
         self.batch_size = batch_size

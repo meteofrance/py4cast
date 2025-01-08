@@ -31,9 +31,9 @@ from skimage.transform import resize
 from tqdm import trange
 
 from py4cast.datasets import get_datasets
-from py4cast.datasets.base import Item, collate_fn
+from py4cast.datasets.base import DatasetInfo, Item, collate_fn
 from py4cast.datasets.titan.settings import AROME_PATH, METADATA
-from py4cast.lightning import ArLightningHyperParam, AutoRegressiveLightning
+from py4cast.lightning import AutoRegressiveLightning
 from py4cast.plots import DomainInfo
 
 PARAMS_INFO = {
@@ -132,28 +132,25 @@ def read_arome(date: str, params: List[str], num_steps: int) -> np.ndarray:
     return np.stack(list_arrays, axis=-1)
 
 
-def get_model_and_hparams(
-    ckpt: Path, num_pred_steps: int
-) -> Tuple[AutoRegressiveLightning, ArLightningHyperParam]:
+def get_model(ckpt: Path, num_pred_steps: int) -> AutoRegressiveLightning:
     """Loads a model from its checkpoint and changes the nb of forecast steps."""
     model = AutoRegressiveLightning.load_from_checkpoint(ckpt)
-    hparams = model.hparams["hparams"]
-    hparams.num_pred_steps_val_test = num_pred_steps
+    model.num_pred_steps_val_test = num_pred_steps
     model.eval()
-    return model, hparams
+    return model
 
 
-def get_item_for_date(date: str, hparams: ArLightningHyperParam) -> Item:
+def get_item_for_date(date: str, model: AutoRegressiveLightning) -> Item:
     """Returns an Item containing one sample for a chosen date.
     Date should be in format YYYYMMDDHH.
     """
     config_override = {"periods": {"test": {"start": date, "end": date}}}
     _, _, test_ds = get_datasets(
-        hparams.dataset_name,
-        hparams.num_input_steps,
-        hparams.num_pred_steps_train,
-        hparams.num_pred_steps_val_test,
-        hparams.dataset_conf,
+        model.dataset_name,
+        model.num_input_steps,
+        model.num_pred_steps_train,
+        model.num_pred_steps_val_test,
+        model.dataset_conf,
         config_override=config_override,
     )
     item = test_ds[0]
@@ -174,14 +171,17 @@ def make_forecast(model: AutoRegressiveLightning, item: Item) -> torch.tensor:
 
 
 def post_process_outputs(
-    y: torch.tensor, feature_names: List[str], feature_names_to_idx: dict
+    y: torch.tensor,
+    feature_names: List[str],
+    feature_names_to_idx: dict,
+    dataset_info: DatasetInfo,
 ) -> np.ndarray:
     """Post-processes one forecast by de-normalizing the values of each feature."""
     arrays = []
     for feature_name in feature_names:
         idx_feature = feature_names_to_idx[feature_name]
-        mean = hparams.dataset_info.stats[feature_name]["mean"]
-        std = hparams.dataset_info.stats[feature_name]["std"]
+        mean = dataset_info.stats[feature_name]["mean"]
+        std = dataset_info.stats[feature_name]["std"]
         y_norm = (y[:, :, :, idx_feature] * std + mean).cpu().detach().numpy()
         arrays.append(y_norm)
     return np.stack(arrays, axis=-1)
@@ -193,6 +193,7 @@ def plot_frame(
     target: np.ndarray,
     predictions: List[np.ndarray],
     domain_info: DomainInfo,
+    dataset_info: DatasetInfo,
     title: str = None,
     models_names: List[str] = None,
 ) -> None:
@@ -215,7 +216,7 @@ def plot_frame(
         vmin, vmax = None, None
         short_name = "_".join(feature_name.split("_")[:2])
         feature_str = METADATA["WEATHER_PARAMS"][short_name]["long_name"][6:]
-        colorbar_label = f"{feature_str} ({hparams.dataset_info.units[feature_name]})"
+        colorbar_label = f"{feature_str} ({dataset_info.units[feature_name]})"
 
     if (lines, cols) == (1, 3):
         figsize = (12, 5)
@@ -265,6 +266,7 @@ def make_gif(
     preds: List[np.ndarray],
     models_names: List[str],
     domain_info: DomainInfo,
+    dataset_info: DatasetInfo,
 ):
     """Plots a gifs comparing multiple forecasts of one feature."""
     date = dt.datetime.strptime(date, "%Y%m%d%H")
@@ -284,6 +286,7 @@ def make_gif(
             target_t,
             preds_t,
             domain_info,
+            dataset_info,
             title,
             models_names,
         )
@@ -329,17 +332,21 @@ if __name__ == "__main__":
             forecast = read_arome(args.date, arome_features, args.num_pred_steps)
             models_names.append("AROME Oper")
         else:
-            model, hparams = get_model_and_hparams(ckpt, args.num_pred_steps)
-            item = get_item_for_date(args.date, hparams)
+            model = get_model(ckpt, args.num_pred_steps)
+            item = get_item_for_date(args.date, model)
             forecast = make_forecast(model, item)
             feature_idx_dict = item.inputs.feature_names_to_idx
-            forecast = post_process_outputs(forecast, feature_names, feature_idx_dict)
-            models_names.append(f"{hparams.model_name}\n{hparams.save_path.name}")
+            forecast = post_process_outputs(
+                forecast, feature_names, feature_idx_dict, model.dataset_info
+            )
+            models_names.append(f"{model.model_name}\n{model.save_path.name}")
         y_preds.append(forecast)
 
     y_true = item.outputs.tensor
-    y_true = post_process_outputs(y_true, feature_names, feature_idx_dict)
-    domain_info = hparams.dataset_info.domain_info
+    y_true = post_process_outputs(
+        y_true, feature_names, feature_idx_dict, model.dataset_info
+    )
+    domain_info = model.dataset_info.domain_info
     if args.plot_analysis:
         models_names = ["AROME Analysis"] + models_names
 
@@ -355,4 +362,5 @@ if __name__ == "__main__":
             list_preds_feat,
             models_names,
             domain_info,
+            model.dataset_info,
         )
