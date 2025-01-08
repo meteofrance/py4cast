@@ -17,11 +17,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 from mfai.torch.namedtensor import NamedTensor
-from tabulate import tabulate
-from torch.utils.data import DataLoader, Dataset
-from torch.utils.data._utils.collate import collate_tensor_fn
-from tqdm import tqdm
-
 from py4cast.datasets.access import (
     DataAccessor,
     Grid,
@@ -35,6 +30,10 @@ from py4cast.datasets.access import (
 from py4cast.forcingutils import generate_toa_radiation_forcing, get_year_hour_forcing
 from py4cast.plots import DomainInfo
 from py4cast.utils import RegisterFieldsMixin, merge_dicts
+from tabulate import tabulate
+from torch.utils.data import DataLoader, Dataset
+from torch.utils.data._utils.collate import collate_tensor_fn
+from tqdm import tqdm
 
 
 @dataclass(slots=True)
@@ -706,7 +705,7 @@ class DatasetABC(Dataset):
                     self.accessor,
                     member,
                 )
-                if (not self.settings.check_validity) or sample.is_valid():
+                if sample.is_valid():
                     samples.append(sample)
                 else:
                     invalid_samples += 1

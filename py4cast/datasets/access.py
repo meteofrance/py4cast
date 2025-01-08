@@ -13,7 +13,6 @@ import einops
 import numpy as np
 import torch
 from mfai.torch.namedtensor import NamedTensor
-
 from py4cast.settings import CACHE_DIR
 
 
@@ -314,7 +313,6 @@ class SamplePreprocSettings:
     num_pred_steps: int  # Number of output timesteps
     step_duration: float  # duration in hour
     standardize: bool = True
-    check_validity: bool = True
     file_format: Literal["npy", "grib"] = "grib"
     members: Optional[Tuple[int]] = None
     add_landsea_mask: bool = False

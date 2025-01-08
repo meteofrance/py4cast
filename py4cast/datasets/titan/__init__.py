@@ -5,8 +5,6 @@ from typing import Callable, List, Literal
 
 import numpy as np
 import xarray as xr
-from skimage.transform import resize
-
 from py4cast.datasets.access import (
     DataAccessor,
     Grid,
@@ -16,6 +14,7 @@ from py4cast.datasets.access import (
     WeatherParam,
 )
 from py4cast.datasets.titan.settings import FORMATSTR, METADATA, SCRATCH_PATH
+from skimage.transform import resize
 
 
 class TitanAccessor(DataAccessor):
@@ -224,5 +223,4 @@ def load_data_grib(param: WeatherParam, path: Path) -> np.ndarray:
         arr = ds[param.grib_param].values
     else:
         arr = ds[param.grib_param].sel(isobaricInhPa=param.level).values
-    print("grib data loaded", (arr.shape))
     return arr, lons, lats

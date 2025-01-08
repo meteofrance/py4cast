@@ -4,19 +4,19 @@ from pathlib import Path
 
 import numpy as np
 import tqdm
-from typer import Typer
-
 from py4cast.datasets import compute_dataset_stats as cds
 from py4cast.datasets.access import Timestamps
 from py4cast.datasets.base import DatasetABC
 from py4cast.datasets.titan import TitanAccessor
 from py4cast.datasets.titan.settings import DEFAULT_CONFIG, FORMATSTR
+from typer import Typer
 
 app = Typer()
 
 
 def convert_sample_grib2_numpy(dataset: DatasetABC):
     """Saves each 2D parameter data of the given date as one NPY file."""
+    dataset.settings.file_format = "grib"
     sample_list = dataset.sample_list
     for sample in sample_list:
         dest_folder = sample.timestamps.validity_times[0].strftime(FORMATSTR)

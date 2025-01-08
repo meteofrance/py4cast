@@ -1,10 +1,9 @@
 from typing import Literal
 
 import torch
-from tqdm import tqdm
-
 from py4cast.datasets.base import DatasetABC, TorchDataloaderSettings
 from py4cast.utils import torch_save
+from tqdm import tqdm
 
 
 def compute_mean_std_min_max(
