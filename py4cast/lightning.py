@@ -9,7 +9,7 @@ from typing import Dict, List, Tuple, Union
 
 import einops
 import matplotlib
-import pytorch_lightning as pl
+from lightning import LightningModule, LightningDataModule
 import torch
 from lightning.pytorch.loggers import MLFlowLogger
 from lightning.pytorch.utilities import rank_zero_only
@@ -44,7 +44,7 @@ PLOT_PERIOD: int = 10
 
 
 @dataclass
-class PlDataModule(pl.LightningDataModule):
+class PlDataModule(LightningDataModule):
     """
     DataModule to encapsulate data splits and data loading.
     """
@@ -55,7 +55,7 @@ class PlDataModule(pl.LightningDataModule):
     num_pred_steps_val_test: int
     batch_size: int = 1
     num_workers: int = 1
-    prefetch_factor: int | None
+    prefetch_factor: int | None = None
     pin_memory: bool = False
     dataset_conf: Union[Path, None] = None
     config_override: Union[Dict, None] = (None,)
@@ -212,7 +212,7 @@ def exp_summary(hparams: ArLightningHyperParam, model: nn.Module):
     summary(model)
 
 
-class AutoRegressiveLightning(pl.LightningModule):
+class AutoRegressiveLightning(LightningModule):
     """
     Auto-regressive lightning module for predicting meteorological fields.
     """
