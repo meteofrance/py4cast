@@ -153,18 +153,18 @@ class TitanAccessor(DataAccessor):
                 return False
         return True
 
-    def valid_timestamp(n_inputs: int, timestamps: Timestamps) -> bool:
+    def valid_timestamp(
+        t0: dt.datetime,
+        num_input_steps: int,
+        num_pred_steps: int,
+        step_duration: dt.timedelta,
+        leadtimes: List[dt.timedelta],
+        ) -> List[Timestamps]:
         """
-        Verification function called after the creation of each timestamps.
-        Check if computed terms respect the dataset convention.
-        Reminder:
-        Titan terms are between +0h lead time and +23h lead time wrt to the day:00h00UTC reference
-        Allowing larger terms would double-sample some samples (day+00h00 <-> (day+1)+24h00)
+        Return the list of all avalaible Timestamps for t0.
         """
-        term_0 = timestamps.terms[n_inputs - 1]
-        if term_0 > np.timedelta64(23, "h"):
-            return False
-        return True
+        timesteps = [delta * step_duration  for delta in range(-num_input_steps+1, num_pred_steps+1)]
+        return [Timestamps(datetime=t0, timedeltas=timesteps)]
 
     def parameter_namer(param: WeatherParam) -> str:
         if param.level_type in ["surface", "heightAboveGround"]:

@@ -127,18 +127,30 @@ class PoesyAccessor(DataAccessor):
             return False
         return True
 
-    def valid_timestamp(n_inputs: int, timestamps: Timestamps) -> bool:
+def valid_timestamp(
+        t0: dt.datetime,
+        num_input_steps: int,
+        num_pred_steps: int,
+        step_duration: dt.timedelta,
+        leadtimes: List[dt.timedelta],
+        ) -> List[Timestamps]:
         """
-        Verification function called after the creation of each timestamps.
-        Check if computed terms respect the dataset convention.
+        Return the list of all avalaible Timestamps for t0.
         Reminder:
-        Poesy terms are between +1h lead time and +45h lead time.
+        Poesy leadtimes are between +1h and +45h.
         """
         limits = METADATA["TERMS"]
-        for t in timestamps.terms:
+        
+        valid_times_one_run = [t0 + leadtime for leadtime in leadtimes]
+        timesteps = [delta * step_duration  for delta in range(-num_input_steps+1, num_pred_steps+1)]
+        
+        timestamps = []
+        for t in valid_times_one_run:
+            min_validtime, max_validtime = t - timesteps[0], t + timesteps[-1]
+            if min_validtime - t0 < dt.timedelta(hours=int(limits["start"])):
+                continue
+            if max_validtime - t0 > dt.timedelta(hours=int(limits["end"])):
+                continue
+            timestamps.append(Timestamps(datetime=t, timesteps=timesteps))
 
-            if (t > dt.timedelta(hours=int(limits["end"]))) or (
-                t < dt.timedelta(hours=int(limits["start"]))
-            ):
-                return False
-        return True
+        return timestamps
