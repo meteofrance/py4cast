@@ -10,9 +10,9 @@ import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
+import lightning.pytorch as pl
 import numpy as np
 import pytest
-import pytorch_lightning as pl
 import torch
 from mfai.torch import export_to_onnx, onnx_load_and_infer
 from mfai.torch.models.base import ModelType

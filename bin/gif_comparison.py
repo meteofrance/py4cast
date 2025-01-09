@@ -193,7 +193,6 @@ def plot_frame(
     target: np.ndarray,
     predictions: List[np.ndarray],
     domain_info: DomainInfo,
-    dataset_info: DatasetInfo,
     title: str = None,
     models_names: List[str] = None,
 ) -> None:
@@ -216,7 +215,9 @@ def plot_frame(
         vmin, vmax = None, None
         short_name = "_".join(feature_name.split("_")[:2])
         feature_str = METADATA["WEATHER_PARAMS"][short_name]["long_name"][6:]
-        colorbar_label = f"{feature_str} ({dataset_info.units[feature_name]})"
+        colorbar_label = (
+            f"{feature_str}"  # Units: ({dataset_info.units[feature_name]})"
+        )
 
     if (lines, cols) == (1, 3):
         figsize = (12, 5)
@@ -266,7 +267,6 @@ def make_gif(
     preds: List[np.ndarray],
     models_names: List[str],
     domain_info: DomainInfo,
-    dataset_info: DatasetInfo,
 ):
     """Plots a gifs comparing multiple forecasts of one feature."""
     date = dt.datetime.strptime(date, "%Y%m%d%H")
@@ -286,7 +286,6 @@ def make_gif(
             target_t,
             preds_t,
             domain_info,
-            dataset_info,
             title,
             models_names,
         )
@@ -362,5 +361,4 @@ if __name__ == "__main__":
             list_preds_feat,
             models_names,
             domain_info,
-            model.dataset_info,
         )
