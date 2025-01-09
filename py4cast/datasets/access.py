@@ -6,7 +6,7 @@ from collections import namedtuple
 from dataclasses import dataclass, field
 from functools import cached_property
 from pathlib import Path
-from typing import Any, Callable, List, Literal, Optional, Tuple
+from typing import Any, Callable, List, Literal, Optional, Tuple, Iterable
 
 import cartopy
 import einops
@@ -20,36 +20,30 @@ from py4cast.settings import CACHE_DIR
 @dataclass(slots=True)
 class Period:
     # first day of the period (included)
-    # each day of the period will be separated from start by an integer multiple of 24h
-    # note that the start date valid hour ("t0") may not be 00h00
     start: dt.datetime
     # last day of the period (included)
     end: dt.datetime
-    # In hours, step btw the t0 of consecutive terms
-    step_duration: int
+    # step between two consecutives t0 in seconds
+    step_duration: dt.timedelta
+    # name of the period, e.g. "Train", "Valid" or "Test"
     name: str
-    # first term (= time delta wrt to a date t0) that is admissible
-    term_start: int = 0
-    # last term (= time delta wrt to a date start) that is admissible
-    term_end: int = 23
+    # leadtimes (optional), corresponding to available leadtimes
+    leadtimes: List[dt.timedelta] = None
 
     def __post_init__(self):
         self.start = np.datetime64(dt.datetime.strptime(str(self.start), "%Y%m%d%H"))
         self.end = np.datetime64(dt.datetime.strptime(str(self.end), "%Y%m%d%H"))
+        self.step_duration = dt.timedelta(seconds=self.step_duration)
 
     @property
-    def terms_list(self) -> np.array:
-        return np.arange(self.term_start, self.term_end + 1, self.step_duration)
-
-    @property
-    def date_list(self) -> np.array:
+    def validtimes(self) -> np.array:
         """
-        List all dates available for the period, with a 24h leap
+        List all dates available for the period
         """
         return np.arange(
             self.start,
             self.end + np.timedelta64(1, "D"),
-            np.timedelta64(1, "D"),
+            self.step_duration,
             dtype="datetime64[s]",
         ).tolist()
 
@@ -59,22 +53,21 @@ class Timestamps:
     """
     Describe all timestamps in a sample.
     It contains
-        datetime, terms, validity times
+        datetime, timedeltas, validity times
 
     If n_inputs = 2, n_preds = 2, terms will be (-1, 0, 1, 2) * step_duration
      where step_duration is typically an integer multiple of 1 hour
 
-    validity times correspond to the addition of terms to the reference datetime
+    validity times correspond to the addition of timedeltas to the reference datetime
     """
-
     # date and hour of the reference time
     datetime: dt.datetime
-    # terms are time deltas vis-à-vis the reference input time step.
-    terms: np.array
+    
+    # list of timedelta with the reference input datetime.
+    timedeltas: Iterable[dt.timedelta]
 
-    # validity times are complete datetimes
-    validity_times: List[dt.datetime]
-
+    def __post_init__(self):
+        self.validity_times = [self.datetime + delta for delta in self.timedeltas]
 
 GridConfig = namedtuple(
     "GridConfig", "full_size latitude longitude geopotential landsea_mask"
@@ -311,7 +304,6 @@ class SamplePreprocSettings:
     dataset_name: str
     num_input_steps: int  # Number of input timesteps
     num_pred_steps: int  # Number of output timesteps
-    step_duration: float  # duration in hour
     standardize: bool = True
     file_format: Literal["npy", "grib"] = "grib"
     members: Optional[Tuple[int]] = None
@@ -419,10 +411,9 @@ class DataAccessor(ABC):
         """
 
     @abstractmethod
-    def valid_timestamp(n_inputs: int, timestamps: Timestamps) -> bool:
+    def valid_timestamp(t0: dt.datetime, num_input_steps: int, num_pred_steps: int, leadtimes: List[dt.timedelta]) -> List[Timestamps]:
         """
-        Verification function called after the creation of each timestamps.
-        Check if computed terms respect the dataset convention.
+        Return the list of all avalaible Timestamps for t0.
         """
 
     @abstractmethod

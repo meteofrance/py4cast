@@ -213,18 +213,18 @@ class Statics(RegisterFieldsMixin):
 
 
 def generate_forcings(
-    date: dt.datetime, output_terms: List[dt.timedelta], grid: Grid
+    date: dt.datetime, timedeltas: List[dt.timedelta], grid: Grid
 ) -> List[NamedTensor]:
     """
     Generate all the forcing in this function.
     Return a list of NamedTensor.
     """
     # Datetime Forcing
-    datetime_forcing = get_year_hour_forcing(date, output_terms).type(torch.float32)
+    datetime_forcing = get_year_hour_forcing(date, timedeltas).type(torch.float32)
 
     # Solar forcing, dim : [num_pred_steps, Lat, Lon, feature = 1]
     solar_forcing = generate_toa_radiation_forcing(
-        grid.lat, grid.lon, date, output_terms
+        grid.lat, grid.lon, date, timedeltas
     ).type(torch.float32)
 
     lforcings = [
@@ -392,16 +392,15 @@ class Sample:
         if self.settings.num_input_steps + self.settings.num_pred_steps != len(
             self.timestamps.validity_times
         ):
-            raise Exception("Length terms does not match inputs + outputs")
+            raise Exception("Length of validity times does not match inputs + outputs")
 
         self.output_timestamps = Timestamps(
-            self.timestamps.datetime,
-            self.timestamps.terms[self.settings.num_input_steps :],
-            self.timestamps.validity_times[self.settings.num_input_steps :],
+            datetime=self.timestamps.datetime,
+            timedeltas=self.timestamps.timedeltas[self.settings.num_input_steps :],
         )
 
     def __repr__(self):
-        return f"Date {self.timestamps.datetime}, input terms {self.input_terms}, output terms {self.output_terms}"
+        return f"Date {self.timestamps.datetime}"
 
     def is_valid(self) -> bool:
         for param in self.params:
@@ -488,7 +487,7 @@ class Sample:
 
         external_forcings = generate_forcings(
             date=self.timestamps.datetime,
-            output_terms=self.output_timestamps.terms,
+            timedeltas=self.output_timestamps.timedeltas,
             grid=self.grid,
         )
 
@@ -650,7 +649,7 @@ class DatasetABC(Dataset):
             units=self.units,
             weather_dim=self.input_output_dim,
             forcing_dim=self.input_dim,
-            step_duration=self.settings.step_duration,
+            step_duration=self.period.step_duration,
             statics=self.statics,
             stats=self.stats,
             diff_stats=self.diff_stats,
@@ -663,31 +662,15 @@ class DatasetABC(Dataset):
         print("Start creating samples...")
         stats = self.stats if self.settings.standardize else None
 
-        n_inputs, n_preds, step_duration = (
-            self.settings.num_input_steps,
-            self.settings.num_pred_steps,
-            self.period.step_duration,
-        )
-
-        sample_timesteps = [
-            step_duration * step for step in range(-n_inputs + 1, n_preds + 1)
-        ]
         all_timestamps = []
-        for date in tqdm(self.period.date_list):
-            for term in self.period.terms_list:
-                t0 = date + dt.timedelta(hours=int(term))
-                validity_times = [
-                    t0 + dt.timedelta(hours=ts) for ts in sample_timesteps
-                ]
-                terms = [dt.timedelta(hours=int(t + term)) for t in sample_timesteps]
-
-                timestamps = Timestamps(
-                    datetime=date,
-                    terms=np.array(terms),
-                    validity_times=validity_times,
-                )
-                if self.accessor.valid_timestamp(n_inputs, timestamps):
-                    all_timestamps.append(timestamps)
+        for t0 in tqdm(self.period.validtimes):
+            all_timestamps += self.accessor.valid_timestamp(
+                t0,
+                self.settings.num_input_steps,
+                self.settings.num_pred_steps,
+                self.period.step_duration,
+                self.period.leadtimes,
+            )
 
         samples = []
         invalid_samples = 0
@@ -867,7 +850,6 @@ class DatasetABC(Dataset):
             dataset_name=name,
             num_input_steps=num_input_steps,
             num_pred_steps=num_pred_steps_train,
-            step_duration=conf["periods"]["train"]["step_duration"],
             members=members,
             **conf["settings"],
         )
@@ -880,7 +862,6 @@ class DatasetABC(Dataset):
             dataset_name=name,
             num_input_steps=num_input_steps,
             num_pred_steps=num_pred_steps_val_test,
-            step_duration=conf["periods"]["valid"]["step_duration"],
             members=members,
             **conf["settings"],
         )
