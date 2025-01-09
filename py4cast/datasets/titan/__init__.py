@@ -19,7 +19,6 @@ from py4cast.datasets.titan.settings import FORMATSTR, METADATA, SCRATCH_PATH
 
 
 class TitanAccessor(DataAccessor):
-
     @staticmethod
     def get_weight_per_level(
         level: int,
@@ -106,7 +105,6 @@ class TitanAccessor(DataAccessor):
             folder = SCRATCH_PATH / "grib" / date.strftime(FORMATSTR)
             return folder / param.grib_name
         else:
-
             npy_path = cls.get_dataset_path(ds_name, param.grid) / "data"
             filename = f"{cls.parameter_namer(param)}.npy"
             return npy_path / date.strftime(FORMATSTR) / filename
@@ -159,11 +157,14 @@ class TitanAccessor(DataAccessor):
         num_pred_steps: int,
         step_duration: dt.timedelta,
         leadtimes: List[dt.timedelta],
-        ) -> List[Timestamps]:
+    ) -> List[Timestamps]:
         """
         Return the list of all avalaible Timestamps for t0.
         """
-        timesteps = [delta * step_duration  for delta in range(-num_input_steps+1, num_pred_steps+1)]
+        timesteps = [
+            delta * step_duration
+            for delta in range(-num_input_steps + 1, num_pred_steps + 1)
+        ]
         return [Timestamps(datetime=t0, timedeltas=timesteps)]
 
     def parameter_namer(param: WeatherParam) -> str:

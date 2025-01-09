@@ -60,14 +60,16 @@ class Timestamps:
 
     validity times correspond to the addition of timedeltas to the reference datetime
     """
+
     # date and hour of the reference time
     datetime: dt.datetime
-    
+
     # list of timedelta with the reference input datetime.
     timedeltas: Iterable[dt.timedelta]
 
     def __post_init__(self):
         self.validity_times = [self.datetime + delta for delta in self.timedeltas]
+
 
 GridConfig = namedtuple(
     "GridConfig", "full_size latitude longitude geopotential landsea_mask"
@@ -411,7 +413,13 @@ class DataAccessor(ABC):
         """
 
     @abstractmethod
-    def valid_timestamp(t0: dt.datetime, num_input_steps: int, num_pred_steps: int, leadtimes: List[dt.timedelta]) -> List[Timestamps]:
+    def valid_timestamp(
+        t0: dt.datetime,
+        num_input_steps: int,
+        num_pred_steps: int,
+        step_duration: dt.timedelta,
+        leadtimes: List[dt.timedelta],
+    ) -> List[Timestamps]:
         """
         Return the list of all avalaible Timestamps for t0.
         """

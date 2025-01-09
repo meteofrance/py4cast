@@ -24,7 +24,6 @@ from py4cast.settings import CACHE_DIR
 
 @dataclass
 class PoesyAccessor(DataAccessor):
-
     @staticmethod
     def cache_dir(name: str, grid: Grid):
         complete_name = str(name) + "_" + grid.name
@@ -121,36 +120,39 @@ class PoesyAccessor(DataAccessor):
         timestamps: Timestamps,
         file_format: str = "npy",
     ) -> bool:
-
         filepath = self.get_filepath(ds_name, param, timestamps.datetime, file_format)
         if not filepath.exists():
             return False
         return True
 
-def valid_timestamp(
-        t0: dt.datetime,
-        num_input_steps: int,
-        num_pred_steps: int,
-        step_duration: dt.timedelta,
-        leadtimes: List[dt.timedelta],
-        ) -> List[Timestamps]:
-        """
-        Return the list of all avalaible Timestamps for t0.
-        Reminder:
-        Poesy leadtimes are between +1h and +45h.
-        """
-        limits = METADATA["TERMS"]
-        
-        valid_times_one_run = [t0 + leadtime for leadtime in leadtimes]
-        timesteps = [delta * step_duration  for delta in range(-num_input_steps+1, num_pred_steps+1)]
-        
-        timestamps = []
-        for t in valid_times_one_run:
-            min_validtime, max_validtime = t - timesteps[0], t + timesteps[-1]
-            if min_validtime - t0 < dt.timedelta(hours=int(limits["start"])):
-                continue
-            if max_validtime - t0 > dt.timedelta(hours=int(limits["end"])):
-                continue
-            timestamps.append(Timestamps(datetime=t, timesteps=timesteps))
 
-        return timestamps
+def valid_timestamp(
+    t0: dt.datetime,
+    num_input_steps: int,
+    num_pred_steps: int,
+    step_duration: dt.timedelta,
+    leadtimes: List[dt.timedelta],
+) -> List[Timestamps]:
+    """
+    Return the list of all avalaible Timestamps for t0.
+    Reminder:
+    Poesy leadtimes are between +1h and +45h.
+    """
+    limits = METADATA["TERMS"]
+
+    valid_times_one_run = [t0 + leadtime for leadtime in leadtimes]
+    timesteps = [
+        delta * step_duration
+        for delta in range(-num_input_steps + 1, num_pred_steps + 1)
+    ]
+
+    timestamps = []
+    for t in valid_times_one_run:
+        min_validtime, max_validtime = t - timesteps[0], t + timesteps[-1]
+        if min_validtime - t0 < dt.timedelta(hours=int(limits["start"])):
+            continue
+        if max_validtime - t0 > dt.timedelta(hours=int(limits["end"])):
+            continue
+        timestamps.append(Timestamps(datetime=t, timesteps=timesteps))
+
+    return timestamps

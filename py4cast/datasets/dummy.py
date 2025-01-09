@@ -18,7 +18,6 @@ from py4cast.settings import CACHE_DIR, DEFAULT_CONFIG_DIR
 
 
 class DummyAccessor(DataAccessor):
-
     print("importing DummyAccessor automatically creates directory and dummy config")
     config = {
         "periods": {
@@ -45,7 +44,6 @@ class DummyAccessor(DataAccessor):
         outfile.write(jsonconfig)
 
     def cache_dir(name: str, grid: Grid) -> Path:
-
         path = CACHE_DIR / f"{name}_{grid.name}"
         os.makedirs(path, mode=0o777, exist_ok=True)
 
@@ -81,7 +79,6 @@ class DummyAccessor(DataAccessor):
         level: int,
         level_type: Literal["isobaricInhPa", "heightAboveGround", "surface", "meanSea"],
     ) -> float:
-
         return 1.0
 
     def load_grid_info(name: str) -> GridConfig:
