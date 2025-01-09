@@ -9,12 +9,11 @@ from argparse import ArgumentParser
 from datetime import datetime
 from pathlib import Path
 
-import pytorch_lightning as pl
+import lightning.pytorch as pl
 from lightning.pytorch.loggers import TensorBoardLogger
 from lightning.pytorch.profilers import PyTorchProfiler
 
 from py4cast.datasets import get_datasets
-from py4cast.datasets.base import TorchDataloaderSettings
 from py4cast.lightning import AutoRegressiveLightning
 from py4cast.settings import ROOTDIR
 
@@ -58,9 +57,8 @@ model.eval()
 
 # Change number of auto regresive steps for long forecasts
 print(f"Changing number of val pred steps to {args.num_pred_steps}...")
-hparams = model.hparams["hparams"]
-hparams.num_pred_steps_val_test = args.num_pred_steps
-hparams.save_path = args.ckpt_path.parent
+model.num_pred_steps_val_test = args.num_pred_steps
+model.save_path = args.ckpt_path.parent
 
 log_dir, folder, subfolder = get_log_dirs(args.ckpt_path)
 logger = TensorBoardLogger(
@@ -86,15 +84,17 @@ trainer = pl.Trainer(
 )
 
 # Initializing data loader
-dl_settings = TorchDataloaderSettings(batch_size=1, num_workers=5, prefetch_factor=2)
 _, val_ds, _ = get_datasets(
-    hparams.dataset_name,
-    hparams.num_input_steps,
-    hparams.num_pred_steps_train,
-    hparams.num_pred_steps_val_test,
-    hparams.dataset_conf,
+    model.dataset_name,
+    model.num_input_steps,
+    model.num_pred_steps_train,
+    model.num_pred_steps_val_test,
+    model.dataset_conf,
 )
-dataloader = val_ds.torch_dataloader(dl_settings)
+dataloader = val_ds.torch_dataloader(batch_size=1, num_workers=5, prefetch_factor=2)
 
 print("Testing...")
-trainer.test(model=model, dataloaders=val_ds.torch_dataloader(dl_settings))
+trainer.test(
+    model=model,
+    dataloaders=val_ds.torch_dataloader(batch_size=1, num_workers=5, prefetch_factor=2),
+)
