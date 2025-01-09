@@ -6,7 +6,7 @@ model:
   num_inter_steps: 1 # Number of intermediary steps (without any data)
   num_samples_to_plot: 1 
   training_strategy: diff_ar # diff_ar or scaled_ar
-  save_path: /scratch/shared/py4cast/logs/camp0/test_cli_clement/
+  save_path: /scratch/shared/py4cast/logs/camp0/test_cli_clement/efiuh/version_0
   use_lr_scheduler: False
   no_log: False
   channels_last: False # True: B W H C

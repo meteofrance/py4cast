@@ -191,6 +191,8 @@ class AutoRegressiveLightning(LightningModule):
         self.no_log = no_log
         self.channels_last = channels_last
 
+        # self.save_path = Path(self.save_path) / f"version_{10}"
+
         if self.num_inter_steps > 1 and self.num_input_steps > 1:
             raise AttributeError(
                 "It is not possible to have multiple input steps when num_inter_steps > 1."
@@ -280,7 +282,6 @@ class AutoRegressiveLightning(LightningModule):
 
         self.loss.prepare(self, statics.interior_mask, dataset_info)
 
-        save_path = self.save_path
         max_pred_step = self.num_pred_steps_val_test - 1
         if self.logging_enabled:
             self.rmse_psd_plot_metric = MetricPSDVar(pred_step=max_pred_step)
@@ -669,20 +670,19 @@ class AutoRegressiveLightning(LightningModule):
             l1_loss = ScaledLoss("L1Loss", reduction="none")
             l1_loss.prepare(self, self.interior_mask, self.dataset_info)
             metrics = {"mae": l1_loss}
-            save_path = self.save_path
             self.valid_plotters = [
                 StateErrorPlot(metrics, prefix="Validation"),
                 PredictionTimestepPlot(
                     num_samples_to_plot=1,
                     num_features_to_plot=4,
                     prefix="Validation",
-                    save_path=save_path,
+                    save_path=self.save_path,
                 ),
                 PredictionEpochPlot(
                     num_samples_to_plot=1,
                     num_features_to_plot=4,
                     prefix="Validation",
-                    save_path=save_path,
+                    save_path=self.save_path,
                 ),
             ]
 
@@ -786,16 +786,14 @@ class AutoRegressiveLightning(LightningModule):
                 loss.prepare(self, self.interior_mask, self.dataset_info)
                 metrics[alias] = loss
 
-            save_path = self.save_path
-
             self.test_plotters = [
-                StateErrorPlot(metrics, save_path=save_path),
+                StateErrorPlot(metrics, save_path=self.save_path),
                 SpatialErrorPlot(),
                 PredictionTimestepPlot(
                     num_samples_to_plot=self.num_samples_to_plot,
                     num_features_to_plot=4,
                     prefix="Test",
-                    save_path=save_path,
+                    save_path=self.save_path,
                 ),
             ]
 

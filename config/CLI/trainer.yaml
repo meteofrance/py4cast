@@ -3,17 +3,17 @@ seed_everything: true
 
 trainer:  # Native training arguments of ligthining.pytorch.Trainer
 
-  fast_dev_run: True  # True: fit with only 1 batch and 1 epoch, use for dev (logging & checkpointing disabled)
+  fast_dev_run: False  # True: fit with only 1 batch and 1 epoch, use for dev (logging & checkpointing disabled)
   num_nodes: 1         # Num of GPU nodes (1 if device=cpu)
-  max_epochs: 1
+  max_epochs: 50
   profiler: null       # Performance profiler. Possibilities are [null, simple, or specific custom class (see doc)]
 
   logger:
     class_path: lightning.pytorch.loggers.TensorBoardLogger
     init_args:
       # default_hp_metric: False # see if tensoboard still works before rm TODO
-      save_dir: /scratch/shared/py4cast/logs/   # MUST be modified
-      name: my_experiment                       # MUST be modified
+      save_dir: /scratch/shared/py4cast/logs/camp0/test_cli_clement/   # MUST be modified
+      name:  efiuh                                                    # version of the model
   # Your logs will be saved in save_dir/name/version_{i}/
   # (checkpoints, config.yaml, images, scores, tensorboard logs, ...)
   # Lightning automatically increments the version index of your experiment
@@ -41,10 +41,10 @@ trainer:  # Native training arguments of ligthining.pytorch.Trainer
   accumulate_grad_batches: 10  # Num of batches before optim step
   deterministic: False         # True for reproducibility but increases computation time
   check_val_every_n_epoch: 1   # Number of epochs training between each validation run
-  precision: "32"              # Numerical precision to use for model (32/16/bf16/64)
+  precision: 32                # Numerical precision to use for model (32/16/bf16/64)
   strategy: auto               # Training strategy alias (auto, ddp, fsdp, etc)
   accelerator: auto            # Type of device (auto, gpu, cpu)
   devices: auto                # Number of devices (auto or NUM)
-  limit_train_batches: 3       # Limit num of batches per epoch (to do very short training)
-  limit_val_batches: 3
-  limit_test_batches: 3
+  limit_train_batches: 300     # Limit num of batches per epoch (to do very short training)
+  limit_val_batches: 300
+  limit_test_batches: 300
