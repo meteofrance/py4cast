@@ -1,0 +1,43 @@
+{
+    "grid": {
+        "border_size": 0,
+        "name": "dummygrid",
+        "proj_name": "PlateCarree",
+        "projection_kwargs": {},
+        "subdomain": [
+            0,
+            64,
+            0,
+            64
+        ]
+    },
+    "params": {
+        "dummy_parameter": {
+            "kind": "input_output",
+            "levels": [
+                500
+            ]
+        }
+    },
+    "periods": {
+        "test": {
+            "end": 2023010122,
+            "start": 2023010116,
+            "step_duration": 3600
+        },
+        "train": {
+            "end": 2023010107,
+            "start": 2023010100,
+            "step_duration": 3600
+        },
+        "valid": {
+            "end": 2023010115,
+            "start": 2023010108,
+            "step_duration": 3600
+        }
+    },
+    "settings": {
+        "file_format": "npy",
+        "standardize": "true"
+    }
+}
