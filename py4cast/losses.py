@@ -6,7 +6,7 @@ from abc import ABC, abstractmethod
 from functools import lru_cache
 from typing import Tuple
 
-import pytorch_lightning as pl
+import lightning.pytorch as pl
 import torch
 from torch.nn import MSELoss
 
