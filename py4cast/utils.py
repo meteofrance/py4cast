@@ -2,7 +2,7 @@ from dataclasses import fields
 from pathlib import Path
 from typing import Dict
 
-import pytorch_lightning as pl
+import lightning.pytorch as pl
 import torch
 
 

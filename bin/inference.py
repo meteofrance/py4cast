@@ -1,7 +1,7 @@
 import argparse
 from pathlib import Path
 
-from pytorch_lightning import Trainer
+from lightning.pytorch import Trainer
 
 from py4cast.io.outputs import GribSavingSettings, save_named_tensors_to_grib
 from py4cast.lightning import AutoRegressiveLightning, PlDataModule
