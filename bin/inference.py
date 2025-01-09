@@ -53,8 +53,7 @@ if __name__ == "__main__":
                 args.model_path = file
                 break
     lightning_module = AutoRegressiveLightning.load_from_checkpoint(args.model_path)
-    hparams = lightning_module.hparams["hparams"]
-    lightning_module.hparams["precision"] = args.precision
+    lightning_module.precision = args.precision
 
     if args.date is not None:
         config_override = {
@@ -66,10 +65,10 @@ if __name__ == "__main__":
 
     dm = PlDataModule(
         dataset=args.dataset,
-        num_input_steps=hparams.num_input_steps,
-        num_pred_steps_train=hparams.num_pred_steps_train,
-        num_pred_steps_val_test=hparams.num_pred_steps_val_test,
-        batch_size=hparams.batch_size,
+        num_input_steps=lightning_module.num_input_steps,
+        num_pred_steps_train=lightning_module.num_pred_steps_train,
+        num_pred_steps_val_test=lightning_module.num_pred_steps_val_test,
+        batch_size=lightning_module.batch_size,
         dataset_conf=args.dataset_conf,
         config_override=config_override,
     )
