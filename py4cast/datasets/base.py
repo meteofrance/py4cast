@@ -289,7 +289,6 @@ class DatasetInfo:
         print(f"Features shortnames {self.shortnames}")
         for p in ["input", "input_output", "output"]:
             names = self.shortnames[p]
-            print(names)
             mean = self.stats.to_list("mean", names)
             std = self.stats.to_list("std", names)
             mini = self.stats.to_list("min", names)

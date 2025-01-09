@@ -8,7 +8,7 @@ from typer import Typer
 
 from py4cast.datasets import compute_dataset_stats as cds
 from py4cast.datasets.access import Timestamps
-from py4cast.datasets.base import DatasetABC
+from py4cast.datasets.base import DatasetABC, TorchDataloaderSettings
 from py4cast.datasets.titan import TitanAccessor
 from py4cast.datasets.titan.settings import DEFAULT_CONFIG, FORMATSTR
 
@@ -157,6 +157,7 @@ def plot(path_config: Path = DEFAULT_CONFIG, dataset_name: str = "titan"):
     )
     print("Plot gif of one sample...")
     sample = train_ds.sample_list[0]
+    print(sample)
     sample.plot_gif("test.gif")
     print("Plot png for one step of sample...")
     item = sample.load(no_standardize=True)
@@ -176,7 +177,7 @@ def speedtest(
         num_pred_steps_train=1,
         num_pred_steps_val_tests=5,
     )
-    data_iter = iter(train_ds.torch_dataloader())
+    data_iter = iter(train_ds.torch_dataloader(tl_settings=TorchDataloaderSettings()))
     print("Dataset file_format: ", train_ds.settings.file_format)
     print("Speed test:")
     start_time = time.time()
