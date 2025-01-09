@@ -6,39 +6,37 @@ from dataclasses import dataclass
 from functools import cached_property
 from pathlib import Path
 from typing import Dict, List, Literal, Tuple, Union
-
 import einops
 import matplotlib
 import torch
 from lightning import LightningDataModule, LightningModule
 from lightning.pytorch.loggers import MLFlowLogger
 from lightning.pytorch.utilities import rank_zero_only
+from torchinfo import summary
+from transformers import get_cosine_schedule_with_warmup
+
 from mfai.torch.models.base import ModelType
 from mfai.torch.models.utils import (
     expand_to_batch,
     features_last_to_second,
     features_second_to_last,
 )
-from torchinfo import summary
-from transformers import get_cosine_schedule_with_warmup
-
 from py4cast.datasets import get_datasets
 from py4cast.datasets.base import DatasetInfo, ItemBatch, NamedTensor, Statics
 from py4cast.losses import ScaledLoss, WeightedLoss
 from py4cast.metrics import MetricACC, MetricPSDK, MetricPSDVar
 from py4cast.models import build_model_from_settings, get_model_kls_and_settings
 from py4cast.models import registry as model_registry
+from py4cast.utils import str_to_dtype
 from py4cast.plots import (
     PredictionEpochPlot,
     PredictionTimestepPlot,
     SpatialErrorPlot,
     StateErrorPlot,
 )
-from py4cast.utils import str_to_dtype
 
 # learning rate scheduling period in steps (update every nth step)
 LR_SCHEDULER_PERIOD: int = 10
-
 # PNG plots period in epochs. Plots are made, logged and saved every nth epoch.
 PLOT_PERIOD: int = 10
 
@@ -55,12 +53,12 @@ class PlDataModule(LightningDataModule):
         num_input_steps: int,
         num_pred_steps_train: int,
         num_pred_steps_val_test: int,
-        batch_size: int = 1,
-        num_workers: int = 1,
-        prefetch_factor: int | None = None,
-        pin_memory: bool = False,
-        dataset_conf: Union[Path, None] = None,
-        config_override: Union[Dict, None] = None,
+        batch_size: int,
+        num_workers: int,
+        prefetch_factor: int | None,
+        pin_memory: bool,
+        dataset_conf: Path | None,
+        config_override: Dict | None,
     ):
         super().__init__()
         self.num_input_steps = num_input_steps
@@ -151,30 +149,31 @@ class AutoRegressiveLightning(LightningModule):
 
     def __init__(
         self,
+        #args linked from trainer and datamodule
         dataset_name: str,
-        dataset_conf: Path,
-        dataset_info,
+        num_input_steps: int,
+        num_pred_steps_train: int,
+        num_pred_steps_val_test: int,
         batch_size: int,
-        model_conf: Union[Path, None] = None,
-        model_name: Literal[tuple(model_registry.keys())] = "HalfUNet",
-        lr: float = 0.1,
-        loss_name: Literal["mse", "mae"] = "mse",
-        num_input_steps: int = 2,
-        num_pred_steps_train: int = 2,
-        num_inter_steps: int = 1,  # Number of intermediary steps (without any data),
-        num_pred_steps_val_test: int = 2,
-        num_samples_to_plot: int = 1,
-        training_strategy: str = "diff_ar",
-        len_train_loader: int = 1,
-        save_path: Path = None,
-        use_lr_scheduler: bool = False,
-        precision: str = "bf16",
-        no_log: bool = False,
-        channels_last: bool = False,
-        *args,
-        **kwargs,
+        dataset_info,
+        len_train_loader: int,
+
+        dataset_conf: Path, # TO DELETE ?
+
+        #non-linked args
+        model_name: str,
+        model_conf: Path | None,
+        lr: float,
+        loss_name: str,
+        num_inter_steps: int,
+        num_samples_to_plot: int,
+        training_strategy: str,
+        save_path: Path,
+        use_lr_scheduler: bool,
+        no_log: bool,
+        channels_last: bool,
     ):
-        super().__init__(*args, **kwargs)
+        super().__init__()
         self.dataset_name = dataset_name
         self.dataset_conf = dataset_conf
         self.dataset_info = dataset_info
@@ -191,7 +190,6 @@ class AutoRegressiveLightning(LightningModule):
         self.len_train_loader = len_train_loader
         self.save_path = save_path
         self.use_lr_scheduler = use_lr_scheduler
-        self.precision = precision
         self.no_log = no_log
         self.channels_last = channels_last
 
@@ -220,11 +218,6 @@ class AutoRegressiveLightning(LightningModule):
         # Keeping track of grid shape
         self.grid_shape = statics.grid_shape
 
-        # For example plotting
-        self.plotted_examples = 0
-
-        # For storing spatial loss maps during evaluation
-        self.spatial_loss_maps = []
 
         # class variables to log loss during training, for tensorboad custom scalar
         self.training_step_losses = []
@@ -304,18 +297,14 @@ class AutoRegressiveLightning(LightningModule):
         """
         Return the appropriate torch dtype for the desired precision in hparams.
         """
-        return str_to_dtype[self.precision]
+        return str_to_dtype[self.trainer.precision]
 
     def print_summary_model(self):
-        # self.dataset_info.summary()
         print(f"Number of input_steps : {self.num_input_steps}")
         print(f"Number of pred_steps (training) : {self.num_pred_steps_train}")
         print(f"Number of pred_steps (test/val) : {self.num_pred_steps_val_test}")
         print(f"Number of intermediary steps :{self.num_inter_steps}")
         print(f"Training strategy :{self.training_strategy}")
-        # print(
-        #     f"Model step duration : {self.dataset_info.step_duration /self.num_inter_steps}"
-        # )
         print(f"Model conf {self.model_conf}")
         print("---------------------")
         print(f"Loss {self.loss}")
