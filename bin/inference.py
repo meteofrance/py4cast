@@ -64,7 +64,7 @@ if __name__ == "__main__":
         config_override = {"num_inference_pred_steps": args.infer_steps}
 
     dm = PlDataModule(
-        dataset=args.dataset,
+        dataset_name=args.dataset,
         num_input_steps=lightning_module.num_input_steps,
         num_pred_steps_train=lightning_module.num_pred_steps_train,
         num_pred_steps_val_test=lightning_module.num_pred_steps_val_test,
