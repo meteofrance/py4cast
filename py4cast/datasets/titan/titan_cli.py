@@ -8,7 +8,7 @@ from typer import Typer
 
 from py4cast.datasets import compute_dataset_stats as cds
 from py4cast.datasets.access import Timestamps
-from py4cast.datasets.base import DatasetABC, TorchDataloaderSettings
+from py4cast.datasets.base import DatasetABC
 from py4cast.datasets.titan import TitanAccessor
 from py4cast.datasets.titan.settings import DEFAULT_CONFIG, FORMATSTR
 
@@ -177,7 +177,7 @@ def speedtest(
         num_pred_steps_train=1,
         num_pred_steps_val_tests=5,
     )
-    data_iter = iter(train_ds.torch_dataloader(tl_settings=TorchDataloaderSettings()))
+    data_iter = iter(train_ds.torch_dataloader())
     print("Dataset file_format: ", train_ds.settings.file_format)
     print("Speed test:")
     start_time = time.time()

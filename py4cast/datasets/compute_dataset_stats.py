@@ -3,7 +3,7 @@ from typing import Literal
 import torch
 from tqdm import tqdm
 
-from py4cast.datasets.base import DatasetABC, TorchDataloaderSettings
+from py4cast.datasets.base import DatasetABC
 from py4cast.utils import torch_save
 
 
@@ -13,7 +13,7 @@ def compute_mean_std_min_max(
     """
     Compute mean and standard deviation for this dataset.
     """
-    random_batch = next(iter(dataset.torch_dataloader(TorchDataloaderSettings())))
+    random_batch = next(iter(dataset.torch_dataloader()))
     named_tensor = getattr(random_batch, type_tensor)
     n_features = len(named_tensor.feature_names)
     sum_means = torch.zeros(n_features)
@@ -27,7 +27,7 @@ def compute_mean_std_min_max(
         raise ValueError("Your dataset should not be standardized.")
 
     for batch in tqdm(
-        dataset.torch_dataloader(TorchDataloaderSettings()),
+        dataset.torch_dataloader(),
         desc=f"Computing {type_tensor} stats",
     ):
         tensor = getattr(batch, type_tensor).tensor
@@ -78,9 +78,7 @@ def compute_parameters_stats(dataset: DatasetABC):
 
 
 def compute_time_step_stats(dataset: DatasetABC):
-    random_inputs = next(
-        iter(dataset.torch_dataloader(TorchDataloaderSettings()))
-    ).inputs
+    random_inputs = next(iter(dataset.torch_dataloader())).inputs
     n_features = len(random_inputs.feature_names)
     sum_means = torch.zeros(n_features)
     sum_squares = torch.zeros(n_features)
@@ -88,7 +86,7 @@ def compute_time_step_stats(dataset: DatasetABC):
     if not dataset.settings.standardize:
         raise ValueError("Your dataset should be standardized.")
 
-    for batch in tqdm(dataset.torch_dataloader(TorchDataloaderSettings())):
+    for batch in tqdm(dataset.torch_dataloader()):
         # Here we assume that data are in 2 or 3 D
         inputs = batch.inputs.tensor
         outputs = batch.outputs.tensor
