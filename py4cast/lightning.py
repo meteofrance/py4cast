@@ -5,35 +5,35 @@ from copy import deepcopy
 from dataclasses import dataclass
 from functools import cached_property
 from pathlib import Path
-from typing import Dict, List, Literal, Tuple, Union
+from typing import Dict, List, Tuple, Union
+
 import einops
 import matplotlib
 import torch
 from lightning import LightningDataModule, LightningModule
 from lightning.pytorch.loggers import MLFlowLogger
 from lightning.pytorch.utilities import rank_zero_only
-from torchinfo import summary
-from transformers import get_cosine_schedule_with_warmup
-
 from mfai.torch.models.base import ModelType
 from mfai.torch.models.utils import (
     expand_to_batch,
     features_last_to_second,
     features_second_to_last,
 )
+from torchinfo import summary
+from transformers import get_cosine_schedule_with_warmup
+
 from py4cast.datasets import get_datasets
 from py4cast.datasets.base import DatasetInfo, ItemBatch, NamedTensor, Statics
 from py4cast.losses import ScaledLoss, WeightedLoss
 from py4cast.metrics import MetricACC, MetricPSDK, MetricPSDVar
 from py4cast.models import build_model_from_settings, get_model_kls_and_settings
-from py4cast.models import registry as model_registry
-from py4cast.utils import str_to_dtype
 from py4cast.plots import (
     PredictionEpochPlot,
     PredictionTimestepPlot,
     SpatialErrorPlot,
     StateErrorPlot,
 )
+from py4cast.utils import str_to_dtype
 
 # learning rate scheduling period in steps (update every nth step)
 LR_SCHEDULER_PERIOD: int = 10
@@ -149,18 +149,16 @@ class AutoRegressiveLightning(LightningModule):
 
     def __init__(
         self,
-        #args linked from trainer and datamodule
+        # args linked from trainer and datamodule
         dataset_name: str,
         num_input_steps: int,
         num_pred_steps_train: int,
         num_pred_steps_val_test: int,
         batch_size: int,
+        dataset_conf: Path,  # TO DELETE ?
         dataset_info,
         len_train_loader: int,
-
-        dataset_conf: Path, # TO DELETE ?
-
-        #non-linked args
+        # non-linked args
         model_name: str,
         model_conf: Path | None,
         lr: float,
@@ -217,7 +215,6 @@ class AutoRegressiveLightning(LightningModule):
 
         # Keeping track of grid shape
         self.grid_shape = statics.grid_shape
-
 
         # class variables to log loss during training, for tensorboad custom scalar
         self.training_step_losses = []

@@ -1,9 +1,9 @@
 data:
   #args forwarded (linked) to model
-  dataset_name: "titan"
+  dataset_name: "titan_refacto2"
   num_input_steps: 1
   num_pred_steps_train: 1
-  num_pred_steps_train: 1
+  num_pred_steps_val_test: 1
   batch_size: 2
 
   #other args

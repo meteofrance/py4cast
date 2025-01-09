@@ -1,5 +1,5 @@
 model:
-  model_name: "unetrpp"
+  model_name: UNETRPP
   model_conf: null # Path to model_conf
   lr: 1e-4
   loss_name: mse # mse or mae

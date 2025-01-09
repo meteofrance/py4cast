@@ -1,5 +1,5 @@
 model:
-  model_name: "halfunet"
+  model_name: HalfUNet
   model_conf: null # Path to model_conf
   lr: 1e-4
   loss_name: mse # mse or mae
