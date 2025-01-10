@@ -10,17 +10,17 @@ import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
+import lightning.pytorch as pl
 import numpy as np
 import pytest
-import pytorch_lightning as pl
 import torch
 from mfai.torch import export_to_onnx, onnx_load_and_infer
 from mfai.torch.models.base import ModelType
 from mfai.torch.models.utils import features_last_to_second, features_second_to_last
 
 from py4cast.datasets import get_datasets
-from py4cast.datasets.base import TorchDataloaderSettings, collate_fn
-from py4cast.lightning import ArLightningHyperParam, AutoRegressiveLightning
+from py4cast.datasets.base import collate_fn
+from py4cast.lightning import AutoRegressiveLightning
 from py4cast.models import all_nn_architectures, get_model_kls_and_settings
 
 
@@ -163,14 +163,10 @@ def test_lightning_fit_inference():
         None,
     )
 
-    dl_settings = TorchDataloaderSettings(
-        batch_size=BATCH_SIZE,
-        num_workers=2,
-    )
     train_ds, val_ds, test_ds = datasets
-    train_loader = train_ds.torch_dataloader(dl_settings)
-    val_loader = val_ds.torch_dataloader(dl_settings)
-    test_loader = test_ds.torch_dataloader(dl_settings)
+    train_loader = train_ds.torch_dataloader(batch_size=BATCH_SIZE, num_workers=2)
+    val_loader = val_ds.torch_dataloader(batch_size=BATCH_SIZE, num_workers=2)
+    test_loader = test_ds.torch_dataloader(batch_size=BATCH_SIZE, num_workers=2)
 
     with tempfile.TemporaryDirectory() as tmpdir:
         save_path = Path(tmpdir) / "logs"
@@ -191,7 +187,7 @@ def test_lightning_fit_inference():
                 )
             ],
         )
-        hp = ArLightningHyperParam(
+        lightning_module = AutoRegressiveLightning(
             dataset_info=datasets[0].dataset_info,
             dataset_name=DATASET,
             dataset_conf=None,
@@ -203,7 +199,6 @@ def test_lightning_fit_inference():
             num_pred_steps_val_test=NUM_OUTPUTS,
             save_path=save_path,
         )
-        lightning_module = AutoRegressiveLightning(hp)
         trainer.fit(
             model=lightning_module,
             train_dataloaders=train_loader,
@@ -214,8 +209,7 @@ def test_lightning_fit_inference():
         # finds the first .ckpt file
         ckpt_path = next(save_path.glob("*.ckpt"))
         model = AutoRegressiveLightning.load_from_checkpoint(ckpt_path)
-        hparams = model.hparams["hparams"]
-        hparams.num_pred_steps_val_test = NUM_OUTPUTS
+        model.num_pred_steps_val_test = NUM_OUTPUTS
         model.eval()
 
         item = test_ds[0]  # Load data directly from dataset (no dataloader)
