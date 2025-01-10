@@ -166,7 +166,6 @@ class AutoRegressiveLightning(LightningModule):
         num_inter_steps: int,
         num_samples_to_plot: int,
         training_strategy: str,
-        save_path: Path,
         use_lr_scheduler: bool,
         no_log: bool,
         channels_last: bool,
@@ -186,12 +185,9 @@ class AutoRegressiveLightning(LightningModule):
         self.num_samples_to_plot = num_samples_to_plot
         self.training_strategy = training_strategy
         self.len_train_loader = len_train_loader
-        self.save_path = save_path
         self.use_lr_scheduler = use_lr_scheduler
         self.no_log = no_log
         self.channels_last = channels_last
-
-        # self.save_path = Path(self.save_path) / f"version_{10}"
 
         if self.num_inter_steps > 1 and self.num_input_steps > 1:
             raise AttributeError(
@@ -279,16 +275,22 @@ class AutoRegressiveLightning(LightningModule):
             self.loss = WeightedLoss("L1Loss", reduction="none")
         else:
             raise TypeError(f"Unknown loss function: {loss_name}")
-
         self.loss.prepare(self, statics.interior_mask, dataset_info)
+        exp_summary(self)
+
+    def setup(self, stage=None):
+        self.configure_optimizers()
+        print(self.trainer.logger.version)
+        if isinstance(self.trainer.logger.version, int):
+            self.save_path = Path(self.trainer.logger.save_dir) / Path(self.trainer.logger.name) / f"version_{self.trainer.logger.version}"
+        else :
+            self.save_path = Path(self.trainer.logger.save_dir) / Path(self.trainer.logger.name) / Path(self.trainer.logger.version)
 
         max_pred_step = self.num_pred_steps_val_test - 1
         if self.logging_enabled:
             self.rmse_psd_plot_metric = MetricPSDVar(pred_step=max_pred_step)
-            self.psd_plot_metric = MetricPSDK(save_path, pred_step=max_pred_step)
-            self.acc_metric = MetricACC(dataset_info)
-
-        exp_summary(self)
+            self.psd_plot_metric = MetricPSDK(self.save_path, pred_step=max_pred_step)
+            self.acc_metric = MetricACC(self.dataset_info)
 
     @property
     def dtype(self):
