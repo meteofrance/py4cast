@@ -1,7 +1,7 @@
 import datetime as dt
 from functools import lru_cache
 from pathlib import Path
-from typing import Callable, List, Literal
+from typing import Callable, List, Literal, Union
 
 import numpy as np
 import xarray as xr
@@ -155,17 +155,20 @@ class TitanAccessor(DataAccessor):
         t0: dt.datetime,
         num_input_steps: int,
         num_pred_steps: int,
-        step_duration: dt.timedelta,
-        leadtimes: List[dt.timedelta],
-    ) -> List[Timestamps]:
+        pred_step: dt.timedelta,
+        leadtime: Union[dt.timedelta, None],
+    ) -> bool:
         """
-        Return the list of all avalaible Timestamps for t0.
+        Return True if the dataset contains the data for t0 + leadtime. Else return False.
+
+        Args:
+            t0 (dt.datetime): valid time of the observation or run date (in case of dataset that contain multiple forecasts).
+            num_input_steps (int,): number of input steps.
+            num_pred_steps (int,): number of prediction steps.
+            pred_step (dt.timedelta): duration of the prediction step.
+            leadtime (dt.timedelta): leadtime for wich we want to know if it is a valid timestamp.
         """
-        timesteps = [
-            delta * step_duration
-            for delta in range(-num_input_steps + 1, num_pred_steps + 1)
-        ]
-        return [Timestamps(datetime=t0, timedeltas=timesteps)]
+        return True
 
     def parameter_namer(param: WeatherParam) -> str:
         if param.level_type in ["surface", "heightAboveGround"]:
