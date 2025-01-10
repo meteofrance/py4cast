@@ -13,7 +13,7 @@ trainer:  # Native training arguments of ligthining.pytorch.Trainer
     init_args:
       # default_hp_metric: False # see if tensoboard still works before rm TODO
       save_dir: /dir1/dir2/dir3/   # Root directory 
-      name:                        # EMPTY: runs written in save_path. NOT EMPTY: runs written in save_path/name
+      name:                        # EMPTY: runs written in save_dir. NOT EMPTY: runs written in save_dir/name
       version:                     # EMPTY: name of the run==version_{i}. NOT EMPTY: name of the run==version
   # Your logs will be saved in save_dir/*name*/version/
   # (checkpoints, config.yaml, images, scores, tensorboard logs, ...)
