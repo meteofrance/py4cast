@@ -170,8 +170,10 @@ class AutoRegressiveLightning(LightningModule):
         use_lr_scheduler: bool,
         no_log: bool,
         channels_last: bool,
+        *args,
+        **kwargs,
     ):
-        super().__init__()
+        super().__init__(*args,**kwargs)
         self.dataset_name = dataset_name
         self.dataset_conf = dataset_conf
         self.dataset_info = dataset_info
@@ -282,12 +284,13 @@ class AutoRegressiveLightning(LightningModule):
         else:
             raise TypeError(f"Unknown loss function: {loss_name}")
         self.loss.prepare(self, statics.interior_mask, dataset_info)
+
         exp_summary(self)
 
     def setup(self, stage=None):
         self.configure_optimizers()
         self.save_path = Path(self.trainer.logger.log_dir)
-
+        self.logger.log_hyperparams(self.hparams, metrics={"val_mean_loss": 0.0})
         max_pred_step = self.num_pred_steps_val_test - 1
         if self.logging_enabled:
             self.rmse_psd_plot_metric = MetricPSDVar(pred_step=max_pred_step)
@@ -330,9 +333,6 @@ class AutoRegressiveLightning(LightningModule):
     @rank_zero_only
     def log_hparams_tb(self):
         if self.logging_enabled and self.logger:
-            # Log hparams in tensorboard hparams window
-            dict_log = {"username": getpass.getuser()}
-            self.logger.log_hyperparams(dict_log, metrics={"val_mean_loss": 0.0})
             # Save model & dataset conf as files
             if self.dataset_conf is not None:
                 shutil.copyfile(self.dataset_conf, self.save_path / "dataset_conf.json")
