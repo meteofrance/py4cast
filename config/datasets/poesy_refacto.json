@@ -3,26 +3,26 @@
         "train": {
             "start": 20200615,
             "end": 20210615,
-            "fcst_daily_runs": [75600],
-            "fcst_leadtime_start_in_sec": 3600,
-            "fcst_leadtime_end_in_sec": 162000,
-            "fcst_leadtime_step_in_sec": 3600
+            "refcst_daily_runs": [75600],
+            "refcst_leadtime_start_in_sec": 3600,
+            "refcst_leadtime_end_in_sec": 162000,
+            "refcst_leadtime_step_in_sec": 3600
         },
         "test": {
             "start": 20210616,
             "end": 20210716,
-            "fcst_daily_runs": [75600],
-            "fcst_leadtime_start_in_sec": 3600,
-            "fcst_leadtime_end_in_sec": 162000,
-            "fcst_leadtime_step_in_sec": 3600
+            "refcst_daily_runs": [75600],
+            "refcst_leadtime_start_in_sec": 3600,
+            "refcst_leadtime_end_in_sec": 162000,
+            "refcst_leadtime_step_in_sec": 3600
         },
         "valid": {
             "start": 20210717,
             "end": 20211115,
-            "fcst_daily_runs": [75600],
-            "fcst_leadtime_start_in_sec": 3600,
-            "fcst_leadtime_end_in_sec": 162000,
-            "fcst_leadtime_step_in_sec": 3600
+            "refcst_daily_runs": [75600],
+            "refcst_leadtime_start_in_sec": 3600,
+            "refcst_leadtime_end_in_sec": 162000,
+            "refcst_leadtime_step_in_sec": 3600
         }
     },
     "grid":{

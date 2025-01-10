@@ -403,10 +403,10 @@ class Sample:
     def is_valid(self) -> bool:
         for param in self.params:
             if not self.accessor.exists(
-                self.settings.dataset_name,
-                param,
-                self.timestamps,
-                self.settings.file_format,
+                ds_name=self.settings.dataset_name,
+                param=param,
+                timestamps=self.timestamps,
+                file_format=self.settings.file_format,
             ):
                 return False
         return True
@@ -662,14 +662,13 @@ class DatasetABC(Dataset):
 
         timestamps = []
         for t0, leadtime in tqdm(self.period.available_t0_and_leadtimes):
-            valid_timestamp = self.accessor.valid_timestamp(
+            if self.accessor.optional_check_before_exists(
                 t0,
                 self.settings.num_input_steps,
                 self.settings.num_pred_steps,
                 self.period.forecast_step,
                 leadtime,
-            )
-            if valid_timestamp:
+                ):
                 timesteps = [
                     delta * self.period.forecast_step + leadtime
                     for delta in range(
@@ -861,7 +860,7 @@ class DatasetABC(Dataset):
         )
         train_period = Period(**conf["periods"]["train"], name="train")
         train_ds = cls(
-            name, grid, train_period, param_list, train_settings, accessor_kls
+            name, grid, train_period, param_list, train_settings, accessor_kls()
         )
 
         valid_settings = SamplePreprocSettings(
@@ -873,11 +872,11 @@ class DatasetABC(Dataset):
         )
         valid_period = Period(**conf["periods"]["valid"], name="valid")
         valid_ds = cls(
-            name, grid, valid_period, param_list, valid_settings, accessor_kls
+            name, grid, valid_period, param_list, valid_settings, accessor_kls()
         )
 
         test_period = Period(**conf["periods"]["test"], name="test")
-        test_ds = cls(name, grid, test_period, param_list, valid_settings, accessor_kls)
+        test_ds = cls(name, grid, test_period, param_list, valid_settings, accessor_kls())
 
         return train_ds, valid_ds, test_ds
 

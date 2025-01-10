@@ -30,7 +30,7 @@ class Period:
 
         # Forecast: If you are in the case of a non continuous Dataset, i.e. you
         may have multiple files for a single valid time.
-        - fcst_daily_runs (List[dt.timedelta]): timedeltas of the day for wich forecast runs are
+        - refcst_daily_runs (List[dt.timedelta]): timedeltas of the day for wich forecast runs are
         available. If you set it in a config file, please give a list of seconds. None by default.
         - refcst_leadtime_start_in_sec (int): starting leadtime of the forecast in seconds. None by default.
         - refcst_leadtime_end_in_sec (int): ending leadtime of the forecast in seconds. None by default.
@@ -48,7 +48,7 @@ class Period:
     # -------------- FORECAST ---------------
     # If you are in the case of a non continuous Dataset, i.e. you may have multiple files
     # for a single valid time.
-    fcst_daily_runs: List[dt.timedelta] = (
+    refcst_daily_runs: List[dt.timedelta] = (
         None  # timedeltas of the day for wich forecast runs are available
     )
     refcst_leadtime_start_in_sec: int = None  # starting leadtime of the forecast
@@ -79,7 +79,7 @@ class Period:
 
         if self.refcst_leadtime_start_in_sec is not None:
             self.refcst_daily_runs = [
-                dt.timedelta(seconds=int(sec)) for sec in self.fcst_daily_runs
+                dt.timedelta(seconds=int(sec)) for sec in self.refcst_daily_runs
             ]
 
     @property
@@ -401,6 +401,27 @@ class DataAccessor(ABC):
     We refer to py4cast.datasets.titan (reanalysis) and py4cast.datasets.poesy (reforecast)
     as two end-to-end examples of DataAccessors.
     """
+    def optional_check_before_exists(
+        t0: dt.datetime,
+        num_input_steps: int,
+        num_pred_steps: int,
+        pred_step: dt.timedelta,
+        leadtime: Union[dt.timedelta, None],
+    ) -> bool:
+        """
+        Optional method that return True if the dataset contains the data for t0 + leadtime. Else return False.
+
+        Please override this method is your personnal DataAccessor() if you want to avoid unecessary file checking
+        for an optimisation purpose.
+
+        Args:
+            t0 (dt.datetime): valid time of the observation or run date (in case of dataset that contain multiple forecasts).
+            num_input_steps (int,): number of input steps.
+            num_pred_steps (int,): number of prediction steps.
+            pred_step (dt.timedelta): duration of the prediction step.
+            leadtime (dt.timedelta): leadtime for wich we want to know if it is a valid timestamp.
+        """
+        return True
 
     def cache_dir(name: str, grid: Grid) -> Path:
         """
@@ -448,10 +469,9 @@ class DataAccessor(ABC):
         Consumed by the `Param` interface object.
         """
 
-    @classmethod
     @abstractmethod
     def get_filepath(
-        cls,
+        self,
         dataset_name: str,
         param: WeatherParam,
         timestamps: Timestamps,
@@ -461,10 +481,9 @@ class DataAccessor(ABC):
         Return a path to retrieve a given parameter at from a dataset
         """
 
-    @classmethod
     @abstractmethod
     def load_data_from_disk(
-        cls,
+        self,
         dataset_name: str,  # name of the dataset or dataset version
         param: WeatherParam,  # specific parameter (2D field associated to a grid)
         timestamps: Timestamps,  # specific timestamp at which to load the field
@@ -476,10 +495,9 @@ class DataAccessor(ABC):
         loads a given parameter on a given timestamp
         """
 
-    @classmethod
     @abstractmethod
     def exists(
-        cls,
+        self,
         ds_name: str,
         param: WeatherParam,
         timestamps: Timestamps,
@@ -491,26 +509,7 @@ class DataAccessor(ABC):
         Concrete implementations can typically verify that the file where the data is exists.
         """
 
-    @abstractmethod
-    def valid_timestamp(
-        t0: dt.datetime,
-        num_input_steps: int,
-        num_pred_steps: int,
-        pred_step: dt.timedelta,
-        leadtime: Union[dt.timedelta, None],
-    ) -> bool:
-        """
-        Return True if the dataset contains the data for t0 + leadtime. Else return False.
-
-        Args:
-            t0 (dt.datetime): valid time of the observation or run date (in case of dataset that contain multiple forecasts).
-            num_input_steps (int,): number of input steps.
-            num_pred_steps (int,): number of prediction steps.
-            pred_step (dt.timedelta): duration of the prediction step.
-            leadtime (dt.timedelta): leadtime for wich we want to know if it is a valid timestamp.
-        """
-
-    @abstractmethod
+    @staticmethod
     def parameter_namer(param: WeatherParam) -> str:
         """
         Return a string used to identify parameters names on files and stats metadata

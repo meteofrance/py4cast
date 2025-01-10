@@ -107,7 +107,7 @@ class PoesyAccessor(DataAccessor):
         arr = data_array[
             param.grid.subdomain[0] : param.grid.subdomain[1],
             param.grid.subdomain[2] : param.grid.subdomain[3],
-            (timestamps.terms / dt.timedelta(hours=1)).astype(int) - 1,
+            (timestamps.timedeltas / dt.timedelta(hours=1)).astype(int) - 1,
             member,
         ].transpose([2, 0, 1])
 
@@ -125,7 +125,8 @@ class PoesyAccessor(DataAccessor):
             return False
         return True
 
-    def valid_timestamp(
+    @staticmethod
+    def optional_check_before_exists(
         t0: dt.datetime,
         num_input_steps: int,
         num_pred_steps: int,
