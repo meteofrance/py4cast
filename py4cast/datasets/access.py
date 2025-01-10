@@ -401,6 +401,7 @@ class DataAccessor(ABC):
     We refer to py4cast.datasets.titan (reanalysis) and py4cast.datasets.poesy (reforecast)
     as two end-to-end examples of DataAccessors.
     """
+    @staticmethod
     def optional_check_before_exists(
         t0: dt.datetime,
         num_input_steps: int,
