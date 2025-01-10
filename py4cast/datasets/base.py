@@ -661,7 +661,7 @@ class DatasetABC(Dataset):
         stats = self.stats if self.settings.standardize else None
 
         timestamps = []
-        for t0, leadtime in tqdm(self.period.available_t0_and_leadtimes):
+        for t0, leadtime in self.period.available_t0_and_leadtimes:
             if self.accessor.optional_check_before_exists(
                 t0,
                 self.settings.num_input_steps,
@@ -680,7 +680,7 @@ class DatasetABC(Dataset):
 
         samples = []
         invalid_samples = 0
-        for ts in timestamps:
+        for ts in tqdm(timestamps, desc=f"Checking samples of '{self.period.name}' period"):
             for member in self.settings.members:
                 sample = Sample(
                     ts,
