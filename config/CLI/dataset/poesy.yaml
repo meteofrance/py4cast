@@ -12,9 +12,3 @@ data:
   pin_memory: False 
   dataset_conf: "/dir1/dir2/dir3/poesy_refacto.json"
   config_override: null
-      # num_inference_pred_steps: 6
-      # periods: 
-      #   test: 
-      #     start: 2021061621 
-      #     end: 2021061621 
-      #     step: 1
