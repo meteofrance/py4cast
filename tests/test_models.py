@@ -217,13 +217,13 @@ def test_lightning_fit_inference():
             num_pred_steps_val_test=NUM_OUTPUTS,
             len_train_loader=len(train_loader),
             lr=1e-4,
-            loss_name='mse',
+            loss_name="mse",
             num_inter_steps=1,
             num_samples_to_plot=1,
             training_strategy="diff_ar",
             use_lr_scheduler=False,
             no_log=False,
-            channels_last=False
+            channels_last=False,
         )
         trainer.fit(
             model=lightning_module,
