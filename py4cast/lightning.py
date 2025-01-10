@@ -1,4 +1,3 @@
-import getpass
 import shutil
 import subprocess
 from copy import deepcopy
@@ -173,7 +172,7 @@ class AutoRegressiveLightning(LightningModule):
         *args,
         **kwargs,
     ):
-        super().__init__(*args,**kwargs)
+        super().__init__(*args, **kwargs)
         self.dataset_name = dataset_name
         self.dataset_conf = dataset_conf
         self.dataset_info = dataset_info
