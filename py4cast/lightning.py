@@ -156,7 +156,7 @@ class AutoRegressiveLightning(LightningModule):
         num_pred_steps_val_test: int,
         batch_size: int,
         dataset_conf: Path,  # TO DELETE ?
-        dataset_info,
+        dataset_info,  # Don't put type here or CLI doesn't work
         len_train_loader: int,
         # non-linked args
         model_name: Literal[tuple(model_registry.keys())],
@@ -164,11 +164,11 @@ class AutoRegressiveLightning(LightningModule):
         lr: float,
         loss_name: Literal["mse", "mae"],
         num_inter_steps: int,
-        num_samples_to_plot: int,
         training_strategy: str,
         use_lr_scheduler: bool,
         no_log: bool,
         channels_last: bool,
+        num_samples_to_plot: int = 1,
         *args,
         **kwargs,
     ):
