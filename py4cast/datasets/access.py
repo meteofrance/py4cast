@@ -6,7 +6,7 @@ from collections import namedtuple
 from dataclasses import dataclass, field
 from functools import cached_property
 from pathlib import Path
-from typing import Any, Callable, List, Literal, Optional, Tuple, Iterable
+from typing import Any, Callable, List, Literal, Optional, Tuple, Iterable, Union
 
 import cartopy
 import einops
@@ -19,33 +19,112 @@ from py4cast.settings import CACHE_DIR
 
 @dataclass(slots=True)
 class Period:
-    # first day of the period (included)
-    start: dt.datetime
-    # last day of the period (included)
-    end: dt.datetime
-    # step between two consecutives t0 in seconds
-    step_duration: dt.timedelta
-    # name of the period, e.g. "Train", "Valid" or "Test"
+    """
+    Args:
+        - name (str): name of the period, e.g. "Train", "Valid" or "Test".
+        - start (dt.datetime): first day of the period (included).
+        - end (dt.datetime): last day of the period (included).
+
+        # Observation: If you are in the case of a continuous Dataset
+        - obs_step (dt.timedelta): step between 2 consecutives observations. None by default.
+
+        # Forecast: If you are in the case of a non continuous Dataset, i.e. you
+        may have multiple files for a single valid time.
+        - fcst_daily_runs (List[dt.timedelta]): timedeltas of the day for wich forecast runs are
+        available. If you set it in a config file, please give a list of seconds. None by default.
+        - refcst_leadtime_start_in_sec (int): starting leadtime of the forecast in seconds. None by default.
+        - refcst_leadtime_end_in_sec (int): ending leadtime of the forecast in seconds. None by default.
+        - refcst_leadtime_step_in_sec (int): step between 2 consecutives leadtimes. None by default.
+    """
+
     name: str
-    # leadtimes (optional), corresponding to available leadtimes
-    leadtimes: List[dt.timedelta] = None
+    start: dt.datetime
+    end: dt.datetime
+
+    # -------------- OBSERVATION ---------------
+    # If you are in the case of a continuous Dataset
+    obs_step: dt.timedelta = None  # step between 2 consecutives observations
+
+    # -------------- FORECAST ---------------
+    # If you are in the case of a non continuous Dataset, i.e. you may have multiple files
+    # for a single valid time.
+    fcst_daily_runs: List[dt.timedelta] = (
+        None  # timedeltas of the day for wich forecast runs are available
+    )
+    refcst_leadtime_start_in_sec: int = None  # starting leadtime of the forecast
+    refcst_leadtime_end_in_sec: int = None  # ending leadtime of the forecast
+    refcst_leadtime_step_in_sec: int = None  # step between 2 consecutives leadtimes
 
     def __post_init__(self):
-        self.start = np.datetime64(dt.datetime.strptime(str(self.start), "%Y%m%d%H"))
-        self.end = np.datetime64(dt.datetime.strptime(str(self.end), "%Y%m%d%H"))
-        self.step_duration = dt.timedelta(seconds=self.step_duration)
+        self.start = dt.datetime.strptime(str(self.start), "%Y%m%d")
+        self.end = dt.datetime.strptime(str(self.end), "%Y%m%d")
+
+        if (
+            self.obs_step,
+            self.refcst_daily_runs,
+            self.refcst_leadtime_start_in_sec,
+            self.refcst_leadtime_end_in_sec,
+            self.refcst_leadtime_step_in_sec,
+        ) == (None, None, None, None, None):
+            raise ValueError(
+                """Please instatiate the Period() class, with at least:
+    - 'obs_step' if you work with a continuous dataset,
+    - 'refcst_daily_runs', 'refcst_leadtime_start_in_sec', 'refcst_leadtime_end_in_sec' and
+    'refcst_leadtime_step_in_sec' if you work with a dataset that has multiple files for a single valid time.
+"""
+            )
+
+        if self.obs_step is not None:
+            self.obs_step = dt.timedelta(seconds=int(self.obs_step))
+
+        if self.refcst_leadtime_start_in_sec is not None:
+            self.refcst_daily_runs = [
+                dt.timedelta(seconds=int(sec)) for sec in self.fcst_daily_runs
+            ]
 
     @property
-    def validtimes(self) -> np.array:
+    def available_t0_and_leadtimes(self) -> List[Tuple[dt.datetime, dt.timedelta]]:
         """
-        List all dates available for the period
+        Return a list of all possible couples of (t0, leadtime).
         """
-        return np.arange(
-            self.start,
-            self.end + np.timedelta64(1, "D"),
-            self.step_duration,
-            dtype="datetime64[s]",
-        ).tolist()
+        if self.obs_step is not None:
+            list_t0 = np.arange(
+                self.start,
+                self.end + dt.timedelta(days=1),
+                self.obs_step,
+                dtype="datetime64[s]",
+            ).tolist()
+            list_leadtimes = [dt.timedelta(seconds=0)]
+        else:
+            list_days = np.arange(
+                self.start,
+                self.end + dt.timedelta(days=1),
+                dt.timedelta(days=1),
+                dtype="datetime64[s]",
+            ).tolist()
+            list_t0 = [day + run for day in list_days for run in self.refcst_daily_runs]
+            list_leadtimes = [
+                dt.timedelta(seconds=int(leadtime))
+                for leadtime in range(
+                    int(self.refcst_leadtime_start_in_sec),
+                    int(self.refcst_leadtime_end_in_sec),
+                    int(self.refcst_leadtime_step_in_sec),
+                )
+            ]
+
+        return [(t0, leadtime) for t0 in list_t0 for leadtime in list_leadtimes]
+
+    @property
+    def forecast_step(self) -> dt.timedelta:
+        """
+        Return the forecast step.
+        self.obs_step if available, else self.fcst_leadtime_step_in_sec.
+        """
+        return (
+            self.obs_step
+            if self.obs_step is not None
+            else dt.timedelta(seconds=self.refcst_leadtime_step_in_sec)
+        )
 
 
 @dataclass
@@ -417,11 +496,18 @@ class DataAccessor(ABC):
         t0: dt.datetime,
         num_input_steps: int,
         num_pred_steps: int,
-        step_duration: dt.timedelta,
-        leadtimes: List[dt.timedelta],
-    ) -> List[Timestamps]:
+        pred_step: dt.timedelta,
+        leadtime: Union[dt.timedelta, None],
+    ) -> bool:
         """
-        Return the list of all avalaible Timestamps for t0.
+        Return True if the dataset contains the data for t0 + leadtime. Else return False.
+
+        Args:
+            t0 (dt.datetime): valid time of the observation or run date (in case of dataset that contain multiple forecasts).
+            num_input_steps (int,): number of input steps.
+            num_pred_steps (int,): number of prediction steps.
+            pred_step (dt.timedelta): duration of the prediction step.
+            leadtime (dt.timedelta): leadtime for wich we want to know if it is a valid timestamp.
         """
 
     @abstractmethod

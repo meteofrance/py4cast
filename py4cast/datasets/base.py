@@ -269,9 +269,7 @@ class DatasetInfo:
     units: Dict[str, str]  # d[shortname] = unit (str)
     weather_dim: int
     forcing_dim: int
-    step_duration: (
-        float  # Duration (in hour) of one step in the dataset. 0.25 means 15 minutes.
-    )
+    pred_step: dt.timedelta  # Duration of one step in the dataset.
     statics: Statics  # A lot of static variables
     stats: Stats
     diff_stats: Stats
@@ -283,7 +281,7 @@ class DatasetInfo:
         Print a table summarizing variables present in the dataset (and their role)
         """
         print(f"\n Summarizing {self.name} \n")
-        print(f"Step_duration {self.step_duration}")
+        print(f"Step_duration {self.pred_step}")
         print(f"Static fields {self.statics.grid_statics.feature_names}")
         print(f"Grid static features {self.statics.grid_statics}")
         print(f"Features shortnames {self.shortnames}")
@@ -649,7 +647,7 @@ class DatasetABC(Dataset):
             units=self.units,
             weather_dim=self.input_output_dim,
             forcing_dim=self.input_dim,
-            step_duration=self.period.step_duration,
+            pred_step=self.period.forecast_step,
             statics=self.statics,
             stats=self.stats,
             diff_stats=self.diff_stats,
@@ -662,19 +660,28 @@ class DatasetABC(Dataset):
         print("Start creating samples...")
         stats = self.stats if self.settings.standardize else None
 
-        all_timestamps = []
-        for t0 in tqdm(self.period.validtimes):
-            all_timestamps += self.accessor.valid_timestamp(
+        timestamps = []
+        for t0, leadtime in tqdm(self.period.available_t0_and_leadtimes):
+            valid_timestamp = self.accessor.valid_timestamp(
                 t0,
                 self.settings.num_input_steps,
                 self.settings.num_pred_steps,
-                self.period.step_duration,
-                self.period.leadtimes,
+                self.period.forecast_step,
+                leadtime,
             )
+            if valid_timestamp:
+                timesteps = [
+                    delta * self.period.forecast_step + leadtime
+                    for delta in range(
+                        -self.settings.num_input_steps + 1,
+                        self.settings.num_pred_steps + 1,
+                    )
+                ]
+                timestamps.append(Timestamps(datetime=t0, timedeltas=timesteps))
 
         samples = []
         invalid_samples = 0
-        for ts in all_timestamps:
+        for ts in timestamps:
             for member in self.settings.members:
                 sample = Sample(
                     ts,
