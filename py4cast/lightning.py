@@ -286,19 +286,7 @@ class AutoRegressiveLightning(LightningModule):
 
     def setup(self, stage=None):
         self.configure_optimizers()
-        print(self.trainer.logger.version)
-        if isinstance(self.trainer.logger.version, int):
-            self.save_path = (
-                Path(self.trainer.logger.save_dir)
-                / Path(self.trainer.logger.name)
-                / f"version_{self.trainer.logger.version}"
-            )
-        else:
-            self.save_path = (
-                Path(self.trainer.logger.save_dir)
-                / Path(self.trainer.logger.name)
-                / Path(self.trainer.logger.version)
-            )
+        self.save_path = Path(self.trainer.logger.log_dir)
 
         max_pred_step = self.num_pred_steps_val_test - 1
         if self.logging_enabled:
