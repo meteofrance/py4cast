@@ -5,7 +5,7 @@ from copy import deepcopy
 from dataclasses import dataclass
 from functools import cached_property
 from pathlib import Path
-from typing import Dict, List, Tuple, Union
+from typing import Dict, List, Literal, Tuple, Union
 
 import einops
 import matplotlib
@@ -27,6 +27,7 @@ from py4cast.datasets.base import DatasetInfo, ItemBatch, NamedTensor, Statics
 from py4cast.losses import ScaledLoss, WeightedLoss
 from py4cast.metrics import MetricACC, MetricPSDK, MetricPSDVar
 from py4cast.models import build_model_from_settings, get_model_kls_and_settings
+from py4cast.models import registry as model_registry
 from py4cast.plots import (
     PredictionEpochPlot,
     PredictionTimestepPlot,
@@ -159,10 +160,10 @@ class AutoRegressiveLightning(LightningModule):
         dataset_info,
         len_train_loader: int,
         # non-linked args
-        model_name: str,
+        model_name: Literal[tuple(model_registry.keys())],
         model_conf: Path | None,
         lr: float,
-        loss_name: str,
+        loss_name: Literal["mse", "mae"],
         num_inter_steps: int,
         num_samples_to_plot: int,
         training_strategy: str,
@@ -213,6 +214,11 @@ class AutoRegressiveLightning(LightningModule):
 
         # Keeping track of grid shape
         self.grid_shape = statics.grid_shape
+        # For example plotting
+        self.plotted_examples = 0
+
+        # For storing spatial loss maps during evaluation
+        self.spatial_loss_maps = []
 
         # class variables to log loss during training, for tensorboad custom scalar
         self.training_step_losses = []
@@ -282,9 +288,17 @@ class AutoRegressiveLightning(LightningModule):
         self.configure_optimizers()
         print(self.trainer.logger.version)
         if isinstance(self.trainer.logger.version, int):
-            self.save_path = Path(self.trainer.logger.save_dir) / Path(self.trainer.logger.name) / f"version_{self.trainer.logger.version}"
-        else :
-            self.save_path = Path(self.trainer.logger.save_dir) / Path(self.trainer.logger.name) / Path(self.trainer.logger.version)
+            self.save_path = (
+                Path(self.trainer.logger.save_dir)
+                / Path(self.trainer.logger.name)
+                / f"version_{self.trainer.logger.version}"
+            )
+        else:
+            self.save_path = (
+                Path(self.trainer.logger.save_dir)
+                / Path(self.trainer.logger.name)
+                / Path(self.trainer.logger.version)
+            )
 
         max_pred_step = self.num_pred_steps_val_test - 1
         if self.logging_enabled:
