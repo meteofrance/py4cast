@@ -108,7 +108,10 @@ class TitanAccessor(DataAccessor):
 2. Your DataAccessor **MUST** implement all the abstract methods from **DataAccessor**.
    * `load_grid_info`, `load_param_info`, `get_weight_per_level` : deciding how to load metadata
    * `get_dataset_path`, `cache_dir`, `get_filepath` : deciding how to describe directories and files in your architecture.
-   * `load_data_from_disk`, `exists`, `valid_timestamps` : used to verify the validity of a sample and to load individual data chunks from the disk.
+   * `load_data_from_disk`, `exists` : used to verify the validity of a sample and to load individual data chunks from the disk.
+
+    Please override the `optional_check_before_exists()` in your custom DataAccessor() if you want to avoid unecessary file checking for an optimisation purpose.
+
 3. This code must be included in a submodule under the py4cast.datasets module, with :
    * the `__init__.py` file containing the definition of the DataAccessor class
    * additional files, such as `settings.py` (defining constants such as directories) or `metadata.yaml` (providing general information on the dataset). While this is up to the user, we recommend following examples from `titan`(reanalysis dataset) or from `poesy` (ensemble reforecast dataset).
