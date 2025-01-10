@@ -1,7 +1,7 @@
 import datetime as dt
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Literal
+from typing import List, Literal, Union
 
 import numpy as np
 
@@ -125,34 +125,35 @@ class PoesyAccessor(DataAccessor):
             return False
         return True
 
+    def valid_timestamp(
+        t0: dt.datetime,
+        num_input_steps: int,
+        num_pred_steps: int,
+        pred_step: dt.timedelta,
+        leadtime: Union[dt.timedelta, None],
+    ) -> bool:
+        """
+        Return True if the dataset contains the data for t0 + leadtime. Else return False.
 
-def valid_timestamp(
-    t0: dt.datetime,
-    num_input_steps: int,
-    num_pred_steps: int,
-    step_duration: dt.timedelta,
-    leadtimes: List[dt.timedelta],
-) -> List[Timestamps]:
-    """
-    Return the list of all avalaible Timestamps for t0.
-    Reminder:
-    Poesy leadtimes are between +1h and +45h.
-    """
-    limits = METADATA["TERMS"]
+        Args:
+            t0 (dt.datetime): valid time of the observation or run date (in case of dataset that contain multiple forecasts).
+            num_input_steps (int,): number of input steps.
+            num_pred_steps (int,): number of prediction steps.
+            pred_step (dt.timedelta): duration of the prediction step.
+            leadtime (dt.timedelta): leadtime for wich we want to know if it is a valid timestamp.
 
-    valid_times_one_run = [t0 + leadtime for leadtime in leadtimes]
-    timesteps = [
-        delta * step_duration
-        for delta in range(-num_input_steps + 1, num_pred_steps + 1)
-    ]
+        Reminder:
+            Poesy leadtimes are between +1h and +45h.
+        """
+        limits = METADATA["TERMS"]
 
-    timestamps = []
-    for t in valid_times_one_run:
-        min_validtime, max_validtime = t - timesteps[0], t + timesteps[-1]
+        validtime = t0 + leadtime
+
+        min_validtime = validtime - (num_input_steps - 1) * pred_step
+        max_validtime = validtime + (num_pred_steps) * pred_step
         if min_validtime - t0 < dt.timedelta(hours=int(limits["start"])):
-            continue
+            return False
         if max_validtime - t0 > dt.timedelta(hours=int(limits["end"])):
-            continue
-        timestamps.append(Timestamps(datetime=t, timesteps=timesteps))
+            return False
 
-    return timestamps
+        return True

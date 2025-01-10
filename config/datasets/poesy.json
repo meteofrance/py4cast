@@ -1,19 +1,28 @@
 {
     "periods": {
         "train": {
-            "start": 2020061521,
-            "end": 2021061521,
-            "step": 24
+            "start": 20200615,
+            "end": 20210615,
+            "fcst_daily_hours": [75600],
+            "fcst_leadtime_start_in_sec": 3600,
+            "fcst_leadtime_end_in_sec": 162000,
+            "fcst_leadtime_step_in_sec": 3600
         },
         "test": {
-            "start": 2021061621,
-            "end": 2021071621,
-            "step": 24
+            "start": 20210616,
+            "end": 20210716,
+            "fcst_daily_hours": [75600],
+            "fcst_leadtime_start_in_sec": 3600,
+            "fcst_leadtime_end_in_sec": 162000,
+            "fcst_leadtime_step_in_sec": 3600
         },
         "valid": {
-            "start": 2021071721,
-            "end": 2021111521,
-            "step": 24
+            "start": 20210717,
+            "end": 20211115,
+            "fcst_daily_hours": [75600],
+            "fcst_leadtime_start_in_sec": 3600,
+            "fcst_leadtime_end_in_sec": 162000,
+            "fcst_leadtime_step_in_sec": 3600
         }
     },
     "grid":{
