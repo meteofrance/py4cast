@@ -22,16 +22,16 @@ class Period:
     # first day of the period (included)
     # each day of the period will be separated from start by an integer multiple of 24h
     # note that the start date valid hour ("t0") may not be 00h00
-    start: dt.datetime
+    start: str
     # last day of the period (included)
-    end: dt.datetime
-    # In hours, step btw the t0 of consecutive terms
-    step_duration: int
-    name: str
+    end: str
+    # timedelta, step btw the t0 of consecutive terms
+    step_duration: dt.timedelta
+    name: Literal["train", "valid", "test"]
     # first term (= time delta wrt to a date t0) that is admissible
-    term_start: int = 0
+    term_start: dt.timedelta = dt.timedelta(hours=0)
     # last term (= time delta wrt to a date start) that is admissible
-    term_end: int = 23
+    term_end: dt.timedelta = dt.timedelta(hours=23)
 
     def __post_init__(self):
         self.start = np.datetime64(dt.datetime.strptime(str(self.start), "%Y%m%d%H"))
@@ -39,7 +39,7 @@ class Period:
 
     @property
     def terms_list(self) -> np.array:
-        return np.arange(self.term_start, self.term_end + 1, self.step_duration)
+        return np.arange(self.term_start, self.term_end, self.step_duration)
 
     @property
     def date_list(self) -> np.array:

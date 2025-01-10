@@ -677,9 +677,9 @@ class DatasetABC(Dataset):
             for term in self.period.terms_list:
                 t0 = date + dt.timedelta(hours=int(term))
                 validity_times = [
-                    t0 + dt.timedelta(hours=ts) for ts in sample_timesteps
+                    t0 + ts for ts in sample_timesteps
                 ]
-                terms = [dt.timedelta(hours=int(t + term)) for t in sample_timesteps]
+                terms = [term + t for t in sample_timesteps]
 
                 timestamps = Timestamps(
                     datetime=date,
