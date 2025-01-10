@@ -107,7 +107,7 @@ class PoesyAccessor(DataAccessor):
         arr = data_array[
             param.grid.subdomain[0] : param.grid.subdomain[1],
             param.grid.subdomain[2] : param.grid.subdomain[3],
-            (timestamps.timedeltas / dt.timedelta(hours=1)).astype(int) - 1,
+            (np.array(timestamps.timedeltas) / dt.timedelta(hours=1)).astype(int) - 1,
             member,
         ].transpose([2, 0, 1])
 
