@@ -304,11 +304,13 @@ class AutoRegressiveLightning(LightningModule):
         return str_to_dtype[self.trainer.precision]
 
     def print_summary_model(self):
+        self.dataset_info.summary()
         print(f"Number of input_steps : {self.num_input_steps}")
         print(f"Number of pred_steps (training) : {self.num_pred_steps_train}")
         print(f"Number of pred_steps (test/val) : {self.num_pred_steps_val_test}")
         print(f"Number of intermediary steps :{self.num_inter_steps}")
         print(f"Training strategy :{self.training_strategy}")
+        print(f"Model step duration : {self.dataset_info.step_duration /self.num_inter_steps}")
         print(f"Model conf {self.model_conf}")
         print("---------------------")
         print(f"Loss {self.loss}")
