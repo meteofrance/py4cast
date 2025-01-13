@@ -147,12 +147,6 @@ parser.add_argument(
     help="Number of batches loaded in advance by each worker",
 )
 parser.add_argument(
-    "--no_log",
-    action=BooleanOptionalAction,
-    default=False,
-    help="When activated, log are not stored and models are not saved. Use in dev mode.",
-)
-parser.add_argument(
     "--mlflow_log",
     action=BooleanOptionalAction,
     default=False,
@@ -163,12 +157,6 @@ parser.add_argument(
     action=BooleanOptionalAction,
     default=False,
     help="When activated, reduce number of epoch and steps.",
-)
-parser.add_argument(
-    "--use_lr_scheduler",
-    action=BooleanOptionalAction,
-    default=False,
-    help="When activated, uses OneCycle LR scheduler.",
 )
 parser.add_argument(
     "--load_model_ckpt",
