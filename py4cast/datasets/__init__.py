@@ -81,7 +81,6 @@ def get_datasets(
 
     return DatasetABC.from_json(
         accessor_kls,
-        name,
         config_file,
         num_input_steps,
         num_pred_steps_train,

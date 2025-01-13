@@ -66,11 +66,10 @@ def prepare(
 
 
 @app.command()
-def describe(path_config: Path = DEFAULT_CONFIG, dataset_name: str = "poesy"):
+def describe(path_config: Path = DEFAULT_CONFIG):
     """Describes Poesy."""
     train_ds, _, _ = DatasetABC.from_json(
         PoesyAccessor,
-        dataset_name=dataset_name,
         fname=path_config,
         num_input_steps=2,
         num_pred_steps_train=1,
@@ -83,11 +82,10 @@ def describe(path_config: Path = DEFAULT_CONFIG, dataset_name: str = "poesy"):
 
 
 @app.command()
-def plot(path_config: Path = DEFAULT_CONFIG, dataset_name: str = "poesy"):
+def plot(path_config: Path = DEFAULT_CONFIG):
     """Plots a png and a gif for one sample."""
     train_ds, _, _ = DatasetABC.from_json(
         PoesyAccessor,
-        dataset_name=dataset_name,
         fname=path_config,
         num_input_steps=2,
         num_pred_steps_train=1,
@@ -102,13 +100,10 @@ def plot(path_config: Path = DEFAULT_CONFIG, dataset_name: str = "poesy"):
 
 
 @app.command()
-def speedtest(
-    path_config: Path = DEFAULT_CONFIG, dataset_name: str = "poesy", n_iter: int = 5
-):
+def speedtest(path_config: Path = DEFAULT_CONFIG, n_iter: int = 5):
     print("Speed test:")
     train_ds, _, _ = DatasetABC.from_json(
         PoesyAccessor,
-        dataset_name=dataset_name,
         fname=path_config,
         num_input_steps=2,
         num_pred_steps_train=1,

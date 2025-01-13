@@ -128,7 +128,6 @@ def describe(path_config: Path = DEFAULT_CONFIG, dataset_name: str = "titan"):
     """Describes Titan."""
     train_ds, _, _ = DatasetABC.from_json(
         TitanAccessor,
-        dataset_name=dataset_name,
         fname=path_config,
         num_input_steps=2,
         num_pred_steps_train=1,
@@ -145,7 +144,6 @@ def plot(path_config: Path = DEFAULT_CONFIG, dataset_name: str = "titan"):
     """Plots a png and a gif for one sample."""
     train_ds, _, _ = DatasetABC.from_json(
         TitanAccessor,
-        dataset_name=dataset_name,
         fname=path_config,
         num_input_steps=2,
         num_pred_steps_train=1,
@@ -167,7 +165,6 @@ def speedtest(
     """Makes a loading speed test."""
     train_ds, _, _ = DatasetABC.from_json(
         TitanAccessor,
-        dataset_name=dataset_name,
         fname=path_config,
         num_input_steps=2,
         num_pred_steps_train=1,
