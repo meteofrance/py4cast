@@ -18,8 +18,10 @@ from mfai.torch.models.utils import (
     features_last_to_second,
     features_second_to_last,
 )
+import mlflow.pytorch
 from torchinfo import summary
 from transformers import get_cosine_schedule_with_warmup
+from mlflow.models.signature import infer_signature
 
 from py4cast.datasets import get_datasets
 from py4cast.datasets.base import DatasetInfo, ItemBatch, NamedTensor, Statics
@@ -163,7 +165,7 @@ class AutoRegressiveLightning(LightningModule):
         model_conf: Path | None = None,
         lr: float = 1e-3,
         loss_name: Literal["mse", "mae"] = "mse",
-        num_inter_steps: int = 0,
+        num_inter_steps: int = 1,
         training_strategy: Literal["diff_ar", "scaled_ar"] = "diff_ar",
         channels_last: bool = False,
         num_samples_to_plot: int = 1,
@@ -295,8 +297,8 @@ class AutoRegressiveLightning(LightningModule):
 
     def setup(self, stage=None):
         self.configure_optimizers()
-        self.save_path = Path(self.trainer.logger.log_dir)
         self.logger.log_hyperparams(self.hparams, metrics={"val_mean_loss": 0.0})
+        self.save_path = Path(self.trainer.logger.log_dir)
         max_pred_step = self.num_pred_steps_val_test - 1
         self.rmse_psd_plot_metric = MetricPSDVar(pred_step=max_pred_step)
         self.psd_plot_metric = MetricPSDK(self.save_path, pred_step=max_pred_step)
@@ -363,7 +365,6 @@ class AutoRegressiveLightning(LightningModule):
 
     def on_fit_start(self):
         self.log_hparams_tb()
-
 
     def configure_optimizers(self):
         if self.optimizer == "Adam":
@@ -667,6 +668,23 @@ class AutoRegressiveLightning(LightningModule):
         outputs = self.training_step_losses
         self._shared_epoch_end(outputs, "train")
         self.training_step_losses.clear()  # free memory
+
+    def on_train_end(self):
+        if self.mlflow_logger:
+
+            # Get random sample to infer the signature of the model
+            dataloader = self.trainer.datamodule.test_dataloader()
+            data = next(iter(dataloader))
+            signature = infer_signature(
+                data.inputs.tensor.detach().numpy(), data.outputs.tensor.detach().numpy()
+            )
+
+            # Manually log the trained model in Mlflow style with its signature
+            run_id = self.mlflow_logger.version
+            with mlflow.start_run(run_id=run_id):
+                mlflow.pytorch.log_model(
+                    pytorch_model=self.trainer.model, artifact_path="model", signature=signature
+                )
 
     def on_validation_start(self):
         """
