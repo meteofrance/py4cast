@@ -89,7 +89,7 @@ class Period:
         """
         Return a list of all possible couples of (t0, leadtime).
         """
-        if self.obs_step is not None:
+        if self.obs_step is not None:  # continuous dataset case
             list_t0 = np.arange(
                 self.start,
                 self.end + dt.timedelta(days=1),
@@ -97,7 +97,7 @@ class Period:
                 dtype="datetime64[s]",
             ).tolist()
             list_leadtimes = [dt.timedelta(seconds=0)]
-        else:
+        else:  # non-continuous dataset
             list_days = np.arange(
                 self.start,
                 self.end + dt.timedelta(days=1),
