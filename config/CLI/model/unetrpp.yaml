@@ -7,7 +7,7 @@ model:
   num_samples_to_plot: 1
   training_strategy: diff_ar # diff_ar or scaled_ar
   channels_last: False # True: B W H C
-  optimizer: Adam # name of the optimizer (adam, SGD)
+  optimizer: AdamW # name of the optimizer (adam, SGD)
   weight_decay: 0.001 # deepNN : 0.0001 à 0.1, linear regression : 0.001 à 0.1, classification: 0.01 à 0.1
   lr_scheduler: cosine_scheduler # name of the scheduler (StepLR, OneCycleLR, cosine_scheduler)
   #useful if StepLR is used

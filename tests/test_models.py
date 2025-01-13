@@ -222,7 +222,7 @@ def test_lightning_fit_inference():
             num_samples_to_plot=1,
             training_strategy="diff_ar",
             channels_last=False,
-            optimizer="Adam",
+            optimizer="AdamW",
             weight_decay=0.001,
             lr_scheduler="cosine_scheduler",
             StepLR_step_size=10,

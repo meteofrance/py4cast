@@ -169,7 +169,7 @@ class AutoRegressiveLightning(LightningModule):
         training_strategy: Literal["diff_ar", "scaled_ar"] = "diff_ar",
         channels_last: bool = False,
         num_samples_to_plot: int = 1,
-        optimizer: str = "adam", # name of the optimizer (adam, SGD)
+        optimizer: str = "Adam", # name of the optimizer (adam, SGD)
         weight_decay: float = 0.001, # deepNN : 0.0001 à 0.1, linear regression : 0.001 à 0.1, classification: 0.01 à 0.1
         lr_scheduler: str = "cosine_scheduler", # name of the scheduler (StepLR, OneCycleLR, cosine_scheduler)
         #useful if StepLR is used
@@ -367,8 +367,8 @@ class AutoRegressiveLightning(LightningModule):
         self.log_hparams_tb()
 
     def configure_optimizers(self):
-        if self.optimizer == "Adam":
-            optimizer = torch.optim.Adam(self.parameters(), lr=self.lr, weight_decay=self.weight_decay)
+        if self.optimizer == "AdamW":
+            optimizer = torch.optim.AdamW(self.parameters(), lr=self.lr, weight_decay=self.weight_decay)
         elif self.optimizer == "SGD":
             optimizer = torch.optim.SGD(self.parameters(), lr=self.lr, weight_decay=self.weight_decay)
         else:
