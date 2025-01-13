@@ -111,12 +111,12 @@ def prepare(
         test_ds.settings.standardize = True
 
     if compute_stats:
-        if hasattr(train_ds, sample_list):
+        if hasattr(train_ds, "sample_list"):
             del train_ds.sample_list
         train_ds.settings.standardize = False
         print("Computing stats on each parameter...")
         cds.compute_parameters_stats(train_ds)
-        if hasattr(train_ds, sample_list):
+        if hasattr(train_ds, "sample_list"):
             del train_ds.sample_list
         train_ds.settings.standardize = True
         print("Computing time stats on each parameters, between 2 timesteps...")

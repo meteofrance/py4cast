@@ -58,7 +58,7 @@ def prepare(
 
         print("Computing time stats on each parameters, between 2 timesteps...")
         train_ds.settings.standardize = True
-        if hasattr(train_ds.sample_list):
+        if hasattr(train_ds, "sample_list"):
             del train_ds.sample_list
         cds.compute_time_step_stats(train_ds)
 
