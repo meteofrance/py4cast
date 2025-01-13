@@ -6,7 +6,7 @@ from collections import namedtuple
 from dataclasses import dataclass, field
 from functools import cached_property
 from pathlib import Path
-from typing import Any, Callable, List, Literal, Optional, Tuple, Iterable, Union
+from typing import Any, Callable, Iterable, List, Literal, Optional, Tuple, Union
 
 import cartopy
 import einops
