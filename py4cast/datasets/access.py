@@ -478,9 +478,10 @@ class DataAccessor(ABC):
         Consumed by the `Param` interface object.
         """
 
+    @classmethod
     @abstractmethod
     def get_filepath(
-        self,
+        cls,
         dataset_name: str,
         param: WeatherParam,
         timestamps: Timestamps,
@@ -490,9 +491,10 @@ class DataAccessor(ABC):
         Return a path to retrieve a given parameter at from a dataset
         """
 
+    @classmethod
     @abstractmethod
     def load_data_from_disk(
-        self,
+        cls,
         dataset_name: str,  # name of the dataset or dataset version
         param: WeatherParam,  # specific parameter (2D field associated to a grid)
         timestamps: Timestamps,  # specific timestamp at which to load the field

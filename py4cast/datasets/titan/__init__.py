@@ -87,8 +87,9 @@ class TitanAccessor(DataAccessor):
         subdataset_name = f"{name}_{grid.name}_{str_subdomain}"
         return SCRATCH_PATH / "subdatasets" / subdataset_name
 
+    @classmethod
     def get_filepath(
-        self,
+        cls,
         ds_name: str,
         param: WeatherParam,
         date: dt.datetime,
@@ -103,13 +104,13 @@ class TitanAccessor(DataAccessor):
             folder = SCRATCH_PATH / "grib" / date.strftime(FORMATSTR)
             return folder / param.grib_name
         else:
-            npy_path = self.get_dataset_path(ds_name, param.grid) / "data"
-            filename = f"{self.parameter_namer(param)}.npy"
+            npy_path = cls.get_dataset_path(ds_name, param.grid) / "data"
+            filename = f"{cls.parameter_namer(param)}.npy"
             return npy_path / date.strftime(FORMATSTR) / filename
 
     @classmethod
     def load_data_from_disk(
-        self,
+        cls,
         ds_name: str,
         param: WeatherParam,
         timestamps: Timestamps,
@@ -123,7 +124,7 @@ class TitanAccessor(DataAccessor):
         dates = timestamps.validity_times
         arr_list = []
         for date in dates:
-            data_path = self.get_filepath(ds_name, param, date, file_format)
+            data_path = cls.get_filepath(ds_name, param, date, file_format)
             if file_format == "grib":
                 arr, lons, lats = load_data_grib(param, data_path)
                 arr = fit_to_grid(arr, lons, lats)
