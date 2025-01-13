@@ -655,7 +655,7 @@ class DatasetABC(Dataset):
                 self.settings.num_pred_steps,
                 self.period.forecast_step,
                 leadtime,
-                ):
+            ):
                 timesteps = [
                     delta * self.period.forecast_step + leadtime
                     for delta in range(
@@ -667,7 +667,9 @@ class DatasetABC(Dataset):
 
         samples = []
         invalid_samples = 0
-        for ts in tqdm(timestamps, desc=f"Checking samples of '{self.period.name}' period"):
+        for ts in tqdm(
+            timestamps, desc=f"Checking samples of '{self.period.name}' period"
+        ):
             for member in self.settings.members:
                 sample = Sample(
                     ts,
@@ -870,7 +872,9 @@ class DatasetABC(Dataset):
         )
 
         test_period = Period(**conf["periods"]["test"], name="test")
-        test_ds = cls(name, grid, test_period, param_list, valid_settings, accessor_kls())
+        test_ds = cls(
+            name, grid, test_period, param_list, valid_settings, accessor_kls()
+        )
 
         return train_ds, valid_ds, test_ds
 

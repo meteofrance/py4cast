@@ -1,7 +1,7 @@
 import datetime as dt
 from functools import lru_cache
 from pathlib import Path
-from typing import Callable, List, Literal, Union
+from typing import Callable, List, Literal
 
 import numpy as np
 import xarray as xr
