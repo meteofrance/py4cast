@@ -21,9 +21,9 @@ class DummyAccessor(DataAccessor):
     print("importing DummyAccessor automatically creates directory and dummy config")
     config = {
         "periods": {
-            "train": {"start": 2023010100, "end": 2023010107, "step_duration": 1},
-            "valid": {"start": 2023010108, "end": 2023010115, "step_duration": 1},
-            "test": {"start": 2023010116, "end": 2023010122, "step_duration": 1},
+            "train": {"start": 20230101, "end": 20230101, "step_duration": 3600},
+            "valid": {"start": 20230101, "end": 20230101, "step_duration": 3600},
+            "test": {"start": 20230101, "end": 20230101, "step_duration": 3600},
         },
         "settings": {"standardize": "true", "file_format": "npy"},
         "grid": {
