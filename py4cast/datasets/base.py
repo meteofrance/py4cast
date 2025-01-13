@@ -895,7 +895,6 @@ class DatasetABC(Dataset):
     def from_json(
         cls,
         accessor_kls: Type[DataAccessor],
-        dataset_name: str,
         fname: Path,
         num_input_steps: int,
         num_pred_steps_train: int,
@@ -915,7 +914,7 @@ class DatasetABC(Dataset):
                 conf = merge_dicts(conf, config_override)
         return cls.from_dict(
             accessor_kls,
-            dataset_name,
+            fname.stem,
             conf,
             num_input_steps,
             num_pred_steps_train,
