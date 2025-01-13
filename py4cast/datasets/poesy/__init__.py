@@ -96,10 +96,6 @@ class PoesyAccessor(DataAccessor):
         member: int,
         file_format: str = "npy",
     ) -> np.array:
-        """
-        date : Date of file.
-        term : Position of leadtimes in file.
-        """
         data_array = np.load(
             self.get_filepath(ds_name, param, timestamps.datetime), mmap_mode="r"
         )
@@ -137,11 +133,12 @@ class PoesyAccessor(DataAccessor):
         Return True if the dataset contains the data for t0 + leadtime. Else return False.
 
         Args:
-            t0 (dt.datetime): valid time of the observation or run date (in case of dataset that contain multiple forecasts).
-            num_input_steps (int,): number of input steps.
-            num_pred_steps (int,): number of prediction steps.
-            pred_step (dt.timedelta): duration of the prediction step.
-            leadtime (dt.timedelta): leadtime for wich we want to know if it is a valid timestamp.
+            - t0 (dt.datetime): valid time of the observation or run date (in case of dataset that contain
+            multiple forecasts).
+            - num_input_steps (int,): number of input steps.
+            - num_pred_steps (int,): number of prediction steps.
+            - pred_step (dt.timedelta): duration of the prediction step.
+            - leadtime (dt.timedelta): leadtime for wich we want to know if it is a valid timestamp.
 
         Reminder:
             Poesy leadtimes are between +1h and +45h.

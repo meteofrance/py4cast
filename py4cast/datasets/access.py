@@ -417,11 +417,12 @@ class DataAccessor(ABC):
         for an optimisation purpose.
 
         Args:
-            t0 (dt.datetime): valid time of the observation or run date (in case of dataset that contain multiple forecasts).
-            num_input_steps (int,): number of input steps.
-            num_pred_steps (int,): number of prediction steps.
-            pred_step (dt.timedelta): duration of the prediction step.
-            leadtime (dt.timedelta): leadtime for wich we want to know if it is a valid timestamp.
+            - t0 (dt.datetime): valid time of the observation or run date (in case of dataset that contain
+            multiple forecasts).
+            - num_input_steps (int,): number of input steps.
+            - num_pred_steps (int,): number of prediction steps.
+            - pred_step (dt.timedelta): duration of the prediction step.
+            - leadtime (dt.timedelta): leadtime for wich we want to know if it is a valid timestamp.
         """
         return True
 
