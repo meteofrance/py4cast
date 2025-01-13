@@ -32,9 +32,6 @@ class Py4castLightningCLI(LightningCLI):
             "model.dataset_name",
         )
         parser.link_arguments(
-            "data.train_dataset_info", "model.dataset_info", apply_on="instantiate"
-        )
-        parser.link_arguments(
             "data.batch_size",
             "model.batch_size",
         )
@@ -51,7 +48,18 @@ class Py4castLightningCLI(LightningCLI):
             "model.num_pred_steps_val_test",
         )
         parser.link_arguments(
-            "data.len_train_dl", "model.len_train_loader", apply_on="instantiate"
+            "data.dataset_conf",
+            "model.dataset_conf",
+        )
+        parser.link_arguments(
+            "data.train_dataset_info",
+            "model.dataset_info",
+            apply_on="instantiate",
+        )
+        parser.link_arguments(
+            "data.len_train_dl",
+            "model.len_train_loader",
+            apply_on="instantiate",
         )
 
 

@@ -1,4 +1,3 @@
-import getpass
 import shutil
 import subprocess
 from copy import deepcopy
@@ -38,7 +37,6 @@ from py4cast.utils import str_to_dtype
 
 # learning rate scheduling period in steps (update every nth step)
 LR_SCHEDULER_PERIOD: int = 10
-
 # PNG plots period in epochs. Plots are made, logged and saved every nth epoch.
 PLOT_PERIOD: int = 10
 
@@ -51,16 +49,16 @@ class PlDataModule(LightningDataModule):
 
     def __init__(
         self,
-        dataset_name: str,
-        num_input_steps: int,
-        num_pred_steps_train: int,
-        num_pred_steps_val_test: int,
-        batch_size: int = 1,
+        dataset_name: str = "dummy",
+        num_input_steps: int = 1,
+        num_pred_steps_train: int = 1,
+        num_pred_steps_val_test: int = 1,
+        batch_size: int = 2,
         num_workers: int = 1,
         prefetch_factor: int | None = None,
         pin_memory: bool = False,
-        dataset_conf: Union[Path, None] = None,
-        config_override: Union[Dict, None] = None,
+        dataset_conf: Path | None = None,
+        config_override: Dict | None = None,
     ):
         super().__init__()
         self.num_input_steps = num_input_steps
@@ -151,26 +149,26 @@ class AutoRegressiveLightning(LightningModule):
 
     def __init__(
         self,
-        dataset_name: str,
-        dataset_conf: Path,
-        dataset_info,
-        batch_size: int,
-        model_conf: Union[Path, None] = None,
+        # args linked from trainer and datamodule
+        dataset_info,  # Don't put type hint here or CLI doesn't work
+        len_train_loader: int,
+        dataset_name: str = "dummy",
+        dataset_conf: Path | None = None,  # TO DELETE ?
+        num_input_steps: int = 1,
+        num_pred_steps_train: int = 1,
+        num_pred_steps_val_test: int = 1,
+        batch_size: int = 2,
+        # non-linked args
         model_name: Literal[tuple(model_registry.keys())] = "HalfUNet",
-        lr: float = 0.1,
+        model_conf: Path | None = None,
+        lr: float = 1e-3,
         loss_name: Literal["mse", "mae"] = "mse",
-        num_input_steps: int = 2,
-        num_pred_steps_train: int = 2,
-        num_inter_steps: int = 1,  # Number of intermediary steps (without any data),
-        num_pred_steps_val_test: int = 2,
-        num_samples_to_plot: int = 1,
-        training_strategy: str = "diff_ar",
-        len_train_loader: int = 1,
-        save_path: Path = None,
+        num_inter_steps: int = 0,
+        training_strategy: Literal["diff_ar", "scaled_ar"] = "diff_ar",
         use_lr_scheduler: bool = False,
-        precision: str = "bf16",
         no_log: bool = False,
         channels_last: bool = False,
+        num_samples_to_plot: int = 1,
         *args,
         **kwargs,
     ):
@@ -189,9 +187,7 @@ class AutoRegressiveLightning(LightningModule):
         self.num_samples_to_plot = num_samples_to_plot
         self.training_strategy = training_strategy
         self.len_train_loader = len_train_loader
-        self.save_path = save_path
         self.use_lr_scheduler = use_lr_scheduler
-        self.precision = precision
         self.no_log = no_log
         self.channels_last = channels_last
 
@@ -219,7 +215,6 @@ class AutoRegressiveLightning(LightningModule):
 
         # Keeping track of grid shape
         self.grid_shape = statics.grid_shape
-
         # For example plotting
         self.plotted_examples = 0
 
@@ -287,35 +282,37 @@ class AutoRegressiveLightning(LightningModule):
             self.loss = WeightedLoss("L1Loss", reduction="none")
         else:
             raise TypeError(f"Unknown loss function: {loss_name}")
-
         self.loss.prepare(self, statics.interior_mask, dataset_info)
 
-        save_path = self.save_path
+        exp_summary(self)
+
+    def setup(self, stage=None):
+        self.configure_optimizers()
+        self.save_path = Path(self.trainer.logger.log_dir)
+        self.logger.log_hyperparams(self.hparams, metrics={"val_mean_loss": 0.0})
         max_pred_step = self.num_pred_steps_val_test - 1
         if self.logging_enabled:
             self.rmse_psd_plot_metric = MetricPSDVar(pred_step=max_pred_step)
-            self.psd_plot_metric = MetricPSDK(save_path, pred_step=max_pred_step)
-            self.acc_metric = MetricACC(dataset_info)
-
-        exp_summary(self)
+            self.psd_plot_metric = MetricPSDK(self.save_path, pred_step=max_pred_step)
+            self.acc_metric = MetricACC(self.dataset_info)
 
     @property
     def dtype(self):
         """
         Return the appropriate torch dtype for the desired precision in hparams.
         """
-        return str_to_dtype[self.precision]
+        return str_to_dtype[self.trainer.precision]
 
     def print_summary_model(self):
-        # self.dataset_info.summary()
+        self.dataset_info.summary()
         print(f"Number of input_steps : {self.num_input_steps}")
         print(f"Number of pred_steps (training) : {self.num_pred_steps_train}")
         print(f"Number of pred_steps (test/val) : {self.num_pred_steps_val_test}")
         print(f"Number of intermediary steps :{self.num_inter_steps}")
         print(f"Training strategy :{self.training_strategy}")
-        # print(
-        #     f"Model step duration : {self.dataset_info.step_duration /self.num_inter_steps}"
-        # )
+        print(
+            f"Model step duration : {self.dataset_info.step_duration /self.num_inter_steps}"
+        )
         print(f"Model conf {self.model_conf}")
         print("---------------------")
         print(f"Loss {self.loss}")
@@ -339,9 +336,6 @@ class AutoRegressiveLightning(LightningModule):
     @rank_zero_only
     def log_hparams_tb(self):
         if self.logging_enabled and self.logger:
-            # Log hparams in tensorboard hparams window
-            dict_log = {"username": getpass.getuser()}
-            self.logger.log_hyperparams(dict_log, metrics={"val_mean_loss": 0.0})
             # Save model & dataset conf as files
             if self.dataset_conf is not None:
                 shutil.copyfile(self.dataset_conf, self.save_path / "dataset_conf.json")
@@ -683,20 +677,19 @@ class AutoRegressiveLightning(LightningModule):
             l1_loss = ScaledLoss("L1Loss", reduction="none")
             l1_loss.prepare(self, self.interior_mask, self.dataset_info)
             metrics = {"mae": l1_loss}
-            save_path = self.save_path
             self.valid_plotters = [
                 StateErrorPlot(metrics, prefix="Validation"),
                 PredictionTimestepPlot(
                     num_samples_to_plot=1,
                     num_features_to_plot=4,
                     prefix="Validation",
-                    save_path=save_path,
+                    save_path=self.save_path,
                 ),
                 PredictionEpochPlot(
                     num_samples_to_plot=1,
                     num_features_to_plot=4,
                     prefix="Validation",
-                    save_path=save_path,
+                    save_path=self.save_path,
                 ),
             ]
 
@@ -800,16 +793,14 @@ class AutoRegressiveLightning(LightningModule):
                 loss.prepare(self, self.interior_mask, self.dataset_info)
                 metrics[alias] = loss
 
-            save_path = self.save_path
-
             self.test_plotters = [
-                StateErrorPlot(metrics, save_path=save_path),
+                StateErrorPlot(metrics, save_path=self.save_path),
                 SpatialErrorPlot(),
                 PredictionTimestepPlot(
                     num_samples_to_plot=self.num_samples_to_plot,
                     num_features_to_plot=4,
                     prefix="Test",
-                    save_path=save_path,
+                    save_path=self.save_path,
                 ),
             ]
 

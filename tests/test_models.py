@@ -164,9 +164,27 @@ def test_lightning_fit_inference():
     )
 
     train_ds, val_ds, test_ds = datasets
-    train_loader = train_ds.torch_dataloader(batch_size=BATCH_SIZE, num_workers=2)
-    val_loader = val_ds.torch_dataloader(batch_size=BATCH_SIZE, num_workers=2)
-    test_loader = test_ds.torch_dataloader(batch_size=BATCH_SIZE, num_workers=2)
+    train_loader = train_ds.torch_dataloader(
+        batch_size=BATCH_SIZE,
+        num_workers=2,
+        shuffle=True,
+        prefetch_factor=None,
+        pin_memory=False,
+    )
+    val_loader = val_ds.torch_dataloader(
+        batch_size=BATCH_SIZE,
+        num_workers=2,
+        shuffle=False,
+        prefetch_factor=None,
+        pin_memory=False,
+    )
+    test_loader = test_ds.torch_dataloader(
+        batch_size=BATCH_SIZE,
+        num_workers=2,
+        shuffle=False,
+        prefetch_factor=None,
+        pin_memory=False,
+    )
 
     with tempfile.TemporaryDirectory() as tmpdir:
         save_path = Path(tmpdir) / "logs"
@@ -197,7 +215,15 @@ def test_lightning_fit_inference():
             num_input_steps=NUM_INPUTS,
             num_pred_steps_train=NUM_OUTPUTS,
             num_pred_steps_val_test=NUM_OUTPUTS,
-            save_path=save_path,
+            len_train_loader=len(train_loader),
+            lr=1e-4,
+            loss_name="mse",
+            num_inter_steps=1,
+            num_samples_to_plot=1,
+            training_strategy="diff_ar",
+            use_lr_scheduler=False,
+            no_log=False,
+            channels_last=False,
         )
         trainer.fit(
             model=lightning_module,
