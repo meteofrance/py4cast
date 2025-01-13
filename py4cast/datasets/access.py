@@ -426,7 +426,7 @@ class DataAccessor(ABC):
         """
         return True
 
-    def cache_dir(name: str, grid: Grid) -> Path:
+    def cache_dir(self, name: str, grid: Grid) -> Path:
         """
         Return the path of cache_dir, where, e.g, stat files can be stored
         """
@@ -434,12 +434,14 @@ class DataAccessor(ABC):
         os.makedirs(path, mode=0o777, exist_ok=True)
         return path
 
+    @staticmethod
     @abstractmethod
     def get_dataset_path(name: str, grid: Grid) -> Path:
         """
         Return the path that will be used as cache for data during dataset preparation.
         """
 
+    @staticmethod
     @abstractmethod
     def get_weight_per_level(
         level: int,
@@ -449,6 +451,7 @@ class DataAccessor(ABC):
         Attribute a weight in the final reconstruction loss depending on the height level and level_type
         """
 
+    @staticmethod
     @abstractmethod
     def load_grid_info(name: str) -> GridConfig:
         """
@@ -457,6 +460,7 @@ class DataAccessor(ABC):
         Consumed by the 'Grid' interface object.
         """
 
+    @staticmethod
     @abstractmethod
     def get_grid_coords(param: WeatherParam) -> List[float]:
         """

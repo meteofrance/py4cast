@@ -24,8 +24,7 @@ from py4cast.settings import CACHE_DIR
 
 @dataclass
 class PoesyAccessor(DataAccessor):
-    @staticmethod
-    def cache_dir(name: str, grid: Grid):
+    def cache_dir(self, name: str, grid: Grid):
         complete_name = str(name) + "_" + grid.name
         return CACHE_DIR / complete_name
 
@@ -72,8 +71,8 @@ class PoesyAccessor(DataAccessor):
     def get_grid_coords(param: WeatherParam) -> List[float]:
         raise NotImplementedError("Poesy does not require get_grid_coords")
 
-    @staticmethod
     def get_filepath(
+        self,
         ds_name: str,
         param: WeatherParam,
         date: dt.datetime,
