@@ -42,12 +42,14 @@ class Period:
     end: dt.datetime
 
     # -------------- OBSERVATION ---------------
-    # If you are in the case of a continuous Dataset
+    # If you are in the case of a continuous Dataset. e.g, a dataset with regularly spaced
+    # observations or a reanalysis (such as titan)
     obs_step: dt.timedelta = None  # step between 2 consecutives observations
 
     # -------------- FORECAST ---------------
     # If you are in the case of a non continuous Dataset, i.e. you may have multiple files
-    # for a single valid time.
+    # for a single valid time. This is typically the case for a reforecast dataset with one
+    # run per day, and lead times larger than 24h (such as poesy).
     refcst_daily_runs: List[dt.timedelta] = (
         None  # timedeltas of the day for wich forecast runs are available
     )
@@ -74,10 +76,10 @@ class Period:
 """
             )
 
-        if self.obs_step is not None:
+        if self.obs_step is not None:  # continuous dataset case
             self.obs_step = dt.timedelta(seconds=int(self.obs_step))
 
-        if self.refcst_leadtime_start_in_sec is not None:
+        if self.refcst_leadtime_start_in_sec is not None:  # non-continuous dataset
             self.refcst_daily_runs = [
                 dt.timedelta(seconds=int(sec)) for sec in self.refcst_daily_runs
             ]
