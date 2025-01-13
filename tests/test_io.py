@@ -38,7 +38,7 @@ def test_nan_mask():
 
     _, _, dummy_ds = DatasetABC.from_json(
         DummyAccessor,
-        f"{DEFAULT_CONFIG_DIR}/datasets/dummy_config.json",
+        DEFAULT_CONFIG_DIR / "datasets" / "dummy_config.json",
         num_input_steps=1,
         num_pred_steps_train=2,
         num_pred_steps_val_tests=2,
@@ -303,7 +303,7 @@ def test_write_template_dataset():
     sample = FakeSample("1911-10-30", "first solvay congress")
     _, _, dummy_ds = DatasetABC.from_json(
         DummyAccessor,
-        f"{DEFAULT_CONFIG_DIR}/datasets/dummy_config.json",
+        DEFAULT_CONFIG_DIR / "datasets" / "dummy_config.json",
         num_input_steps=1,
         num_pred_steps_train=2,
         num_pred_steps_val_tests=2,
@@ -365,7 +365,7 @@ def test_write_template_dataset():
     sample = FakeSample("1911-10-30", "first solvay congress")
     _, _, dummy_ds = DatasetABC.from_json(
         DummyAccessor,
-        f"{DEFAULT_CONFIG_DIR}/datasets/dummy_config.json",
+        DEFAULT_CONFIG_DIR / "datasets" / "dummy_config.json",
         num_input_steps=1,
         num_pred_steps_train=2,
         num_pred_steps_val_tests=2,
@@ -423,7 +423,7 @@ def test_write_template_dataset():
     sample = FakeSample("1911-10-30", "first solvay congress")
     _, _, dummy_ds = DatasetABC.from_json(
         DummyAccessor,
-        f"{DEFAULT_CONFIG_DIR}/datasets/dummy_config.json",
+        DEFAULT_CONFIG_DIR / "datasets" / "dummy_config.json",
         num_input_steps=1,
         num_pred_steps_train=2,
         num_pred_steps_val_tests=2,
@@ -479,7 +479,7 @@ def test_write_template_dataset():
     sample = FakeSample("1911-10-30", "first solvay congress")
     _, _, dummy_ds = DatasetABC.from_json(
         DummyAccessor,
-        f"{DEFAULT_CONFIG_DIR}/datasets/dummy_config.json",
+        DEFAULT_CONFIG_DIR / "datasets" / "dummy_config.json",
         num_input_steps=1,
         num_pred_steps_train=2,
         num_pred_steps_val_tests=2,
