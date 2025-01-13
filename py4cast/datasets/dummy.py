@@ -43,7 +43,7 @@ class DummyAccessor(DataAccessor):
     with open(DEFAULT_CONFIG_DIR / "datasets" / "dummy_config.json", "w") as outfile:
         outfile.write(jsonconfig)
 
-    def cache_dir(name: str, grid: Grid) -> Path:
+    def cache_dir(self, name: str, grid: Grid) -> Path:
         path = CACHE_DIR / f"{name}_{grid.name}"
         os.makedirs(path, mode=0o777, exist_ok=True)
 
@@ -69,18 +69,21 @@ class DummyAccessor(DataAccessor):
 
         return path
 
+    @staticmethod
     def get_dataset_path(name: str, grid: Grid) -> Path:
         path = CACHE_DIR / f"{name}_{grid.name}"
         os.makedirs(path, mode=0o777, exist_ok=True)
 
         return path
 
+    @staticmethod
     def get_weight_per_level(
         level: int,
         level_type: Literal["isobaricInhPa", "heightAboveGround", "surface", "meanSea"],
     ) -> float:
         return 1.0
 
+    @staticmethod
     def load_grid_info(name: str) -> GridConfig:
         lat = (np.indices((64,)) - 16) * 0.5
         lon = (np.indices((64,)) + 30) * 0.5
@@ -93,9 +96,11 @@ class DummyAccessor(DataAccessor):
             landsea_mask=None,
         )
 
+    @staticmethod
     def get_grid_coords(param: WeatherParam) -> List[float]:
         return [-8.0, 24.0, 15.0, 47.0]
 
+    @staticmethod
     def load_param_info(name: str) -> ParamConfig:
         return ParamConfig(
             unit="adimensional",
@@ -106,26 +111,24 @@ class DummyAccessor(DataAccessor):
             grib_param=None,
         )
 
-    @classmethod
     def get_filepath(
-        cls,
+        self,
         dataset_name: str,
         param: WeatherParam,
         timestamps: Timestamps,
         file_format: str = "npy",
     ) -> Path:
         if not os.path.exists(
-            cls.get_dataset_path(dataset_name, param.grid) / "dummy_data.npy"
+            self.get_dataset_path(dataset_name, param.grid) / "dummy_data.npy"
         ):
-            arr = np.random.randn(len(timestamps.terms), 64, 64, 1).clip(-3, 3)
+            arr = np.random.randn(len(timestamps.timedeltas), 64, 64, 1).clip(-3, 3)
             np.save(
-                cls.get_dataset_path(dataset_name, param.grid) / "dummy_data.npy", arr
+                self.get_dataset_path(dataset_name, param.grid) / "dummy_data.npy", arr
             )
-        return cls.get_dataset_path(dataset_name, param.grid) / "dummy_data.npy"
+        return self.get_dataset_path(dataset_name, param.grid) / "dummy_data.npy"
 
-    @classmethod
     def load_data_from_disk(
-        cls,
+        self,
         dataset_name: str,  # name of the dataset or dataset version
         param: WeatherParam,  # specific parameter (2D field associated to a grid)
         timestamps: Timestamps,  # specific timestamp at which to load the field
@@ -136,15 +139,11 @@ class DummyAccessor(DataAccessor):
         Main loading function to fetch actual data on disk.
         loads a given parameter on a given timestamp
         """
-        arr = np.load(cls.get_filepath(dataset_name, param, timestamps))
+        arr = np.load(self.get_filepath(dataset_name, param, timestamps))
         return arr
 
-    def valid_timestamp(n_inputs: int, time: Timestamps) -> bool:
-        return True
-
-    @classmethod
     def exists(
-        cls,
+        self,
         ds_name: str,
         param: WeatherParam,
         timestamps: Timestamps,
