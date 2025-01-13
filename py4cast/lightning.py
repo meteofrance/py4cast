@@ -298,11 +298,19 @@ class AutoRegressiveLightning(LightningModule):
     def setup(self, stage=None):
         self.configure_optimizers()
         self.logger.log_hyperparams(self.hparams, metrics={"val_mean_loss": 0.0})
-        self.save_path = Path(self.trainer.logger.log_dir)
-        max_pred_step = self.num_pred_steps_val_test - 1
-        self.rmse_psd_plot_metric = MetricPSDVar(pred_step=max_pred_step)
-        self.psd_plot_metric = MetricPSDK(self.save_path, pred_step=max_pred_step)
-        self.acc_metric = MetricACC(self.dataset_info)
+        if self.logging_enabled:
+            self.save_path = Path(self.trainer.logger.log_dir)
+            max_pred_step = self.num_pred_steps_val_test - 1
+            self.rmse_psd_plot_metric = MetricPSDVar(pred_step=max_pred_step)
+            self.psd_plot_metric = MetricPSDK(self.save_path, pred_step=max_pred_step)
+            self.acc_metric = MetricACC(self.dataset_info)
+
+    @property
+    def logging_enabled(self):
+        """
+        Check if logging is enabled
+        """
+        return self.trainer.logger.log_dir
 
     @property
     def dtype(self):
@@ -343,7 +351,7 @@ class AutoRegressiveLightning(LightningModule):
 
     @rank_zero_only
     def log_hparams_tb(self):
-        if self.logger:
+        if self.logging_enabled and self.logger:
             # Save model & dataset conf as files
             if self.dataset_conf is not None:
                 shutil.copyfile(self.dataset_conf, self.save_path / "dataset_conf.json")
@@ -596,9 +604,10 @@ class AutoRegressiveLightning(LightningModule):
         """Computes and logs the averaged metrics at the end of an epoch.
         Step shared by training and validation epochs.
         """
-        avg_loss = torch.stack([x for x in outputs]).mean()
-        tb = self.logger.experiment
-        tb.add_scalar(f"mean_loss_epoch/{label}", avg_loss, self.current_epoch)
+        if self.logging_enabled:
+            avg_loss = torch.stack([x for x in outputs]).mean()
+            tb = self.logger.experiment
+            tb.add_scalar(f"mean_loss_epoch/{label}", avg_loss, self.current_epoch)
 
     def training_step(self, batch: ItemBatch, batch_idx: int) -> torch.Tensor:
         """
@@ -621,8 +630,9 @@ class AutoRegressiveLightning(LightningModule):
         self.training_step_losses.append(batch_loss)
 
         # Notify every plotters
-        for plotter in self.train_plotters:
-            plotter.update(self, prediction=self.prediction, target=self.target)
+        if self.logging_enabled:
+            for plotter in self.train_plotters:
+                plotter.update(self, prediction=self.prediction, target=self.target)
 
         return batch_loss
 
@@ -690,24 +700,25 @@ class AutoRegressiveLightning(LightningModule):
         """
         Add some plots when starting validation
         """
-        l1_loss = ScaledLoss("L1Loss", reduction="none")
-        l1_loss.prepare(self, self.interior_mask, self.dataset_info)
-        metrics = {"mae": l1_loss}
-        self.valid_plotters = [
-            StateErrorPlot(metrics, prefix="Validation"),
-            PredictionTimestepPlot(
-                num_samples_to_plot=1,
-                num_features_to_plot=4,
-                prefix="Validation",
-                save_path=self.save_path,
-            ),
-            PredictionEpochPlot(
-                num_samples_to_plot=1,
-                num_features_to_plot=4,
-                prefix="Validation",
-                save_path=self.save_path,
-            ),
-        ]
+        if self.logging_enabled:
+            l1_loss = ScaledLoss("L1Loss", reduction="none")
+            l1_loss.prepare(self, self.interior_mask, self.dataset_info)
+            metrics = {"mae": l1_loss}
+            self.valid_plotters = [
+                StateErrorPlot(metrics, prefix="Validation"),
+                PredictionTimestepPlot(
+                    num_samples_to_plot=1,
+                    num_features_to_plot=4,
+                    prefix="Validation",
+                    save_path=self.save_path,
+                ),
+                PredictionEpochPlot(
+                    num_samples_to_plot=1,
+                    num_features_to_plot=4,
+                    prefix="Validation",
+                    save_path=self.save_path,
+                ),
+            ]
 
     def _shared_val_test_step(self, batch: ItemBatch, batch_idx, label: str):
         with torch.no_grad():
@@ -716,19 +727,20 @@ class AutoRegressiveLightning(LightningModule):
         time_step_loss = torch.mean(self.loss(prediction, target), dim=0)
         mean_loss = torch.mean(time_step_loss)
 
-        # Log loss per timestep
-        loss_dict = {
-            f"timestep_losses/{label}_step_{step}": time_step_loss[step]
-            for step in range(time_step_loss.shape[0])
-        }
-        self.log_dict(loss_dict, on_epoch=True, sync_dist=True)
-        self.log(
-            f"{label}_mean_loss",
-            mean_loss,
-            on_epoch=True,
-            sync_dist=True,
-            prog_bar=(label == "val"),
-        )
+        if self.logging_enabled:
+            # Log loss per timestep
+            loss_dict = {
+                f"timestep_losses/{label}_step_{step}": time_step_loss[step]
+                for step in range(time_step_loss.shape[0])
+            }
+            self.log_dict(loss_dict, on_epoch=True, sync_dist=True)
+            self.log(
+                f"{label}_mean_loss",
+                mean_loss,
+                on_epoch=True,
+                sync_dist=True,
+                prog_bar=(label == "val"),
+            )
         return prediction, target, mean_loss
 
     def validation_step(self, batch: ItemBatch, batch_idx):
@@ -742,46 +754,48 @@ class AutoRegressiveLightning(LightningModule):
 
         self.val_mean_loss = mean_loss
 
-        # Notify every plotters
-        if self.current_epoch % PLOT_PERIOD == 0:
-            for plotter in self.valid_plotters:
-                plotter.update(self, prediction=prediction, target=target)
-        self.psd_plot_metric.update(prediction, target, self.original_shape)
-        self.rmse_psd_plot_metric.update(prediction, target, self.original_shape)
-        self.acc_metric.update(prediction, target)
+        if self.logging_enabled:
+            # Notify every plotters
+            if self.current_epoch % PLOT_PERIOD == 0:
+                for plotter in self.valid_plotters:
+                    plotter.update(self, prediction=prediction, target=target)
+            self.psd_plot_metric.update(prediction, target, self.original_shape)
+            self.rmse_psd_plot_metric.update(prediction, target, self.original_shape)
+            self.acc_metric.update(prediction, target)
 
     def on_validation_epoch_end(self):
         """
         Compute val metrics at the end of val epoch
         """
 
-        # Get dict of metrics' results
-        dict_metrics = dict()
-        dict_metrics.update(self.psd_plot_metric.compute())
-        dict_metrics.update(self.rmse_psd_plot_metric.compute())
-        dict_metrics.update(self.acc_metric.compute())
-        for name, elmnt in dict_metrics.items():
-            if isinstance(elmnt, matplotlib.figure.Figure):
-                # Tensorboard logger
-                self.logger.experiment.add_figure(
-                    f"{name}", elmnt, self.current_epoch
-                )
-                # If MLFlowLogger activated
-                if self.mlflow_logger:
-                    run_id = self.mlflow_logger.version
-                    self.mlflow_logger.experiment.log_figure(
-                        run_id=run_id,
-                        figure=elmnt,
-                        artifact_file=f"figures/{name}.png",
+        if self.logging_enabled:
+            # Get dict of metrics' results
+            dict_metrics = dict()
+            dict_metrics.update(self.psd_plot_metric.compute())
+            dict_metrics.update(self.rmse_psd_plot_metric.compute())
+            dict_metrics.update(self.acc_metric.compute())
+            for name, elmnt in dict_metrics.items():
+                if isinstance(elmnt, matplotlib.figure.Figure):
+                    # Tensorboard logger
+                    self.logger.experiment.add_figure(
+                        f"{name}", elmnt, self.current_epoch
                     )
-            elif isinstance(elmnt, torch.Tensor):
-                self.log_dict(
-                    {name: elmnt},
-                    prog_bar=False,
-                    on_step=False,
-                    on_epoch=True,
-                    sync_dist=True,
-                )
+                    # If MLFlowLogger activated
+                    if self.mlflow_logger:
+                        run_id = self.mlflow_logger.version
+                        self.mlflow_logger.experiment.log_figure(
+                            run_id=run_id,
+                            figure=elmnt,
+                            artifact_file=f"figures/{name}.png",
+                        )
+                elif isinstance(elmnt, torch.Tensor):
+                    self.log_dict(
+                        {name: elmnt},
+                        prog_bar=False,
+                        on_step=False,
+                        on_epoch=True,
+                        sync_dist=True,
+                    )
 
         outputs = self.validation_step_losses
         self._shared_epoch_end(outputs, "validation")
@@ -789,31 +803,33 @@ class AutoRegressiveLightning(LightningModule):
         # free memory
         self.validation_step_losses.clear()
 
-        # Notify every plotters
-        if self.current_epoch % PLOT_PERIOD == 0:
-            for plotter in self.valid_plotters:
-                plotter.on_step_end(self, label="Valid")
+        if self.logging_enabled:
+            # Notify every plotters
+            if self.current_epoch % PLOT_PERIOD == 0:
+                for plotter in self.valid_plotters:
+                    plotter.on_step_end(self, label="Valid")
 
     def on_test_start(self):
         """
         Attach observer when starting test
         """
-        metrics = {}
-        for torch_loss, alias in ("L1Loss", "mae"), ("MSELoss", "rmse"):
-            loss = ScaledLoss(torch_loss, reduction="none")
-            loss.prepare(self, self.interior_mask, self.dataset_info)
-            metrics[alias] = loss
+        if self.logging_enabled:
+            metrics = {}
+            for torch_loss, alias in ("L1Loss", "mae"), ("MSELoss", "rmse"):
+                loss = ScaledLoss(torch_loss, reduction="none")
+                loss.prepare(self, self.interior_mask, self.dataset_info)
+                metrics[alias] = loss
 
-        self.test_plotters = [
-            StateErrorPlot(metrics, save_path=self.save_path),
-            SpatialErrorPlot(),
-            PredictionTimestepPlot(
-                num_samples_to_plot=self.num_samples_to_plot,
-                num_features_to_plot=4,
-                prefix="Test",
-                save_path=self.save_path,
-            ),
-        ]
+            self.test_plotters = [
+                StateErrorPlot(metrics, save_path=self.save_path),
+                SpatialErrorPlot(),
+                PredictionTimestepPlot(
+                    num_samples_to_plot=self.num_samples_to_plot,
+                    num_features_to_plot=4,
+                    prefix="Test",
+                    save_path=self.save_path,
+                ),
+            ]
 
     def test_step(self, batch: ItemBatch, batch_idx):
         """
@@ -821,13 +837,14 @@ class AutoRegressiveLightning(LightningModule):
         """
         prediction, target, _ = self._shared_val_test_step(batch, batch_idx, "test")
 
-        # Notify plotters & metrics
-        for plotter in self.test_plotters:
-            plotter.update(self, prediction=prediction, target=target)
+        if self.logging_enabled:
+            # Notify plotters & metrics
+            for plotter in self.test_plotters:
+                plotter.update(self, prediction=prediction, target=target)
 
-        self.acc_metric.update(prediction, target)
-        self.psd_plot_metric.update(prediction, target, self.original_shape)
-        self.rmse_psd_plot_metric.update(prediction, target, self.original_shape)
+            self.acc_metric.update(prediction, target)
+            self.psd_plot_metric.update(prediction, target, self.original_shape)
+            self.rmse_psd_plot_metric.update(prediction, target, self.original_shape)
 
     @cached_property
     def interior_2d(self) -> torch.Tensor:
@@ -845,37 +862,38 @@ class AutoRegressiveLightning(LightningModule):
         """
         Compute test metrics and make plots at the end of test epoch.
         """
-        dict_metrics = {}
-        dict_metrics.update(self.psd_plot_metric.compute(prefix="test"))
-        dict_metrics.update(self.rmse_psd_plot_metric.compute(prefix="test"))
-        dict_metrics.update(self.acc_metric.compute(prefix="test"))
+        if self.logging_enabled:
+            dict_metrics = {}
+            dict_metrics.update(self.psd_plot_metric.compute(prefix="test"))
+            dict_metrics.update(self.rmse_psd_plot_metric.compute(prefix="test"))
+            dict_metrics.update(self.acc_metric.compute(prefix="test"))
 
-        for name, elmnt in dict_metrics.items():
-            if isinstance(elmnt, matplotlib.figure.Figure):
-                # Tensorboard logger
-                self.logger.experiment.add_figure(
-                    f"{name}", elmnt, self.current_epoch
-                )
-                # If MLFlowLogger activated
-                if self.mlflow_logger:
-                    run_id = self.mlflow_logger.version
-                    self.mlflow_logger.experiment.log_figure(
-                        run_id=run_id,
-                        figure=elmnt,
-                        artifact_file=f"figures/{name}.png",
+            for name, elmnt in dict_metrics.items():
+                if isinstance(elmnt, matplotlib.figure.Figure):
+                    # Tensorboard logger
+                    self.logger.experiment.add_figure(
+                        f"{name}", elmnt, self.current_epoch
                     )
-            elif isinstance(elmnt, torch.Tensor):
-                self.log_dict(
-                    {name: elmnt},
-                    prog_bar=False,
-                    on_step=False,
-                    on_epoch=True,
-                    sync_dist=True,
-                )
+                    # If MLFlowLogger activated
+                    if self.mlflow_logger:
+                        run_id = self.mlflow_logger.version
+                        self.mlflow_logger.experiment.log_figure(
+                            run_id=run_id,
+                            figure=elmnt,
+                            artifact_file=f"figures/{name}.png",
+                        )
+                elif isinstance(elmnt, torch.Tensor):
+                    self.log_dict(
+                        {name: elmnt},
+                        prog_bar=False,
+                        on_step=False,
+                        on_epoch=True,
+                        sync_dist=True,
+                    )
 
-        # Notify plotters that the test epoch end
-        for plotter in self.test_plotters:
-            plotter.on_step_end(self, label="Test")
+            # Notify plotters that the test epoch end
+            for plotter in self.test_plotters:
+                plotter.on_step_end(self, label="Test")
 
     @cached_property
     def mlflow_logger(self) -> Union[MLFlowLogger, None]:
