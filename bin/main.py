@@ -6,6 +6,7 @@ Exemple usage:
 """
 
 from lightning.pytorch.cli import LightningCLI
+
 from py4cast.lightning import AutoRegressiveLightning, PlDataModule
 
 

@@ -8,6 +8,7 @@ from typing import Dict, List, Literal, Tuple, Union
 
 import einops
 import matplotlib
+import mlflow.pytorch
 import torch
 from lightning import LightningDataModule, LightningModule
 from lightning.pytorch.loggers import MLFlowLogger
@@ -18,10 +19,9 @@ from mfai.torch.models.utils import (
     features_last_to_second,
     features_second_to_last,
 )
-import mlflow.pytorch
+from mlflow.models.signature import infer_signature
 from torchinfo import summary
 from transformers import get_cosine_schedule_with_warmup
-from mlflow.models.signature import infer_signature
 
 from py4cast.datasets import get_datasets
 from py4cast.datasets.base import DatasetInfo, ItemBatch, NamedTensor, Statics
@@ -169,11 +169,11 @@ class AutoRegressiveLightning(LightningModule):
         training_strategy: Literal["diff_ar", "scaled_ar"] = "diff_ar",
         channels_last: bool = False,
         num_samples_to_plot: int = 1,
-        optimizer: str = "Adam", # name of the optimizer (adam, SGD)
-        weight_decay: float = 0.001, # deepNN : 0.0001 à 0.1, linear regression : 0.001 à 0.1, classification: 0.01 à 0.1
-        lr_scheduler: str = "cosine_scheduler", # name of the scheduler (StepLR, OneCycleLR, cosine_scheduler)
-        #useful if StepLR is used
-        steplr_step_size: int = 10, # LR=LR*gamma every num_epoch=step_size  (usually 5-20, must divide max_epoch)
+        optimizer: str = "Adam",  # name of the optimizer (adam, SGD)
+        weight_decay: float = 0.001,  # 0.0001 à 0.1
+        lr_scheduler: str = "cosine_scheduler",  # name of the scheduler (StepLR, OneCycleLR, cosine_scheduler)
+        # useful if StepLR is used
+        steplr_step_size: int = 10,  # LR=LR*gamma every num_epoch=step_size  (usually 5-20, must divide max_epoch)
         steplr_gamma: float = 0.1,
         *args,
         **kwargs,
@@ -376,23 +376,37 @@ class AutoRegressiveLightning(LightningModule):
 
     def configure_optimizers(self):
         if self.optimizer == "AdamW":
-            optimizer = torch.optim.AdamW(self.parameters(), lr=self.lr, weight_decay=self.weight_decay)
+            optimizer = torch.optim.AdamW(
+                self.parameters(), lr=self.lr, weight_decay=self.weight_decay
+            )
         elif self.optimizer == "SGD":
-            optimizer = torch.optim.SGD(self.parameters(), lr=self.lr, weight_decay=self.weight_decay)
+            optimizer = torch.optim.SGD(
+                self.parameters(), lr=self.lr, weight_decay=self.weight_decay
+            )
         else:
             print("Invalid optimizer.  See --help")
 
         if self.lr_scheduler == "StepLR":
-            scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=self.steplr_step_size, gamma=self.steplr_gamma)
+            scheduler = torch.optim.lr_scheduler.StepLR(
+                optimizer, step_size=self.steplr_step_size, gamma=self.steplr_gamma
+            )
         elif self.lr_scheduler == "OneCycleLR":
-            scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, max_lr=1, epochs=self.trainer.max_epoch, steps_per_epoch=self.len_train_loader)
+            scheduler = torch.optim.lr_scheduler.OneCycleLR(
+                optimizer,
+                max_lr=1,
+                epochs=self.trainer.max_epoch,
+                steps_per_epoch=self.len_train_loader,
+            )
         elif self.lr_scheduler == "cosine_scheduler":
-            scheduler = get_cosine_schedule_with_warmup(optimizer, num_warmup_steps=1000, num_training_steps=self.len_train_loader*self.trainer.max_epochs)
+            scheduler = get_cosine_schedule_with_warmup(
+                optimizer,
+                num_warmup_steps=1000,
+                num_training_steps=self.len_train_loader * self.trainer.max_epochs,
+            )
         else:
             return optimizer
-        
-        return [optimizer], [scheduler]
 
+        return [optimizer], [scheduler]
 
     def _next_x(
         self, batch: ItemBatch, prev_states: NamedTensor, step_idx: int
@@ -636,7 +650,6 @@ class AutoRegressiveLightning(LightningModule):
 
         return batch_loss
 
-
     def on_save_checkpoint(self, checkpoint):
         """
         We store our feature and dim names in the checkpoint
@@ -686,14 +699,17 @@ class AutoRegressiveLightning(LightningModule):
             dataloader = self.trainer.datamodule.test_dataloader()
             data = next(iter(dataloader))
             signature = infer_signature(
-                data.inputs.tensor.detach().numpy(), data.outputs.tensor.detach().numpy()
+                data.inputs.tensor.detach().numpy(),
+                data.outputs.tensor.detach().numpy(),
             )
 
             # Manually log the trained model in Mlflow style with its signature
             run_id = self.mlflow_logger.version
             with mlflow.start_run(run_id=run_id):
                 mlflow.pytorch.log_model(
-                    pytorch_model=self.trainer.model, artifact_path="model", signature=signature
+                    pytorch_model=self.trainer.model,
+                    artifact_path="model",
+                    signature=signature,
                 )
 
     def on_validation_start(self):
