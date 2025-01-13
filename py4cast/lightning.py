@@ -360,25 +360,6 @@ class AutoRegressiveLightning(LightningModule):
     def on_fit_start(self):
         self.log_hparams_tb()
 
-    def configure_optimizers(self) -> torch.optim.Optimizer:
-        lr = self.lr
-        opt = torch.optim.AdamW(self.parameters(), lr=lr, betas=(0.9, 0.95))
-        if self.use_lr_scheduler:
-            len_loader = self.len_train_loader // LR_SCHEDULER_PERIOD
-            epochs = self.trainer.max_epochs
-            lr_scheduler = get_cosine_schedule_with_warmup(
-                opt, 1000 // LR_SCHEDULER_PERIOD, len_loader * epochs
-            )
-            return {
-                "optimizer": opt,
-                "lr_scheduler": {
-                    "scheduler": lr_scheduler,
-                    "interval": "step",
-                    "frequency": 1,
-                },
-            }
-        else:
-            return opt
 
     def _next_x(
         self, batch: ItemBatch, prev_states: NamedTensor, step_idx: int

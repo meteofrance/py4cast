@@ -1,23 +1,48 @@
 # lightning.pytorch==2.4.0
 seed_everything: true
 
+optimizer:
+  class_path: torch.optim.AdamW
+  init_args:
+    lr: 0.001
+
+lr_scheduler:
+  class_path: pl_bolts.optimizers.lr_scheduler.LinearWarmupCosineAnnealingLR
+  init_args:
+    warmup_epochs: 1
+    max_epochs: 50
+    eta_min: 0
+
 trainer:  # Native training arguments of ligthining.pytorch.Trainer
 
   fast_dev_run: False  # True: fit with only 1 batch and 1 epoch, use for dev (logging & checkpointing disabled)
   num_nodes: 1         # Num of GPU nodes (1 if device=cpu)
-  max_epochs: 50
+  max_epochs: 1
   profiler: null       # Performance profiler. Possibilities are [null, simple, or specific custom class (see doc)]
 
   logger:
-    class_path: lightning.pytorch.loggers.TensorBoardLogger
-    init_args:
-      # default_hp_metric: False # see if tensoboard still works before rm TODO
-      save_dir: /dir1/dir2/dir3/   # Root directory
-      name:                        # EMPTY: runs written in save_dir. NOT EMPTY: runs written in save_dir/name
-      version:                     # EMPTY: name of the run==version_{i}. NOT EMPTY: name of the run==version
-  # Your logs will be saved in save_dir/*name*/version/
-  # (checkpoints, config.yaml, images, scores, tensorboard logs, ...)
-  # Lightning automatically increments the version index of your experiment
+  # If you use multiple logger, their save_dir MUST be different
+    - class_path: lightning.pytorch.loggers.TensorBoardLogger
+      init_args:
+        # default_hp_metric: False # see if tensoboard still works before rm TODO
+        save_dir: /scratch/shared/py4cast/logs/test_cli/   # Root directory
+        name:                   # EMPTY: runs written in save_dir. NOT EMPTY: runs written in save_dir/name
+        version:                     # EMPTY: name of the run==version_{i}. NOT EMPTY: name of the run==version
+    # Your logs will be saved in save_dir/*name*/version/
+    # (checkpoints, config.yaml, images, scores, tensorboard logs, ...)
+    # Lightning automatically increments the version index of your experiment
+
+    # - class_path: lightning.pytorch.loggers.CSVLogger  # Logs metrics in CSV
+    #   init_args:
+    #     save_dir: /dir1/dir2/dir3/csv/
+
+    # Uncomment to add MLFlow logger
+    # - class_path: lightning.pytorch.loggers.MLFlowLogger
+    #   init_args:
+    #     # experiment_name: "$MLFLOW_EXPERIMENT_NAME"
+    #     # run_name: run_name
+    #     log_model: True
+    #     save_dir: /scratch/shared/py4cast/logs/test_cli/mlflow/
 
   callbacks:
     - class_path: lightning.pytorch.callbacks.ModelCheckpoint
@@ -46,6 +71,14 @@ trainer:  # Native training arguments of ligthining.pytorch.Trainer
   strategy: auto               # Training strategy alias (auto, ddp, fsdp, etc)
   accelerator: auto            # Type of device (auto, gpu, cpu)
   devices: auto                # Number of devices (auto or NUM)
-  limit_train_batches: null     # Limit num of batches per epoch (to do very short training)
-  limit_val_batches: null
-  limit_test_batches: null
+  limit_train_batches: 3     # Limit num of batches per epoch (to do very short training)
+  limit_val_batches: 3
+  limit_test_batches: 3
+
+
+  # TODO :
+# print folder of logs at beginning and end
+# script that launches fit and then test
+# rajputer tests avec CLI
+# se passer des fichiers de conf json data et model
+# link max epoch of trainer and lr scheduler
