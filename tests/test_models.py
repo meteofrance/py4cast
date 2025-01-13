@@ -225,8 +225,8 @@ def test_lightning_fit_inference():
             optimizer="AdamW",
             weight_decay=0.001,
             lr_scheduler="cosine_scheduler",
-            StepLR_step_size=10,
-            StepLR_gamma=0.1,
+            steplr_step_size=10,
+            steplr_gamma=0.1,
         )
         trainer.fit(
             model=lightning_module,
