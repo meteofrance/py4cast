@@ -1,15 +1,8 @@
 model:
   model_name: HalfUNet
   model_conf: null # Path to model_conf
-  lr: 1e-3
   loss_name: mse # mse or mae
   num_inter_steps: 1 # Number of intermediary steps (without any data)
   num_samples_to_plot: 1
   training_strategy: diff_ar # diff_ar or scaled_ar
   channels_last: False # True: B W H C
-  optimizer: AdamW # name of the optimizer (adam, SGD)
-  weight_decay: 0.001 # deepNN : 0.0001 à 0.1, linear regression : 0.001 à 0.1, classification: 0.01 à 0.1
-  lr_scheduler: cosine_scheduler # name of the scheduler (StepLR, OneCycleLR, cosine_scheduler)
-  #useful if StepLR is used
-  StepLR_step_size: 10 # LR=LR*gamma every num_epoch=step_size  (usually 5-20, must divide max_epoch)
-  StepLR_gamma: 0.1

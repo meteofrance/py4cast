@@ -21,7 +21,6 @@ from mfai.torch.models.utils import (
 )
 from mlflow.models.signature import infer_signature
 from torchinfo import summary
-from transformers import get_cosine_schedule_with_warmup
 
 from py4cast.datasets import get_datasets
 from py4cast.datasets.base import DatasetInfo, ItemBatch, NamedTensor, Statics
@@ -37,9 +36,6 @@ from py4cast.plots import (
 )
 from py4cast.utils import str_to_dtype
 
-# learning rate scheduling period in steps (update every nth step)
-LR_SCHEDULER_PERIOD: int = 10
-# PNG plots period in epochs. Plots are made, logged and saved every nth epoch.
 PLOT_PERIOD: int = 10
 
 
@@ -163,18 +159,11 @@ class AutoRegressiveLightning(LightningModule):
         # non-linked args
         model_name: Literal[tuple(model_registry.keys())] = "HalfUNet",
         model_conf: Path | None = None,
-        lr: float = 1e-3,
         loss_name: Literal["mse", "mae"] = "mse",
         num_inter_steps: int = 1,
         training_strategy: Literal["diff_ar", "scaled_ar"] = "diff_ar",
         channels_last: bool = False,
         num_samples_to_plot: int = 1,
-        optimizer: str = "Adam",  # name of the optimizer (adam, SGD)
-        weight_decay: float = 0.001,  # 0.0001 à 0.1
-        lr_scheduler: str = "cosine_scheduler",  # name of the scheduler (StepLR, OneCycleLR, cosine_scheduler)
-        # useful if StepLR is used
-        steplr_step_size: int = 10,  # LR=LR*gamma every num_epoch=step_size  (usually 5-20, must divide max_epoch)
-        steplr_gamma: float = 0.1,
         *args,
         **kwargs,
     ):
@@ -185,7 +174,6 @@ class AutoRegressiveLightning(LightningModule):
         self.batch_size = batch_size
         self.model_conf = model_conf
         self.model_name = model_name
-        self.lr = lr
         self.num_input_steps = num_input_steps
         self.num_pred_steps_train = num_pred_steps_train
         self.num_pred_steps_val_test = num_pred_steps_val_test
@@ -194,11 +182,6 @@ class AutoRegressiveLightning(LightningModule):
         self.training_strategy = training_strategy
         self.len_train_loader = len_train_loader
         self.channels_last = channels_last
-        self.optimizer = optimizer
-        self.weight_decay = weight_decay
-        self.lr_scheduler = lr_scheduler
-        self.steplr_step_size = steplr_step_size
-        self.steplr_gamma = steplr_gamma
 
         if self.num_inter_steps > 1 and self.num_input_steps > 1:
             raise AttributeError(
@@ -296,7 +279,7 @@ class AutoRegressiveLightning(LightningModule):
         exp_summary(self)
 
     def setup(self, stage=None):
-        self.configure_optimizers()
+        # self.configure_optimizers()
         self.logger.log_hyperparams(self.hparams, metrics={"val_mean_loss": 0.0})
         if self.logging_enabled:
             self.save_path = Path(self.trainer.logger.log_dir)
@@ -306,11 +289,11 @@ class AutoRegressiveLightning(LightningModule):
             self.acc_metric = MetricACC(self.dataset_info)
 
     @property
-    def logging_enabled(self):
+    def logging_enabled(self) -> bool:
         """
         Check if logging is enabled
         """
-        return self.trainer.logger.log_dir
+        return self.trainer.logger.log_dir is not None
 
     @property
     def dtype(self):
@@ -333,7 +316,6 @@ class AutoRegressiveLightning(LightningModule):
         print("---------------------")
         print(f"Loss {self.loss}")
         print(f"Batch size {self.batch_size}")
-        print(f"Learning rate {self.lr}")
         print("---------------------------")
 
     @rank_zero_only

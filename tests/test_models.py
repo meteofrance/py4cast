@@ -216,17 +216,11 @@ def test_lightning_fit_inference():
             num_pred_steps_train=NUM_OUTPUTS,
             num_pred_steps_val_test=NUM_OUTPUTS,
             len_train_loader=len(train_loader),
-            lr=1e-4,
             loss_name="mse",
             num_inter_steps=1,
             num_samples_to_plot=1,
             training_strategy="diff_ar",
             channels_last=False,
-            optimizer="AdamW",
-            weight_decay=0.001,
-            lr_scheduler="cosine_scheduler",
-            steplr_step_size=10,
-            steplr_gamma=0.1,
         )
         trainer.fit(
             model=lightning_module,
