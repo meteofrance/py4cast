@@ -173,8 +173,8 @@ class AutoRegressiveLightning(LightningModule):
         weight_decay: float = 0.001, # deepNN : 0.0001 à 0.1, linear regression : 0.001 à 0.1, classification: 0.01 à 0.1
         lr_scheduler: str = "cosine_scheduler", # name of the scheduler (StepLR, OneCycleLR, cosine_scheduler)
         #useful if StepLR is used
-        StepLR_step_size: int = 10, # LR=LR*gamma every num_epoch=step_size  (usually 5-20, must divide max_epoch)
-        StepLR_gamma: float = 0.1,
+        steplr_step_size: int = 10, # LR=LR*gamma every num_epoch=step_size  (usually 5-20, must divide max_epoch)
+        steplr_gamma: float = 0.1,
         *args,
         **kwargs,
     ):
@@ -197,8 +197,8 @@ class AutoRegressiveLightning(LightningModule):
         self.optimizer = optimizer
         self.weight_decay = weight_decay
         self.lr_scheduler = lr_scheduler
-        self.StepLR_step_size = StepLR_step_size
-        self.StepLR_gamma = StepLR_gamma
+        self.steplr_step_size = steplr_step_size
+        self.steplr_gamma = steplr_gamma
 
         if self.num_inter_steps > 1 and self.num_input_steps > 1:
             raise AttributeError(
@@ -383,7 +383,7 @@ class AutoRegressiveLightning(LightningModule):
             print("Invalid optimizer.  See --help")
 
         if self.lr_scheduler == "StepLR":
-            scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=self.StepLR_step_size, gamma=self.StepLR_gamma)
+            scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=self.steplr_step_size, gamma=self.steplr_gamma)
         elif self.lr_scheduler == "OneCycleLR":
             scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, max_lr=1, epochs=self.trainer.max_epoch, steps_per_epoch=self.len_train_loader)
         elif self.lr_scheduler == "cosine_scheduler":
