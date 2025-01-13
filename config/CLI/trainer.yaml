@@ -12,7 +12,7 @@ trainer:  # Native training arguments of ligthining.pytorch.Trainer
     class_path: lightning.pytorch.loggers.TensorBoardLogger
     init_args:
       # default_hp_metric: False # see if tensoboard still works before rm TODO
-      save_dir: /dir1/dir2/dir3/   # Root directory 
+      save_dir: /dir1/dir2/dir3/   # Root directory
       name:                        # EMPTY: runs written in save_dir. NOT EMPTY: runs written in save_dir/name
       version:                     # EMPTY: name of the run==version_{i}. NOT EMPTY: name of the run==version
   # Your logs will be saved in save_dir/*name*/version/
@@ -36,7 +36,7 @@ trainer:  # Native training arguments of ligthining.pytorch.Trainer
       init_args:
         monitor: val_mean_loss
         mode: min
-        patience: 50
+        patience: 5
 
   log_every_n_steps: 50        # Num of batches btw logging
   accumulate_grad_batches: 10  # Num of batches before optim step

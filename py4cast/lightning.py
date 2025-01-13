@@ -49,16 +49,16 @@ class PlDataModule(LightningDataModule):
 
     def __init__(
         self,
-        dataset_name: str,
-        num_input_steps: int,
-        num_pred_steps_train: int,
-        num_pred_steps_val_test: int,
-        batch_size: int,
-        num_workers: int,
-        prefetch_factor: int | None,
-        pin_memory: bool,
-        dataset_conf: Path | None,
-        config_override: Dict | None,
+        dataset_name: str = "dummy",
+        num_input_steps: int = 1,
+        num_pred_steps_train: int = 1,
+        num_pred_steps_val_test: int = 1,
+        batch_size: int = 2,
+        num_workers: int = 1,
+        prefetch_factor: int | None = None,
+        pin_memory: bool = False,
+        dataset_conf: Path | None = None,
+        config_override: Dict | None = None,
     ):
         super().__init__()
         self.num_input_steps = num_input_steps
@@ -150,24 +150,24 @@ class AutoRegressiveLightning(LightningModule):
     def __init__(
         self,
         # args linked from trainer and datamodule
-        dataset_name: str,
-        num_input_steps: int,
-        num_pred_steps_train: int,
-        num_pred_steps_val_test: int,
-        batch_size: int,
-        dataset_conf: Path,  # TO DELETE ?
-        dataset_info,  # Don't put type here or CLI doesn't work
+        dataset_info,  # Don't put type hint here or CLI doesn't work
         len_train_loader: int,
+        dataset_name: str = "dummy",
+        dataset_conf: Path | None = None,  # TO DELETE ?
+        num_input_steps: int = 1,
+        num_pred_steps_train: int = 1,
+        num_pred_steps_val_test: int = 1,
+        batch_size: int = 2,
         # non-linked args
-        model_name: Literal[tuple(model_registry.keys())],
-        model_conf: Path | None,
-        lr: float,
-        loss_name: Literal["mse", "mae"],
-        num_inter_steps: int,
-        training_strategy: str,
-        use_lr_scheduler: bool,
-        no_log: bool,
-        channels_last: bool,
+        model_name: Literal[tuple(model_registry.keys())] = "HalfUNet",
+        model_conf: Path | None = None,
+        lr: float = 1e-3,
+        loss_name: Literal["mse", "mae"] = "mse",
+        num_inter_steps: int = 0,
+        training_strategy: Literal["diff_ar", "scaled_ar"] = "diff_ar",
+        use_lr_scheduler: bool = False,
+        no_log: bool = False,
+        channels_last: bool = False,
         num_samples_to_plot: int = 1,
         *args,
         **kwargs,
