@@ -357,8 +357,6 @@ dict_args = {
     "loss_name": args.loss,
     "training_strategy": args.strategy,
     "len_train_loader": len_loader,
-    "use_lr_scheduler": args.use_lr_scheduler,
-    "no_log": args.no_log,
     "channels_last": args.channels_last,
     "dataset_info": dataset_info,
 }
