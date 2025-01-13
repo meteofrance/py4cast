@@ -221,9 +221,12 @@ def test_lightning_fit_inference():
             num_inter_steps=1,
             num_samples_to_plot=1,
             training_strategy="diff_ar",
-            use_lr_scheduler=False,
-            no_log=False,
             channels_last=False,
+            optimizer="AdamW",
+            weight_decay=0.001,
+            lr_scheduler="cosine_scheduler",
+            steplr_step_size=10,
+            steplr_gamma=0.1,
         )
         trainer.fit(
             model=lightning_module,

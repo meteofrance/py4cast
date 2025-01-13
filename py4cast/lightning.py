@@ -8,6 +8,7 @@ from typing import Dict, List, Literal, Tuple, Union
 
 import einops
 import matplotlib
+import mlflow.pytorch
 import torch
 from lightning import LightningDataModule, LightningModule
 from lightning.pytorch.loggers import MLFlowLogger
@@ -18,10 +19,9 @@ from mfai.torch.models.utils import (
     features_last_to_second,
     features_second_to_last,
 )
-import mlflow.pytorch
+from mlflow.models.signature import infer_signature
 from torchinfo import summary
 from transformers import get_cosine_schedule_with_warmup
-from mlflow.models.signature import infer_signature
 
 from py4cast.datasets import get_datasets
 from py4cast.datasets.base import DatasetInfo, ItemBatch, NamedTensor, Statics
@@ -167,10 +167,14 @@ class AutoRegressiveLightning(LightningModule):
         loss_name: Literal["mse", "mae"] = "mse",
         num_inter_steps: int = 1,
         training_strategy: Literal["diff_ar", "scaled_ar"] = "diff_ar",
-        use_lr_scheduler: bool = False,
-        no_log: bool = False,
         channels_last: bool = False,
         num_samples_to_plot: int = 1,
+        optimizer: str = "Adam",  # name of the optimizer (adam, SGD)
+        weight_decay: float = 0.001,  # 0.0001 à 0.1
+        lr_scheduler: str = "cosine_scheduler",  # name of the scheduler (StepLR, OneCycleLR, cosine_scheduler)
+        # useful if StepLR is used
+        steplr_step_size: int = 10,  # LR=LR*gamma every num_epoch=step_size  (usually 5-20, must divide max_epoch)
+        steplr_gamma: float = 0.1,
         *args,
         **kwargs,
     ):
@@ -189,9 +193,12 @@ class AutoRegressiveLightning(LightningModule):
         self.num_samples_to_plot = num_samples_to_plot
         self.training_strategy = training_strategy
         self.len_train_loader = len_train_loader
-        self.use_lr_scheduler = use_lr_scheduler
-        self.no_log = no_log
         self.channels_last = channels_last
+        self.optimizer = optimizer
+        self.weight_decay = weight_decay
+        self.lr_scheduler = lr_scheduler
+        self.steplr_step_size = steplr_step_size
+        self.steplr_gamma = steplr_gamma
 
         if self.num_inter_steps > 1 and self.num_input_steps > 1:
             raise AttributeError(
@@ -292,11 +299,18 @@ class AutoRegressiveLightning(LightningModule):
         self.configure_optimizers()
         self.logger.log_hyperparams(self.hparams, metrics={"val_mean_loss": 0.0})
         if self.logging_enabled:
-            max_pred_step = self.num_pred_steps_val_test - 1
             self.save_path = Path(self.trainer.logger.log_dir)
+            max_pred_step = self.num_pred_steps_val_test - 1
             self.rmse_psd_plot_metric = MetricPSDVar(pred_step=max_pred_step)
             self.psd_plot_metric = MetricPSDK(self.save_path, pred_step=max_pred_step)
             self.acc_metric = MetricACC(self.dataset_info)
+
+    @property
+    def logging_enabled(self):
+        """
+        Check if logging is enabled
+        """
+        return self.trainer.logger.log_dir
 
     @property
     def dtype(self):
@@ -603,13 +617,6 @@ class AutoRegressiveLightning(LightningModule):
 
         return batch_loss
 
-    @property
-    def logging_enabled(self):
-        """
-        Check if logging is enabled
-        """
-        return (not self.no_log) and (self.trainer.logger.log_dir)
-
     def on_save_checkpoint(self, checkpoint):
         """
         We store our feature and dim names in the checkpoint
@@ -659,14 +666,17 @@ class AutoRegressiveLightning(LightningModule):
             dataloader = self.trainer.datamodule.test_dataloader()
             data = next(iter(dataloader))
             signature = infer_signature(
-                data.inputs.tensor.detach().numpy(), data.outputs.tensor.detach().numpy()
+                data.inputs.tensor.detach().numpy(),
+                data.outputs.tensor.detach().numpy(),
             )
 
             # Manually log the trained model in Mlflow style with its signature
             run_id = self.mlflow_logger.version
             with mlflow.start_run(run_id=run_id):
                 mlflow.pytorch.log_model(
-                    pytorch_model=self.trainer.model, artifact_path="model", signature=signature
+                    pytorch_model=self.trainer.model,
+                    artifact_path="model",
+                    signature=signature,
                 )
 
     def on_validation_start(self):
