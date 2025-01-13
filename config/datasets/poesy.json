@@ -3,7 +3,7 @@
         "train": {
             "start": 20200615,
             "end": 20210615,
-            "refcst_daily_hours": [75600],
+            "refcst_daily_runs": [75600],
             "refcst_leadtime_start_in_sec": 3600,
             "refcst_leadtime_end_in_sec": 162000,
             "refcst_leadtime_step_in_sec": 3600
@@ -11,7 +11,7 @@
         "test": {
             "start": 20210616,
             "end": 20210716,
-            "refcst_daily_hours": [75600],
+            "refcst_daily_runs": [75600],
             "refcst_leadtime_start_in_sec": 3600,
             "refcst_leadtime_end_in_sec": 162000,
             "refcst_leadtime_step_in_sec": 3600
@@ -19,7 +19,7 @@
         "valid": {
             "start": 20210717,
             "end": 20211115,
-            "refcst_daily_hours": [75600],
+            "refcst_daily_runs": [75600],
             "refcst_leadtime_start_in_sec": 3600,
             "refcst_leadtime_end_in_sec": 162000,
             "refcst_leadtime_step_in_sec": 3600
