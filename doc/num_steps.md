@@ -16,7 +16,7 @@ Currently they are many `num steps` options tunable from CLI.
 
 These different options interfer with other options of the dataset.
 
-The step_duration of the model is defined by : `step_duration of the dataset / num_inter_steps`.
+The forecast step of the model is defined by : `obs_step` in the case of an observation dataset or `refcst_leadtime_step_in_sec` in the case of a reforecast dataset.
 
 
 ## Example of num steps usage
