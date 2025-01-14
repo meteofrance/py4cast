@@ -221,6 +221,12 @@ def test_lightning_fit_inference():
             num_samples_to_plot=1,
             training_strategy="diff_ar",
             channels_last=False,
+            optimizer_name="AdamW",
+            lr=0.001,
+            lr_scheduler="cosine",
+            warmup_epochs=1,
+            max_epochs=50,
+            eta_min=0,
         )
         trainer.fit(
             model=lightning_module,

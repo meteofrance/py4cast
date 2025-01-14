@@ -165,6 +165,12 @@ class AutoRegressiveLightning(LightningModule):
         training_strategy: Literal["diff_ar", "scaled_ar"] = "diff_ar",
         channels_last: bool = False,
         num_samples_to_plot: int = 1,
+        optimizer_name: str = "AdamW",
+        lr: float = 0.001,
+        lr_scheduler: str = "cosine",
+        warmup_epochs: int = 1,
+        max_epochs: int = 50,
+        eta_min: int = 0,
         *args,
         **kwargs,
     ):
@@ -183,6 +189,12 @@ class AutoRegressiveLightning(LightningModule):
         self.training_strategy = training_strategy
         self.len_train_loader = len_train_loader
         self.channels_last = channels_last
+        self.optimizer_name = optimizer_name
+        self.lr = lr
+        self.lr_scheduler = lr_scheduler
+        self.warmup_epochs = warmup_epochs
+        self.max_epochs = max_epochs
+        self.eta_min = eta_min
 
         if self.num_inter_steps > 1 and self.num_input_steps > 1:
             raise AttributeError(
@@ -290,15 +302,13 @@ class AutoRegressiveLightning(LightningModule):
             self.acc_metric = MetricACC(self.dataset_info)
 
     def configure_optimizers(self):
-        optimizer = self.optimizer.class_path(**self.optimizer.init_args)
-        scheduler = self.lr_scheduler.class_path(
-            optimizer, **self.lr_scheduler.init_args
+        optimizer = torch.optim.AdamW(self.parameters(), lr=self.lr)
+        scheduler = pl_bolts.optimizers.lr_scheduler.LinearWarmupCosineAnnealingLR(
+            optimizer,
+            warmup_epochs=self.warmup_epochs,
+            max_epochs=self.max_epochs,
+            eta_min=self.eta_min,
         )
-        if optimizer is None:
-            optimizer = torch.optim.AdamW(self.parameters(), lr=0.001)
-            scheduler = pl_bolts.optimizers.lr_scheduler.LinearWarmupCosineAnnealingLR(
-                optimizer, warmup_epochs=1, max_epochs=50, eta_min=0
-            )
         return [optimizer], [scheduler]
 
     @property
