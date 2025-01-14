@@ -73,8 +73,9 @@ class PoesyAccessor(DataAccessor):
     def get_grid_coords(param: WeatherParam) -> List[float]:
         raise NotImplementedError("Poesy does not require get_grid_coords")
 
-    @staticmethod
+    @classmethod
     def get_filepath(
+        cls,
         ds_name: str,
         param: WeatherParam,
         date: dt.datetime,
@@ -89,8 +90,9 @@ class PoesyAccessor(DataAccessor):
             / f"{date.strftime('%Y-%m-%dT%H:%M:%SZ')}_{var_file_name}_lt1-45_crop.npy"
         )
 
+    @classmethod
     def load_data_from_disk(
-        self,
+        cls,
         ds_name: str,
         param: WeatherParam,
         timestamps: Timestamps,
@@ -102,7 +104,7 @@ class PoesyAccessor(DataAccessor):
         term : Position of leadtimes in file.
         """
         data_array = np.load(
-            self.get_filepath(ds_name, param, timestamps.datetime), mmap_mode="r"
+            cls.get_filepath(ds_name, param, timestamps.datetime), mmap_mode="r"
         )
 
         arr = data_array[
@@ -114,15 +116,16 @@ class PoesyAccessor(DataAccessor):
 
         return np.expand_dims(arr, -1)
 
+    @classmethod
     def exists(
-        self,
+        cls,
         ds_name: str,
         param: WeatherParam,
         timestamps: Timestamps,
         file_format: str = "npy",
     ) -> bool:
 
-        filepath = self.get_filepath(ds_name, param, timestamps.datetime, file_format)
+        filepath = cls.get_filepath(ds_name, param, timestamps.datetime, file_format)
         if not filepath.exists():
             return False
         return True

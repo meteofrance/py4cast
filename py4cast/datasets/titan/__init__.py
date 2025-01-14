@@ -130,7 +130,7 @@ class TitanAccessor(DataAccessor):
             data_path = cls.get_filepath(ds_name, param, date, file_format)
             if file_format == "grib":
                 arr, lons, lats = load_data_grib(param, data_path)
-                arr = fit_to_grid(arr, lons, lats)
+                arr = fit_to_grid(param, arr, lons, lats, cls.get_grid_coords)
             else:
                 arr = np.load(data_path)
 
@@ -167,6 +167,9 @@ class TitanAccessor(DataAccessor):
         return True
 
     def parameter_namer(param: WeatherParam) -> str:
+        """
+        Retrieve a filename from a parameter
+        """
         if param.level_type in ["surface", "heightAboveGround"]:
             level_type = "m"
         else:
