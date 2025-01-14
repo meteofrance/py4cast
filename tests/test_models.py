@@ -225,7 +225,7 @@ def test_lightning_fit_inference():
         )
         optimizer = torch.optim.AdamW(lightning_module.parameters(), lr=0.001)
         lr_scheduler = pl_bolts.optimizers.lr_scheduler.LinearWarmupCosineAnnealingLR(
-            warmup_epochs=1, max_epochs=50, eta_min=0
+            optimizer, warmup_epochs=1, max_epochs=50, eta_min=0
         )
         trainer.fit(
             model=lightning_module,
