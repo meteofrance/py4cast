@@ -237,7 +237,7 @@ def test_lightning_fit_inference():
 
         item = test_ds[0]  # Load data directly from dataset (no dataloader)
         batch_item = collate_fn([item])  # Transform to BatchItem
-        model(batch_item)    
+        model(batch_item)
     print()
     print("test_lightning_fit_inference WORKS !")
     print()

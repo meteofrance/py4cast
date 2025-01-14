@@ -9,8 +9,8 @@ from typing import Dict, List, Literal, Tuple, Union
 import einops
 import matplotlib
 import mlflow.pytorch
-import torch
 import pl_bolts
+import torch
 from lightning import LightningDataModule, LightningModule
 from lightning.pytorch.loggers import MLFlowLogger
 from lightning.pytorch.utilities import rank_zero_only
@@ -291,8 +291,10 @@ class AutoRegressiveLightning(LightningModule):
 
     def configure_optimizers(self):
         optimizer = self.optimizer.class_path(**self.optimizer.init_args)
-        scheduler = self.lr_scheduler.class_path(optimizer, **self.lr_scheduler.init_args)
-        if optimizer==None:
+        scheduler = self.lr_scheduler.class_path(
+            optimizer, **self.lr_scheduler.init_args
+        )
+        if optimizer is None:
             optimizer = torch.optim.AdamW(self.parameters(), lr=0.001)
             scheduler = pl_bolts.optimizers.lr_scheduler.LinearWarmupCosineAnnealingLR(
                 optimizer, warmup_epochs=1, max_epochs=50, eta_min=0
