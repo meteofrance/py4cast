@@ -9,7 +9,7 @@ Test our pure PyTorch models to make sure they can be :
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
-
+import pl_bolts
 import lightning.pytorch as pl
 import numpy as np
 import pytest
@@ -221,19 +221,15 @@ def test_lightning_fit_inference():
             num_samples_to_plot=1,
             training_strategy="diff_ar",
             channels_last=False,
-            optimizer="torch.optim.AdamW",
-            optimizer_args={"lr": 0.001},
-            lr_scheduler="pl_bolts.optimizers.lr_scheduler.LinearWarmupCosineAnnealingLR",
-            lr_scheduler_args={
-                "warmup_epochs": 1,
-                "max_epochs": 50,
-                "eta_min": 0,
-            },
         )
+        optimizer = torch.optim.AdamW(lr=0.001)
+        lr_scheduler = pl_bolts.optimizers.lr_scheduler.LinearWarmupCosineAnnealingLR(warmup_epochs=1, max_epochs= 50, eta_min=0)
         trainer.fit(
             model=lightning_module,
             train_dataloaders=train_loader,
             val_dataloaders=val_loader,
+            optimizers=[optimizer],
+            lr_schedulers=[lr_scheduler],
         )
         trainer.test(ckpt_path="best", dataloaders=test_loader)
 
