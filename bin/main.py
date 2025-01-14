@@ -27,6 +27,7 @@ class Py4castLightningCLI(LightningCLI):
         )
 
     def add_arguments_to_parser(self, parser):
+        parser.add_
         parser.link_arguments(
             "data.dataset_name",
             "model.dataset_name",
@@ -61,7 +62,42 @@ class Py4castLightningCLI(LightningCLI):
             "model.len_train_loader",
             apply_on="instantiate",
         )
-
+        parser.add_argument(
+            "--optimizer.class_path",
+            type=str,
+            default="torch.optim.AdamW",
+            help="Optimizer class path",
+        )
+        parser.add_argument(
+            "--optimizer.init_args.lr",
+            type=float,
+            default=0.001,
+            help="Optimizer learning rate",
+        )
+        parser.add_argument(
+            "--lr_scheduler.class_path",
+            type=str,
+            default="pl_bolts.optimizers.lr_scheduler.LinearWarmupCosineAnnealingLR",
+            help="Learning rate scheduler class path",
+        )
+        parser.add_argument(
+            "--lr_scheduler.init_args.warmup_epochs",
+            type=int,
+            default=1,
+            help="Warmup epochs for learning rate scheduler",
+        )
+        parser.add_argument(
+            "--lr_scheduler.init_args.max_epochs",
+            type=int,
+            default=50,
+            help="Maximum epochs for learning rate scheduler",
+        )
+        parser.add_argument(
+            "--lr_scheduler.init_args.eta_min",
+            type=float,
+            default=0,
+            help="Minimum learning rate for scheduler",
+        )
 
 if __name__ == "__main__":
     Py4castLightningCLI(AutoRegressiveLightning, PlDataModule)
