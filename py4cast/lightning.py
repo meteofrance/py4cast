@@ -356,7 +356,6 @@ class AutoRegressiveLightning(LightningModule):
     def on_fit_start(self):
         self.log_hparams_tb()
 
-
     def _next_x(
         self, batch: ItemBatch, prev_states: NamedTensor, step_idx: int
     ) -> torch.Tensor:
