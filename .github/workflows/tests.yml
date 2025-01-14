@@ -52,5 +52,10 @@ jobs:
         coverage run -p bin/inference.py --dataset dummy --model_path /home/runner/work/py4cast/py4cast/logs/camp0/dummy/HalfUNet/runn_run_0/
         coverage run -p bin/train.py --precision 32 --model HiLAM --dataset dummy --epochs 1 --batch_size 1 --num_pred_steps_train 1 --limit_train_batches 1 --num_workers 1 --pin_memory
         coverage run -p bin/train.py --precision 32 --model UNETRPP --dataset dummy --epochs 1 --batch_size 1 --num_pred_steps_train 1 --limit_train_batches 1 --num_workers 1
+        coverage run -p bin/main.py fit --config config/CLI/trainer.yaml --config config/CLI/titan.yaml --config config/CLI/unetrpp.yaml --fast_dev_run True
+        coverage run -p bin/main.py fit --config config/CLI/trainer.yaml --config config/CLI/titan.yaml --config config/CLI/unetrpp.yaml --fast_dev_run False --trainer.max_epochs 1 --data.batch_size 1 --limit_train_batches 1
+        coverage run -p bin/main.py test --config config/CLI/trainer.yaml --config config/CLI/titan.yaml --config config/CLI/unetrpp.yaml --fast_dev_run False --trainer.max_epochs 1 --data.batch_size 1 --limit_train_batches 1
+        
+        
         coverage combine
         coverage report  --ignore-errors --fail-under=60
