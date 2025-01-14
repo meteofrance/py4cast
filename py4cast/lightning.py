@@ -279,7 +279,6 @@ class AutoRegressiveLightning(LightningModule):
         exp_summary(self)
 
     def setup(self, stage=None):
-        # self.configure_optimizers()
         self.logger.log_hyperparams(self.hparams, metrics={"val_mean_loss": 0.0})
         if self.logging_enabled:
             self.save_path = Path(self.trainer.logger.log_dir)
