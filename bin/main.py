@@ -99,5 +99,6 @@ class Py4castLightningCLI(LightningCLI):
             help="Minimum learning rate for scheduler",
         )
 
+
 if __name__ == "__main__":
     Py4castLightningCLI(AutoRegressiveLightning, PlDataModule)
