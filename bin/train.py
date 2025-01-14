@@ -263,45 +263,41 @@ save_path = log_dir / folder / subfolder
 
 # Logger & checkpoint callback
 callback_list = []
-if args.no_log:
-    loggers = None
-else:
-    loggers = {
-        "TensorBoardLogger": TensorBoardLogger(
-            save_dir=log_dir, name=folder, version=subfolder, default_hp_metric=False
-        ),
+
+loggers = {
+    "TensorBoardLogger": TensorBoardLogger(
+        save_dir=log_dir, name=folder, version=subfolder, default_hp_metric=False
+    ),
+}
+
+if args.mlflow_log:
+    mlflow_logger = {
+        "MLFlowLogger": MLFlowLogger(
+            experiment_name=os.getenv("MLFLOW_EXPERIMENT_NAME", str(folder)),
+            run_name=subfolder,
+            log_model=True,
+            save_dir=log_dir / "mlflow",
+        )
     }
+    loggers.update(mlflow_logger)
 
-    if args.mlflow_log:
-        mlflow_logger = {
-            "MLFlowLogger": MLFlowLogger(
-                experiment_name=os.getenv("MLFLOW_EXPERIMENT_NAME", str(folder)),
-                run_name=subfolder,
-                log_model=True,
-                save_dir=log_dir / "mlflow",
-            )
-        }
-        loggers.update(mlflow_logger)
+print(
+    "--> Model, checkpoints, and tensorboard artifacts "
+    + f"will be saved in {save_path}."
+)
 
-    print(
-        "--> Model, checkpoints, and tensorboard artifacts "
-        + f"will be saved in {save_path}."
-    )
-
-    loggers["TensorBoardLogger"].experiment.add_custom_scalars(layout)
-    checkpoint_callback = pl.callbacks.ModelCheckpoint(
-        dirpath=save_path,
-        filename="{epoch:02d}-{val_mean_loss:.2f}",  # Custom filename pattern
-        monitor="val_mean_loss",
-        mode="min",
-        save_top_k=1,  # Save only the best model
-        save_last=True,  # Also save the last model
-    )
-    callback_list.append(checkpoint_callback)
-    callback_list.append(LearningRateMonitor(logging_interval="step"))
-    callback_list.append(
-        EarlyStopping(monitor="val_mean_loss", mode="min", patience=50)
-    )
+loggers["TensorBoardLogger"].experiment.add_custom_scalars(layout)
+checkpoint_callback = pl.callbacks.ModelCheckpoint(
+    dirpath=save_path,
+    filename="{epoch:02d}-{val_mean_loss:.2f}",  # Custom filename pattern
+    monitor="val_mean_loss",
+    mode="min",
+    save_top_k=1,  # Save only the best model
+    save_last=True,  # Also save the last model
+)
+callback_list.append(checkpoint_callback)
+callback_list.append(LearningRateMonitor(logging_interval="step"))
+callback_list.append(EarlyStopping(monitor="val_mean_loss", mode="min", patience=50))
 
 # Setup profiler
 if args.profiler == "pytorch":
@@ -372,16 +368,13 @@ else:
 print("Starting training !")
 trainer.fit(model=lightning_module, datamodule=dm, ckpt_path=args.resume_from_ckpt)
 
-if not args.no_log:
-    # If we saved a model, we test it.
-    best_checkpoint = checkpoint_callback.best_model_path
-    last_checkpoint = checkpoint_callback.last_model_path
+# If we saved a model, we test it.
+best_checkpoint = checkpoint_callback.best_model_path
+last_checkpoint = checkpoint_callback.last_model_path
 
-    model_to_test = best_checkpoint if best_checkpoint else last_checkpoint
-    print(
-        f"Testing using {'best' if best_checkpoint else 'last'} model at {model_to_test}"
-    )
-    trainer.test(ckpt_path=model_to_test, datamodule=dm)
+model_to_test = best_checkpoint if best_checkpoint else last_checkpoint
+print(f"Testing using {'best' if best_checkpoint else 'last'} model at {model_to_test}")
+trainer.test(ckpt_path=model_to_test, datamodule=dm)
 
 # Finally log the model in a MLFlow fashion
 if trainer.is_global_zero and args.mlflow_log:
