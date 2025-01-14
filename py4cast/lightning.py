@@ -10,6 +10,7 @@ import einops
 import matplotlib
 import mlflow.pytorch
 import torch
+import pl_bolts
 from lightning import LightningDataModule, LightningModule
 from lightning.pytorch.loggers import MLFlowLogger
 from lightning.pytorch.utilities import rank_zero_only
@@ -279,6 +280,7 @@ class AutoRegressiveLightning(LightningModule):
         exp_summary(self)
 
     def setup(self, stage=None):
+        self.configure_optimizers()
         self.logger.log_hyperparams(self.hparams, metrics={"val_mean_loss": 0.0})
         if self.logging_enabled:
             self.save_path = Path(self.trainer.logger.log_dir)
@@ -286,6 +288,16 @@ class AutoRegressiveLightning(LightningModule):
             self.rmse_psd_plot_metric = MetricPSDVar(pred_step=max_pred_step)
             self.psd_plot_metric = MetricPSDK(self.save_path, pred_step=max_pred_step)
             self.acc_metric = MetricACC(self.dataset_info)
+
+    def configure_optimizers(self):
+        optimizer = self.optimizer.class_path(**self.optimizer.init_args)
+        scheduler = self.lr_scheduler.class_path(optimizer, **self.lr_scheduler.init_args)
+        if optimizer==None:
+            optimizer = torch.optim.AdamW(self.parameters(), lr=0.001)
+            scheduler = pl_bolts.optimizers.lr_scheduler.LinearWarmupCosineAnnealingLR(
+                optimizer, warmup_epochs=1, max_epochs=50, eta_min=0
+            )
+        return [optimizer], [scheduler]
 
     @property
     def logging_enabled(self) -> bool:

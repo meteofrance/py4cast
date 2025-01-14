@@ -12,7 +12,6 @@ from pathlib import Path
 
 import lightning.pytorch as pl
 import numpy as np
-import pl_bolts
 import pytest
 import torch
 from mfai.torch import export_to_onnx, onnx_load_and_infer
@@ -223,16 +222,10 @@ def test_lightning_fit_inference():
             training_strategy="diff_ar",
             channels_last=False,
         )
-        optimizer = torch.optim.AdamW(lightning_module.parameters(), lr=0.001)
-        lr_scheduler = pl_bolts.optimizers.lr_scheduler.LinearWarmupCosineAnnealingLR(
-            optimizer, warmup_epochs=1, max_epochs=50, eta_min=0
-        )
         trainer.fit(
             model=lightning_module,
             train_dataloaders=train_loader,
             val_dataloaders=val_loader,
-            optimizer=optimizer,
-            lr_scheduler=lr_scheduler,
         )
         trainer.test(ckpt_path="best", dataloaders=test_loader)
 
@@ -244,8 +237,10 @@ def test_lightning_fit_inference():
 
         item = test_ds[0]  # Load data directly from dataset (no dataloader)
         batch_item = collate_fn([item])  # Transform to BatchItem
-        model(batch_item)
+        model(batch_item)    
+    print()
     print("test_lightning_fit_inference WORKS !")
+    print()
 
 
 def test_model_registry():
@@ -269,4 +264,6 @@ def test_model_registry():
         "GraphLAM",
         "HiLAMParallel",
     }
+    print()
     print("test_model_registry WORKS !")
+    print()

@@ -17,7 +17,7 @@ trainer:  # Native training arguments of ligthining.pytorch.Trainer
 
   fast_dev_run: False  # True: fit with only 1 batch and 1 epoch, use for dev (logging & checkpointing disabled)
   num_nodes: 1         # Num of GPU nodes (1 if device=cpu)
-  max_epochs: 1
+  max_epochs: 50
   profiler: null       # Performance profiler. Possibilities are [null, simple, or specific custom class (see doc)]
 
   logger:
