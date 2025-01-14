@@ -221,6 +221,14 @@ def test_lightning_fit_inference():
             num_samples_to_plot=1,
             training_strategy="diff_ar",
             channels_last=False,
+            optimizer="torch.optim.AdamW",
+            optimizer_args={"lr": 0.001},
+            lr_scheduler="pl_bolts.optimizers.lr_scheduler.LinearWarmupCosineAnnealingLR",
+            lr_scheduler_args={
+                "warmup_epochs": 1,
+                "max_epochs": 50,
+                "eta_min": 0,
+            },
         )
         trainer.fit(
             model=lightning_module,
@@ -238,6 +246,7 @@ def test_lightning_fit_inference():
         item = test_ds[0]  # Load data directly from dataset (no dataloader)
         batch_item = collate_fn([item])  # Transform to BatchItem
         model(batch_item)
+    print("test_lightning_fit_inference WORKS !")
 
 
 def test_model_registry():
@@ -261,3 +270,4 @@ def test_model_registry():
         "GraphLAM",
         "HiLAMParallel",
     }
+    print("test_model_registry WORKS !")
