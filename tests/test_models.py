@@ -231,8 +231,8 @@ def test_lightning_fit_inference():
             model=lightning_module,
             train_dataloaders=train_loader,
             val_dataloaders=val_loader,
-            optimizers=[optimizer],
-            lr_schedulers=[lr_scheduler],
+            optimizer=optimizer,
+            lr_scheduler=lr_scheduler,
         )
         trainer.test(ckpt_path="best", dataloaders=test_loader)
 
