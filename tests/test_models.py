@@ -8,9 +8,7 @@ Test our pure PyTorch models to make sure they can be :
 
 import tempfile
 from dataclasses import dataclass
-from pathlib import Path
 
-import lightning.pytorch as pl
 import numpy as np
 import pytest
 import torch
@@ -18,9 +16,6 @@ from mfai.torch import export_to_onnx, onnx_load_and_infer
 from mfai.torch.models.base import ModelType
 from mfai.torch.models.utils import features_last_to_second, features_second_to_last
 
-from py4cast.datasets import get_datasets
-from py4cast.datasets.base import collate_fn
-from py4cast.lightning import AutoRegressiveLightning
 from py4cast.models import all_nn_architectures, get_model_kls_and_settings
 
 
@@ -145,6 +140,7 @@ def test_torch_training_loop(model_name):
                 sample = features_last_to_second(sample)
             export_to_onnx(model, sample, dst.name)
             onnx_load_and_infer(dst.name, sample)
+
 
 def test_model_registry():
     """
