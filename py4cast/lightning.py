@@ -9,7 +9,6 @@ from typing import Dict, List, Literal, Tuple, Union
 import einops
 import matplotlib
 import mlflow.pytorch
-import pl_bolts
 import torch
 from lightning import LightningDataModule, LightningModule
 from lightning.pytorch.loggers import MLFlowLogger
