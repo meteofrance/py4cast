@@ -72,9 +72,9 @@ trainer:  # Native training arguments of ligthining.pytorch.Trainer
   strategy: auto               # Training strategy alias (auto, ddp, fsdp, etc)
   accelerator: auto            # Type of device (auto, gpu, cpu)
   devices: auto                # Number of devices (auto or NUM)
-  limit_train_batches: 3     # Limit num of batches per epoch (to do very short training)
-  limit_val_batches: 3
-  limit_test_batches: 3
+  limit_train_batches: null    # Limit num of batches per epoch (to do very short training)
+  limit_val_batches: null
+  limit_test_batches: null
 
 
   # TODO :

@@ -164,12 +164,6 @@ class AutoRegressiveLightning(LightningModule):
         training_strategy: Literal["diff_ar", "scaled_ar"] = "diff_ar",
         channels_last: bool = False,
         num_samples_to_plot: int = 1,
-        optimizer_name: str = "AdamW",
-        lr: float = 0.001,
-        lr_scheduler: str = "cosine",
-        warmup_epochs: int = 1,
-        max_epochs: int = 50,
-        eta_min: int = 0,
         *args,
         **kwargs,
     ):
@@ -188,12 +182,6 @@ class AutoRegressiveLightning(LightningModule):
         self.training_strategy = training_strategy
         self.len_train_loader = len_train_loader
         self.channels_last = channels_last
-        self.optimizer_name = optimizer_name
-        self.lr = lr
-        self.lr_scheduler = lr_scheduler
-        self.warmup_epochs = warmup_epochs
-        self.max_epochs = max_epochs
-        self.eta_min = eta_min
 
         if self.num_inter_steps > 1 and self.num_input_steps > 1:
             raise AttributeError(
@@ -301,7 +289,7 @@ class AutoRegressiveLightning(LightningModule):
             self.acc_metric = MetricACC(self.dataset_info)
 
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(), lr=self.lr)
+        optimizer = torch.optim.Adam(self.parameters(), lr=0.001)
         return [optimizer]
 
     @property
@@ -577,10 +565,6 @@ class AutoRegressiveLightning(LightningModule):
 
     def on_train_start(self):
         self.train_plotters = []
-        # print("Optimizer:")
-        # print(self.optimizers())
-        # print("Scheduler:")
-        # print(self.lr_schedulers())
 
     def _shared_epoch_end(self, outputs: List[torch.Tensor], label: str) -> None:
         """Computes and logs the averaged metrics at the end of an epoch.

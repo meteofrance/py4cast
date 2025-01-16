@@ -163,6 +163,3 @@ def test_model_registry():
         "GraphLAM",
         "HiLAMParallel",
     }
-    print()
-    print("test_model_registry WORKS !")
-    print()
