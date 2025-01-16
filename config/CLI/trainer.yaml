@@ -1,6 +1,19 @@
 # lightning.pytorch==2.4.0
 seed_everything: true
 
+optimizer:
+  class_path: torch.optim.AdamW
+  init_args:
+    lr: 0.001
+
+lr_scheduler:
+  class_path: pl_bolts.optimizers.lr_scheduler.LinearWarmupCosineAnnealingLR
+  init_args:
+    warmup_epochs: 1
+    max_epochs: 50
+    eta_min: 0
+
+
 trainer:  # Native training arguments of ligthining.pytorch.Trainer
 
   fast_dev_run: False  # True: fit with only 1 batch and 1 epoch, use for dev (logging & checkpointing disabled)

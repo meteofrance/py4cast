@@ -288,11 +288,9 @@ class AutoRegressiveLightning(LightningModule):
         else:
             raise TypeError(f"Unknown loss function: {loss_name}")
         self.loss.prepare(self, statics.interior_mask, dataset_info)
-
         exp_summary(self)
 
     def setup(self, stage=None):
-        self.configure_optimizers()
         self.logger.log_hyperparams(self.hparams, metrics={"val_mean_loss": 0.0})
         if self.logging_enabled:
             self.save_path = Path(self.trainer.logger.log_dir)
@@ -300,16 +298,6 @@ class AutoRegressiveLightning(LightningModule):
             self.rmse_psd_plot_metric = MetricPSDVar(pred_step=max_pred_step)
             self.psd_plot_metric = MetricPSDK(self.save_path, pred_step=max_pred_step)
             self.acc_metric = MetricACC(self.dataset_info)
-
-    def configure_optimizers(self):
-        optimizer = torch.optim.AdamW(self.parameters(), lr=self.lr)
-        scheduler = pl_bolts.optimizers.lr_scheduler.LinearWarmupCosineAnnealingLR(
-            optimizer,
-            warmup_epochs=self.warmup_epochs,
-            max_epochs=self.max_epochs,
-            eta_min=self.eta_min,
-        )
-        return [optimizer], [scheduler]
 
     @property
     def logging_enabled(self) -> bool:

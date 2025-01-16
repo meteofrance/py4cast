@@ -6,9 +6,3 @@ model:
   num_samples_to_plot: 1
   training_strategy: diff_ar # diff_ar or scaled_ar
   channels_last: False # True: B W H C
-  optimizer_name: AdamW
-  lr: 0.001
-  lr_scheduler: cosine
-  warmup_epochs: 1
-  max_epochs: 50
-  eta_min: 0
