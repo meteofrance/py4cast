@@ -287,9 +287,11 @@ class AutoRegressiveLightning(LightningModule):
         else:
             raise TypeError(f"Unknown loss function: {loss_name}")
         self.loss.prepare(self, statics.interior_mask, dataset_info)
+
         exp_summary(self)
 
     def setup(self, stage=None):
+        self.configure_optimizers()
         self.logger.log_hyperparams(self.hparams, metrics={"val_mean_loss": 0.0})
         if self.logging_enabled:
             self.save_path = Path(self.trainer.logger.log_dir)
@@ -297,6 +299,10 @@ class AutoRegressiveLightning(LightningModule):
             self.rmse_psd_plot_metric = MetricPSDVar(pred_step=max_pred_step)
             self.psd_plot_metric = MetricPSDK(self.save_path, pred_step=max_pred_step)
             self.acc_metric = MetricACC(self.dataset_info)
+
+    def configure_optimizers(self):
+        optimizer = torch.optim.Adam(self.parameters(), lr=self.lr)
+        return [optimizer]
 
     @property
     def logging_enabled(self) -> bool:
@@ -571,6 +577,11 @@ class AutoRegressiveLightning(LightningModule):
 
     def on_train_start(self):
         self.train_plotters = []
+        # print("Optimizer:")
+        # print(self.optimizers())
+        # print("Scheduler:")
+        # print(self.lr_schedulers())
+
 
     def _shared_epoch_end(self, outputs: List[torch.Tensor], label: str) -> None:
         """Computes and logs the averaged metrics at the end of an epoch.
