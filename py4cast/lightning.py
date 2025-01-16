@@ -582,7 +582,6 @@ class AutoRegressiveLightning(LightningModule):
         # print("Scheduler:")
         # print(self.lr_schedulers())
 
-
     def _shared_epoch_end(self, outputs: List[torch.Tensor], label: str) -> None:
         """Computes and logs the averaged metrics at the end of an epoch.
         Step shared by training and validation epochs.
