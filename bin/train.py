@@ -78,9 +78,6 @@ parser.add_argument(
     "--loss", type=str, default="mse", help="Loss function to use (default: mse)"
 )
 parser.add_argument(
-    "--lr", type=float, default=1e-3, help="learning rate (default: 0.001)"
-)
-parser.add_argument(
     "--val_interval",
     type=int,
     default=1,
@@ -349,7 +346,6 @@ dict_args = {
     "num_pred_steps_train": args.num_pred_steps_train,
     "num_pred_steps_val_test": args.num_pred_steps_val_test,
     "num_inter_steps": args.num_inter_steps,
-    "lr": args.lr,
     "loss_name": args.loss,
     "training_strategy": args.strategy,
     "len_train_loader": len_loader,
