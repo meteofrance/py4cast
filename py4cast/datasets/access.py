@@ -45,6 +45,7 @@ class Period:
     # If you are in the case of a continuous Dataset. e.g, a dataset with regularly spaced
     # observations or a reanalysis (such as titan)
     obs_step: dt.timedelta = None  # step between 2 consecutives observations
+    obs_step_btw_t0: dt.datetime = None  # step between 2 consecutives t0 of training sample
 
     # -------------- FORECAST ---------------
     # If you are in the case of a non continuous Dataset, i.e. you may have multiple files
@@ -78,6 +79,10 @@ class Period:
 
         if self.obs_step is not None:  # continuous dataset case
             self.obs_step = dt.timedelta(seconds=int(self.obs_step))
+            if self.obs_step_btw_t0 is not None:
+                self.obs_step_btw_t0 = dt.timedelta(seconds=int(self.obs_step_btw_t0))
+            else:
+                self.obs_step_btw_t0 = self.obs_step
 
         if self.refcst_leadtime_start_in_sec is not None:  # non-continuous dataset
             self.refcst_daily_runs = [
@@ -93,7 +98,7 @@ class Period:
             list_t0 = np.arange(
                 self.start,
                 self.end + dt.timedelta(days=1),
-                self.obs_step,
+                self.obs_step_btw_t0,
                 dtype="datetime64[s]",
             ).tolist()
             list_leadtimes = [dt.timedelta(seconds=0)]
