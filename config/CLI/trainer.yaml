@@ -1,6 +1,8 @@
 # lightning.pytorch==2.4.0
 seed_everything: true
 
+ckpt_path: #EMPTY: runs as usual. NOT EMPTY: load weights and hyperparameters from checkpoint
+
 optimizer:
   class_path: torch.optim.AdamW
   init_args:
