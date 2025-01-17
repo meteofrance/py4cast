@@ -71,6 +71,9 @@ if __name__ == "__main__":
         batch_size=lightning_module.batch_size,
         dataset_conf=args.dataset_conf,
         config_override=config_override,
+        num_workers=10,
+        prefetch_factor=None,
+        pin_memory=False,
     )
 
     trainer = Trainer(devices="auto")
