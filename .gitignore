@@ -166,6 +166,7 @@ cython_debug/
 #.idea/
 
 lightning_logs/
+dummy_config.json
 
 # Heavy Data
 *.npy
