@@ -8,6 +8,7 @@ from typing import Dict, List, Literal, Tuple, Union
 
 import einops
 import matplotlib
+import mlflow.pytorch
 import torch
 from lightning import LightningDataModule, LightningModule
 from lightning.pytorch.loggers import MLFlowLogger
@@ -18,8 +19,8 @@ from mfai.torch.models.utils import (
     features_last_to_second,
     features_second_to_last,
 )
+from mlflow.models.signature import infer_signature
 from torchinfo import summary
-from transformers import get_cosine_schedule_with_warmup
 
 from py4cast.datasets import get_datasets
 from py4cast.datasets.base import DatasetInfo, ItemBatch, NamedTensor, Statics
@@ -35,9 +36,6 @@ from py4cast.plots import (
 )
 from py4cast.utils import str_to_dtype
 
-# learning rate scheduling period in steps (update every nth step)
-LR_SCHEDULER_PERIOD: int = 10
-# PNG plots period in epochs. Plots are made, logged and saved every nth epoch.
 PLOT_PERIOD: int = 10
 
 
@@ -161,12 +159,9 @@ class AutoRegressiveLightning(LightningModule):
         # non-linked args
         model_name: Literal[tuple(model_registry.keys())] = "HalfUNet",
         model_conf: Path | None = None,
-        lr: float = 1e-3,
         loss_name: Literal["mse", "mae"] = "mse",
-        num_inter_steps: int = 0,
+        num_inter_steps: int = 1,
         training_strategy: Literal["diff_ar", "scaled_ar"] = "diff_ar",
-        use_lr_scheduler: bool = False,
-        no_log: bool = False,
         channels_last: bool = False,
         num_samples_to_plot: int = 1,
         *args,
@@ -179,7 +174,6 @@ class AutoRegressiveLightning(LightningModule):
         self.batch_size = batch_size
         self.model_conf = model_conf
         self.model_name = model_name
-        self.lr = lr
         self.num_input_steps = num_input_steps
         self.num_pred_steps_train = num_pred_steps_train
         self.num_pred_steps_val_test = num_pred_steps_val_test
@@ -187,8 +181,6 @@ class AutoRegressiveLightning(LightningModule):
         self.num_samples_to_plot = num_samples_to_plot
         self.training_strategy = training_strategy
         self.len_train_loader = len_train_loader
-        self.use_lr_scheduler = use_lr_scheduler
-        self.no_log = no_log
         self.channels_last = channels_last
 
         if self.num_inter_steps > 1 and self.num_input_steps > 1:
@@ -288,13 +280,27 @@ class AutoRegressiveLightning(LightningModule):
 
     def setup(self, stage=None):
         self.configure_optimizers()
-        self.save_path = Path(self.trainer.logger.log_dir)
         self.logger.log_hyperparams(self.hparams, metrics={"val_mean_loss": 0.0})
-        max_pred_step = self.num_pred_steps_val_test - 1
         if self.logging_enabled:
+            self.save_path = Path(self.trainer.logger.log_dir)
+            max_pred_step = self.num_pred_steps_val_test - 1
             self.rmse_psd_plot_metric = MetricPSDVar(pred_step=max_pred_step)
             self.psd_plot_metric = MetricPSDK(self.save_path, pred_step=max_pred_step)
             self.acc_metric = MetricACC(self.dataset_info)
+            print()
+            print(f"LOG DIR : {self.save_path}")
+            print()
+
+    def configure_optimizers(self):
+        optimizer = torch.optim.Adam(self.parameters(), lr=0.001)
+        return [optimizer]
+
+    @property
+    def logging_enabled(self) -> bool:
+        """
+        Check if logging is enabled
+        """
+        return self.trainer.logger.log_dir is not None
 
     @property
     def dtype(self):
@@ -317,7 +323,6 @@ class AutoRegressiveLightning(LightningModule):
         print("---------------------")
         print(f"Loss {self.loss}")
         print(f"Batch size {self.batch_size}")
-        print(f"Learning rate {self.lr}")
         print("---------------------------")
 
     @rank_zero_only
@@ -357,26 +362,6 @@ class AutoRegressiveLightning(LightningModule):
 
     def on_fit_start(self):
         self.log_hparams_tb()
-
-    def configure_optimizers(self) -> torch.optim.Optimizer:
-        lr = self.lr
-        opt = torch.optim.AdamW(self.parameters(), lr=lr, betas=(0.9, 0.95))
-        if self.use_lr_scheduler:
-            len_loader = self.len_train_loader // LR_SCHEDULER_PERIOD
-            epochs = self.trainer.max_epochs
-            lr_scheduler = get_cosine_schedule_with_warmup(
-                opt, 1000 // LR_SCHEDULER_PERIOD, len_loader * epochs
-            )
-            return {
-                "optimizer": opt,
-                "lr_scheduler": {
-                    "scheduler": lr_scheduler,
-                    "interval": "step",
-                    "frequency": 1,
-                },
-            }
-        else:
-            return opt
 
     def _next_x(
         self, batch: ItemBatch, prev_states: NamedTensor, step_idx: int
@@ -620,13 +605,6 @@ class AutoRegressiveLightning(LightningModule):
 
         return batch_loss
 
-    @property
-    def logging_enabled(self):
-        """
-        Check if logging is enabled
-        """
-        return not self.no_log
-
     def on_save_checkpoint(self, checkpoint):
         """
         We store our feature and dim names in the checkpoint
@@ -668,6 +646,26 @@ class AutoRegressiveLightning(LightningModule):
         outputs = self.training_step_losses
         self._shared_epoch_end(outputs, "train")
         self.training_step_losses.clear()  # free memory
+
+    def on_train_end(self):
+        if self.mlflow_logger:
+
+            # Get random sample to infer the signature of the model
+            dataloader = self.trainer.datamodule.test_dataloader()
+            data = next(iter(dataloader))
+            signature = infer_signature(
+                data.inputs.tensor.detach().numpy(),
+                data.outputs.tensor.detach().numpy(),
+            )
+
+            # Manually log the trained model in Mlflow style with its signature
+            run_id = self.mlflow_logger.version
+            with mlflow.start_run(run_id=run_id):
+                mlflow.pytorch.log_model(
+                    pytorch_model=self.trainer.model,
+                    artifact_path="model",
+                    signature=signature,
+                )
 
     def on_validation_start(self):
         """
