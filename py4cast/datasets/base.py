@@ -287,7 +287,6 @@ class DatasetInfo:
         print(f"Features shortnames {self.shortnames}")
         for p in ["input", "input_output", "output"]:
             names = self.shortnames[p]
-            print(names)
             mean = self.stats.to_list("mean", names)
             std = self.stats.to_list("std", names)
             mini = self.stats.to_list("min", names)
@@ -408,6 +407,10 @@ class Sample:
                 timestamps=self.timestamps,
                 file_format=self.settings.file_format,
             ):
+                print(
+                    f"invalid: {self.timestamps.validity_times[0]}, \
+                        {self.accessor.parameter_namer(param)}. Check file."
+                )
                 return False
         return True
 
@@ -642,7 +645,7 @@ class DatasetABC(Dataset):
         )
 
     @cached_property
-    def sample_list(self):
+    def sample_list(self) -> List[Sample]:
         """Creates the list of samples."""
         print("Start creating samples...")
         stats = self.stats if self.settings.standardize else None
@@ -882,7 +885,6 @@ class DatasetABC(Dataset):
     def from_json(
         cls,
         accessor_kls: Type[DataAccessor],
-        dataset_name: str,
         fname: Path,
         num_input_steps: int,
         num_pred_steps_train: int,
@@ -902,7 +904,7 @@ class DatasetABC(Dataset):
                 conf = merge_dicts(conf, config_override)
         return cls.from_dict(
             accessor_kls,
-            dataset_name,
+            fname.stem,
             conf,
             num_input_steps,
             num_pred_steps_train,

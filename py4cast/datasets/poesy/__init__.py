@@ -110,14 +110,15 @@ class PoesyAccessor(DataAccessor):
 
         return np.expand_dims(arr, -1)
 
+    @classmethod
     def exists(
-        self,
+        cls,
         ds_name: str,
         param: WeatherParam,
         timestamps: Timestamps,
         file_format: str = "npy",
     ) -> bool:
-        filepath = self.get_filepath(ds_name, param, timestamps.datetime, file_format)
+        filepath = cls.get_filepath(ds_name, param, timestamps.datetime, file_format)
         if not filepath.exists():
             return False
         return True

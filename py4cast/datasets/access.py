@@ -194,6 +194,7 @@ class Grid:
             )
         self.x = self.subdomain[1] - self.subdomain[0]
         self.y = self.subdomain[3] - self.subdomain[2]
+        self.full_size = self.grid_config.full_size
 
     def get_grid_info(self) -> GridConfig:
         return self.load_grid_info_func(self.name)
@@ -422,7 +423,7 @@ class DataAccessor(ABC):
         """
         Optional method that return True if the dataset contains the data for t0 + leadtime. Else return False.
 
-        Please override this method is your personnal DataAccessor() if you want to avoid unecessary file checking
+        Please override this method in your personnal DataAccessor() if you want to avoid unecessary file checking
         for an optimisation purpose.
 
         Args:
