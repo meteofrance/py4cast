@@ -294,7 +294,7 @@ checkpoint_callback = pl.callbacks.ModelCheckpoint(
 )
 callback_list.append(checkpoint_callback)
 callback_list.append(LearningRateMonitor(logging_interval="step"))
-callback_list.append(EarlyStopping(monitor="val_mean_loss", mode="min", patience=50))
+callback_list.append(EarlyStopping(monitor="val_mean_loss", mode="min", patience=5))
 
 # Setup profiler
 if args.profiler == "pytorch":
