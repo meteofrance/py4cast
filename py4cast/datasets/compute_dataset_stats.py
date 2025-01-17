@@ -1,9 +1,9 @@
 from typing import Literal
 
 import torch
-from base import DatasetABC
 from tqdm import tqdm
 
+from py4cast.datasets.base import DatasetABC
 from py4cast.utils import torch_save
 
 
@@ -27,7 +27,8 @@ def compute_mean_std_min_max(
         raise ValueError("Your dataset should not be standardized.")
 
     for batch in tqdm(
-        dataset.torch_dataloader(), desc=f"Computing {type_tensor} stats"
+        dataset.torch_dataloader(),
+        desc=f"Computing {type_tensor} stats",
     ):
         tensor = getattr(batch, type_tensor).tensor
         tensor = tensor.flatten(1, 3)  # Flatten to be (Batch, X, Features)
@@ -65,7 +66,7 @@ def compute_parameters_stats(dataset: DatasetABC):
     """
     all_stats = {}
     for type_tensor in ["inputs", "outputs", "forcing"]:
-        stats_dict = compute_mean_std_min_max(type_tensor)
+        stats_dict = compute_mean_std_min_max(dataset, type_tensor)
         for feature, stats in stats_dict.items():
             # If feature was computed multiple times we keep only first occurence
             if feature not in all_stats.keys():
