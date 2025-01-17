@@ -3,17 +3,17 @@
         "train": {
             "start": 2023010106,
             "end": 2023010123,
-            "step": 3
+            "obs_step": 3600
         },
         "valid": {
             "start": 2023010200,
             "end": 2023010223,
-            "step": 3
+            "obs_step": 3600
         },
         "test": {
             "start": 2023010300,
             "end": 2023010320,
-            "step": 3
+            "obs_step": 3600
         }
     },
     "grid":{
@@ -24,7 +24,6 @@
         "projection_kwargs": {}
     },
     "settings":{
-        "step_duration": 1,
         "standardize": true,
         "file_format": "dataset"
     },

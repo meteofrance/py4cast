@@ -317,7 +317,7 @@ class AutoRegressiveLightning(LightningModule):
         print(f"Number of intermediary steps :{self.num_inter_steps}")
         print(f"Training strategy :{self.training_strategy}")
         print(
-            f"Model step duration : {self.dataset_info.step_duration /self.num_inter_steps}"
+            f"Model step duration : {self.dataset_info.pred_step /self.num_inter_steps}"
         )
         print(f"Model conf {self.model_conf}")
         print("---------------------")
