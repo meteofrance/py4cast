@@ -45,7 +45,9 @@ class Period:
     # If you are in the case of a continuous Dataset. e.g, a dataset with regularly spaced
     # observations or a reanalysis (such as titan)
     obs_step: dt.timedelta = None  # step between 2 consecutives observations
-    obs_step_btw_t0: dt.datetime = None  # step between 2 consecutives t0 of training sample
+    obs_step_btw_t0: dt.datetime = (
+        None  # step between 2 consecutives t0 of training sample
+    )
 
     # -------------- FORECAST ---------------
     # If you are in the case of a non continuous Dataset, i.e. you may have multiple files
