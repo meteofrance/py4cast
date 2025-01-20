@@ -663,8 +663,12 @@ class DatasetABC(Dataset):
             step_duration * step for step in range(-n_inputs + 1, n_preds + 1)
         ]
         all_timestamps = []
+
+        # Iterate over each date
         for date in tqdm(self.period.date_list):
+            # Iterate over each terms
             for term in self.period.terms_list:
+                # Build the list of terms
                 t0 = date + dt.timedelta(hours=int(term))
                 validity_times = [
                     t0 + dt.timedelta(hours=ts) for ts in sample_timesteps
@@ -676,6 +680,7 @@ class DatasetABC(Dataset):
                     terms=np.array(terms),
                     validity_times=validity_times,
                 )
+                # Check if the builded terms' timestamp respect the convention of the selected dataset
                 if self.accessor.valid_timestamp(n_inputs, timestamps):
                     all_timestamps.append(timestamps)
 
@@ -692,6 +697,7 @@ class DatasetABC(Dataset):
                     self.accessor,
                     member,
                 )
+                # Check for each param in the sample if the corresponding file exists.
                 if sample.is_valid():
                     samples.append(sample)
                 else:

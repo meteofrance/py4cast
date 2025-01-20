@@ -75,6 +75,11 @@ class Timestamps:
     # validity times are complete datetimes
     validity_times: List[dt.datetime]
 
+    def __post_init__(self):
+        val_times_computed = [self.datetime + t for t in self.terms]
+        if self.validity_times != val_times_computed:
+            raise ValueError(f"Validity_times are not matching with the datetime and terms in input;\ninput : {self.validity_times}, computed : {val_times_computed}")
+
 
 GridConfig = namedtuple(
     "GridConfig", "full_size latitude longitude geopotential landsea_mask"
