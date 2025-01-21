@@ -213,18 +213,18 @@ class Statics(RegisterFieldsMixin):
 
 
 def generate_forcings(
-    date: dt.datetime, output_terms: List[dt.timedelta], grid: Grid
+    date: dt.datetime, timedeltas: List[dt.timedelta], grid: Grid
 ) -> List[NamedTensor]:
     """
     Generate all the forcing in this function.
     Return a list of NamedTensor.
     """
     # Datetime Forcing
-    datetime_forcing = get_year_hour_forcing(date, output_terms).type(torch.float32)
+    datetime_forcing = get_year_hour_forcing(date, timedeltas).type(torch.float32)
 
     # Solar forcing, dim : [num_pred_steps, Lat, Lon, feature = 1]
     solar_forcing = generate_toa_radiation_forcing(
-        grid.lat, grid.lon, date, output_terms
+        grid.lat, grid.lon, date, timedeltas
     ).type(torch.float32)
 
     lforcings = [
@@ -269,9 +269,7 @@ class DatasetInfo:
     units: Dict[str, str]  # d[shortname] = unit (str)
     weather_dim: int
     forcing_dim: int
-    step_duration: (
-        float  # Duration (in hour) of one step in the dataset. 0.25 means 15 minutes.
-    )
+    pred_step: dt.timedelta  # Duration of one step in the dataset.
     statics: Statics  # A lot of static variables
     stats: Stats
     diff_stats: Stats
@@ -283,7 +281,7 @@ class DatasetInfo:
         Print a table summarizing variables present in the dataset (and their role)
         """
         print(f"\n Summarizing {self.name} \n")
-        print(f"Step_duration {self.step_duration}")
+        print(f"Step_duration {self.pred_step}")
         print(f"Static fields {self.statics.grid_statics.feature_names}")
         print(f"Grid static features {self.statics.grid_statics}")
         print(f"Features shortnames {self.shortnames}")
@@ -391,24 +389,23 @@ class Sample:
         if self.settings.num_input_steps + self.settings.num_pred_steps != len(
             self.timestamps.validity_times
         ):
-            raise Exception("Length terms does not match inputs + outputs")
+            raise Exception("Length of validity times does not match inputs + outputs")
 
         self.output_timestamps = Timestamps(
-            self.timestamps.datetime,
-            self.timestamps.terms[self.settings.num_input_steps :],
-            self.timestamps.validity_times[self.settings.num_input_steps :],
+            datetime=self.timestamps.datetime,
+            timedeltas=self.timestamps.timedeltas[self.settings.num_input_steps :],
         )
 
     def __repr__(self):
-        return f"{self.timestamps.datetime}, terms {self.timestamps.terms}, {self.settings.num_input_steps} inputs"
+        return f"Date {self.timestamps.datetime}"
 
     def is_valid(self) -> bool:
         for param in self.params:
             if not self.accessor.exists(
-                self.settings.dataset_name,
-                param,
-                self.timestamps,
-                self.settings.file_format,
+                ds_name=self.settings.dataset_name,
+                param=param,
+                timestamps=self.timestamps,
+                file_format=self.settings.file_format,
             ):
                 print(
                     f"invalid: {self.timestamps.validity_times[0]}, \
@@ -491,7 +488,7 @@ class Sample:
 
         external_forcings = generate_forcings(
             date=self.timestamps.datetime,
-            output_terms=self.output_timestamps.terms,
+            timedeltas=self.output_timestamps.timedeltas,
             grid=self.grid,
         )
 
@@ -640,7 +637,7 @@ class DatasetABC(Dataset):
             units=self.units,
             weather_dim=self.input_output_dim,
             forcing_dim=self.input_dim,
-            step_duration=self.settings.step_duration,
+            pred_step=self.period.forecast_step,
             statics=self.statics,
             stats=self.stats,
             diff_stats=self.diff_stats,
@@ -653,35 +650,29 @@ class DatasetABC(Dataset):
         print("Start creating samples...")
         stats = self.stats if self.settings.standardize else None
 
-        n_inputs, n_preds, step_duration = (
-            self.settings.num_input_steps,
-            self.settings.num_pred_steps,
-            self.period.step_duration,
-        )
-
-        sample_timesteps = [
-            step_duration * step for step in range(-n_inputs + 1, n_preds + 1)
-        ]
-        all_timestamps = []
-        for date in tqdm(self.period.date_list):
-            for term in self.period.terms_list:
-                t0 = date + dt.timedelta(hours=int(term))
-                validity_times = [
-                    t0 + dt.timedelta(hours=ts) for ts in sample_timesteps
+        timestamps = []
+        for t0, leadtime in self.period.available_t0_and_leadtimes:
+            if self.accessor.optional_check_before_exists(
+                t0,
+                self.settings.num_input_steps,
+                self.settings.num_pred_steps,
+                self.period.forecast_step,
+                leadtime,
+            ):
+                timesteps = [
+                    delta * self.period.forecast_step + leadtime
+                    for delta in range(
+                        -self.settings.num_input_steps + 1,
+                        self.settings.num_pred_steps + 1,
+                    )
                 ]
-                terms = [dt.timedelta(hours=int(t + term)) for t in sample_timesteps]
-
-                timestamps = Timestamps(
-                    datetime=date,
-                    terms=np.array(terms),
-                    validity_times=validity_times,
-                )
-                if self.accessor.valid_timestamp(n_inputs, timestamps):
-                    all_timestamps.append(timestamps)
+                timestamps.append(Timestamps(datetime=t0, timedeltas=timesteps))
 
         samples = []
         invalid_samples = 0
-        for ts in all_timestamps:
+        for ts in tqdm(
+            timestamps, desc=f"Checking samples of '{self.period.name}' period"
+        ):
             for member in self.settings.members:
                 sample = Sample(
                     ts,
@@ -850,7 +841,6 @@ class DatasetABC(Dataset):
         num_pred_steps_train: int,
         num_pred_steps_val_test: int,
     ) -> Tuple[Type["DatasetABC"], Type["DatasetABC"], Type["DatasetABC"]]:
-
         grid = Grid(load_grid_info_func=accessor_kls.load_grid_info, **conf["grid"])
 
         try:
@@ -864,30 +854,30 @@ class DatasetABC(Dataset):
             dataset_name=name,
             num_input_steps=num_input_steps,
             num_pred_steps=num_pred_steps_train,
-            step_duration=conf["periods"]["train"]["step_duration"],
             members=members,
             **conf["settings"],
         )
         train_period = Period(**conf["periods"]["train"], name="train")
         train_ds = cls(
-            name, grid, train_period, param_list, train_settings, accessor_kls
+            name, grid, train_period, param_list, train_settings, accessor_kls()
         )
 
         valid_settings = SamplePreprocSettings(
             dataset_name=name,
             num_input_steps=num_input_steps,
             num_pred_steps=num_pred_steps_val_test,
-            step_duration=conf["periods"]["valid"]["step_duration"],
             members=members,
             **conf["settings"],
         )
         valid_period = Period(**conf["periods"]["valid"], name="valid")
         valid_ds = cls(
-            name, grid, valid_period, param_list, valid_settings, accessor_kls
+            name, grid, valid_period, param_list, valid_settings, accessor_kls()
         )
 
         test_period = Period(**conf["periods"]["test"], name="test")
-        test_ds = cls(name, grid, test_period, param_list, valid_settings, accessor_kls)
+        test_ds = cls(
+            name, grid, test_period, param_list, valid_settings, accessor_kls()
+        )
 
         return train_ds, valid_ds, test_ds
 

@@ -6,7 +6,7 @@ from collections import namedtuple
 from dataclasses import dataclass, field
 from functools import cached_property
 from pathlib import Path
-from typing import Any, Callable, List, Literal, Optional, Tuple
+from typing import Any, Callable, Iterable, List, Literal, Optional, Tuple, Union
 
 import cartopy
 import einops
@@ -19,39 +19,121 @@ from py4cast.settings import CACHE_DIR
 
 @dataclass(slots=True)
 class Period:
-    # first day of the period (included)
-    # each day of the period will be separated from start by an integer multiple of 24h
-    # note that the start date valid hour ("t0") may not be 00h00
-    start: dt.datetime
-    # last day of the period (included)
-    end: dt.datetime
-    # In hours, step btw the t0 of consecutive terms
-    step_duration: int
+    """
+    Args:
+        - name (str): name of the period, e.g. "Train", "Valid" or "Test".
+        - start (dt.datetime): first day of the period (included).
+        - end (dt.datetime): last day of the period (included).
+
+        # Observation: If you are in the case of a continuous Dataset
+        - obs_step (dt.timedelta): step between 2 consecutives observations. None by default.
+
+        # Forecast: If you are in the case of a non continuous Dataset, i.e. you
+        may have multiple files for a single valid time.
+        - refcst_daily_runs (List[dt.timedelta]): timedeltas of the day for wich forecast runs are
+        available. If you set it in a config file, please give a list of seconds. None by default.
+        - refcst_leadtime_start_in_sec (int): starting leadtime of the forecast in seconds. None by default.
+        - refcst_leadtime_end_in_sec (int): ending leadtime of the forecast in seconds. None by default.
+        - refcst_leadtime_step_in_sec (int): step between 2 consecutives leadtimes. None by default.
+    """
+
     name: str
-    # first term (= time delta wrt to a date t0) that is admissible
-    term_start: int = 0
-    # last term (= time delta wrt to a date start) that is admissible
-    term_end: int = 23
+    start: dt.datetime
+    end: dt.datetime
+
+    # -------------- OBSERVATION ---------------
+    # If you are in the case of a continuous Dataset. e.g, a dataset with regularly spaced
+    # observations or a reanalysis (such as titan)
+    obs_step: dt.timedelta = None  # step between 2 consecutives observations
+    obs_step_btw_t0: dt.datetime = (
+        None  # step between 2 consecutives t0 of training sample
+    )
+
+    # -------------- FORECAST ---------------
+    # If you are in the case of a non continuous Dataset, i.e. you may have multiple files
+    # for a single valid time. This is typically the case for a reforecast dataset with one
+    # run per day, and lead times larger than 24h (such as poesy).
+    refcst_daily_runs: List[dt.timedelta] = (
+        None  # timedeltas of the day for wich forecast runs are available
+    )
+    refcst_leadtime_start_in_sec: int = None  # starting leadtime of the forecast
+    refcst_leadtime_end_in_sec: int = None  # ending leadtime of the forecast
+    refcst_leadtime_step_in_sec: int = None  # step between 2 consecutives leadtimes
 
     def __post_init__(self):
-        self.start = np.datetime64(dt.datetime.strptime(str(self.start), "%Y%m%d%H"))
-        self.end = np.datetime64(dt.datetime.strptime(str(self.end), "%Y%m%d%H"))
+        self.start = dt.datetime.strptime(str(self.start), "%Y%m%d")
+        self.end = dt.datetime.strptime(str(self.end), "%Y%m%d")
+
+        if (
+            self.obs_step,
+            self.refcst_daily_runs,
+            self.refcst_leadtime_start_in_sec,
+            self.refcst_leadtime_end_in_sec,
+            self.refcst_leadtime_step_in_sec,
+        ) == (None, None, None, None, None):
+            raise ValueError(
+                """Please instatiate the Period() class, with at least:
+    - 'obs_step' if you work with a continuous dataset,
+    - 'refcst_daily_runs', 'refcst_leadtime_start_in_sec', 'refcst_leadtime_end_in_sec' and
+    'refcst_leadtime_step_in_sec' if you work with a dataset that has multiple files for a single valid time.
+"""
+            )
+
+        if self.obs_step is not None:  # continuous dataset case
+            self.obs_step = dt.timedelta(seconds=int(self.obs_step))
+            if self.obs_step_btw_t0 is not None:
+                self.obs_step_btw_t0 = dt.timedelta(seconds=int(self.obs_step_btw_t0))
+            else:
+                self.obs_step_btw_t0 = self.obs_step
+
+        if self.refcst_leadtime_start_in_sec is not None:  # non-continuous dataset
+            self.refcst_daily_runs = [
+                dt.timedelta(seconds=int(sec)) for sec in self.refcst_daily_runs
+            ]
 
     @property
-    def terms_list(self) -> np.array:
-        return np.arange(self.term_start, self.term_end + 1, self.step_duration)
+    def available_t0_and_leadtimes(self) -> List[Tuple[dt.datetime, dt.timedelta]]:
+        """
+        Return a list of all possible couples of (t0, leadtime).
+        """
+        if self.obs_step is not None:  # continuous dataset case
+            list_t0 = np.arange(
+                self.start,
+                self.end + dt.timedelta(days=1),
+                self.obs_step_btw_t0,
+                dtype="datetime64[s]",
+            ).tolist()
+            list_leadtimes = [dt.timedelta(seconds=0)]
+        else:  # non-continuous dataset
+            list_days = np.arange(
+                self.start,
+                self.end + dt.timedelta(days=1),
+                dt.timedelta(days=1),
+                dtype="datetime64[s]",
+            ).tolist()
+            list_t0 = [day + run for day in list_days for run in self.refcst_daily_runs]
+            list_leadtimes = [
+                dt.timedelta(seconds=int(leadtime))
+                for leadtime in range(
+                    int(self.refcst_leadtime_start_in_sec),
+                    int(self.refcst_leadtime_end_in_sec),
+                    int(self.refcst_leadtime_step_in_sec),
+                )
+            ]
+
+        return [(t0, leadtime) for t0 in list_t0 for leadtime in list_leadtimes]
 
     @property
-    def date_list(self) -> np.array:
+    def forecast_step(self) -> dt.timedelta:
         """
-        List all dates available for the period, with a 24h leap
+        Return the forecast step.
+        self.obs_step if available, else self.fcst_leadtime_step_in_sec.
         """
-        return np.arange(
-            self.start,
-            self.end + np.timedelta64(1, "D"),
-            np.timedelta64(1, "D"),
-            dtype="datetime64[s]",
-        ).tolist()
+        return (
+            self.obs_step
+            if self.obs_step is not None
+            else dt.timedelta(seconds=self.refcst_leadtime_step_in_sec)
+        )
 
 
 @dataclass
@@ -59,21 +141,22 @@ class Timestamps:
     """
     Describe all timestamps in a sample.
     It contains
-        datetime, terms, validity times
+        datetime, timedeltas, validity times
 
     If n_inputs = 2, n_preds = 2, terms will be (-1, 0, 1, 2) * step_duration
      where step_duration is typically an integer multiple of 1 hour
 
-    validity times correspond to the addition of terms to the reference datetime
+    validity times correspond to the addition of timedeltas to the reference datetime
     """
 
     # date and hour of the reference time
     datetime: dt.datetime
-    # terms are time deltas vis-à-vis the reference input time step.
-    terms: np.array
 
-    # validity times are complete datetimes
-    validity_times: List[dt.datetime]
+    # list of timedelta with the reference input datetime.
+    timedeltas: Iterable[dt.timedelta]
+
+    def __post_init__(self):
+        self.validity_times = [self.datetime + delta for delta in self.timedeltas]
 
 
 GridConfig = namedtuple(
@@ -312,7 +395,6 @@ class SamplePreprocSettings:
     dataset_name: str
     num_input_steps: int  # Number of input timesteps
     num_pred_steps: int  # Number of output timesteps
-    step_duration: float  # duration in hour
     standardize: bool = True
     file_format: Literal["npy", "grib"] = "grib"
     members: Optional[Tuple[int]] = None
@@ -330,7 +412,31 @@ class DataAccessor(ABC):
     as two end-to-end examples of DataAccessors.
     """
 
-    def cache_dir(name: str, grid: Grid) -> Path:
+    @staticmethod
+    def optional_check_before_exists(
+        t0: dt.datetime,
+        num_input_steps: int,
+        num_pred_steps: int,
+        pred_step: dt.timedelta,
+        leadtime: Union[dt.timedelta, None],
+    ) -> bool:
+        """
+        Optional method that return True if the dataset contains the data for t0 + leadtime. Else return False.
+
+        Please override this method in your personnal DataAccessor() if you want to avoid unecessary file checking
+        for an optimisation purpose.
+
+        Args:
+            - t0 (dt.datetime): valid time of the observation or run date (in case of dataset that contain
+            multiple forecasts).
+            - num_input_steps (int,): number of input steps.
+            - num_pred_steps (int,): number of prediction steps.
+            - pred_step (dt.timedelta): duration of the prediction step.
+            - leadtime (dt.timedelta): leadtime for wich we want to know if it is a valid timestamp.
+        """
+        return True
+
+    def cache_dir(self, name: str, grid: Grid) -> Path:
         """
         Return the path of cache_dir, where, e.g, stat files can be stored
         """
@@ -338,12 +444,14 @@ class DataAccessor(ABC):
         os.makedirs(path, mode=0o777, exist_ok=True)
         return path
 
+    @staticmethod
     @abstractmethod
     def get_dataset_path(name: str, grid: Grid) -> Path:
         """
         Return the path that will be used as cache for data during dataset preparation.
         """
 
+    @staticmethod
     @abstractmethod
     def get_weight_per_level(
         level: int,
@@ -353,6 +461,7 @@ class DataAccessor(ABC):
         Attribute a weight in the final reconstruction loss depending on the height level and level_type
         """
 
+    @staticmethod
     @abstractmethod
     def load_grid_info(name: str) -> GridConfig:
         """
@@ -361,6 +470,7 @@ class DataAccessor(ABC):
         Consumed by the 'Grid' interface object.
         """
 
+    @staticmethod
     @abstractmethod
     def get_grid_coords(param: WeatherParam) -> List[float]:
         """
@@ -404,10 +514,9 @@ class DataAccessor(ABC):
         loads a given parameter on a given timestamp
         """
 
-    @classmethod
     @abstractmethod
     def exists(
-        cls,
+        self,
         ds_name: str,
         param: WeatherParam,
         timestamps: Timestamps,
@@ -419,14 +528,7 @@ class DataAccessor(ABC):
         Concrete implementations can typically verify that the file where the data is exists.
         """
 
-    @abstractmethod
-    def valid_timestamp(n_inputs: int, timestamps: Timestamps) -> bool:
-        """
-        Verification function called after the creation of each timestamps.
-        Check if computed terms respect the dataset convention.
-        """
-
-    @abstractmethod
+    @staticmethod
     def parameter_namer(param: WeatherParam) -> str:
         """
         Return a string used to identify parameters names on files and stats metadata

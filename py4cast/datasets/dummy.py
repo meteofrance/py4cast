@@ -18,13 +18,12 @@ from py4cast.settings import CACHE_DIR, DEFAULT_CONFIG_DIR
 
 
 class DummyAccessor(DataAccessor):
-
     print("importing DummyAccessor automatically creates directory and dummy config")
     config = {
         "periods": {
-            "train": {"start": 2023010100, "end": 2023010107, "step_duration": 1},
-            "valid": {"start": 2023010108, "end": 2023010115, "step_duration": 1},
-            "test": {"start": 2023010116, "end": 2023010122, "step_duration": 1},
+            "train": {"start": 20230101, "end": 20230101, "obs_step": 3600},
+            "valid": {"start": 20230101, "end": 20230101, "obs_step": 3600},
+            "test": {"start": 20230101, "end": 20230101, "obs_step": 3600},
         },
         "settings": {"standardize": "true", "file_format": "npy"},
         "grid": {
@@ -44,8 +43,7 @@ class DummyAccessor(DataAccessor):
     with open(DEFAULT_CONFIG_DIR / "datasets" / "dummy_config.json", "w") as outfile:
         outfile.write(jsonconfig)
 
-    def cache_dir(name: str, grid: Grid) -> Path:
-
+    def cache_dir(self, name: str, grid: Grid) -> Path:
         path = CACHE_DIR / f"{name}_{grid.name}"
         os.makedirs(path, mode=0o777, exist_ok=True)
 
@@ -71,19 +69,21 @@ class DummyAccessor(DataAccessor):
 
         return path
 
+    @staticmethod
     def get_dataset_path(name: str, grid: Grid) -> Path:
         path = CACHE_DIR / f"{name}_{grid.name}"
         os.makedirs(path, mode=0o777, exist_ok=True)
 
         return path
 
+    @staticmethod
     def get_weight_per_level(
         level: int,
         level_type: Literal["isobaricInhPa", "heightAboveGround", "surface", "meanSea"],
     ) -> float:
-
         return 1.0
 
+    @staticmethod
     def load_grid_info(name: str) -> GridConfig:
         lat = (np.indices((64,)) - 16) * 0.5
         lon = (np.indices((64,)) + 30) * 0.5
@@ -96,9 +96,11 @@ class DummyAccessor(DataAccessor):
             landsea_mask=None,
         )
 
+    @staticmethod
     def get_grid_coords(param: WeatherParam) -> List[float]:
         return [-8.0, 24.0, 15.0, 47.0]
 
+    @staticmethod
     def load_param_info(name: str) -> ParamConfig:
         return ParamConfig(
             unit="adimensional",
@@ -120,7 +122,7 @@ class DummyAccessor(DataAccessor):
         if not os.path.exists(
             cls.get_dataset_path(dataset_name, param.grid) / "dummy_data.npy"
         ):
-            arr = np.random.randn(len(timestamps.terms), 64, 64, 1).clip(-3, 3)
+            arr = np.random.randn(len(timestamps.timedeltas), 64, 64, 1).clip(-3, 3)
             np.save(
                 cls.get_dataset_path(dataset_name, param.grid) / "dummy_data.npy", arr
             )
@@ -142,12 +144,8 @@ class DummyAccessor(DataAccessor):
         arr = np.load(cls.get_filepath(dataset_name, param, timestamps))
         return arr
 
-    def valid_timestamp(n_inputs: int, time: Timestamps) -> bool:
-        return True
-
-    @classmethod
     def exists(
-        cls,
+        self,
         ds_name: str,
         param: WeatherParam,
         timestamps: Timestamps,
