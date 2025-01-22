@@ -70,7 +70,7 @@ def test_torch_training_loop(model_name):
     NUM_INPUTS = 2
     NUM_OUTPUTS = 1
 
-    model_kls, model_settings = get_model_kls_and_settings(model_name)
+    model_kls, model_settings = get_model_kls_and_settings(model_name, {})
 
     # GNNs build the graph here, once at rank zero
     if hasattr(model_kls, "rank_zero_setup"):
