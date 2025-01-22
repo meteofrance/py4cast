@@ -46,7 +46,7 @@ all_nn_architectures = list(registry)
 
 
 def get_model_kls_and_settings(
-    model_name: str, settings_path: Union[Path, None] = None
+    model_name: str, settings: dict
 ):
     """
     Returns the classes for a model and its settings instance.
@@ -59,11 +59,7 @@ def get_model_kls_and_settings(
         ) from e
     settings_kls = model_kls.settings_kls
 
-    if settings_path is None:
-        model_settings = settings_kls()
-    else:
-        with open(settings_path, "r") as f:
-            model_settings = settings_kls.schema().loads(f.read())
+    model_settings = settings_kls(**settings)
     return model_kls, model_settings
 
 
@@ -71,7 +67,7 @@ def build_model_from_settings(
     network_name: str,
     num_input_features: int,
     num_output_features: int,
-    settings_path: Union[Path, None],
+    settings: dict,
     input_shape: tuple,
     *args,
     **kwargs,
@@ -79,7 +75,7 @@ def build_model_from_settings(
     """
     Instanciates a model based on its name and an optional settings file.
     """
-    model_kls, model_settings = get_model_kls_and_settings(network_name, settings_path)
+    model_kls, model_settings = get_model_kls_and_settings(network_name, settings)
     return (
         model_kls(
             num_input_features,

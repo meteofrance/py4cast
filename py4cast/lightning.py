@@ -147,6 +147,7 @@ class AutoRegressiveLightning(LightningModule):
 
     def __init__(
         self,
+        settings_init_args,
         # args linked from trainer and datamodule
         dataset_info,  # Don't put type hint here or CLI doesn't work
         len_train_loader: int,
@@ -168,6 +169,7 @@ class AutoRegressiveLightning(LightningModule):
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
+        self.settings_init_args = settings_init_args
         self.dataset_name = dataset_name
         self.dataset_conf = dataset_conf
         self.dataset_info = dataset_info
@@ -231,7 +233,7 @@ class AutoRegressiveLightning(LightningModule):
 
         num_output_features = dataset_info.weather_dim
 
-        model_kls, model_settings = get_model_kls_and_settings(model_name, model_conf)
+        model_kls, model_settings = get_model_kls_and_settings(model_name, self.settings_init_args)
 
         # All processes should wait until rank zero
         # has done the initialization (like creating a graph)
@@ -241,7 +243,7 @@ class AutoRegressiveLightning(LightningModule):
             model_name,
             num_input_features,
             num_output_features,
-            model_conf,
+            self.settings_init_args,
             statics.grid_shape,
         )
         if channels_last:

@@ -1,5 +1,5 @@
 model:
-  model_name: HalfUNet
+  model_name: Segformer
   model_conf: null # Path to model_conf
   loss_name: mse # mse or mae
   num_inter_steps: 1 # Number of intermediary steps (without any data)
@@ -7,10 +7,10 @@ model:
   training_strategy: diff_ar # diff_ar or scaled_ar
   channels_last: False # True: B W H C
   settings_init_args:
-    num_filters: 64
-    dilation: 1
-    bias: False
-    use_ghost: False
-    last_activation: Identity
-    absolute_pos_embed: False
-    #autopad_enabled: False # not recognized by CLI but present in UNETRPPSettings -> strange O.o
+    # dims: (32, 64, 160, 256) # Unsupported type by yaml
+    # heads: (1, 2, 5, 8)
+    # ff_expansion: (8, 8, 4, 4)
+    # reduction_ratio: (8, 4, 2, 1)
+    num_layers: 2
+    decoder_dim: 256
+    num_downsampling_chans: 32 # Number of channels after downsampling

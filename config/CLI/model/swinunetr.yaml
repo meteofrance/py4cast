@@ -1,0 +1,20 @@
+model:
+  model_name: SwinUNETR
+  model_conf: null # Path to model_conf
+  loss_name: mse # mse or mae
+  num_inter_steps: 1 # Number of intermediary steps (without any data)
+  num_samples_to_plot: 1
+  training_strategy: diff_ar # diff_ar or scaled_ar
+  channels_last: False # True: B W H C
+  settings_init_args:
+    depths: [2, 2, 2, 2]
+    num_heads: [3, 6, 12, 24]
+    feature_size: 24
+    norm_name: instance
+    drop_rate: 0.0
+    attn_drop_rate: 0.0
+    dropout_path_rate: 0.0
+    normalize: True
+    use_checkpoint: False
+    # downsample: merging # not recognized by CLI but present in UNETRPPSettings -> strange O.o
+    # use_v2: False # not recognized by CLI but present in UNETRPPSettings -> strange O.o
