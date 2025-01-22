@@ -5,8 +5,7 @@ and also register any plugin found in the PYTHONPATH.
 
 import importlib
 import pkgutil
-from pathlib import Path
-from typing import Any, Tuple, Union
+from typing import Any, Tuple
 
 from mfai.torch.models import registry as mfai_registry
 from mfai.torch.models.base import ModelABC
@@ -45,9 +44,7 @@ for module_name, module in discovered_modules.items():
 all_nn_architectures = list(registry)
 
 
-def get_model_kls_and_settings(
-    model_name: str, settings: dict
-):
+def get_model_kls_and_settings(model_name: str, settings: dict):
     """
     Returns the classes for a model and its settings instance.
     """

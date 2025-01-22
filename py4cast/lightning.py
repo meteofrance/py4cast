@@ -233,7 +233,9 @@ class AutoRegressiveLightning(LightningModule):
 
         num_output_features = dataset_info.weather_dim
 
-        model_kls, model_settings = get_model_kls_and_settings(model_name, self.settings_init_args)
+        model_kls, model_settings = get_model_kls_and_settings(
+            model_name, self.settings_init_args
+        )
 
         # All processes should wait until rank zero
         # has done the initialization (like creating a graph)
