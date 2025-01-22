@@ -10,5 +10,5 @@ data:
   num_workers: 10
   prefetch_factor: null
   pin_memory: False 
-  dataset_conf: "config/datasets/titan_refacto.json"
+  dataset_conf: "config/datasets/titan_refacto2.json"
   config_override: null
