@@ -147,7 +147,7 @@ class AutoRegressiveLightning(LightningModule):
 
     def __init__(
         self,
-        settings_init_args,
+        settings_init_args: dict,
         # args linked from trainer and datamodule
         dataset_info,  # Don't put type hint here or CLI doesn't work
         len_train_loader: int,
