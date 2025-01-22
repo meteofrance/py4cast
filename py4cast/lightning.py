@@ -348,8 +348,6 @@ class AutoRegressiveLightning(LightningModule):
             # Save model & dataset conf as files
             if self.dataset_conf is not None:
                 shutil.copyfile(self.dataset_conf, self.save_path / "dataset_conf.json")
-            if self.model_conf is not None:
-                shutil.copyfile(self.model_conf, self.save_path / "model_conf.json")
             # Write commit and state of git repo in log file
             dest_git_log = self.save_path / "git_log.txt"
             out_log = (
