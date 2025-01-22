@@ -323,6 +323,8 @@ class Sample:
                 tmp_state = NamedTensor(tensor=tensor, **deepcopy(state_kwargs))
                 loutputs.append(tmp_state)
 
+                linputs.append(NamedTensor(tensor=torch.zeros_like(tensor),**deepcopy(state_kwargs)))
+
             else:  # input_output
                 tensor = self.get_param_tensor(param, self.all_dates, no_standardize)
                 state_kwargs["names"][0] = "timestep"
