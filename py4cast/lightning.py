@@ -77,17 +77,6 @@ class PlDataModule(LightningDataModule):
             config_override,
         )
 
-    @property
-    def len_train_dl(self):
-        return len(
-            self.train_ds.torch_dataloader(
-                batch_size=self.batch_size,
-                num_workers=self.num_workers,
-                shuffle=False,
-                prefetch_factor=self.prefetch_factor,
-                pin_memory=self.pin_memory,
-            )
-        )
 
     @property
     def train_dataset_info(self) -> DatasetInfo:
@@ -150,7 +139,6 @@ class AutoRegressiveLightning(LightningModule):
         settings_init_args: dict,
         # args linked from trainer and datamodule
         dataset_info,  # Don't put type hint here or CLI doesn't work
-        len_train_loader: int,
         dataset_name: str = "dummy",
         dataset_conf: Path | None = None,  # TO DELETE ?
         num_input_steps: int = 1,
@@ -183,7 +171,6 @@ class AutoRegressiveLightning(LightningModule):
         self.num_inter_steps = num_inter_steps
         self.num_samples_to_plot = num_samples_to_plot
         self.training_strategy = training_strategy
-        self.len_train_loader = len_train_loader
         self.channels_last = channels_last
         self.downscaling_only = downscaling_only
         if downscaling_only:

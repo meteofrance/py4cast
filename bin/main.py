@@ -56,11 +56,6 @@ class Py4castLightningCLI(LightningCLI):
             "model.dataset_info",
             apply_on="instantiate",
         )
-        parser.link_arguments(
-            "data.len_train_dl",
-            "model.len_train_loader",
-            apply_on="instantiate",
-        )
 
 
 if __name__ == "__main__":
