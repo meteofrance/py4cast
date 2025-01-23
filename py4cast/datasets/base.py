@@ -694,11 +694,11 @@ class DatasetABC(Dataset):
 
     def torch_dataloader(
         self,
-        batch_size: int,
-        num_workers: int,
-        shuffle: bool,
-        prefetch_factor: Union[int, None],
-        pin_memory: bool,
+        batch_size: int= 1,
+        num_workers: int= 1,
+        shuffle: bool = False,
+        prefetch_factor: Union[int, None] = None,
+        pin_memory: bool = False,
     ) -> DataLoader:
         """
         Builds a torch dataloader from self.
