@@ -48,11 +48,12 @@ jobs:
         export PY4CAST_ROOTDIR=`pwd`
         coverage run -p -m pytest tests/
         coverage run -p bin/main.py fit --config config/CLI/trainer.yaml --config config/CLI/dataset/dummy.yaml --config config/CLI/model/unetrpp.yaml --trainer.fast_dev_run True
-        coverage run -p bin/main.py fit --config config/CLI/trainer.yaml --config config/CLI/dataset/dummy.yaml --config config/CLI/model/unetrpp.yaml --trainer.fast_dev_run False --trainer.max_epochs 1 --data.batch_size 1 --trainer.limit_train_batches 1 --trainer.logger.init_args.version version_test
-        coverage run -p bin/main.py fit --config config/CLI/trainer.yaml --config config/CLI/dataset/dummy.yaml --config config/CLI/model/unetrpp.yaml --trainer.fast_dev_run False --trainer.max_epochs 1 --data.batch_size 1 --trainer.limit_train_batches 1 --ckpt_path /home/runner/work/py4cast/py4cast/lightning_logs/version_test/checkpoints/last.ckpt
+        coverage run -p bin/main.py fit --config config/CLI/trainer.yaml --config config/CLI/dataset/dummy.yaml --config config/CLI/model/unetrpp.yaml --trainer.max_epochs 1 --data.batch_size 1 --trainer.limit_train_batches 1 --trainer.logger.init_args.version version_test
+        coverage run -p bin/main.py fit --config config/CLI/trainer.yaml --config config/CLI/dataset/dummy.yaml --config config/CLI/model/unetrpp.yaml --trainer.max_epochs 1 --data.batch_size 1 --trainer.limit_train_batches 1 --ckpt_path /home/runner/work/py4cast/py4cast/lightning_logs/version_test/checkpoints/last.ckpt
         coverage run -p bin/inference.py --dataset dummy --model_path /home/runner/work/py4cast/py4cast/lightning_logs/version_test/checkpoints/last.ckpt
-        coverage run -p bin/main.py test --config config/CLI/trainer.yaml --config config/CLI/dataset/dummy.yaml --config config/CLI/model/unetrpp.yaml --trainer.fast_dev_run False --trainer.max_epochs 1 --data.batch_size 1 --trainer.limit_train_batches 1 --ckpt_path /home/runner/work/py4cast/py4cast/lightning_logs/version_test/checkpoints/last.ckpt
-        
+        coverage run -p bin/main.py test --config config/CLI/trainer.yaml --config config/CLI/dataset/dummy.yaml --config config/CLI/model/unetrpp.yaml --trainer.max_epochs 1 --data.batch_size 1 --trainer.limit_train_batches 1 --ckpt_path /home/runner/work/py4cast/py4cast/lightning_logs/version_test/checkpoints/last.ckpt
+        coverage run -p bin/main.py predict --config config/CLI/trainer.yaml --config config/CLI/dataset/dummy.yaml --config config/CLI/model/unetrpp.yaml  --trainer.max_epochs 1 --data.batch_size 1 --trainer.limit_train_batches 1 --ckpt_path /home/runner/work/py4cast/py4cast/lightning_logs/version_test/checkpoints/last.ckpt
+
 
         coverage combine
         coverage report  --ignore-errors --fail-under=60
