@@ -337,6 +337,7 @@ trainer = pl.Trainer(
 )
 
 dict_args = {
+    "settings_init_args": {},
     "dataset_name": args.dataset,
     "dataset_conf": args.dataset_conf,
     "batch_size": args.batch_size,
