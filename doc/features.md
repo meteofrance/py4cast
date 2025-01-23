@@ -33,6 +33,10 @@ in the forward pass. **x** are the neural network inputs and **model(x)** is the
 | scaled_ar |  | next_state = previous_state + model(x)*diff_std + diff_mean | y_true  | Yes |
 |  diff_ar | | next_state = previous_state + model(x) | No |  No |
 
+Experimental strategy:
+Downscaling only:
+run with : `python bin/main.py fit --config config/CLI/trainer.yaml --config config/CLI/dataset/titan.yaml --config config/CLI/model/unetrpp.yaml --model.downscaling_only True`
+
 
 ## Available Losses
 

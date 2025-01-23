@@ -165,6 +165,7 @@ class AutoRegressiveLightning(LightningModule):
         training_strategy: Literal["diff_ar", "scaled_ar"] = "diff_ar",
         channels_last: bool = False,
         num_samples_to_plot: int = 1,
+        downscaling_only: bool = False,
         *args,
         **kwargs,
     ):
@@ -184,6 +185,11 @@ class AutoRegressiveLightning(LightningModule):
         self.training_strategy = training_strategy
         self.len_train_loader = len_train_loader
         self.channels_last = channels_last
+        self.downscaling_only = downscaling_only
+        if downscaling_only:
+            print("WARNING : You are using downscaling_only mode: this is experimental.")
+        if self.downscaling_only and self.training_strategy == "scaled_ar":
+            raise ValueError("Scaled AR incompatible with Downscaling. ")
 
         if self.num_inter_steps > 1 and self.num_input_steps > 1:
             raise AttributeError(
@@ -375,11 +381,13 @@ class AutoRegressiveLightning(LightningModule):
         - static features
         """
         forcing = batch.forcing.select_dim("timestep", step_idx, bare_tensor=False)
+        inputs = [
+            prev_states.select_dim("timestep", idx) * (1 - self.downscaling_only)
+            for idx in range(batch.num_input_steps)
+        ]
+
         x = torch.cat(
-            [
-                prev_states.select_dim("timestep", idx)
-                for idx in range(batch.num_input_steps)
-            ]
+            inputs
             + [self.grid_static_features[: batch.batch_size], forcing.tensor],
             dim=forcing.dim_index("features"),
         )
@@ -513,7 +521,7 @@ class AutoRegressiveLightning(LightningModule):
                         + step_diff_mean
                     )
                 else:
-                    predicted_state = prev_states.select_dim("timestep", -1) + y
+                    predicted_state = prev_states.select_dim("timestep", -1) * (1 - self.downscaling_only) + y
 
                 # Overwrite border with true state
                 # Force it to true state for all intermediary step
