@@ -232,7 +232,6 @@ dm = PlDataModule(
 )
 
 # Get essential info to instantiate ArLightningHyperParam
-len_loader = dm.len_train_dl
 dataset_info = dm.train_dataset_info
 
 # Setup GPU usage + get len of loader for LR scheduler
@@ -241,10 +240,8 @@ if torch.cuda.is_available():
     torch.backends.cuda.matmul.allow_tf32 = True
     torch.backends.cudnn.allow_tf32 = True
     torch.set_float32_matmul_precision("high")  # Allows using Tensor Cores on A100s
-    len_loader = len_loader // (torch.cuda.device_count() * nb_nodes)
 else:
     device_name = "cpu"
-    len_loader = len_loader
 # Get Log folders
 log_dir = ROOTDIR / "logs"
 folder = Path(args.campaign_name) / args.dataset / args.model
@@ -349,7 +346,6 @@ dict_args = {
     "num_inter_steps": args.num_inter_steps,
     "loss_name": args.loss,
     "training_strategy": args.strategy,
-    "len_train_loader": len_loader,
     "channels_last": args.channels_last,
     "dataset_info": dataset_info,
 }

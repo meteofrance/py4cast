@@ -77,17 +77,6 @@ class PlDataModule(LightningDataModule):
             config_override,
         )
 
-    @property
-    def len_train_dl(self):
-        return len(
-            self.train_ds.torch_dataloader(
-                batch_size=self.batch_size,
-                num_workers=self.num_workers,
-                shuffle=False,
-                prefetch_factor=self.prefetch_factor,
-                pin_memory=self.pin_memory,
-            )
-        )
 
     @property
     def train_dataset_info(self) -> DatasetInfo:
@@ -150,7 +139,6 @@ class AutoRegressiveLightning(LightningModule):
         settings_init_args: dict,
         # args linked from trainer and datamodule
         dataset_info,  # Don't put type hint here or CLI doesn't work
-        len_train_loader: int,
         dataset_name: str = "dummy",
         dataset_conf: Path | None = None,  # TO DELETE ?
         num_input_steps: int = 1,
@@ -165,6 +153,7 @@ class AutoRegressiveLightning(LightningModule):
         training_strategy: Literal["diff_ar", "scaled_ar"] = "diff_ar",
         channels_last: bool = False,
         num_samples_to_plot: int = 1,
+        downscaling_only: bool = False,
         *args,
         **kwargs,
     ):
@@ -182,8 +171,12 @@ class AutoRegressiveLightning(LightningModule):
         self.num_inter_steps = num_inter_steps
         self.num_samples_to_plot = num_samples_to_plot
         self.training_strategy = training_strategy
-        self.len_train_loader = len_train_loader
         self.channels_last = channels_last
+        self.downscaling_only = downscaling_only
+        if downscaling_only:
+            print("WARNING : You are using downscaling_only mode: this is experimental.")
+        if self.downscaling_only and self.training_strategy == "scaled_ar":
+            raise ValueError("Scaled AR incompatible with Downscaling. ")
 
         if self.num_inter_steps > 1 and self.num_input_steps > 1:
             raise AttributeError(
@@ -375,11 +368,13 @@ class AutoRegressiveLightning(LightningModule):
         - static features
         """
         forcing = batch.forcing.select_dim("timestep", step_idx, bare_tensor=False)
+        inputs = [
+            prev_states.select_dim("timestep", idx) * (1 - self.downscaling_only)
+            for idx in range(batch.num_input_steps)
+        ]
+
         x = torch.cat(
-            [
-                prev_states.select_dim("timestep", idx)
-                for idx in range(batch.num_input_steps)
-            ]
+            inputs
             + [self.grid_static_features[: batch.batch_size], forcing.tensor],
             dim=forcing.dim_index("features"),
         )
@@ -513,7 +508,7 @@ class AutoRegressiveLightning(LightningModule):
                         + step_diff_mean
                     )
                 else:
-                    predicted_state = prev_states.select_dim("timestep", -1) + y
+                    predicted_state = prev_states.select_dim("timestep", -1) * (1 - self.downscaling_only) + y
 
                 # Overwrite border with true state
                 # Force it to true state for all intermediary step
