@@ -1,0 +1,16 @@
+model:
+  model_name: DeepLabV3Plus
+  model_conf: null # Path to model_conf
+  loss_name: mse # mse or mae
+  num_inter_steps: 1 # Number of intermediary steps (without any data)
+  num_samples_to_plot: 1
+  training_strategy: diff_ar # diff_ar or scaled_ar
+  channels_last: False # True: B W H C
+  settings_init_args:
+    encoder_name: resnet18
+    encoder_depth: 5
+    encoder_weights: True
+    decoder_channels: 256
+    activation: null # identity (=null)/sigmoid/softmax2d/softmax/logsoftmax/tanh/callable
+    upsampling: 8
+    aux_params: null
