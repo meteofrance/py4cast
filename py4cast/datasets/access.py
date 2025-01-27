@@ -180,7 +180,7 @@ class Grid:
     y: int = field(init=False)  # Y dimension of the grid (latitudes)
     # projection information (e.g for plotting)
     proj_name: str = "PlateCarree"
-    projection_kwargs: dict = field(default_factory={})
+    projection_kwargs: dict = field(default_factory=dict)
 
     def __post_init__(self):
         self.grid_config = self.get_grid_info()
@@ -534,3 +534,11 @@ class DataAccessor(ABC):
         Return a string used to identify parameters names on files and stats metadata
         """
         return f"{param.name}_{param.level}_{param.level_type}"
+
+
+def test():
+    return None
+
+if __name__ == "__main__":
+    grid = Grid(name="coucou", load_grid_info_func=test)
+    print(grid)
