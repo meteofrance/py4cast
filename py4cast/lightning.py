@@ -651,7 +651,6 @@ class AutoRegressiveLightning(LightningModule):
 
     def on_train_end(self):
         if self.mlflow_logger:
-
             # Get random sample to infer the signature of the model
             dataloader = self.trainer.datamodule.test_dataloader()
             data = next(iter(dataloader))
