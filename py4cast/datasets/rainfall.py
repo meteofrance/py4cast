@@ -75,9 +75,8 @@ class RainfallAccessor(DataAccessor):
     #                              LOADING                      #
     #############################################################
 
-    @classmethod
-    def cache_dir(cls, name: str, grid: Grid):
-        return cls.get_dataset_path(name, grid)
+    def cache_dir(self, name: str, grid: Grid):
+        return self.get_dataset_path(name, grid)
 
     @staticmethod
     def get_dataset_path(name: str, grid: Grid):
@@ -137,9 +136,6 @@ class RainfallAccessor(DataAccessor):
             filepath = cls.get_filepath(ds_name, param, date, file_format)
             if not filepath.exists():
                 return False
-        return True
-
-    def valid_timestamp(n_inputs: int, timestamps: Timestamps) -> bool:
         return True
 
     def parameter_namer(param: WeatherParam) -> str:
