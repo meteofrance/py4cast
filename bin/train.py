@@ -10,22 +10,17 @@ from argparse import ArgumentParser, BooleanOptionalAction
 from datetime import datetime
 from pathlib import Path
 
+import lightning.pytorch as pl
 import mlflow.pytorch
-import pytorch_lightning as pl
 import torch
+from lightning.pytorch.callbacks import LearningRateMonitor
+from lightning.pytorch.callbacks.early_stopping import EarlyStopping
 from lightning.pytorch.loggers import MLFlowLogger, TensorBoardLogger
 from lightning.pytorch.profilers import AdvancedProfiler, PyTorchProfiler
 from lightning_fabric.utilities import seed
 from mlflow.models.signature import infer_signature
-from pytorch_lightning.callbacks import LearningRateMonitor
-from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 
-from py4cast.datasets.base import TorchDataloaderSettings
-from py4cast.lightning import (
-    ArLightningHyperParam,
-    AutoRegressiveLightning,
-    PlDataModule,
-)
+from py4cast.lightning import AutoRegressiveLightning, PlDataModule
 from py4cast.models import registry as model_registry
 from py4cast.settings import ROOTDIR
 
@@ -81,9 +76,6 @@ parser.add_argument("--seed", type=int, default=42, help="random seed (default: 
 # Training options
 parser.add_argument(
     "--loss", type=str, default="mse", help="Loss function to use (default: mse)"
-)
-parser.add_argument(
-    "--lr", type=float, default=1e-3, help="learning rate (default: 0.001)"
 )
 parser.add_argument(
     "--val_interval",
@@ -152,12 +144,6 @@ parser.add_argument(
     help="Number of batches loaded in advance by each worker",
 )
 parser.add_argument(
-    "--no_log",
-    action=BooleanOptionalAction,
-    default=False,
-    help="When activated, log are not stored and models are not saved. Use in dev mode.",
-)
-parser.add_argument(
     "--mlflow_log",
     action=BooleanOptionalAction,
     default=False,
@@ -168,12 +154,6 @@ parser.add_argument(
     action=BooleanOptionalAction,
     default=False,
     help="When activated, reduce number of epoch and steps.",
-)
-parser.add_argument(
-    "--use_lr_scheduler",
-    action=BooleanOptionalAction,
-    default=False,
-    help="When activated, uses OneCycle LR scheduler.",
 )
 parser.add_argument(
     "--load_model_ckpt",
@@ -237,20 +217,16 @@ if args.dev_mode:
 run_id = date.strftime("%b-%d-%Y-%M-%S")
 seed.seed_everything(args.seed)
 
-dl_settings = TorchDataloaderSettings(
+# Wrap dataset with lightning datamodule
+dm = PlDataModule(
+    dataset_name=args.dataset,
+    num_input_steps=args.num_input_steps,
+    num_pred_steps_train=args.num_pred_steps_train,
+    num_pred_steps_val_test=args.num_pred_steps_val_test,
     batch_size=args.batch_size,
     num_workers=args.num_workers,
     prefetch_factor=args.prefetch_factor,
     pin_memory=args.pin_memory,
-)
-
-# Wrap dataset with lightning datamodule
-dm = PlDataModule(
-    dataset=args.dataset,
-    num_input_steps=args.num_input_steps,
-    num_pred_steps_train=args.num_pred_steps_train,
-    num_pred_steps_val_test=args.num_pred_steps_val_test,
-    dl_settings=dl_settings,
     dataset_conf=args.dataset_conf,
     config_override=None,
 )
@@ -281,69 +257,44 @@ version = 0 if list_subdirs == [] else list_versions[-1] + 1
 subfolder = f"{run_name}_{version}"
 save_path = log_dir / folder / subfolder
 
-hp = ArLightningHyperParam(
-    dataset_info=dataset_info,
-    dataset_name=args.dataset,
-    dataset_conf=args.dataset_conf,
-    batch_size=args.batch_size,
-    model_name=args.model,
-    model_conf=args.model_conf,
-    num_input_steps=args.num_input_steps,
-    num_pred_steps_train=args.num_pred_steps_train,
-    num_pred_steps_val_test=args.num_pred_steps_val_test,
-    num_inter_steps=args.num_inter_steps,
-    lr=args.lr,
-    loss=args.loss,
-    training_strategy=args.strategy,
-    len_train_loader=len_loader,
-    save_path=save_path,
-    use_lr_scheduler=args.use_lr_scheduler,
-    precision=args.precision,
-    no_log=args.no_log,
-    channels_last=args.channels_last,
-)
 
 # Logger & checkpoint callback
 callback_list = []
-if args.no_log:
-    loggers = None
-else:
-    loggers = {
-        "TensorBoardLogger": TensorBoardLogger(
-            save_dir=log_dir, name=folder, version=subfolder, default_hp_metric=False
-        ),
+
+loggers = {
+    "TensorBoardLogger": TensorBoardLogger(
+        save_dir=log_dir, name=folder, version=subfolder, default_hp_metric=False
+    ),
+}
+
+if args.mlflow_log:
+    mlflow_logger = {
+        "MLFlowLogger": MLFlowLogger(
+            experiment_name=os.getenv("MLFLOW_EXPERIMENT_NAME", str(folder)),
+            run_name=subfolder,
+            log_model=True,
+            save_dir=log_dir / "mlflow",
+        )
     }
+    loggers.update(mlflow_logger)
 
-    if args.mlflow_log:
-        mlflow_logger = {
-            "MLFlowLogger": MLFlowLogger(
-                experiment_name=os.getenv("MLFLOW_EXPERIMENT_NAME", str(folder)),
-                run_name=subfolder,
-                log_model=True,
-                save_dir=log_dir / "mlflow",
-            )
-        }
-        loggers.update(mlflow_logger)
+print(
+    "--> Model, checkpoints, and tensorboard artifacts "
+    + f"will be saved in {save_path}."
+)
 
-    print(
-        "--> Model, checkpoints, and tensorboard artifacts "
-        + f"will be saved in {save_path}."
-    )
-
-    loggers["TensorBoardLogger"].experiment.add_custom_scalars(layout)
-    checkpoint_callback = pl.callbacks.ModelCheckpoint(
-        dirpath=save_path,
-        filename="{epoch:02d}-{val_mean_loss:.2f}",  # Custom filename pattern
-        monitor="val_mean_loss",
-        mode="min",
-        save_top_k=1,  # Save only the best model
-        save_last=True,  # Also save the last model
-    )
-    callback_list.append(checkpoint_callback)
-    callback_list.append(LearningRateMonitor(logging_interval="step"))
-    callback_list.append(
-        EarlyStopping(monitor="val_mean_loss", mode="min", patience=50)
-    )
+loggers["TensorBoardLogger"].experiment.add_custom_scalars(layout)
+checkpoint_callback = pl.callbacks.ModelCheckpoint(
+    dirpath=save_path,
+    filename="{epoch:02d}-{val_mean_loss:.2f}",  # Custom filename pattern
+    monitor="val_mean_loss",
+    mode="min",
+    save_top_k=1,  # Save only the best model
+    save_last=True,  # Also save the last model
+)
+callback_list.append(checkpoint_callback)
+callback_list.append(LearningRateMonitor(logging_interval="step"))
+callback_list.append(EarlyStopping(monitor="val_mean_loss", mode="min", patience=5))
 
 # Setup profiler
 if args.profiler == "pytorch":
@@ -385,27 +336,42 @@ trainer = pl.Trainer(
     limit_test_batches=args.limit_train_batches,
 )
 
+dict_args = {
+    "settings_init_args": {},
+    "dataset_name": args.dataset,
+    "dataset_conf": args.dataset_conf,
+    "batch_size": args.batch_size,
+    "model_name": args.model,
+    "model_conf": args.model_conf,
+    "num_input_steps": args.num_input_steps,
+    "num_pred_steps_train": args.num_pred_steps_train,
+    "num_pred_steps_val_test": args.num_pred_steps_val_test,
+    "num_inter_steps": args.num_inter_steps,
+    "loss_name": args.loss,
+    "training_strategy": args.strategy,
+    "len_train_loader": len_loader,
+    "channels_last": args.channels_last,
+    "dataset_info": dataset_info,
+}
+
 if args.load_model_ckpt and not args.resume_from_ckpt:
     lightning_module = AutoRegressiveLightning.load_from_checkpoint(
-        args.load_model_ckpt, hparams=hp
+        args.load_model_ckpt, **dict_args
     )
 else:
-    lightning_module = AutoRegressiveLightning(hp)
+    lightning_module = AutoRegressiveLightning(**dict_args)
 
 # Train model
 print("Starting training !")
 trainer.fit(model=lightning_module, datamodule=dm, ckpt_path=args.resume_from_ckpt)
 
-if not args.no_log:
-    # If we saved a model, we test it.
-    best_checkpoint = checkpoint_callback.best_model_path
-    last_checkpoint = checkpoint_callback.last_model_path
+# If we saved a model, we test it.
+best_checkpoint = checkpoint_callback.best_model_path
+last_checkpoint = checkpoint_callback.last_model_path
 
-    model_to_test = best_checkpoint if best_checkpoint else last_checkpoint
-    print(
-        f"Testing using {'best' if best_checkpoint else 'last'} model at {model_to_test}"
-    )
-    trainer.test(ckpt_path=model_to_test, datamodule=dm)
+model_to_test = best_checkpoint if best_checkpoint else last_checkpoint
+print(f"Testing using {'best' if best_checkpoint else 'last'} model at {model_to_test}")
+trainer.test(ckpt_path=model_to_test, datamodule=dm)
 
 # Finally log the model in a MLFlow fashion
 if trainer.is_global_zero and args.mlflow_log:

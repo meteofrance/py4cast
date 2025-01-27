@@ -1,7 +1,0 @@
-{
-"num_heads_encoder": 8,
-"hidden_size": 512,
-"linear_upsampling": true,
-"downsampling_rate": 2
-}
-

@@ -2,7 +2,7 @@ from dataclasses import fields
 from pathlib import Path
 from typing import Dict
 
-import pytorch_lightning as pl
+import lightning.pytorch as pl
 import torch
 
 
@@ -55,8 +55,8 @@ def merge_dicts(d1: Dict, d2: Dict) -> Dict:
 
 
 str_to_dtype = {
-    "bf16": torch.bfloat16,
-    "16": torch.float16,
-    "32": torch.float32,
-    "64": torch.float64,
+    "bf16-true": torch.bfloat16,
+    "16-true": torch.float16,
+    "32-true": torch.float32,
+    "64-true": torch.float64,
 }

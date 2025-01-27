@@ -7,46 +7,74 @@ from typer import Typer
 
 from py4cast.datasets import compute_dataset_stats as cds
 from py4cast.datasets.base import DatasetABC
+from py4cast.datasets.poesy import PoesyAccessor
 from py4cast.datasets.poesy.settings import DEFAULT_CONFIG
 
 app = Typer()
 
 
 @app.command()
-def prepare(dataset: DatasetABC, path_config: Path):
+def prepare(
+    path_config: Path = DEFAULT_CONFIG,
+    num_input_steps: int = 1,
+    num_pred_steps_train: int = 1,
+    num_pred_steps_val_test: int = 1,
+    compute_stats: bool = True,
+):
+    """
+    Prepares Poesy dataset for training.
+    This command will:
+        - create all needed folders
+        - computes statistics on all weather parameters.
+    """
+
     print("--> Preparing Poesy Dataset...")
 
     print("Load train dataset configuration...")
     with open(path_config, "r") as fp:
         conf = json.load(fp)
 
-    print("Computing stats on each parameter...")
-    conf["settings"]["standardize"] = True
-    train_ds, _, _ = dataset.from_json(
-        fname=path_config,
-        num_input_steps=2,
-        num_pred_steps_train=1,
-        num_pred_steps_val_test=1,
+    print("instantiate train dataset configuration...")
+    train_ds, _, _ = DatasetABC.from_dict(
+        PoesyAccessor,
+        name=path_config.stem,
+        conf=conf,
+        num_input_steps=num_input_steps,
+        num_pred_steps_train=num_pred_steps_train,
+        num_pred_steps_val_test=num_pred_steps_val_test,
     )
-    cds.compute_parameters_stats(dataset)
 
-    print("Computing time stats on each parameters, between 2 timesteps...")
-    conf["settings"]["standardize"] = True
-    train_ds, _, _ = DatasetABC.from_json(
-        fname=path_config,
-        num_input_steps=2,
-        num_pred_steps_train=1,
-        num_pred_steps_val_test=1,
-    )
-    cds.compute_time_step_stats(dataset)
+    print("Creating cache folder")
+    print(train_ds.cache_dir)
+    train_ds.cache_dir.mkdir(exist_ok=True)
+
+    if compute_stats:
+        print(f"Dataset stats will be saved in {train_ds.cache_dir}")
+
+        print("Computing stats on each parameter...")
+        train_ds.settings.standardize = False
+
+        cds.compute_parameters_stats(train_ds)
+
+        print("Computing time stats on each parameters, between 2 timesteps...")
+        train_ds.settings.standardize = True
+        if hasattr(train_ds, "sample_list"):
+            del train_ds.sample_list
+        cds.compute_time_step_stats(train_ds)
 
     return train_ds
 
 
 @app.command()
 def describe(path_config: Path = DEFAULT_CONFIG):
-    """Describes Titan."""
-    train_ds, _, _ = DatasetABC.from_json(path_config, 2, 1, 5)
+    """Describes Poesy."""
+    train_ds, _, _ = DatasetABC.from_json(
+        PoesyAccessor,
+        fname=path_config,
+        num_input_steps=2,
+        num_pred_steps_train=1,
+        num_pred_steps_val_tests=5,
+    )
     train_ds.dataset_info.summary()
     print("Len dataset : ", len(train_ds))
     print("First Item description :")
@@ -56,7 +84,13 @@ def describe(path_config: Path = DEFAULT_CONFIG):
 @app.command()
 def plot(path_config: Path = DEFAULT_CONFIG):
     """Plots a png and a gif for one sample."""
-    train_ds, _, _ = DatasetABC.from_json(path_config, 2, 1, 5)
+    train_ds, _, _ = DatasetABC.from_json(
+        PoesyAccessor,
+        fname=path_config,
+        num_input_steps=2,
+        num_pred_steps_train=1,
+        num_pred_steps_val_tests=5,
+    )
     print("Plot gif of one sample...")
     sample = train_ds.sample_list[0]
     sample.plot_gif("test.gif")
@@ -68,7 +102,13 @@ def plot(path_config: Path = DEFAULT_CONFIG):
 @app.command()
 def speedtest(path_config: Path = DEFAULT_CONFIG, n_iter: int = 5):
     print("Speed test:")
-    train_ds, _, _ = DatasetABC.from_json(path_config, 2, 1, 5)
+    train_ds, _, _ = DatasetABC.from_json(
+        PoesyAccessor,
+        fname=path_config,
+        num_input_steps=2,
+        num_pred_steps_train=1,
+        num_pred_steps_val_tests=5,
+    )
     data_iter = iter(train_ds.torch_dataloader())
     start_time = time.time()
     for i in tqdm.trange(n_iter, desc="Loading samples"):

@@ -12,9 +12,9 @@ registry = {}
 
 # we try to import and register the datasets
 # with loose coupling
-# missing dependencies for a dataset should not
+# missing dependencies for a single dataset should not
 # break the code
-# NEW DATASETS MUST BE REGISTERED HERE
+# NEW ACCESSORS MUST BE REGISTERED HERE
 
 try:
     from .titan import TitanAccessor
@@ -81,7 +81,6 @@ def get_datasets(
 
     return DatasetABC.from_json(
         accessor_kls,
-        name,
         config_file,
         num_input_steps,
         num_pred_steps_train,

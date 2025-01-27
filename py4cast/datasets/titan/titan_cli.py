@@ -1,41 +1,61 @@
-import datetime as dt
 import json
 import time
 from pathlib import Path
-from typing import List
 
 import numpy as np
 import tqdm
 from typer import Typer
 
 from py4cast.datasets import compute_dataset_stats as cds
-from py4cast.datasets.access import WeatherParam
-from py4cast.datasets.base import DatasetABC, get_param_list
+from py4cast.datasets.access import Timestamps
+from py4cast.datasets.base import DatasetABC
 from py4cast.datasets.titan import TitanAccessor
-from py4cast.datasets.titan.settings import DEFAULT_CONFIG
+from py4cast.datasets.titan.settings import DEFAULT_CONFIG, FORMATSTR
 
 app = Typer()
 
 
-def process_sample_dataset(
-    dataset: DatasetABC, date: dt.datetime, params: List[WeatherParam]
-):
+def convert_sample_grib2_numpy(dataset: DatasetABC):
     """Saves each 2D parameter data of the given date as one NPY file."""
-    for param in params:
-        dest_file = dataset.get_filepath(dataset.name, param, date, file_format="npy")
-        dest_file.parent.mkdir(exist_ok=True)
-        if not dest_file.exists():
-            try:
-                arr = dataset.accessor.load_data_from_disk(
-                    dataset.name, param, date, file_format="grib"
-                )
-                np.save(dest_file, arr)
-            except Exception as e:
-                print(e)
-                print(
-                    f"WARNING: Could not load grib data {param.name} {param.level} {date}. Skipping sample."
-                )
-                break
+    dataset.settings.file_format = "grib"
+    sample_list = dataset.sample_list
+    for sample in sample_list:
+        dest_folder = sample.timestamps.validity_times[0].strftime(FORMATSTR)
+        d, v, t = (
+            sample.timestamps.datetime,
+            sample.timestamps.validity_times[0],
+            sample.timestamps.terms[0],
+        )
+        t = Timestamps(datetime=d, terms=np.array(t), validity_times=[v])
+        path = (
+            dataset.accessor.get_dataset_path(dataset.name, dataset.grid)
+            / "data"
+            / dest_folder
+        )
+        path.mkdir(exist_ok=True)
+        for p in sample.params:
+            dest_file = dataset.accessor.get_filepath(
+                dataset.name, p, v, file_format="npy"
+            )
+            if not dest_file.exists():
+                try:
+                    arr = dataset.accessor.load_data_from_disk(
+                        dataset.name, p, t, file_format="grib"
+                    ).squeeze()
+                    np.save(
+                        dest_file,
+                        arr[
+                            dataset.grid.subdomain[0] : dataset.grid.subdomain[1],
+                            dataset.grid.subdomain[2] : dataset.grid.subdomain[3],
+                        ].astype(np.float32),
+                    )
+                except Exception as e:
+                    print(e)
+                    print(
+                        f"WARNING: Could not load grib {dataset.accessor.parameter_namer(p)} {p.level} {v}. Skipping."
+                    )
+                    break
+    dataset.settings.file_format = "npy"
 
 
 @app.command()
@@ -46,13 +66,11 @@ def prepare(
     num_pred_steps_val_test: int = 1,
     convert_grib2npy: bool = False,
     compute_stats: bool = True,
-    write_valid_samples_list: bool = True,
 ):
     """Prepares Titan dataset for training.
     This command will:
         - create all needed folders
         - convert gribs to npy and rescale data to the wanted grid
-        - establish a list of valid samples for each set
         - computes statistics on all weather parameters."""
     print("--> Preparing Titan Dataset...")
 
@@ -62,11 +80,12 @@ def prepare(
 
     print("Creating folders...")
     train_ds, valid_ds, test_ds = DatasetABC.from_dict(
-        path_config.stem,
-        conf,
-        num_input_steps,
-        num_pred_steps_train,
-        num_pred_steps_val_test,
+        TitanAccessor,
+        name=path_config.stem,
+        conf=conf,
+        num_input_steps=num_input_steps,
+        num_pred_steps_train=num_pred_steps_train,
+        num_pred_steps_val_test=num_pred_steps_val_test,
     )
     train_ds.cache_dir.mkdir(exist_ok=True)
     data_dir = train_ds.cache_dir / "data"
@@ -74,56 +93,46 @@ def prepare(
     print(f"Dataset will be saved in {train_ds.cache_dir}")
 
     if convert_grib2npy:
+        train_ds.settings.standardize = False
+        valid_ds.settings.standardize = False
+        test_ds.settings.standardize = False
+
         print("Converting gribs to npy...")
-        param_list = get_param_list(
-            conf,
-            train_ds.grid,
-            TitanAccessor.load_param_info,
-            TitanAccessor.get_weight_per_level,
-        )
-        sum_dates = (
-            list(train_ds.period.date_list)
-            + list(valid_ds.period.date_list)
-            + list(test_ds.period.date_list)
-        )
-        dates = sorted(list(set(sum_dates)))
-        for date in tqdm.tqdm(dates):
-            process_sample_dataset(train_ds, date, param_list)
+        print("train")
+        convert_sample_grib2_numpy(train_ds)
+        print("validation")
+        convert_sample_grib2_numpy(valid_ds)
+        print("test")
+        convert_sample_grib2_numpy(test_ds)
         print("Done!")
 
-    if write_valid_samples_list:
-        train_ds.write_list_valid_samples()
-        valid_ds.write_list_valid_samples()
-        test_ds.write_list_valid_samples()
+        train_ds.settings.standardize = True
+        valid_ds.settings.standardize = True
+        test_ds.settings.standardize = True
 
     if compute_stats:
-        conf["settings"]["standardize"] = False
-        train_ds, valid_ds, test_ds = DatasetABC.from_dict(
-            path_config.stem,
-            conf,
-            num_input_steps,
-            num_pred_steps_train,
-            num_pred_steps_val_test,
-        )
+        if hasattr(train_ds, "sample_list"):
+            del train_ds.sample_list
+        train_ds.settings.standardize = False
         print("Computing stats on each parameter...")
         cds.compute_parameters_stats(train_ds)
-
-        conf["settings"]["standardize"] = True
-        train_ds, valid_ds, test_ds = DatasetABC.from_dict(
-            path_config.stem,
-            conf,
-            num_input_steps,
-            num_pred_steps_train,
-            num_pred_steps_val_test,
-        )
+        if hasattr(train_ds, "sample_list"):
+            del train_ds.sample_list
+        train_ds.settings.standardize = True
         print("Computing time stats on each parameters, between 2 timesteps...")
         cds.compute_time_step_stats(train_ds)
 
 
 @app.command()
-def describe(path_config: Path = DEFAULT_CONFIG):
+def describe(path_config: Path = DEFAULT_CONFIG, dataset_name: str = "titan"):
     """Describes Titan."""
-    train_ds, _, _ = DatasetABC.from_json(path_config, 2, 1, 5)
+    train_ds, _, _ = DatasetABC.from_json(
+        TitanAccessor,
+        fname=path_config,
+        num_input_steps=2,
+        num_pred_steps_train=1,
+        num_pred_steps_val_tests=5,
+    )
     train_ds.dataset_info.summary()
     print("Len dataset : ", len(train_ds))
     print("First Item description :")
@@ -131,11 +140,18 @@ def describe(path_config: Path = DEFAULT_CONFIG):
 
 
 @app.command()
-def plot(path_config: Path = DEFAULT_CONFIG):
+def plot(path_config: Path = DEFAULT_CONFIG, dataset_name: str = "titan"):
     """Plots a png and a gif for one sample."""
-    train_ds, _, _ = DatasetABC.from_json(path_config, 2, 1, 5)
+    train_ds, _, _ = DatasetABC.from_json(
+        TitanAccessor,
+        fname=path_config,
+        num_input_steps=2,
+        num_pred_steps_train=1,
+        num_pred_steps_val_tests=5,
+    )
     print("Plot gif of one sample...")
     sample = train_ds.sample_list[0]
+    print(sample)
     sample.plot_gif("test.gif")
     print("Plot png for one step of sample...")
     item = sample.load(no_standardize=True)
@@ -143,9 +159,17 @@ def plot(path_config: Path = DEFAULT_CONFIG):
 
 
 @app.command()
-def speedtest(path_config: Path = DEFAULT_CONFIG, n_iter: int = 5):
+def speedtest(
+    path_config: Path = DEFAULT_CONFIG, n_iter: int = 5, dataset_name: str = "titan"
+):
     """Makes a loading speed test."""
-    train_ds, _, _ = DatasetABC.from_json(path_config, 2, 1, 5)
+    train_ds, _, _ = DatasetABC.from_json(
+        TitanAccessor,
+        fname=path_config,
+        num_input_steps=2,
+        num_pred_steps_train=1,
+        num_pred_steps_val_tests=5,
+    )
     data_iter = iter(train_ds.torch_dataloader())
     print("Dataset file_format: ", train_ds.settings.file_format)
     print("Speed test:")

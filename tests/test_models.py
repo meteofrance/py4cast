@@ -8,19 +8,14 @@ Test our pure PyTorch models to make sure they can be :
 
 import tempfile
 from dataclasses import dataclass
-from pathlib import Path
 
 import numpy as np
 import pytest
-import pytorch_lightning as pl
 import torch
 from mfai.torch import export_to_onnx, onnx_load_and_infer
 from mfai.torch.models.base import ModelType
 from mfai.torch.models.utils import features_last_to_second, features_second_to_last
 
-from py4cast.datasets import get_datasets
-from py4cast.datasets.base import TorchDataloaderSettings, collate_fn
-from py4cast.lightning import ArLightningHyperParam, AutoRegressiveLightning
 from py4cast.models import all_nn_architectures, get_model_kls_and_settings
 
 
@@ -75,7 +70,7 @@ def test_torch_training_loop(model_name):
     NUM_INPUTS = 2
     NUM_OUTPUTS = 1
 
-    model_kls, model_settings = get_model_kls_and_settings(model_name)
+    model_kls, model_settings = get_model_kls_and_settings(model_name, {})
 
     # GNNs build the graph here, once at rank zero
     if hasattr(model_kls, "rank_zero_setup"):
@@ -145,82 +140,6 @@ def test_torch_training_loop(model_name):
                 sample = features_last_to_second(sample)
             export_to_onnx(model, sample, dst.name)
             onnx_load_and_infer(dst.name, sample)
-
-
-def test_lightning_fit_inference():
-    """Checks that our Lightning module and training loop is working and
-    that we can make a simple inference with the trained model."""
-    NUM_INPUTS = 2
-    NUM_OUTPUTS = 1
-    DATASET = "dummy"
-    MODEL = "HalfUNet"
-    BATCH_SIZE = 2
-    datasets = get_datasets(
-        DATASET,
-        NUM_INPUTS,
-        NUM_OUTPUTS,
-        NUM_OUTPUTS,
-        None,
-    )
-
-    dl_settings = TorchDataloaderSettings(
-        batch_size=BATCH_SIZE,
-        num_workers=2,
-    )
-    train_ds, val_ds, test_ds = datasets
-    train_loader = train_ds.torch_dataloader(dl_settings)
-    val_loader = val_ds.torch_dataloader(dl_settings)
-    test_loader = test_ds.torch_dataloader(dl_settings)
-
-    with tempfile.TemporaryDirectory() as tmpdir:
-        save_path = Path(tmpdir) / "logs"
-        save_path.mkdir(exist_ok=True, parents=True)
-        trainer = pl.Trainer(
-            max_epochs=3,
-            limit_train_batches=3,
-            limit_val_batches=3,
-            limit_test_batches=3,
-            callbacks=[
-                pl.callbacks.ModelCheckpoint(
-                    dirpath=save_path,
-                    filename="{epoch:02d}-{val_mean_loss:.2f}",  # Custom filename pattern
-                    monitor="val_mean_loss",
-                    mode="min",
-                    save_top_k=1,
-                    save_last=True,
-                )
-            ],
-        )
-        hp = ArLightningHyperParam(
-            dataset_info=datasets[0].dataset_info,
-            dataset_name=DATASET,
-            dataset_conf=None,
-            batch_size=BATCH_SIZE,
-            model_name=MODEL,
-            model_conf=None,
-            num_input_steps=NUM_INPUTS,
-            num_pred_steps_train=NUM_OUTPUTS,
-            num_pred_steps_val_test=NUM_OUTPUTS,
-            save_path=save_path,
-        )
-        lightning_module = AutoRegressiveLightning(hp)
-        trainer.fit(
-            model=lightning_module,
-            train_dataloaders=train_loader,
-            val_dataloaders=val_loader,
-        )
-        trainer.test(ckpt_path="best", dataloaders=test_loader)
-
-        # finds the first .ckpt file
-        ckpt_path = next(save_path.glob("*.ckpt"))
-        model = AutoRegressiveLightning.load_from_checkpoint(ckpt_path)
-        hparams = model.hparams["hparams"]
-        hparams.num_pred_steps_val_test = NUM_OUTPUTS
-        model.eval()
-
-        item = test_ds[0]  # Load data directly from dataset (no dataloader)
-        batch_item = collate_fn([item])  # Transform to BatchItem
-        model(batch_item)
 
 
 def test_model_registry():

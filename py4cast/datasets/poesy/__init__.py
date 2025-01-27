@@ -1,7 +1,7 @@
 import datetime as dt
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Literal
+from typing import List, Literal, Union
 
 import numpy as np
 
@@ -24,9 +24,7 @@ from py4cast.settings import CACHE_DIR
 
 @dataclass
 class PoesyAccessor(DataAccessor):
-
-    @staticmethod
-    def cache_dir(name: str, grid: Grid):
+    def cache_dir(self, name: str, grid: Grid):
         complete_name = str(name) + "_" + grid.name
         return CACHE_DIR / complete_name
 
@@ -73,8 +71,9 @@ class PoesyAccessor(DataAccessor):
     def get_grid_coords(param: WeatherParam) -> List[float]:
         raise NotImplementedError("Poesy does not require get_grid_coords")
 
-    @staticmethod
+    @classmethod
     def get_filepath(
+        cls,
         ds_name: str,
         param: WeatherParam,
         date: dt.datetime,
@@ -89,56 +88,72 @@ class PoesyAccessor(DataAccessor):
             / f"{date.strftime('%Y-%m-%dT%H:%M:%SZ')}_{var_file_name}_lt1-45_crop.npy"
         )
 
+    @classmethod
     def load_data_from_disk(
-        self,
+        cls,
         ds_name: str,
         param: WeatherParam,
         timestamps: Timestamps,
         member: int,
         file_format: str = "npy",
     ) -> np.array:
-        """
-        date : Date of file.
-        term : Position of leadtimes in file.
-        """
         data_array = np.load(
-            self.get_filepath(ds_name, param, timestamps.datetime), mmap_mode="r"
+            cls.get_filepath(ds_name, param, timestamps.datetime), mmap_mode="r"
         )
 
         arr = data_array[
             param.grid.subdomain[0] : param.grid.subdomain[1],
             param.grid.subdomain[2] : param.grid.subdomain[3],
-            (timestamps.terms / dt.timedelta(hours=1)).astype(int) - 1,
+            (np.array(timestamps.timedeltas) / dt.timedelta(hours=1)).astype(int) - 1,
             member,
         ].transpose([2, 0, 1])
 
         return np.expand_dims(arr, -1)
 
+    @classmethod
     def exists(
-        self,
+        cls,
         ds_name: str,
         param: WeatherParam,
         timestamps: Timestamps,
         file_format: str = "npy",
     ) -> bool:
-
-        filepath = self.get_filepath(ds_name, param, timestamps.datetime, file_format)
+        filepath = cls.get_filepath(ds_name, param, timestamps.datetime, file_format)
         if not filepath.exists():
             return False
         return True
 
-    def valid_timestamp(n_inputs: int, timestamps: Timestamps) -> bool:
+    @staticmethod
+    def optional_check_before_exists(
+        t0: dt.datetime,
+        num_input_steps: int,
+        num_pred_steps: int,
+        pred_step: dt.timedelta,
+        leadtime: Union[dt.timedelta, None],
+    ) -> bool:
         """
-        Verification function called after the creation of each timestamps.
-        Check if computed terms respect the dataset convention.
+        Return True if the dataset contains the data for t0 + leadtime. Else return False.
+
+        Args:
+            - t0 (dt.datetime): valid time of the observation or run date (in case of dataset that contain
+            multiple forecasts).
+            - num_input_steps (int,): number of input steps.
+            - num_pred_steps (int,): number of prediction steps.
+            - pred_step (dt.timedelta): duration of the prediction step.
+            - leadtime (dt.timedelta): leadtime for wich we want to know if it is a valid timestamp.
+
         Reminder:
-        Poesy terms are between +1h lead time and +45h lead time.
+            Poesy leadtimes are between +1h and +45h.
         """
         limits = METADATA["TERMS"]
-        for t in timestamps.terms:
 
-            if (t > dt.timedelta(hours=int(limits["end"]))) or (
-                t < dt.timedelta(hours=int(limits["start"]))
-            ):
-                return False
+        validtime = t0 + leadtime
+
+        min_validtime = validtime - (num_input_steps - 1) * pred_step
+        max_validtime = validtime + (num_pred_steps) * pred_step
+        if min_validtime - t0 < dt.timedelta(hours=int(limits["start"])):
+            return False
+        if max_validtime - t0 > dt.timedelta(hours=int(limits["end"])):
+            return False
+
         return True

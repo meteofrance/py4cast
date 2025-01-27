@@ -19,7 +19,6 @@ from py4cast.datasets.titan.settings import FORMATSTR, METADATA, SCRATCH_PATH
 
 
 class TitanAccessor(DataAccessor):
-
     @staticmethod
     def get_weight_per_level(
         level: int,
@@ -79,9 +78,8 @@ class TitanAccessor(DataAccessor):
     #                              LOADING                      #
     #############################################################
 
-    @classmethod
-    def cache_dir(cls, name: str, grid: Grid):
-        return cls.get_dataset_path(name, grid)
+    def cache_dir(self, name: str, grid: Grid):
+        return self.get_dataset_path(name, grid)
 
     @staticmethod
     def get_dataset_path(name: str, grid: Grid):
@@ -106,7 +104,6 @@ class TitanAccessor(DataAccessor):
             folder = SCRATCH_PATH / "grib" / date.strftime(FORMATSTR)
             return folder / param.grib_name
         else:
-
             npy_path = cls.get_dataset_path(ds_name, param.grid) / "data"
             filename = f"{cls.parameter_namer(param)}.npy"
             return npy_path / date.strftime(FORMATSTR) / filename
@@ -130,7 +127,7 @@ class TitanAccessor(DataAccessor):
             data_path = cls.get_filepath(ds_name, param, date, file_format)
             if file_format == "grib":
                 arr, lons, lats = load_data_grib(param, data_path)
-                arr = fit_to_grid(arr, lons, lats)
+                arr = fit_to_grid(param, arr, lons, lats, cls.get_grid_coords)
             else:
                 arr = np.load(data_path)
 
@@ -139,34 +136,24 @@ class TitanAccessor(DataAccessor):
             arr_list.append(np.expand_dims(arr, axis=-1))
         return np.stack(arr_list)
 
-    @classmethod
     def exists(
-        cls,
+        self,
         ds_name: str,
         param: WeatherParam,
         timestamps: Timestamps,
         file_format: Literal["npy", "grib"] = "grib",
     ) -> bool:
         for date in timestamps.validity_times:
-            filepath = cls.get_filepath(ds_name, param, date, file_format)
+            filepath = self.get_filepath(ds_name, param, date, file_format)
             if not filepath.exists():
                 return False
         return True
 
-    def valid_timestamp(n_inputs: int, timestamps: Timestamps) -> bool:
-        """
-        Verification function called after the creation of each timestamps.
-        Check if computed terms respect the dataset convention.
-        Reminder:
-        Titan terms are between +0h lead time and +23h lead time wrt to the day:00h00UTC reference
-        Allowing larger terms would double-sample some samples (day+00h00 <-> (day+1)+24h00)
-        """
-        term_0 = timestamps.terms[n_inputs - 1]
-        if term_0 > np.timedelta64(23, "h"):
-            return False
-        return True
-
+    @staticmethod
     def parameter_namer(param: WeatherParam) -> str:
+        """
+        Retrieve a filename from a parameter
+        """
         if param.level_type in ["surface", "heightAboveGround"]:
             level_type = "m"
         else:

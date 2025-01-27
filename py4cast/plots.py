@@ -370,19 +370,16 @@ class PredictionTimestepPlot(MapPlot):
         for t_i, (pred_t, target_t) in enumerate(zip(prediction, target), start=1):
             # Create one figure per variable at this time step
             # This generate a matplotlib warning as more than 20 figures are plotted.
-            units = [
-                obj.hparams["hparams"].dataset_info.units[name]
-                for name in feature_names
-            ]
+            units = [obj.dataset_info.units[name] for name in feature_names]
             var_figs = [
                 plot_prediction(
                     pred_t[:, :, var_i],
                     target_t[:, :, var_i],
                     obj.interior_2d[:, :, 0],
                     title=f"{var_name} ({var_unit}), "
-                    f"t={t_i} ({obj.hparams['hparams'].dataset_info.step_duration*t_i} h)",
+                    f"t={t_i} ({obj.dataset_info.pred_step*t_i} h)",
                     vrange=var_vrange,
-                    domain_info=obj.hparams["hparams"].dataset_info.domain_info,
+                    domain_info=obj.dataset_info.domain_info,
                 )
                 for var_i, (var_name, var_unit, var_vrange) in enumerate(
                     zip(feature_names, units, var_vranges)
@@ -437,7 +434,7 @@ class PredictionEpochPlot(MapPlot):
 
         # Create one figure per variable at this time step
         # This generate a matplotlib warning as more than 20 figures are plotted.
-        leadtime = obj.hparams["hparams"].dataset_info.step_duration * max_step
+        leadtime = obj.dataset_info.pred_step * max_step
         var_figs = [
             plot_prediction(
                 pred_t[:, :, var_i],
@@ -446,15 +443,12 @@ class PredictionEpochPlot(MapPlot):
                 title=f"{var_name} ({var_unit}), "
                 f"t={max_step} ({leadtime} h) - epoch {obj.current_epoch}",
                 vrange=var_vrange,
-                domain_info=obj.hparams["hparams"].dataset_info.domain_info,
+                domain_info=obj.dataset_info.domain_info,
             )
             for var_i, (var_name, var_unit, var_vrange) in enumerate(
                 zip(
                     feature_names,
-                    [
-                        obj.hparams["hparams"].dataset_info.units[name]
-                        for name in feature_names
-                    ],
+                    [obj.dataset_info.units[name] for name in feature_names],
                     var_vranges,
                 )
             )
@@ -521,8 +515,7 @@ class StateErrorPlot(Plotter):
         if not self.initialized:
             self.shortnames = prediction.feature_names
             self.units = [
-                obj.hparams["hparams"].dataset_info.units[name]
-                for name in prediction.feature_names
+                obj.dataset_info.units[name] for name in prediction.feature_names
             ]
             self.initialized = True
 
@@ -550,7 +543,7 @@ class StateErrorPlot(Plotter):
                         loss,
                         self.shortnames,
                         self.units,
-                        step_duration=obj.hparams["hparams"].dataset_info.step_duration,
+                        step_duration=obj.dataset_info.pred_step,
                     )
 
                     # log it in tensorboard
@@ -621,8 +614,8 @@ class SpatialErrorPlot(Plotter):
                 plot_spatial_error(
                     loss_map,
                     obj.interior_2d[:, :, 0],
-                    title=f"{self.prefix} loss, t={t_i} ({obj.hparams['hparams'].dataset_info.step_duration*t_i} h)",
-                    domain_info=obj.hparams["hparams"].dataset_info.domain_info,
+                    title=f"{self.prefix} loss, t={t_i} ({obj.dataset_info.pred_step*t_i} h)",
+                    domain_info=obj.dataset_info.domain_info,
                 )
                 for t_i, loss_map in enumerate(mean_spatial_loss)
             ]

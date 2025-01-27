@@ -1,19 +1,19 @@
 {
     "periods": {
         "train": {
-            "start": 2023010100,
-            "end": 2023010107,
-            "step_duration": 1
+            "start": 20220101,
+            "end": 20230101,
+            "obs_step": 3600
         },
         "valid": {
-            "start": 2023010108,
-            "end": 2023010115,
-            "step_duration": 1
+            "start": 20220101,
+            "end": 20230101,
+            "obs_step": 3600
         },
         "test": {
-            "start": 2023010116,
-            "end": 2023010122,
-            "step_duration": 1
+            "start": 20220101,
+            "end": 20230101,
+            "obs_step": 3600
         }
     },
     "grid":{
