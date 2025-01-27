@@ -48,6 +48,16 @@ try:
 except ImportError:
     warnings.warn(f"Could not import DummyAccessor. {traceback.format_exc()}")
 
+try:
+    from .rainfall import RainfallAccessor
+
+    registry["rainfall"] = (
+        RainfallAccessor,
+        DEFAULT_CONFIG_DIR / "datasets" / "rainfall_config.json",
+    )
+except ImportError:
+    warnings.warn(f"Could not import RainfallAccessor. {traceback.format_exc()}")
+
 
 def get_datasets(
     name: str,
