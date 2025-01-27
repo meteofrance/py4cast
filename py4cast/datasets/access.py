@@ -538,7 +538,3 @@ class DataAccessor(ABC):
 
 def test():
     return None
-
-if __name__ == "__main__":
-    grid = Grid(name="coucou", load_grid_info_func=test)
-    print(grid)
