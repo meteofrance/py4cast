@@ -22,6 +22,7 @@ from mfai.torch.models.utils import (
 from mlflow.models.signature import infer_signature
 from torchinfo import summary
 
+from py4cast.io.outputs import GribSavingSettings, save_named_tensors_to_grib
 from py4cast.datasets import get_datasets
 from py4cast.datasets.base import DatasetInfo, ItemBatch, NamedTensor, Statics
 from py4cast.losses import ScaledLoss, WeightedLoss
@@ -151,6 +152,7 @@ class AutoRegressiveLightning(LightningModule):
         # args linked from trainer and datamodule
         dataset_info,  # Don't put type hint here or CLI doesn't work
         len_train_loader: int,
+        infer_ds,
         dataset_name: str = "dummy",
         dataset_conf: Path | None = None,  # TO DELETE ?
         num_input_steps: int = 1,
@@ -162,13 +164,15 @@ class AutoRegressiveLightning(LightningModule):
         model_conf: Path | None = None,
         loss_name: Literal["mse", "mae"] = "mse",
         num_inter_steps: int = 1,
+        num_samples_to_plot: int = 1,
         training_strategy: Literal["diff_ar", "scaled_ar"] = "diff_ar",
         channels_last: bool = False,
-        num_samples_to_plot: int = 1,
+        io_conf = "config/IO/poesy_grib_settings.json",
         *args,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
+        self.infer_ds = infer_ds
         self.settings_init_args = settings_init_args
         self.dataset_name = dataset_name
         self.dataset_conf = dataset_conf
@@ -184,6 +188,7 @@ class AutoRegressiveLightning(LightningModule):
         self.training_strategy = training_strategy
         self.len_train_loader = len_train_loader
         self.channels_last = channels_last
+        self.io_conf = io_conf
 
         if self.num_inter_steps > 1 and self.num_input_steps > 1:
             raise AttributeError(
@@ -623,7 +628,7 @@ class AutoRegressiveLightning(LightningModule):
     def predict_step(self, batch: ItemBatch, batch_idx: int) -> torch.Tensor:
         """
         Check if the feature names are the same as the one used during training
-        and make a prediction.
+        and make a prediction and accumulate.
         """
         if batch_idx == 0:
             if self.input_feature_names != batch.inputs.feature_names:
@@ -631,7 +636,32 @@ class AutoRegressiveLightning(LightningModule):
                     f"Input Feature names mismatch between training and inference. "
                     f"Training: {self.input_feature_names}, Inference: {batch.inputs.feature_names}"
                 )
-        return self.forward(batch)
+        preds = self.forward(batch)
+        if not hasattr(self, 'all_preds'):
+            self.all_preds = []
+        self.all_preds.append(preds)
+        return preds
+
+    def on_predict_end(self):
+        """
+        Méthode appelée à la fin de la phase de prédiction.
+        """
+        preds = self.all_preds
+        with open(self.io_conf, "r") as f:
+            save_settings = GribSavingSettings.schema().loads((f.read()))
+            ph = len(save_settings.output_fmt.split("{}")) - 1
+            kw = len(save_settings.output_kwargs)
+            fi = len(save_settings.sample_identifiers)
+            try:
+                assert ph == (fi + kw)
+            except AssertionError:
+                raise ValueError(
+                    f"Filename fmt has {ph} placeholders,\
+                    but {kw} output_kwargs and {fi} sample identifiers."
+                )
+        for sample, pred in zip(self.infer_ds.sample_list, self.all_preds):
+            save_named_tensors_to_grib(pred, self.infer_ds, sample, save_settings)
+        self.all_preds = []
 
     def forward(self, x: ItemBatch) -> NamedTensor:
         """

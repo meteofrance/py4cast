@@ -6,6 +6,7 @@ model:
   num_samples_to_plot: 1
   training_strategy: diff_ar # diff_ar or scaled_ar
   channels_last: False # True: B W H C
+  io_conf : config/IO/poesy_grib_settings.json
   settings_init_args:
     hidden_size: 256
     num_heads_encoder: 4
