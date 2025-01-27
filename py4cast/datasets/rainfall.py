@@ -1,32 +1,36 @@
 import datetime as dt
+import json
 from pathlib import Path
 from typing import List, Literal
 
 import numpy as np
 import xarray as xr
+from typer import Typer
 
+from py4cast.datasets import compute_dataset_stats as cds
 from py4cast.datasets.access import (
     DataAccessor,
     Grid,
-    Period,
     GridConfig,
     ParamConfig,
+    Period,
     SamplePreprocSettings,
     Timestamps,
     WeatherParam,
 )
 from py4cast.datasets.base import DatasetABC
 
-
 #############################################################
 #                          SETTINGS                         #
 #############################################################
 FORMATSTR = "%Y%m%d%H%M"
 SCRATCH_PATH = Path("/scratch/shared/RADAR_DATA/antilope_5min")
+DEFAULT_CONFIG = Path(__file__).parents[2] / "config/datasets/rainfall.json"
+
+app = Typer()
 
 
 class RainfallAccessor(DataAccessor):
-
     @staticmethod
     def get_weight_per_level():
         return 1.0
@@ -41,12 +45,13 @@ class RainfallAccessor(DataAccessor):
 
         path = SCRATCH_PATH / f"conf_{name}.grib"
         conf_ds = xr.open_dataset(path)
+        altitude = np.zeros(conf_ds.prec.shape)
         landsea_mask = None
         grid_conf = GridConfig(
             conf_ds.prec.shape,
             conf_ds.latitude.values,
             conf_ds.longitude.values,
-            conf_ds.h.values,
+            altitude,
             landsea_mask,
         )
         return grid_conf
@@ -61,7 +66,7 @@ class RainfallAccessor(DataAccessor):
     @staticmethod
     def load_param_info(name: str = "precip") -> ParamConfig:
         if name not in ["precip"]:
-            raise NotImplementedError("Param must be in ['precip'].") 
+            raise NotImplementedError("Param must be in ['precip'].")
         return ParamConfig(
             unit="kg m**-2",
             level_type="surface",
@@ -70,13 +75,15 @@ class RainfallAccessor(DataAccessor):
             grib_name=None,
             grib_param="prec",
         )
-    
+
     #############################################################
     #                              LOADING                      #
     #############################################################
 
     def cache_dir(self, name: str, grid: Grid):
-        return self.get_dataset_path(name, grid)
+        path = self.get_dataset_path(name, grid)
+        path.mkdir(mode=0o777, exist_ok=True)
+        return path
 
     @staticmethod
     def get_dataset_path(name: str, grid: Grid):
@@ -88,14 +95,19 @@ class RainfallAccessor(DataAccessor):
         ds_name: str,
         param: WeatherParam,
         date: dt.datetime,
-        file_format: Literal["npy", "grib"],
+        file_format: Literal["npz", "grib"],
     ) -> Path:
         """
         Returns the path of the file containing the parameter data.
         - in grib format, data is grouped by level type.
-        - in npy format, data is saved as npy, rescaled to the wanted grid, and each
+        - in npz format, data is saved as npz, rescaled to the wanted grid, and each
         2D array is saved as one file to optimize IO during training."""
-        return SCRATCH_PATH / file_format / "Hexagone" / f"{date.strftime(FORMATSTR)}.grib"
+        return (
+            SCRATCH_PATH
+            / file_format
+            / "Hexagone"
+            / f"{date.strftime(FORMATSTR)}.{file_format}"
+        )
 
     @classmethod
     def load_data_from_disk(
@@ -105,7 +117,7 @@ class RainfallAccessor(DataAccessor):
         timestamps: Timestamps,
         # the member parameter is not accessed if irrelevant
         member: int = 0,
-        file_format: Literal["npy", "grib"] = "grib",
+        file_format: Literal["npz", "grib"] = "grib",
     ):
         """
         Function to load invidiual parameter and lead time from a file stored in disk
@@ -120,7 +132,7 @@ class RainfallAccessor(DataAccessor):
             else:
                 arr = np.load(data_path)
                 arr = arr["arr_0"]
-            
+
             arr_list.append(np.expand_dims(arr, axis=-1))
         return np.stack(arr_list)
 
@@ -138,45 +150,76 @@ class RainfallAccessor(DataAccessor):
                 return False
         return True
 
+    @staticmethod
     def parameter_namer(param: WeatherParam) -> str:
-        if param.level_type in ["surface", "heightAboveGround"]:
-            level_type = "m"
-        else:
-            level_type = "hpa"
-        return f"{param.name}_{param.level}{level_type}"
-
+        return param.name
 
 
 ##############################################################################
-#  Describe functions
+#  Describe and prepare functions
 ##############################################################################
-def describe():
-    """Describes Rainfall."""
-    train_ds = DatasetABC(
-        name="rainfall",
-        grid="FRANXL1S100",
-        period=Period(
-            name="train",
-            start="2024010100",
-            end="2025010100",
-            step_duration=dt.timedelta(minutes=5),
-            term_start=dt.timedelta(hours=-1),
-            term_end=dt.timedelta(hours=3)
-        ),
-        params=WeatherParam(
-            name="precip",
-            level="surface",
-            grid="FRANXL1S100",
-            kind="input_output",
-            ),
-        settings=SamplePreprocSettings(
-            dataset_name="rainfall",
-            num_input_steps=12,
-            num_pred_steps=36,
-            step_duration=dt.timedelta(minutes=5),
-        ),
-        accessor=RainfallAccessor(),
-    ),
+@app.command()
+def prepare(
+    path_config: Path = DEFAULT_CONFIG,
+    num_input_steps: int = 12,
+    num_pred_steps_train: int = 36,
+    num_pred_steps_val_test: int = 36,
+    compute_stats: bool = True,
+):
+    """
+    Prepares Rainfall dataset for training.
+    This command will:
+        - create all needed folders
+        - computes statistics on all weather parameters.
+    """
+
+    print("--> Preparing Rainfall Dataset...")
+
+    print("Load train dataset configuration...")
+    with open(path_config, "r") as fp:
+        conf = json.load(fp)
+
+    print("instantiate train dataset configuration...")
+    train_ds, _, _ = DatasetABC.from_dict(
+        RainfallAccessor,
+        name=path_config.stem,
+        conf=conf,
+        num_input_steps=num_input_steps,
+        num_pred_steps_train=num_pred_steps_train,
+        num_pred_steps_val_test=num_pred_steps_val_test,
+    )
+
+    print("Creating cache folder")
+    print(train_ds.cache_dir)
+    train_ds.cache_dir.mkdir(exist_ok=True)
+
+    if compute_stats:
+        print(f"Dataset stats will be saved in {train_ds.cache_dir}")
+
+        print("Computing stats on each parameter...")
+        train_ds.settings.standardize = False
+
+        cds.compute_parameters_stats(train_ds)
+
+        print("Computing time stats on each parameters, between 2 timesteps...")
+        train_ds.settings.standardize = True
+        if hasattr(train_ds, "sample_list"):
+            del train_ds.sample_list
+        cds.compute_time_step_stats(train_ds)
+
+    return train_ds
+
+
+@app.command()
+def describe(path_config: Path = DEFAULT_CONFIG):
+    """Describes Rainfall DataSet."""
+    train_ds, _, _ = DatasetABC.from_json(
+        RainfallAccessor,
+        fname=path_config,
+        num_input_steps=12,
+        num_pred_steps_train=36,
+        num_pred_steps_val_tests=5,
+    )
     train_ds.dataset_info.summary()
     print("Len dataset : ", len(train_ds))
     print("First Item description :")
@@ -184,4 +227,4 @@ def describe():
 
 
 if __name__ == "__main__":
-    describe()
+    app()
