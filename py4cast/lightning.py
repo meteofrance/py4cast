@@ -301,7 +301,10 @@ class AutoRegressiveLightning(LightningModule):
         if isinstance(logger, TensorBoardLogger):
             layout = {
                 "Check Overfit": {
-                    "loss": ["Multiline", ["mean_loss_epoch/train", "mean_loss_epoch/validation"]],
+                    "loss": [
+                        "Multiline",
+                        ["mean_loss_epoch/train", "mean_loss_epoch/validation"],
+                    ],
                 },
             }
             logger.experiment.add_custom_scalars(layout)
