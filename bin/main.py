@@ -67,5 +67,6 @@ class Py4castLightningCLI(LightningCLI):
             apply_on="instantiate",
         )
 
+
 if __name__ == "__main__":
     Py4castLightningCLI(AutoRegressiveLightning, PlDataModule)

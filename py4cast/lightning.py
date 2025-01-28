@@ -22,9 +22,9 @@ from mfai.torch.models.utils import (
 from mlflow.models.signature import infer_signature
 from torchinfo import summary
 
-from py4cast.io.outputs import GribSavingSettings, save_named_tensors_to_grib
 from py4cast.datasets import get_datasets
 from py4cast.datasets.base import DatasetInfo, ItemBatch, NamedTensor, Statics
+from py4cast.io.outputs import GribSavingSettings, save_named_tensors_to_grib
 from py4cast.losses import ScaledLoss, WeightedLoss
 from py4cast.metrics import MetricACC, MetricPSDK, MetricPSDVar
 from py4cast.models import build_model_from_settings, get_model_kls_and_settings
@@ -167,7 +167,7 @@ class AutoRegressiveLightning(LightningModule):
         num_samples_to_plot: int = 1,
         training_strategy: Literal["diff_ar", "scaled_ar"] = "diff_ar",
         channels_last: bool = False,
-        io_conf = "config/IO/poesy_grib_settings.json",
+        io_conf="config/IO/poesy_grib_settings.json",
         *args,
         **kwargs,
     ):
@@ -422,11 +422,11 @@ class AutoRegressiveLightning(LightningModule):
         Handling autocast subtelty for mixed precision on GPU and CPU (only bf16 for the later).
         """
         if torch.cuda.is_available():
-            with torch.amp.autocast('cuda', dtype=self.dtype):
+            with torch.amp.autocast("cuda", dtype=self.dtype):
                 return self._common_step(batch, inference)
         else:
             if not inference and "bf16" in self.trainer.precision:
-                with torch.amp.autocast('cuda', dtype=self.dtype):
+                with torch.amp.autocast("cuda", dtype=self.dtype):
                     return self._common_step(batch, inference)
             else:
                 return self._common_step(batch, inference)
@@ -636,7 +636,7 @@ class AutoRegressiveLightning(LightningModule):
         preds = self.forward(batch)
 
         if self.dataset_name == "poesy":
-            if not hasattr(self, 'all_preds'):
+            if not hasattr(self, "all_preds"):
                 self.all_preds = []
             self.all_preds.append(preds)
         return preds
