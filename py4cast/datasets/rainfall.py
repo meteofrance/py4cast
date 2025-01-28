@@ -1,6 +1,8 @@
 import datetime as dt
 import json
 from pathlib import Path
+import time
+from tqdm import tqdm
 from typing import List, Literal
 
 import numpy as np
@@ -224,6 +226,43 @@ def describe(path_config: Path = DEFAULT_CONFIG):
     print("Len dataset : ", len(train_ds))
     print("First Item description :")
     print(train_ds[0])
+
+
+@app.command()
+def plot(path_config: Path = DEFAULT_CONFIG):
+    """Plots a png and a gif for one sample."""
+    train_ds, _, _ = DatasetABC.from_json(
+        RainfallAccessor,
+        fname=path_config,
+        num_input_steps=2,
+        num_pred_steps_train=1,
+        num_pred_steps_val_tests=5,
+    )
+    print("Plot gif of one sample...")
+    sample = train_ds.sample_list[0]
+    sample.plot_gif("test.gif")
+    print("Plot png for one step of sample...")
+    item = sample.load(no_standardize=True)
+    sample.plot(item, 0, "test.png")
+
+
+@app.command()
+def speedtest(path_config: Path = DEFAULT_CONFIG, n_iter: int = 5):
+    print("Speed test:")
+    train_ds, _, _ = DatasetABC.from_json(
+        RainfallAccessor,
+        fname=path_config,
+        num_input_steps=2,
+        num_pred_steps_train=1,
+        num_pred_steps_val_tests=5,
+    )
+    data_iter = iter(train_ds.torch_dataloader())
+    start_time = time.time()
+    for i in tqdm.trange(n_iter, desc="Loading samples"):
+        _ = next(data_iter)
+    delta = time.time() - start_time
+    speed = n_iter / delta
+    print(f"Loading speed: {round(speed, 3)} sample(s)/sec")
 
 
 if __name__ == "__main__":
