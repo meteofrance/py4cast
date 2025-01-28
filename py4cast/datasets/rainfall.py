@@ -161,7 +161,7 @@ class RainfallAccessor(DataAccessor):
 @app.command()
 def prepare(
     path_config: Path = DEFAULT_CONFIG,
-    num_input_steps: int = 12,
+    num_input_steps: int = 4,
     num_pred_steps_train: int = 36,
     num_pred_steps_val_test: int = 36,
     compute_stats: bool = True,
@@ -216,7 +216,7 @@ def describe(path_config: Path = DEFAULT_CONFIG):
     train_ds, _, _ = DatasetABC.from_json(
         RainfallAccessor,
         fname=path_config,
-        num_input_steps=12,
+        num_input_steps=4,
         num_pred_steps_train=36,
         num_pred_steps_val_tests=5,
     )
