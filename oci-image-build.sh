@@ -39,6 +39,13 @@ else
   echo "PY4CAST_TORCH_VERSION version found in the environment: ${PY4CAST_TORCH_VERSION}"
 fi
 
+# Set the INJECT_MF_CERT env var it does not exist
+if [[ -z "${INJECT_MF_CERT}" ]]; then
+  INJECT_MF_CERT=0
+else
+  echo "INJECT_MF_CERT version found in the environment: ${INJECT_MF_CERT}"
+fi
+
 # Tag the docker image with the latest commit hash on the currrent branch
 TAG=$(git rev-parse --short HEAD)
 
