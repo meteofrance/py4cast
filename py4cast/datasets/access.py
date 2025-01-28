@@ -534,7 +534,3 @@ class DataAccessor(ABC):
         Return a string used to identify parameters names on files and stats metadata
         """
         return f"{param.name}_{param.level}_{param.level_type}"
-
-
-def test():
-    return None
