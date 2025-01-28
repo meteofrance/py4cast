@@ -167,7 +167,7 @@ class AutoRegressiveLightning(LightningModule):
         num_samples_to_plot: int = 1,
         training_strategy: Literal["diff_ar", "scaled_ar"] = "diff_ar",
         channels_last: bool = False,
-        io_conf="config/IO/poesy_grib_settings.json",
+        io_conf: Path | None = None,
         *args,
         **kwargs,
     ):
@@ -297,17 +297,15 @@ class AutoRegressiveLightning(LightningModule):
             self.acc_metric = MetricACC(self.dataset_info)
 
     def configure_loggers(self):
-        logger = self.logger
-        if isinstance(logger, TensorBoardLogger):
-            layout = {
-                "Check Overfit": {
-                    "loss": [
-                        "Multiline",
-                        ["mean_loss_epoch/train", "mean_loss_epoch/validation"],
-                    ],
-                },
-            }
-            logger.experiment.add_custom_scalars(layout)
+        layout = {
+            "Check Overfit": {
+                "loss": [
+                    "Multiline",
+                    ["mean_loss_epoch/train", "mean_loss_epoch/validation"],
+                ],
+            },
+        }
+        self.logger.experiment.add_custom_scalars(layout)
 
     @property
     def logging_enabled(self) -> bool:
@@ -647,33 +645,23 @@ class AutoRegressiveLightning(LightningModule):
                     f"Training: {self.input_feature_names}, Inference: {batch.inputs.feature_names}"
                 )
         preds = self.forward(batch)
-
-        if self.dataset_name == "poesy":
-            if not hasattr(self, "all_preds"):
-                self.all_preds = []
-            self.all_preds.append(preds)
+        if not(self.io_conf is None):
+            self.grib_writing(preds)
         return preds
 
-    def on_predict_end(self):
-        if self.dataset_name == "poesy":
-            self.grib_writing()
-
-    def grib_writing(self):
+    def grib_writing(self, preds):
         with open(self.io_conf, "r") as f:
             save_settings = GribSavingSettings.schema().loads((f.read()))
             ph = len(save_settings.output_fmt.split("{}")) - 1
             kw = len(save_settings.output_kwargs)
             fi = len(save_settings.sample_identifiers)
-            try:
-                assert ph == (fi + kw)
-            except AssertionError:
+            if ph != (fi + kw):
                 raise ValueError(
                     f"Filename fmt has {ph} placeholders,\
                     but {kw} output_kwargs and {fi} sample identifiers."
                 )
-        for sample, pred in zip(self.infer_ds.sample_list, self.all_preds):
+        for sample, pred in zip(self.infer_ds.sample_list, preds):
             save_named_tensors_to_grib(pred, self.infer_ds, sample, save_settings)
-        self.all_preds = []
 
     def forward(self, x: ItemBatch) -> NamedTensor:
         """
