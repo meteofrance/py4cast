@@ -11,4 +11,4 @@ data:
   prefetch_factor: null
   pin_memory: False 
   dataset_conf: config/datasets/poesy_infer.json
-  config_override: null
+  predict_conf: null

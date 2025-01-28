@@ -11,7 +11,7 @@ data:
   prefetch_factor: null
   pin_memory: False 
   dataset_conf: config/datasets/titan_refacto2.json
-  config_override:
+  predict_conf:
     periods:
       test:
         start: 20220101

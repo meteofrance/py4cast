@@ -57,7 +57,7 @@ class PlDataModule(LightningDataModule):
         prefetch_factor: int | None = None,
         pin_memory: bool = False,
         dataset_conf: Path | None = None,
-        config_override: Dict | None = None,
+        predict_conf: Dict | None = None,
     ):
         super().__init__()
         self.num_input_steps = num_input_steps
@@ -75,7 +75,7 @@ class PlDataModule(LightningDataModule):
             num_pred_steps_train,
             num_pred_steps_val_test,
             dataset_conf,
-            config_override,
+            predict_conf,
         )
 
     @property
