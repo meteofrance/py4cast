@@ -22,6 +22,12 @@ def compute_mean_std_min_max(
     flat_input = named_tensor.tensor.flatten(0, ndim_features - 1)  # (X, Features)
     best_min = torch.min(flat_input, dim=0).values
     best_max = torch.max(flat_input, dim=0).values
+
+    if torch.isnan(best_min) or torch.isnan(best_max):
+        raise ValueError(
+            "Your dataset contain NaN values, which prevent the calculation of statistics."
+        )
+
     counter = 0
     if dataset.settings.standardize:
         raise ValueError("Your dataset should not be standardized.")
