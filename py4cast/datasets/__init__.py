@@ -53,7 +53,7 @@ try:
 
     registry["rainfall"] = (
         RainfallAccessor,
-        DEFAULT_CONFIG_DIR / "datasets" / "rainfall_config.json",
+        DEFAULT_CONFIG_DIR / "datasets" / "rainfall.json",
     )
 except ImportError:
     warnings.warn(f"Could not import RainfallAccessor. {traceback.format_exc()}")
