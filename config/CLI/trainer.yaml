@@ -1,7 +1,7 @@
 # lightning.pytorch==2.4.0
 seed_everything: true
 
-ckpt_path: lightning_logs/version_1/checkpoints/epoch=03-val_mean_loss=129.19.ckpt #EMPTY: runs as usual. NOT EMPTY: load weights and hyperparameters from checkpoint
+ckpt_path: #EMPTY: runs as usual. NOT EMPTY: load weights and hyperparameters from checkpoint
 
 optimizer:
   class_path: torch.optim.AdamW

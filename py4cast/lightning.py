@@ -295,9 +295,6 @@ class AutoRegressiveLightning(LightningModule):
             self.rmse_psd_plot_metric = MetricPSDVar(pred_step=max_pred_step)
             self.psd_plot_metric = MetricPSDK(self.save_path, pred_step=max_pred_step)
             self.acc_metric = MetricACC(self.dataset_info)
-            print()
-            print(f"LOG DIR : {self.save_path}")
-            print()
 
     @property
     def logging_enabled(self) -> bool:
@@ -425,11 +422,11 @@ class AutoRegressiveLightning(LightningModule):
         Handling autocast subtelty for mixed precision on GPU and CPU (only bf16 for the later).
         """
         if torch.cuda.is_available():
-            with torch.cuda.amp.autocast(dtype=self.dtype):
+            with torch.amp.autocast('cuda', dtype=self.dtype):
                 return self._common_step(batch, inference)
         else:
             if not inference and "bf16" in self.trainer.precision:
-                with torch.cpu.amp.autocast(dtype=self.dtype):
+                with torch.amp.autocast('cuda', dtype=self.dtype):
                     return self._common_step(batch, inference)
             else:
                 return self._common_step(batch, inference)
@@ -628,7 +625,7 @@ class AutoRegressiveLightning(LightningModule):
     def predict_step(self, batch: ItemBatch, batch_idx: int) -> torch.Tensor:
         """
         Check if the feature names are the same as the one used during training
-        and make a prediction and accumulate.
+        and make a prediction and accumulate if the dataset used is poesy.
         """
         if batch_idx == 0:
             if self.input_feature_names != batch.inputs.feature_names:
@@ -637,16 +634,18 @@ class AutoRegressiveLightning(LightningModule):
                     f"Training: {self.input_feature_names}, Inference: {batch.inputs.feature_names}"
                 )
         preds = self.forward(batch)
-        if not hasattr(self, 'all_preds'):
-            self.all_preds = []
-        self.all_preds.append(preds)
+
+        if self.dataset_name == "poesy":
+            if not hasattr(self, 'all_preds'):
+                self.all_preds = []
+            self.all_preds.append(preds)
         return preds
 
     def on_predict_end(self):
-        """
-        Méthode appelée à la fin de la phase de prédiction.
-        """
-        preds = self.all_preds
+        if self.dataset_name == "poesy":
+            self.grib_writing()
+
+    def grib_writing(self):
         with open(self.io_conf, "r") as f:
             save_settings = GribSavingSettings.schema().loads((f.read()))
             ph = len(save_settings.output_fmt.split("{}")) - 1
