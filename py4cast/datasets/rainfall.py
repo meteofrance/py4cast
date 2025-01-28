@@ -32,7 +32,10 @@ app = Typer()
 
 class RainfallAccessor(DataAccessor):
     @staticmethod
-    def get_weight_per_level():
+    def get_weight_per_level(
+        level: int,
+        level_type: Literal["isobaricInhPa", "heightAboveGround", "surface", "meanSea"],
+    ):
         return 1.0
 
     #############################################################
@@ -132,7 +135,7 @@ class RainfallAccessor(DataAccessor):
             else:
                 arr = np.load(data_path)
                 arr = arr["arr_0"]
-
+            arr = np.nan_to_num(arr)  # Replace nan by 0
             arr_list.append(np.expand_dims(arr, axis=-1))
         return np.stack(arr_list)
 
