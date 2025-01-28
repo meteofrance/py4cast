@@ -47,7 +47,7 @@ class PoesyAccessor(DataAccessor):
             raise Exception(f"unknown level_type:{level_type}")
 
     @staticmethod
-    def load_grid_info(grid: Grid) -> GridConfig:
+    def load_grid_info(name: str) -> GridConfig:
         geopotential = np.load(SCRATCH_PATH / OROGRAPHY_FNAME)
         latlon = np.load(SCRATCH_PATH / LATLON_FNAME)
         full_size = geopotential.shape

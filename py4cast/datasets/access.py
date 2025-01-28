@@ -180,7 +180,7 @@ class Grid:
     y: int = field(init=False)  # Y dimension of the grid (latitudes)
     # projection information (e.g for plotting)
     proj_name: str = "PlateCarree"
-    projection_kwargs: dict = field(default_factory={})
+    projection_kwargs: dict = field(default_factory=dict)
 
     def __post_init__(self):
         self.grid_config = self.get_grid_info()
