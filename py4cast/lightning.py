@@ -11,7 +11,7 @@ import matplotlib
 import mlflow.pytorch
 import torch
 from lightning import LightningDataModule, LightningModule
-from lightning.pytorch.loggers import MLFlowLogger
+from lightning.pytorch.loggers import MLFlowLogger, TensorBoardLogger
 from lightning.pytorch.utilities import rank_zero_only
 from mfai.torch.models.base import ModelType
 from mfai.torch.models.utils import (
@@ -295,6 +295,16 @@ class AutoRegressiveLightning(LightningModule):
             self.rmse_psd_plot_metric = MetricPSDVar(pred_step=max_pred_step)
             self.psd_plot_metric = MetricPSDK(self.save_path, pred_step=max_pred_step)
             self.acc_metric = MetricACC(self.dataset_info)
+
+    def configure_loggers(self):
+        logger = self.logger
+        if isinstance(logger, TensorBoardLogger):
+            layout = {
+                "Check Overfit": {
+                    "loss": ["Multiline", ["mean_loss_epoch/train", "mean_loss_epoch/validation"]],
+                },
+            }
+            logger.experiment.add_custom_scalars(layout)
 
     @property
     def logging_enabled(self) -> bool:
