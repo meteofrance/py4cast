@@ -1,3 +1,4 @@
+import json
 import shutil
 import subprocess
 from copy import deepcopy
@@ -11,7 +12,7 @@ import matplotlib
 import mlflow.pytorch
 import torch
 from lightning import LightningDataModule, LightningModule
-from lightning.pytorch.loggers import MLFlowLogger, TensorBoardLogger
+from lightning.pytorch.loggers import MLFlowLogger
 from lightning.pytorch.utilities import rank_zero_only
 from mfai.torch.models.base import ModelType
 from mfai.torch.models.utils import (
@@ -645,13 +646,13 @@ class AutoRegressiveLightning(LightningModule):
                     f"Training: {self.input_feature_names}, Inference: {batch.inputs.feature_names}"
                 )
         preds = self.forward(batch)
-        if not(self.io_conf is None):
+        if not (self.io_conf is None):
             self.grib_writing(preds)
         return preds
 
     def grib_writing(self, preds):
         with open(self.io_conf, "r") as f:
-            save_settings = GribSavingSettings.schema().loads((f.read()))
+            save_settings = GribSavingSettings(**json.load(f))
             ph = len(save_settings.output_fmt.split("{}")) - 1
             kw = len(save_settings.output_kwargs)
             fi = len(save_settings.sample_identifiers)
