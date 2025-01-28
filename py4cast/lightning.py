@@ -638,7 +638,7 @@ class AutoRegressiveLightning(LightningModule):
     def predict_step(self, batch: ItemBatch, batch_idx: int) -> torch.Tensor:
         """
         Check if the feature names are the same as the one used during training
-        and make a prediction and accumulate if the dataset used is poesy.
+        and make a prediction and accumulate if io_conf =/= none.
         """
         if batch_idx == 0:
             if self.input_feature_names != batch.inputs.feature_names:
