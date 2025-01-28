@@ -407,10 +407,6 @@ class Sample:
                 timestamps=self.timestamps,
                 file_format=self.settings.file_format,
             ):
-                print(
-                    f"invalid: {self.timestamps.validity_times[0]}, \
-                        {self.accessor.parameter_namer(param)}. Check file."
-                )
                 return False
         return True
 

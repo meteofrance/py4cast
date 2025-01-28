@@ -16,7 +16,7 @@ lr_scheduler:
     eta_min: 0
 
 
-trainer:  # Native training arguments of ligthining.pytorch.Trainer
+trainer:               # Native training arguments of ligthining.pytorch.Trainer
 
   fast_dev_run: False  # True: fit with only 1 batch and 1 epoch, use for dev (logging & checkpointing disabled)
   num_nodes: 1         # Num of GPU nodes (1 if device=cpu)

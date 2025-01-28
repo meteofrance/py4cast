@@ -351,11 +351,11 @@ class MetricACC(Metric):
 
         # storing climate normals as a tensor
         warnings.warn(
-            "You are using ACC metric, which supposes access to climate normals.\
-            From now on these normals are NOT grid point dependent,\
-            there is only one scalar value for each field.\
-            Values of ACC using spatialised climate normals \
-            may be very different from those outputted by this metric."
+            "You are using ACC metric, which supposes access to climate normals. "
+            "From now on these normals are NOT grid point dependent, "
+            "there is only one scalar value for each field. "
+            "Values of ACC using spatialised climate normals "
+            "may be very different from those outputted by this metric."
         )
         names = (
             dataset_info.shortnames["input_output"] + dataset_info.shortnames["output"]
