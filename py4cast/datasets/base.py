@@ -694,8 +694,8 @@ class DatasetABC(Dataset):
 
     def torch_dataloader(
         self,
-        batch_size: int= 1,
-        num_workers: int= 1,
+        batch_size: int = 1,
+        num_workers: int = 1,
         shuffle: bool = False,
         prefetch_factor: Union[int, None] = None,
         pin_memory: bool = False,
