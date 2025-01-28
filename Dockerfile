@@ -4,22 +4,23 @@ ARG CUDA_VERS=12.1
 
 ARG INJECT_MF_CERT
 
+
+#####################################################
+### Default base image if no crt file is provided ###
+#####################################################
+FROM ${DOCKER_REGISTRY}/pytorch/pytorch:${TORCH_VERS}-cuda${CUDA_VERS}-cudnn9-devel as BASE_CRT_INJECTED_0
+
+
 ###################################################
 ### Custom base image if a crt file is provided ###
 ###################################################
-FROM ${DOCKER_REGISTRY}/pytorch/pytorch:${TORCH_VERS}-cuda${CUDA_VERS}-cudnn9-devel as BASE_CRT_INJECTED_1
+FROM BASE_CRT_INJECTED_0 as BASE_CRT_INJECTED_1
 
 COPY mf.crt /usr/local/share/ca-certificates/mf.crt
 # The following two lines are necessary to deal with the MITM sniffing proxy we have internally.
 RUN ( test $INJECT_MF_CERT -eq 1 && update-ca-certificates ) || echo "MF certificate not injected"
 ENV REQUESTS_CA_BUNDLE="/usr/local/share/ca-certificates/mf.crt"
 ENV CURL_CA_BUNDLE="/usr/local/share/ca-certificates/mf.crt"
-
-
-#####################################################
-### Default base image if no crt file is provided ###
-#####################################################
-FROM ${DOCKER_REGISTRY}/pytorch/pytorch:${TORCH_VERS}-cuda${CUDA_VERS}-cudnn9-devel as BASE_CRT_INJECTED_0
 
 
 #################################################
