@@ -8,16 +8,16 @@ ARG INJECT_MF_CERT
 #####################################################
 ### Default base image if no crt file is provided ###
 #####################################################
-FROM ${DOCKER_REGISTRY}/pytorch/pytorch:${TORCH_VERS}-cuda${CUDA_VERS}-cudnn9-devel as BASE_CRT_INJECTED_0
+FROM ${DOCKER_REGISTRY}/pytorch/pytorch:${TORCH_VERS}-cuda${CUDA_VERS}-cudnn9-devel as base_crt_injected_0
 
 
 ###################################################
 ### Custom base image if a crt file is provided ###
 ###################################################
-FROM BASE_CRT_INJECTED_0 as BASE_CRT_INJECTED_1
+FROM base_crt_injected_0 as base_crt_injected_1
 
-COPY mf.crt /usr/local/share/ca-certificates/mf.crt
 # The following two lines are necessary to deal with the MITM sniffing proxy we have internally.
+COPY mf.crt /usr/local/share/ca-certificates/mf.crt
 RUN ( test $INJECT_MF_CERT -eq 1 && update-ca-certificates ) || echo "MF certificate not injected"
 ENV REQUESTS_CA_BUNDLE="/usr/local/share/ca-certificates/mf.crt"
 ENV CURL_CA_BUNDLE="/usr/local/share/ca-certificates/mf.crt"
@@ -26,7 +26,7 @@ ENV CURL_CA_BUNDLE="/usr/local/share/ca-certificates/mf.crt"
 #################################################
 ### Final image inherited from the base image ###
 #################################################
-FROM BASE_CRT_INJECTED_${INJECT_MF_CERT}
+FROM base_crt_injected_${INJECT_MF_CERT}
 
 # set apt to non interactive
 ENV DEBIAN_FRONTEND=noninteractive
