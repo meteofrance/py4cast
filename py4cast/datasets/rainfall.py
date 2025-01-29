@@ -6,7 +6,7 @@ from typing import List, Literal
 
 import numpy as np
 import xarray as xr
-from tqdm import tqdm
+from tqdm import trange
 from typer import Typer
 
 from py4cast.datasets import compute_dataset_stats as cds
@@ -259,7 +259,7 @@ def speedtest(path_config: Path = DEFAULT_CONFIG, n_iter: int = 5):
     )
     data_iter = iter(train_ds.torch_dataloader())
     start_time = time.time()
-    for i in tqdm.trange(n_iter, desc="Loading samples"):
+    for i in trange(n_iter, desc="Loading samples"):
         _ = next(data_iter)
     delta = time.time() - start_time
     speed = n_iter / delta
