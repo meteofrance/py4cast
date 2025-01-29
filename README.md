@@ -369,7 +369,7 @@ As in neural-lam, before training you must first compute the mean and std of eac
 To compute the stats of the Titan dataset:
 
 ```bash
-python py4cast/datasets/titan/__init__.py
+python py4cast/datasets/titan/titan_cli.py prepare
 ```
 
 To train on a dataset with its default settings just pass the name of the dataset (all lowercase) :
