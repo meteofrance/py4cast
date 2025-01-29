@@ -2,14 +2,37 @@ ARG DOCKER_REGISTRY=docker.io
 ARG TORCH_VERS=2.4.1
 ARG CUDA_VERS=12.1
 
-FROM ${DOCKER_REGISTRY}/pytorch/pytorch:${TORCH_VERS}-cuda${CUDA_VERS}-cudnn9-devel
+ARG INJECT_MF_CERT
+
+
+#####################################################
+### Default base image if no crt file is provided ###
+#####################################################
+FROM ${DOCKER_REGISTRY}/pytorch/pytorch:${TORCH_VERS}-cuda${CUDA_VERS}-cudnn9-devel as base_crt_injected_0
+
+
+###################################################
+### Custom base image if a crt file is provided ###
+###################################################
+FROM base_crt_injected_0 as base_crt_injected_1
 
 ARG INJECT_MF_CERT
 
-COPY mf.crt /usr/local/share/ca-certificates/mf.crt
-
 # The following two lines are necessary to deal with the MITM sniffing proxy we have internally.
+COPY mf.crt /usr/local/share/ca-certificates/mf.crt
 RUN ( test $INJECT_MF_CERT -eq 1 && update-ca-certificates ) || echo "MF certificate not injected"
+ENV REQUESTS_CA_BUNDLE="/usr/local/share/ca-certificates/mf.crt"
+ENV CURL_CA_BUNDLE="/usr/local/share/ca-certificates/mf.crt"
+
+
+#################################################
+### Final image inherited from the base image ###
+#################################################
+FROM base_crt_injected_${INJECT_MF_CERT}
+
+ARG HTTP_PROXY
+ARG HTTPS_PROXY
+
 # set apt to non interactive
 ENV DEBIAN_FRONTEND=noninteractive
 ENV MY_APT='apt -o "Acquire::https::Verify-Peer=false" -o "Acquire::AllowInsecureRepositories=true" -o "Acquire::AllowDowngradeToInsecureRepositories=true" -o "Acquire::https::Verify-Host=false"'
@@ -19,13 +42,6 @@ RUN $MY_APT update && $MY_APT install -y curl gdal-bin libgdal-dev libgeos-dev g
 
 ENV CPLUS_INCLUDE_PATH=/usr/include/gdal
 ENV C_INCLUDE_PATH=/usr/include/gdal
-
-ARG REQUESTS_CA_BUNDLE="/usr/local/share/ca-certificates/mf.crt"
-ARG CURL_CA_BUNDLE="/usr/local/share/ca-certificates/mf.crt"
-
-# Build eccodes, a recent version yields far better throughput according to our benchmarks
-ARG ECCODES_VER=2.35.0
-RUN curl -O https://confluence.ecmwf.int/download/attachments/45757960/eccodes-$ECCODES_VER-Source.tar.gz && tar -xzf eccodes-$ECCODES_VER-Source.tar.gz && mkdir build && cd build && cmake ../eccodes-$ECCODES_VER-Source -DENABLE_AEC=ON -DENABLE_NETCDF=ON -DENABLE_FORTRAN=OFF && make && ctest && make install && ldconfig
 
 RUN pip install --upgrade pip
 COPY requirements.txt /app/requirements.txt
