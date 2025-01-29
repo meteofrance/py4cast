@@ -193,7 +193,7 @@ From your `py4cast` source directory, to run an experiment using the docker imag
 - The py4cast sources
 - The PY4CAST_ROOTDIR path
 
-Here is an example of command to run a "dev_mode" training of the HiLam model with the TITAN dataset, using all the GPUs:
+Here is an example of command to run a training of the HiLam model with the TITAN dataset, using all the GPUs:
 ```sh
 docker run \
     --name hilam-titan \
@@ -207,11 +207,10 @@ docker run \
     py4cast:<your_tag> \
     bash -c " \
         pip install -e . &&  \
-        python bin/main.py predict\
+        python bin/main.py fit\
             --config config/CLI/trainer.yaml \
             --config config/CLI/model/hilam.yaml \
             --config config/CLI/dataset/titan.yaml \
-            --dev_mode \
     "
 ```
 
@@ -225,7 +224,7 @@ From your `py4cast` source directory, to run an experiment using the podman imag
 - The py4cast sources
 - The PY4CAST_ROOTDIR path
 
-Here is an example of command to run a "dev_mode" training of the HiLam model with the TITAN dataset, using all the GPUs:
+Here is an example of command to run a training of the HiLam model with the TITAN dataset, using all the GPUs:
 ```sh
 podman run \
     --name hilam-titan \
@@ -245,7 +244,7 @@ podman run \
             --config config/CLI/trainer.yaml \
             --config config/CLI/model/hilam.yaml \
             --config config/CLI/dataset/titan.yaml \
-            --dev_mode \
+    "
     "
 ```
 </details>
@@ -259,7 +258,7 @@ From your `py4cast` source directory, to run an experiment using a singularity c
 - The dataset path
 - The PY4CAST_ROOTDIR path
 
-Here is an example of command to run a "dev_mode" training of the HiLam model with the TITAN dataset:
+Here is an example of command to run a training of the HiLam model with the TITAN dataset:
 ```sh
 PY4CAST_TITAN_PATH=/dataset/TITAN \
 PY4CAST_ROOTDIR=<your_py4cast_root_dir> \
@@ -274,7 +273,6 @@ singularity exec \
             --config config/CLI/trainer.yaml \
             --config config/CLI/model/hilam.yaml \
             --config config/CLI/dataset/titan.yaml \
-            --dev_mode \
     "
 ```
 </details>
@@ -298,6 +296,12 @@ runai exec_gpu python bin/main.py fit --config config/CLI/trainer.yaml --config 
 
 2. Train using sbatch single node multi-GPUs
 
+Modify the trainer.yaml configuration file.
+```bash
+trainer:
+  num_nodes: 1
+```
+
 ```bash
 export RUNAI_GRES="gpu:v100:4"
 runai sbatch python bin/main.py fit --config config/CLI/trainer.yaml --config config/CLI/dataset/titan.yaml --config config/CLI/model/hilam.yaml
@@ -306,6 +310,12 @@ runai sbatch python bin/main.py fit --config config/CLI/trainer.yaml --config co
 3. Train using sbatch multi nodes multi GPUs
 
 Here we use 2 nodes with 4 GPUs each.
+
+Modify the trainer.yaml configuration file.
+```bash
+trainer:
+  num_nodes: 2
+```
 
 ```bash
 export RUNAI_SLURM_NNODES=2
@@ -362,7 +372,22 @@ sbatch my_tiny_script.sh
 ```
 with the proxy path depending on your machine.
 
-### Dataset configuration & simple training
+## Delving into the design
+
+main.py uses a LightningCLI to train (`bin/main.py fit`), test (`bin/main.py test`) or predict (`bin/main.py predict`). 
+
+This LightningCLI calls the LightningModule (where the model is initialized and methods are written) and the DataModule (where the dataset is initialized). 
+
+The native args of the LightningCLI (trainer), the args of the LightningModule (model) and the args of the DataModule (data) are accessible through the trainer.yaml, model.yaml and dataset.yaml. Here is a standard command line :
+```bash
+usage : python bin/main.py <mode> --config config/CLI/trainer.yaml --config config/CLI/dataset/<datatset>.yaml --config config/CLI/model/<model>.yaml
+```
+When you want to change an argument, you can either modify the config.yaml where it is parsed or override it by parsing it directly. For instance if you want to change the loss_name argument accessible in unetrpp.yaml, you can use the following command line :
+```bash
+usage : python bin/main.py <mode> --config config/CLI/trainer.yaml --config config/CLI/dataset/<datatset>.yaml --config config/CLI/model/<model>.yaml --model.loss_name mae
+```
+
+### Dataset initialization
 
 As in neural-lam, before training you must first compute the mean and std of each feature.
 
@@ -378,10 +403,16 @@ To train on a dataset with its default settings just pass the name of the datase
 python bin/main.py fit --config config/CLI/trainer.yaml --config config/CLI/dataset/titan.yaml --config config/CLI/model/hilam.yaml
 ```
 
-You can override the dataset default configuration file:
+You can override the dataset default configuration file :
 
+- either by modifying dataset.yaml :
 ```bash
-python bin/main.py fit --config config/CLI/trainer.yaml --config config/CLI/dataset/titan.yaml --config config/CLI/model/hilam.yaml --data.dataset_conf config/smeagoldev.json
+data:
+  dataset_conf: config/datasets/titan_refacto2.json
+```
+- or by parsing the argument :
+```bash
+python bin/main.py fit --config config/CLI/trainer.yaml --config config/CLI/dataset/titan.yaml --config config/CLI/model/hilam.yaml --data.dataset_conf config/datasets/titan_refacto2.json
 ```
 
 [Details on available datasets.](doc/features.md/#available-datasets)
@@ -400,8 +431,17 @@ python bin/main.py fit --config config/CLI/trainer.yaml --config config/CLI/data
 
 You can override some settings of the model using a json config file (here we increase the number of filter to 128 and use ghost modules):
 
+- either by modifying model.yaml :
 ```bash
-python bin/train.py --dataset smeagol --model HalfUNet --model_conf config/halfunet128_ghost.json
+model:
+  settings_init_args:
+    hidden_size: 256
+    num_heads_encoder: 4
+    etc.
+```
+- or by parsing the argument :
+```bash
+python bin/main.py fit --config config/CLI/trainer.yaml --config config/CLI/dataset/titan.yaml --config config/CLI/model/unetrpp.yaml --model.setting_init_args.hidden_size 256
 ```
 
 [Details on available neural networks.](doc/features.md/#available-pytorchs-architecture)
@@ -409,10 +449,16 @@ python bin/train.py --dataset smeagol --model HalfUNet --model_conf config/halfu
 
 2. **Changing the training strategy**
 
-You can choose a training strategy using the **--strategy STRATEGY_NAME** cli argument:
+You can choose a training strategy :
 
+- either by modifying model.yaml :
 ```bash
-python bin/train.py --dataset smeagol --model HalfUNet --strategy diff_ar
+model:
+  training_strategy: diff_ar
+```
+- or by parsing the argument :
+```bash
+python bin/main.py fit --config config/CLI/trainer.yaml --config config/CLI/dataset/titan.yaml --config config/CLI/model/unetrpp.yaml --model.strategy diff_ar
 ```
 
 [Details on available training strategies.](doc/features.md/#available-training-strategies)
@@ -420,35 +466,7 @@ python bin/train.py --dataset smeagol --model HalfUNet --strategy diff_ar
 
 3. **Other training options**:
 
-* `--seed SEED`           random seed (default: 42)
-* `--loss LOSS`           Loss function to use (default: mse)
-* `--lr LR`               learning rate (default: 0.001)
-* `--val_interval VAL_INTERVAL`
-                    Number of epochs training between each validation run (default: 1)
-* `--epochs EPOCHS`       upper epoch limit (default: 200)
-* `--profiler PROFILER`   Profiler required. Possibilities are ['simple', 'pytorch', 'None']
-* `--batch_size BATCH_SIZE`
-                    batch size
-* `--precision PRECISION`
-                    Numerical precision to use for model (32/16/bf16) (default: 32)
-* `--limit_train_batches LIMIT_TRAIN_BATCHES`
-                    Number of batches to use for training
-* `--num_pred_steps_train NUM_PRED_STEPS_TRAIN`
-                    Number of auto-regressive steps/prediction steps during training forward pass
-* `--num_pred_steps_val_test NUM_PRED_STEPS_VAL_TEST`
-                    Number of auto-regressive steps/prediction steps during validation and tests
-* `--num_input_steps NUM_INPUT_STEPS`
-                    Number of previous timesteps supplied as inputs to the model
-* `--num_inter_steps NUM_INTER_STEPS`
-                    Number of model steps between two samples
-* `--no_log`
-    When activated, logs are not stored and models are not saved. Use in dev mode. (default: False)
-* `--mlflow_log`
-    When activated, the MLFlowLogger is used and the model is saved in the MLFlow style (default: False)
-* `--dev_mode`
-    When activated, reduce number of epoch and steps. (default: False)
-* `--load_model_ckpt LOAD_MODEL_CKPT`
-    Path to load model parameters from (default: None)
+For more options, please refer to the various trainer.yaml, model.yaml and dataset.yaml
 
 
 You can find more details about all the `num_X_steps` options [here](doc/num_steps.md).
@@ -500,35 +518,12 @@ export MLFLOW_EXPERIMENT_NAME=py4cast/unetrpp
 
 ### Inference
 
-Inference is done by running the `bin/inference.py` script. This script will load a model and run it on a dataset using the training parameters (dataset config, timestep options, ...).
-
-```bash
-usage: python bin/inference.py [-h] [--model_path MODEL_PATH] [--dataset DATASET] [--infer_steps INFER_STEPS] [--date DATE]
-
-options:
-  -h, --help            show this help message and exit
-  --model_path MODEL_PATH
-                        Path to the model checkpoint
-  --date DATE
-                        Date of the sample to infer on. Format:YYYYMMDDHH
-  --dataset DATASET
-                        Name of the dataset to use (typically the same as has been used for training)
-  --dataset_conf DATASET_CONF
-                        Name of the dataset config file (json, to change e.g dates, leadtimes, etc)
-  --infer_steps INFER_STEPS
-                        Number of auto-regressive steps/prediction steps during the inference
-   --precision PRECISION
-                        floating point precision for the inference (default: 32)
-   --grib BOOL
-                        Whether the outputs should be saved as grib, needs saving conf.
-   --saving_conf SAVING_CONF
-                        Name of the config file for write settings (json)
-```
+Inference is done by running the `bin/main.py predict` script. This script will load a model and run it on a dataset using the training parameters (dataset config, timestep options, ...).
 
 A simple example of inference is shown below:
 
 ```bash
- runai exec_gpu python bin/inference.py --model_path /scratch/shared/py4cast/logs/camp0/poesy/halfunet/sezn_run_dev_12 --date 2021061621 --dataset poesy_infer --infer_steps 2
+ runai exec_gpu python bin/main.py predict --config config/CLI/trainer.yaml --config config/CLI/dataset/titan.yaml --config config/CLI/model/unetrpp.yaml
 ```
 
 ### Making animated plots comparing multiple models
@@ -555,10 +550,10 @@ example: python bin/gif_comparison.py --ckpt AROME --ckpt /.../logs/my_run/epoch
 
 ### Scoring and comparing models
 
-The `bin/test.py` script will compute and save metrics on the validation set, on as many auto-regressive prediction steps as you want.
+The `bin/main.py test` script will compute and save metrics on the validation set, on as many auto-regressive prediction steps as you want.
 
 ```bash
-python bin/test.py PATH_TO_CHECKPOINT --num_pred_steps 24
+python python bin/main.py test --config config/CLI/trainer.yaml --config config/CLI/dataset/titan.yaml --config config/CLI/model/unetrpp.yaml.py
 ```
 
 Once you have executed the `test.py` script on all the models you want, you can compare them with `bin/scores_comparison.py`:
