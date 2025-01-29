@@ -1,0 +1,14 @@
+data:
+  #args forwarded (linked) to model
+  dataset_name: "rainfall"
+  num_input_steps: 4
+  num_pred_steps_train: 12
+  num_pred_steps_val_test: 12
+  batch_size: 8
+
+  #other args
+  num_workers: 10
+  prefetch_factor: null
+  pin_memory: False 
+  dataset_conf: "config/datasets/rainfall.json"
+  config_override: null
