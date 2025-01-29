@@ -16,6 +16,8 @@ FROM ${DOCKER_REGISTRY}/pytorch/pytorch:${TORCH_VERS}-cuda${CUDA_VERS}-cudnn9-de
 ###################################################
 FROM base_crt_injected_0 as base_crt_injected_1
 
+ARG INJECT_MF_CERT
+
 # The following two lines are necessary to deal with the MITM sniffing proxy we have internally.
 COPY mf.crt /usr/local/share/ca-certificates/mf.crt
 RUN ( test $INJECT_MF_CERT -eq 1 && update-ca-certificates ) || echo "MF certificate not injected"
@@ -27,6 +29,9 @@ ENV CURL_CA_BUNDLE="/usr/local/share/ca-certificates/mf.crt"
 ### Final image inherited from the base image ###
 #################################################
 FROM base_crt_injected_${INJECT_MF_CERT}
+
+ARG HTTP_PROXY
+ARG HTTPS_PROXY
 
 # set apt to non interactive
 ENV DEBIAN_FRONTEND=noninteractive

@@ -60,5 +60,7 @@ ${RUNTIME} build \
     --build-arg USER_GUID=$(id -g) \
     --build-arg HOME_DIR=${HOME} \
     --build-arg INJECT_MF_CERT=${INJECT_MF_CERT} \
+    --build-arg HTTP_PROXY=${HTTP_PROXY:=${http_proxy}} \
+    --build-arg HTTPS_PROXY=${HTTPS_PROXY:=${https_proxy}} \
     --tag py4cast:${TAG} \
     .
