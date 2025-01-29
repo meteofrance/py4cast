@@ -425,7 +425,7 @@ class AutoRegressiveLightning(LightningModule):
         Handling autocast subtelty for mixed precision on GPU and CPU (only bf16 for the later).
         """
         if torch.cuda.is_available():
-            with torch.cuda.amp.autocast(dtype=self.dtype):
+            with torch.amp.autocast("cuda", dtype=self.dtype):
                 return self._common_step(batch, inference)
         else:
             if not inference and "bf16" in self.trainer.precision:
