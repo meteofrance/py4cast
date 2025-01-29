@@ -531,6 +531,10 @@ class Sample:
         nrows = len(dict_params.keys())
         ncols = max([len(param_list) for param_list in dict_params.values()])
         fig, axs = plt.subplots(nrows, ncols, figsize=(20, 15), subplot_kw=kwargs)
+        try:
+            axs = axs.flat
+        except AttributeError:
+            axs = [axs]
 
         for i, level in enumerate(dict_params.keys()):
             for j, param in enumerate(dict_params[level]):
@@ -538,12 +542,13 @@ class Sample:
                 tensor = ntensor[pname][index_tensor, :, :, 0]
                 arr = tensor.numpy()[::-1]  # invert latitude
                 vmin, vmax = self.stats[pname]["min"], self.stats[pname]["max"]
-                img = axs[i, j].imshow(
+                ax_idx = i * nrows + j
+                img = axs[ax_idx].imshow(
                     arr, vmin=vmin, vmax=vmax, extent=self.grid.grid_limits
                 )
-                axs[i, j].set_title(pname)
-                axs[i, j].coastlines(resolution="50m")
-                cbar = fig.colorbar(img, ax=axs[i, j], fraction=0.04, pad=0.04)
+                axs[ax_idx].set_title(pname)
+                axs[ax_idx].coastlines(resolution="50m")
+                cbar = fig.colorbar(img, ax=axs[ax_idx], fraction=0.04, pad=0.04)
                 cbar.set_label(param.unit)
 
         plt.suptitle(
