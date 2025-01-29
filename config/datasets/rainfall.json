@@ -30,7 +30,8 @@
     },
     "params": {
         "precip": {
-            "levels": ["surface"],
+            "levels": [0],
+            "typeOfLevel": "surface",
             "kind": "input_output"
         }
     }
