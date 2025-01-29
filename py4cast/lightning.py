@@ -1,3 +1,4 @@
+import json
 import shutil
 import subprocess
 from copy import deepcopy
@@ -24,6 +25,7 @@ from torchinfo import summary
 
 from py4cast.datasets import get_datasets
 from py4cast.datasets.base import DatasetInfo, ItemBatch, NamedTensor, Statics
+from py4cast.io.outputs import GribSavingSettings, save_named_tensors_to_grib
 from py4cast.losses import ScaledLoss, WeightedLoss
 from py4cast.metrics import MetricACC, MetricPSDK, MetricPSDVar
 from py4cast.models import build_model_from_settings, get_model_kls_and_settings
@@ -56,7 +58,7 @@ class PlDataModule(LightningDataModule):
         prefetch_factor: int | None = None,
         pin_memory: bool = False,
         dataset_conf: Path | None = None,
-        config_override: Dict | None = None,
+        predict_conf: Dict | None = None,
     ):
         super().__init__()
         self.num_input_steps = num_input_steps
@@ -74,7 +76,7 @@ class PlDataModule(LightningDataModule):
             num_pred_steps_train,
             num_pred_steps_val_test,
             dataset_conf,
-            config_override,
+            predict_conf,
         )
 
     @property
@@ -151,6 +153,7 @@ class AutoRegressiveLightning(LightningModule):
         # args linked from trainer and datamodule
         dataset_info,  # Don't put type hint here or CLI doesn't work
         len_train_loader: int,
+        infer_ds,
         dataset_name: str = "dummy",
         dataset_conf: Path | None = None,  # TO DELETE ?
         num_input_steps: int = 1,
@@ -162,13 +165,15 @@ class AutoRegressiveLightning(LightningModule):
         model_conf: Path | None = None,
         loss_name: Literal["mse", "mae"] = "mse",
         num_inter_steps: int = 1,
+        num_samples_to_plot: int = 1,
         training_strategy: Literal["diff_ar", "scaled_ar"] = "diff_ar",
         channels_last: bool = False,
-        num_samples_to_plot: int = 1,
+        io_conf: Path | None = None,
         *args,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
+        self.infer_ds = infer_ds
         self.settings_init_args = settings_init_args
         self.dataset_name = dataset_name
         self.dataset_conf = dataset_conf
@@ -184,6 +189,7 @@ class AutoRegressiveLightning(LightningModule):
         self.training_strategy = training_strategy
         self.len_train_loader = len_train_loader
         self.channels_last = channels_last
+        self.io_conf = io_conf
 
         if self.num_inter_steps > 1 and self.num_input_steps > 1:
             raise AttributeError(
@@ -283,7 +289,6 @@ class AutoRegressiveLightning(LightningModule):
         exp_summary(self)
 
     def setup(self, stage=None):
-        self.configure_optimizers()
         self.logger.log_hyperparams(self.hparams, metrics={"val_mean_loss": 0.0})
         if self.logging_enabled:
             self.save_path = Path(self.trainer.logger.log_dir)
@@ -291,13 +296,18 @@ class AutoRegressiveLightning(LightningModule):
             self.rmse_psd_plot_metric = MetricPSDVar(pred_step=max_pred_step)
             self.psd_plot_metric = MetricPSDK(self.save_path, pred_step=max_pred_step)
             self.acc_metric = MetricACC(self.dataset_info)
-            print()
-            print(f"LOG DIR : {self.save_path}")
-            print()
+            self.configure_loggers()
 
-    def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(), lr=0.001)
-        return [optimizer]
+    def configure_loggers(self):
+        layout = {
+            "Check Overfit": {
+                "loss": [
+                    "Multiline",
+                    ["mean_loss_epoch/train", "mean_loss_epoch/validation"],
+                ],
+            },
+        }
+        self.logger.experiment.add_custom_scalars(layout)
 
     @property
     def logging_enabled(self) -> bool:
@@ -429,7 +439,7 @@ class AutoRegressiveLightning(LightningModule):
                 return self._common_step(batch, inference)
         else:
             if not inference and "bf16" in self.trainer.precision:
-                with torch.cpu.amp.autocast(dtype=self.dtype):
+                with torch.amp.autocast("cuda", dtype=self.dtype):
                     return self._common_step(batch, inference)
             else:
                 return self._common_step(batch, inference)
@@ -628,7 +638,7 @@ class AutoRegressiveLightning(LightningModule):
     def predict_step(self, batch: ItemBatch, batch_idx: int) -> torch.Tensor:
         """
         Check if the feature names are the same as the one used during training
-        and make a prediction.
+        and make a prediction and accumulate if io_conf =/= none.
         """
         if batch_idx == 0:
             if self.input_feature_names != batch.inputs.feature_names:
@@ -636,7 +646,24 @@ class AutoRegressiveLightning(LightningModule):
                     f"Input Feature names mismatch between training and inference. "
                     f"Training: {self.input_feature_names}, Inference: {batch.inputs.feature_names}"
                 )
-        return self.forward(batch)
+        preds = self.forward(batch)
+        if not (self.io_conf is None):
+            self.grib_writing(preds)
+        return preds
+
+    def grib_writing(self, preds):
+        with open(self.io_conf, "r") as f:
+            save_settings = GribSavingSettings(**json.load(f))
+            ph = len(save_settings.output_fmt.split("{}")) - 1
+            kw = len(save_settings.output_kwargs)
+            fi = len(save_settings.sample_identifiers)
+            if ph != (fi + kw):
+                raise ValueError(
+                    f"Filename fmt has {ph} placeholders,\
+                    but {kw} output_kwargs and {fi} sample identifiers."
+                )
+        for sample, pred in zip(self.infer_ds.sample_list, preds):
+            save_named_tensors_to_grib(pred, self.infer_ds, sample, save_settings)
 
     def forward(self, x: ItemBatch) -> NamedTensor:
         """

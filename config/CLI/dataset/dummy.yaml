@@ -11,4 +11,4 @@ data:
   prefetch_factor: null
   pin_memory: False 
   dataset_conf: "config/datasets/dummy_config.json"
-  config_override: null
+  predict_conf: null
