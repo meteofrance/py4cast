@@ -207,14 +207,11 @@ docker run \
     py4cast:<your_tag> \
     bash -c " \
         pip install -e . &&  \
-        python bin/train.py \
-            --dataset titan \
-            --model HiLAM \
-            --dataset_conf config/datasets/titan_full.json \
+        python bin/main.py predict\
+            --config config/CLI/trainer.yaml \
+            --config config/CLI/model/hilam.yaml \
+            --config config/CLI/dataset/titan.yaml \
             --dev_mode \
-            --no_log \
-            --num_pred_steps_val_test 1 \
-            --num_input_steps 1 \
     "
 ```
 
@@ -244,14 +241,11 @@ podman run \
     py4cast:<your_tag> \
     bash -c " \
         pip install -e . &&  \
-        python bin/train.py \
-            --dataset titan \
-            --model HiLAM \
-            --dataset_conf config/datasets/titan_full.json \
+        python bin/main.py fit\
+            --config config/CLI/trainer.yaml \
+            --config config/CLI/model/hilam.yaml \
+            --config config/CLI/dataset/titan.yaml \
             --dev_mode \
-            --no_log \
-            --num_pred_steps_val_test 1 \
-            --num_input_steps 1 \
     "
 ```
 </details>
@@ -276,14 +270,11 @@ singularity exec \
     py4cast-<your_tag>.sif \
     bash -c " \
         pip install -e . &&  \
-        python bin/train.py \
-            --dataset titan \
-            --model HiLAM \
-            --dataset_conf config/datasets/titan_full.json \
+        python bin/main.py fit\
+            --config config/CLI/trainer.yaml \
+            --config config/CLI/model/hilam.yaml \
+            --config config/CLI/dataset/titan.yaml \
             --dev_mode \
-            --no_log \
-            --num_pred_steps_val_test 1 \
-            --num_input_steps 1 \
     "
 ```
 </details>
@@ -302,14 +293,14 @@ For now this works only for internal Météo-France users.
 ```bash
 runai gpu_play 4
 runai build
-runai exec_gpu python bin/train.py --dataset titan --model HiLAM
+runai exec_gpu python bin/main.py fit --config config/CLI/trainer.yaml --config config/CLI/dataset/titan.yaml --config config/CLI/model/hilam.yaml
 ```
 
 2. Train using sbatch single node multi-GPUs
 
 ```bash
 export RUNAI_GRES="gpu:v100:4"
-runai sbatch python bin/train.py --dataset titan --model HiLAM
+runai sbatch python bin/main.py fit --config config/CLI/trainer.yaml --config config/CLI/dataset/titan.yaml --config config/CLI/model/hilam.yaml
 ```
 
 3. Train using sbatch multi nodes multi GPUs
@@ -319,7 +310,7 @@ Here we use 2 nodes with 4 GPUs each.
 ```bash
 export RUNAI_SLURM_NNODES=2
 export RUNAI_GRES="gpu:v100:4"
-runai sbatch_multi_node python bin/train.py --dataset titan --model HiLAM
+runai sbatch_multi_node python bin/main.py fit --config config/CLI/trainer.yaml --config config/CLI/dataset/titan.yaml --config config/CLI/model/hilam.yaml
 ```
 
 For the rest of the documentation, you must preprend each python command with `runai exec_gpu`.
@@ -334,7 +325,7 @@ Once your micromamba environment is setup, you should :
 
 A very simple training can be launch (on your current node)
 ```sh
-python bin/train.py  --dataset dummy --model HalfUNet --epochs 2
+python bin/main.py fit --config config/CLI/trainer.yaml --config config/CLI/dataset/dummy.yaml --config config/CLI/model/hilam.yaml
 ```
 
 #### Example of script  to launch on gpu
@@ -356,7 +347,7 @@ source ~/.bashrc  # Be sure that all your environment variables are set
 conda activate py4cast # Activate your environment (installed by micromamba or conda)
 cd $PY4CAST_PATH # Go to Py4CAST (you can either add an environment variable or hard code it here).
 # Launch your favorite command.
-srun python bin/train.py --model HalfUNet --dataset dummy --epochs 2
+srun bin/main.py fit --config config/CLI/trainer.yaml --config config/CLI/dataset/dummy.yaml --config config/CLI/model/hilam.yaml
 ```
 
 
@@ -384,13 +375,13 @@ python py4cast/datasets/titan/__init__.py
 To train on a dataset with its default settings just pass the name of the dataset (all lowercase) :
 
 ```bash
-python bin/train.py --dataset titan --model HalfUNet
+python bin/main.py fit --config config/CLI/trainer.yaml --config config/CLI/dataset/titan.yaml --config config/CLI/model/hilam.yaml
 ```
 
 You can override the dataset default configuration file:
 
 ```bash
-python bin/train.py --dataset smeagol --model HalfUNet --dataset_conf config/smeagoldev.json
+python bin/main.py fit --config config/CLI/trainer.yaml --config config/CLI/dataset/titan.yaml --config config/CLI/model/hilam.yaml --data.dataset_conf config/smeagoldev.json
 ```
 
 [Details on available datasets.](doc/features.md/#available-datasets)
@@ -402,9 +393,9 @@ python bin/train.py --dataset smeagol --model HalfUNet --dataset_conf config/sme
 To train on a dataset using a network with its default settings just pass the name of the architecture (all lowercase) as shown below:
 
 ```bash
-python bin/train.py --dataset smeagol --model HiLAM
+python bin/main.py fit --config config/CLI/trainer.yaml --config config/CLI/dataset/smeagol.yaml --config config/CLI/model/hilam.yaml
 
-python bin/train.py --dataset smeagol --model HalfUNet
+python bin/main.py fit --config config/CLI/trainer.yaml --config config/CLI/dataset/smeagol.yaml --config config/CLI/model/halfunet.yaml
 ```
 
 You can override some settings of the model using a json config file (here we increase the number of filter to 128 and use ghost modules):
