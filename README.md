@@ -387,6 +387,8 @@ When you want to change an argument, you can either modify the config.yaml where
 usage : python bin/main.py <mode> --config config/CLI/trainer.yaml --config config/CLI/dataset/<datatset>.yaml --config config/CLI/model/<model>.yaml --model.loss_name mae
 ```
 
+Quick note: `trainer.fast_dev_run` is a useful option to try to fit the model with minimal computation. It fixes `max_epochs: 1` and `limit_train_batches: 1`
+
 ### Dataset initialization
 
 As in neural-lam, before training you must first compute the mean and std of each feature.
