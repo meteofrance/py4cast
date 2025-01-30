@@ -13,4 +13,4 @@ model:
     use_ghost: False
     last_activation: Identity
     absolute_pos_embed: False
-    autopad_enabled: True # not recognized by CLI but present in UNETRPPSettings -> strange O.o
+    autopad_enabled: True
