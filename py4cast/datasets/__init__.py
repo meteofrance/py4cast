@@ -1,6 +1,5 @@
 import traceback
 import warnings
-from pathlib import Path
 from typing import Dict, Tuple
 
 from py4cast.settings import DEFAULT_CONFIG_DIR
