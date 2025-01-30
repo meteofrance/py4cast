@@ -890,19 +890,19 @@ class DatasetABC(Dataset):
         num_input_steps: int,
         num_pred_steps_train: int,
         num_pred_steps_val_tests: int,
-        config_override: Union[Dict, None] = None,
+        predict_conf: Union[Dict, None] = None,
     ) -> Tuple[Type["DatasetABC"], Type["DatasetABC"], Type["DatasetABC"]]:
         """
         Load a dataset from a json file + the number of expected timesteps
         taken as inputs (num_input_steps) and to predict (num_pred_steps)
         Return the train, valid and test datasets, in that order
-        config_override is a dictionary that can be used to override
+        predict_conf is a dictionary that can be used to override
         some keys of the config file.
         """
         with open(fname, "r") as fp:
             conf = json.load(fp)
-            if config_override is not None:
-                conf = merge_dicts(conf, config_override)
+            if predict_conf is not None:
+                conf = merge_dicts(conf, predict_conf)
         return cls.from_dict(
             accessor_kls,
             fname.stem,
