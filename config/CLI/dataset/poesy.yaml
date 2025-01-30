@@ -1,6 +1,6 @@
 data:
   #args forwarded (linked) to model
-  dataset_name: "poesy"
+  dataset_name: Poesy
   num_input_steps: 1
   num_pred_steps_train: 1
   num_pred_steps_val_test: 1
@@ -10,5 +10,64 @@ data:
   num_workers: 10
   prefetch_factor: null
   pin_memory: False 
-  dataset_conf: config/datasets/poesy_infer.json
-  predict_conf: null
+  dataset_conf:
+    periods:
+      train:
+        start: 20200615
+        end: 20210615
+        refcst_daily_runs:
+          - 75600
+        refcst_leadtime_start_in_sec: 3600
+        refcst_leadtime_end_in_sec: 162000
+        refcst_leadtime_step_in_sec: 3600
+      test:
+        start: 20210616
+        end: 20210716
+        refcst_daily_runs:
+          - 75600
+        refcst_leadtime_start_in_sec: 3600
+        refcst_leadtime_end_in_sec: 162000
+        refcst_leadtime_step_in_sec: 3600
+      valid:
+        start: 20210717
+        end: 20211115
+        refcst_daily_runs:
+          - 75600
+        refcst_leadtime_start_in_sec: 3600
+        refcst_leadtime_end_in_sec: 162000
+        refcst_leadtime_step_in_sec: 3600
+    grid:
+      name: EURW1S40_refacto
+      border_size: 10
+      subdomain:
+        - 50
+        - 178
+        - 50
+        - 178
+      proj_name: LambertConformal
+      projection_kwargs:
+        central_longitude: 2
+        central_latitude: 46.7
+    settings:
+      standardize: true
+      file_format: npy
+    params:
+      t2m:
+        kind: input_output
+        levels:
+          - 2
+      u10:
+        kind: input_output
+        levels:
+          - 10
+      v10:
+        kind: input_output
+        levels:
+          - 10
+      tirf:
+        kind: input_output
+        levels:
+          - 0
+    members:
+      - 0
+      - 1

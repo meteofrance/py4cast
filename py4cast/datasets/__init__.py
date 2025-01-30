@@ -1,7 +1,7 @@
 import traceback
 import warnings
 from pathlib import Path
-from typing import Dict, Tuple, Union
+from typing import Dict, Tuple
 
 from py4cast.settings import DEFAULT_CONFIG_DIR
 
@@ -64,8 +64,7 @@ def get_datasets(
     num_input_steps: int,
     num_pred_steps_train: int,
     num_pred_steps_val_test: int,
-    config_file: Union[str, None] = None,
-    config_override: Union[Dict, None] = None,
+    dataset_conf: Dict | None = None,
 ) -> Tuple[DatasetABC, DatasetABC, DatasetABC]:
     """
     Lookup dataset by name in our registry and uses either
@@ -81,19 +80,17 @@ def get_datasets(
             registered_name = k
             break
     try:
-        accessor_kls, default_config = registry[registered_name]
+        accessor_kls, _ = registry[registered_name]
     except KeyError as ke:
         raise ValueError(
             f"Dataset {name} doesn't match a registry substring, available datasets are :{registry.keys()}"
         ) from ke
 
-    config_file = default_config if config_file is None else Path(config_file)
-
-    return DatasetABC.from_json(
+    return DatasetABC.from_dict(
         accessor_kls,
-        config_file,
+        name,
+        dataset_conf,
         num_input_steps,
         num_pred_steps_train,
         num_pred_steps_val_test,
-        config_override,
     )
