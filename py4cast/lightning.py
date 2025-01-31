@@ -152,7 +152,7 @@ class AutoRegressiveLightning(LightningModule):
         len_train_loader: int,
         infer_ds,
         dataset_name: str = "dummy",
-        dataset_conf: Dict | None = None,  # TO DELETE ?
+        dataset_conf: Dict | None = None,
         num_input_steps: int = 1,
         num_pred_steps_train: int = 1,
         num_pred_steps_val_test: int = 1,
