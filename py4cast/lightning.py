@@ -1,5 +1,4 @@
 import json
-import shutil
 import subprocess
 from copy import deepcopy
 from dataclasses import dataclass
@@ -57,8 +56,7 @@ class PlDataModule(LightningDataModule):
         num_workers: int = 1,
         prefetch_factor: int | None = None,
         pin_memory: bool = False,
-        dataset_conf: Path | None = None,
-        predict_conf: Dict | None = None,
+        dataset_conf: Dict | None = None,
     ):
         super().__init__()
         self.num_input_steps = num_input_steps
@@ -76,7 +74,6 @@ class PlDataModule(LightningDataModule):
             num_pred_steps_train,
             num_pred_steps_val_test,
             dataset_conf,
-            predict_conf,
         )
 
     @property
@@ -155,7 +152,7 @@ class AutoRegressiveLightning(LightningModule):
         len_train_loader: int,
         infer_ds,
         dataset_name: str = "dummy",
-        dataset_conf: Path | None = None,  # TO DELETE ?
+        dataset_conf: Dict | None = None,
         num_input_steps: int = 1,
         num_pred_steps_train: int = 1,
         num_pred_steps_val_test: int = 1,
@@ -355,9 +352,6 @@ class AutoRegressiveLightning(LightningModule):
     @rank_zero_only
     def log_hparams_tb(self):
         if self.logging_enabled and self.logger:
-            # Save model & dataset conf as files
-            if self.dataset_conf is not None:
-                shutil.copyfile(self.dataset_conf, self.save_path / "dataset_conf.json")
             # Write commit and state of git repo in log file
             dest_git_log = self.save_path / "git_log.txt"
             out_log = (

@@ -1,6 +1,6 @@
 data:
   #args forwarded (linked) to model
-  dataset_name: "dummy"
+  dataset_name: dummy
   num_input_steps: 1
   num_pred_steps_train: 1
   num_pred_steps_val_test: 1
@@ -10,5 +10,30 @@ data:
   num_workers: 10
   prefetch_factor: null
   pin_memory: False 
-  dataset_conf: "config/datasets/dummy_config.json"
-  predict_conf: null
+  dataset_conf:
+    grid:
+      border_size: 0
+      name: dummygrid
+      proj_name: PlateCarree
+      projection_kwargs: {}
+      subdomain: [0, 64, 0, 64]
+    params:
+      dummy_parameter:
+        kind: input_output
+        levels: [500]
+    periods:
+      test:
+        end: 20230101
+        obs_step: 3600
+        start: 20230101
+      train:
+        end: 20230101
+        obs_step: 3600
+        start: 20230101
+      valid:
+        end: 20230101
+        obs_step: 3600
+        start: 20230101
+    settings:
+      file_format: npy
+      standardize: "true"
