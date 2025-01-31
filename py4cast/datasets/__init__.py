@@ -22,7 +22,6 @@ try:
         TitanAccessor,
         DEFAULT_CONFIG_DIR / "datasets" / "titan_refacto.json",
     )
-
 except (ImportError, FileNotFoundError, ModuleNotFoundError):
     warnings.warn(f"Could not import TitanAccessor. {traceback.format_exc()}")
 
@@ -33,7 +32,6 @@ try:
         PoesyAccessor,
         DEFAULT_CONFIG_DIR / "datasets" / "poesy_refacto.json",
     )
-
 except ImportError:
     warnings.warn(f"Could not import PoesyAccessor. {traceback.format_exc()}")
 
