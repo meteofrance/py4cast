@@ -46,43 +46,52 @@ class Item:
     forcing has shape (timestep, lat, lon, features)
     """
 
-    inputs: NamedTensor
-    forcing: NamedTensor
+    inputs: NamedTensor | None
+    forcing: NamedTensor | None
     outputs: NamedTensor
 
     def unsqueeze_(self, dim_name: str, dim_index: int):
         """
         Insert a new dimension dim_name at dim_index of size 1
         """
-        self.inputs.unsqueeze_(dim_name, dim_index)
         self.outputs.unsqueeze_(dim_name, dim_index)
-        self.forcing.unsqueeze_(dim_name, dim_index)
+        if self.inputs:
+            self.inputs.unsqueeze_(dim_name, dim_index)
+        if self.forcing:
+            self.forcing.unsqueeze_(dim_name, dim_index)
 
     def squeeze_(self, dim_name: Union[List[str], str]):
         """
         Squeeze the underlying tensor along the dimension(s)
         given its/their name(s).
         """
-        self.inputs.squeeze_(dim_name)
         self.outputs.squeeze_(dim_name)
-        self.forcing.squeeze_(dim_name)
+        if self.inputs:
+            self.inputs.squeeze_(dim_name)
+        if self.forcing:
+            self.forcing.squeeze_(dim_name)
 
     def to_(self, *args, **kwargs):
         """
         'In place' operation to call torch's 'to' method on the underlying NamedTensors.
         """
-        self.inputs.to_(*args, **kwargs)
+        
         self.outputs.to_(*args, **kwargs)
-        self.forcing.to_(*args, **kwargs)
+        if self.inputs:
+            self.inputs.squeeze_(dim_name)
+        if self.forcing:
+            self.forcing.squeeze_(dim_name)
 
     def pin_memory(self):
         """
         Custom Item must implement this method to pin the underlying tensors to memory.
         See https://pytorch.org/docs/stable/data.html#memory-pinning
         """
-        self.inputs.pin_memory_()
-        self.forcing.pin_memory_()
         self.outputs.pin_memory_()
+        if self.inputs:
+            self.inputs.pin_memory_()
+        if self.forcing:
+            self.forcing.pin_memory_()
         return self
 
     def __post_init__(self):
@@ -144,11 +153,11 @@ class ItemBatch(Item):
 
     @cached_property
     def batch_size(self):
-        return self.inputs.dim_size("batch")
+        return self.outputs.dim_size("batch")
 
     @cached_property
     def num_input_steps(self):
-        return self.inputs.dim_size("timestep")
+        return self.outputs.dim_size("timestep")
 
     @cached_property
     def num_pred_steps(self):
@@ -489,13 +498,21 @@ class Sample:
         )
 
         for forcing in external_forcings:
-            forcing.unsqueeze_and_expand_from_(linputs[0])
+            forcing.unsqueeze_and_expand_from_(loutputs[0])
         lforcings = lforcings + external_forcings
 
+        inputs = NamedTensor.concat(linputs) if linputs else None
+        outputs = NamedTensor.concat(loutputs) if loutputs else None
+        forcing = NamedTensor.concat(lforcings) if lforcings else None
+
+        if outputs is None:
+            raise ValueError("Can't train anything without target data: list of outputs is empty.")
+
+
         return Item(
-            inputs=NamedTensor.concat(linputs),
-            outputs=NamedTensor.concat(loutputs),
-            forcing=NamedTensor.concat(lforcings),
+            inputs=inputs,
+            outputs=outputs,
+            forcing=forcing,
         )
 
     def plot(self, item: Item, step: int, save_path: Path = None) -> None:

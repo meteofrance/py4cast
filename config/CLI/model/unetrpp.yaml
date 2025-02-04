@@ -4,7 +4,7 @@ model:
   loss_name: mse # mse or mae
   num_inter_steps: 1 # Number of intermediary steps (without any data)
   num_samples_to_plot: 1
-  training_strategy: diff_ar # diff_ar or scaled_ar
+  training_strategy: downscaling_only # diff_ar or scaled_ar or downscaling_only
   channels_last: False # True: B W H C
   io_conf : null
   settings_init_args:

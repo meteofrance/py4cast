@@ -1,6 +1,6 @@
 data:
   #args forwarded (linked) to model
-  dataset_name: titan_refacto2
+  dataset_name: titan_lbc
   num_input_steps: 1
   num_pred_steps_train: 1
   num_pred_steps_val_test: 1
@@ -10,7 +10,7 @@ data:
   num_workers: 10
   prefetch_factor: null
   pin_memory: False 
-  dataset_conf: config/datasets/titan_refacto2.json
+  dataset_conf: config/datasets/titan_lbc.json
   predict_conf:
     periods:
       test:
