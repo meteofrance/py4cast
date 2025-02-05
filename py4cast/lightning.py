@@ -274,7 +274,6 @@ class AutoRegressiveLightning(LightningModule):
             self.loss = WeightedLoss("L1Loss", reduction="none")
         else:
             raise TypeError(f"Unknown loss function: {loss_name}")
-        print(dataset_info)
         self.loss.prepare(self, statics.interior_mask, dataset_info)
 
         exp_summary(self)
@@ -374,6 +373,8 @@ class AutoRegressiveLightning(LightningModule):
         - previous states
         - forcing
         - static features
+
+        If downscaling strategy, the previous_states are set to 0.
         """
         forcing = batch.forcing.select_dim("timestep", step_idx, bare_tensor=False)
         ds = self.training_strategy == "downscaling_only"
@@ -450,6 +451,11 @@ class AutoRegressiveLightning(LightningModule):
         - diff_ar:
             * No Boundary forcing
             * Differential update next_state = prev_state + y
+            * No Intermediary steps
+        
+        Another training stratgey is implemented (still experimental) is the downscaling, with
+            * No Boundary forcing
+            * Update next_state = y
             * No Intermediary steps
 
         Derived/Inspired from https://github.com/joeloskarsson/neural-lam/
