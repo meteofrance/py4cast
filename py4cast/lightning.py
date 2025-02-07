@@ -150,7 +150,9 @@ class AutoRegressiveLightning(LightningModule):
         loss_name: Literal["mse", "mae"] = "mse",
         num_inter_steps: int = 1,
         num_samples_to_plot: int = 1,
-        training_strategy: Literal["diff_ar", "scaled_ar", "downscaling_only"] = "diff_ar",
+        training_strategy: Literal[
+            "diff_ar", "scaled_ar", "downscaling_only"
+        ] = "diff_ar",
         channels_last: bool = False,
         io_conf: Path | None = None,
         *args,
@@ -174,9 +176,10 @@ class AutoRegressiveLightning(LightningModule):
         self.channels_last = channels_last
         self.io_conf = io_conf
 
-        
         if self.training_strategy == "downscaling_only":
-            print("WARNING : You are using downscaling_only mode: this is experimental.")
+            print(
+                "WARNING : You are using downscaling_only mode: this is experimental."
+            )
 
         if self.num_inter_steps > 1 and self.num_input_steps > 1:
             raise AttributeError(
@@ -377,8 +380,7 @@ class AutoRegressiveLightning(LightningModule):
             for idx in range(batch.num_input_steps)
         ]
         x = torch.cat(
-            inputs
-            + [self.grid_static_features[: batch.batch_size], forcing.tensor],
+            inputs + [self.grid_static_features[: batch.batch_size], forcing.tensor],
             dim=forcing.dim_index("features"),
         )
         return x
@@ -446,7 +448,7 @@ class AutoRegressiveLightning(LightningModule):
             * No Boundary forcing
             * Differential update next_state = prev_state + y
             * No Intermediary steps
-        
+
         Another training stratgey is implemented (still experimental) is the downscaling, with
             * No Boundary forcing
             * Update next_state = y
@@ -517,7 +519,9 @@ class AutoRegressiveLightning(LightningModule):
                     )
                 else:
                     ds = self.training_strategy == "downscaling_only"
-                    predicted_state = prev_states.select_dim("timestep", -1) * (1 - ds)+ y
+                    predicted_state = (
+                        prev_states.select_dim("timestep", -1) * (1 - ds) + y
+                    )
 
                 # Overwrite border with true state
                 # Force it to true state for all intermediary step

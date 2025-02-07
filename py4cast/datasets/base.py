@@ -75,12 +75,11 @@ class Item:
         """
         'In place' operation to call torch's 'to' method on the underlying NamedTensors.
         """
-        
         self.outputs.to_(*args, **kwargs)
         if self.inputs:
-            self.inputs.squeeze_(dim_name)
+            self.inputs.to_(*args, **kwargs)
         if self.forcing:
-            self.forcing.squeeze_(dim_name)
+            self.forcing.to_(*args, **kwargs)
 
     def pin_memory(self):
         """
@@ -506,8 +505,9 @@ class Sample:
         forcing = NamedTensor.concat(lforcings) if lforcings else None
 
         if outputs is None:
-            raise ValueError("Can't train anything without target data: list of outputs is empty.")
-
+            raise ValueError(
+                "Can't train anything without target data: list of outputs is empty."
+            )
 
         return Item(
             inputs=inputs,
