@@ -1,0 +1,41 @@
+data:
+  #args forwarded (linked) to model
+  dataset_name: rainfall
+  num_input_steps: 4
+  num_pred_steps_train: 6
+  num_pred_steps_val_test: 6
+  batch_size: 1
+
+  #other args
+  num_workers: 10
+  prefetch_factor: null
+  pin_memory: False 
+  dataset_conf:
+    periods:
+      train:
+        start: 20240101
+        end: 20240930
+        obs_step: 300
+        obs_step_btw_t0: 10800
+      valid:
+        start: 20241001
+        end: 20241231
+        obs_step: 300
+        obs_step_btw_t0: 10800
+      test:
+        start: 20250101
+        end: 20250115
+        obs_step: 300
+        obs_step_btw_t0: 10800
+    grid:
+      name: FRANXL1S100
+      border_size: 0
+      projection_kwargs: {}
+    settings:
+      standardize: true
+      file_format: npz
+    params:
+      precip:
+        levels: [0]
+        typeOfLevel: surface
+        kind: input_output

@@ -544,6 +544,10 @@ class Sample:
         nrows = len(dict_params.keys())
         ncols = max([len(param_list) for param_list in dict_params.values()])
         fig, axs = plt.subplots(nrows, ncols, figsize=(20, 15), subplot_kw=kwargs)
+        try:
+            axs = axs.flat
+        except AttributeError:
+            axs = [axs]
 
         for i, level in enumerate(dict_params.keys()):
             for j, param in enumerate(dict_params[level]):
@@ -551,12 +555,13 @@ class Sample:
                 tensor = ntensor[pname][index_tensor, :, :, 0]
                 arr = tensor.numpy()[::-1]  # invert latitude
                 vmin, vmax = self.stats[pname]["min"], self.stats[pname]["max"]
-                img = axs[i, j].imshow(
+                ax_idx = i * nrows + j
+                img = axs[ax_idx].imshow(
                     arr, vmin=vmin, vmax=vmax, extent=self.grid.grid_limits
                 )
-                axs[i, j].set_title(pname)
-                axs[i, j].coastlines(resolution="50m")
-                cbar = fig.colorbar(img, ax=axs[i, j], fraction=0.04, pad=0.04)
+                axs[ax_idx].set_title(pname)
+                axs[ax_idx].coastlines(resolution="50m")
+                cbar = fig.colorbar(img, ax=axs[ax_idx], fraction=0.04, pad=0.04)
                 cbar.set_label(param.unit)
 
         plt.suptitle(
@@ -707,11 +712,11 @@ class DatasetABC(Dataset):
 
     def torch_dataloader(
         self,
-        batch_size: int,
-        num_workers: int,
-        shuffle: bool,
-        prefetch_factor: Union[int, None],
-        pin_memory: bool,
+        batch_size: int = 1,
+        num_workers: int = 1,
+        shuffle: bool = False,
+        prefetch_factor: Union[int, None] = None,
+        pin_memory: bool = False,
     ) -> DataLoader:
         """
         Builds a torch dataloader from self.
@@ -902,19 +907,19 @@ class DatasetABC(Dataset):
         num_input_steps: int,
         num_pred_steps_train: int,
         num_pred_steps_val_tests: int,
-        config_override: Union[Dict, None] = None,
+        predict_conf: Union[Dict, None] = None,
     ) -> Tuple[Type["DatasetABC"], Type["DatasetABC"], Type["DatasetABC"]]:
         """
         Load a dataset from a json file + the number of expected timesteps
         taken as inputs (num_input_steps) and to predict (num_pred_steps)
         Return the train, valid and test datasets, in that order
-        config_override is a dictionary that can be used to override
+        predict_conf is a dictionary that can be used to override
         some keys of the config file.
         """
         with open(fname, "r") as fp:
             conf = json.load(fp)
-            if config_override is not None:
-                conf = merge_dicts(conf, config_override)
+            if predict_conf is not None:
+                conf = merge_dicts(conf, predict_conf)
         return cls.from_dict(
             accessor_kls,
             fname.stem,

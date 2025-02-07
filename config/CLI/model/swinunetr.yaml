@@ -16,5 +16,5 @@ model:
     dropout_path_rate: 0.0
     normalize: True
     use_checkpoint: False
-    # downsample: merging # not recognized by CLI but present in UNETRPPSettings -> strange O.o
-    # use_v2: False # not recognized by CLI but present in UNETRPPSettings -> strange O.o
+    downsample: merging
+    use_v2: False
