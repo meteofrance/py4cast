@@ -3,7 +3,7 @@ Unit tests for datasets and NamedTensor.
 """
 
 import datetime
-from dataclasses import dataclass, field, fields
+from dataclasses import dataclass, field
 from functools import cached_property
 
 import numpy as np
