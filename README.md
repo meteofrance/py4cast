@@ -51,7 +51,7 @@ This project started as a fork of neural-lam, a project by Joel Oskarsson, see [
 
 * Use any neural network architectures available in [mfai](https://github.com/meteofrance/mfai?tab=readme-ov-file#neural-network-architectures)
 * 1 dataset with samples available on Huggingface : Titan
-* 2 training strategies : Scaled Auto-regressive steps, Differential Auto-regressive steps
+* 3 training strategies : Scaled Auto-regressive steps, Differential Auto-regressive steps, Downscaling strategy
 * 4 losses: Scaled RMSE, Scaled L1, Weighted MSE, Weighted L1
 * neural networks as simple torch.nn.Module
 * training with pytorchlightning

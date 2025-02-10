@@ -32,6 +32,7 @@ in the forward pass. **x** are the neural network inputs and **model(x)** is the
 | :---:   | :---: | :---: | :---: | :---: |
 | scaled_ar |  | next_state = previous_state + model(x)*diff_std + diff_mean | y_true  | Yes |
 |  diff_ar | | next_state = previous_state + model(x) | No |  No |
+| downscaling_only | next_state = model(x) | No |  No |
 
 
 ## Available Losses
