@@ -649,7 +649,7 @@ class AutoRegressiveLightning(LightningModule):
         preds = self.forward(batch)
 
         # Remove batch dimension
-        preds.flatten_("timestep", 0,1)
+        preds.flatten_("timestep", 0, 1)
 
         # Save gribs if a io config file is given
         if not (self.io_conf is None):
@@ -670,7 +670,9 @@ class AutoRegressiveLightning(LightningModule):
                     but {kw} output_kwargs and {fi} sample identifiers."
                 )
 
-            save_named_tensors_to_grib(preds, self.infer_ds, self.infer_ds.sample_list[0], save_settings)
+            save_named_tensors_to_grib(
+                preds, self.infer_ds, self.infer_ds.sample_list[0], save_settings
+            )
         # for sample, pred in zip(self.infer_ds.sample_list, preds):
         #     save_named_tensors_to_grib(pred, self.infer_ds, sample, save_settings)
 

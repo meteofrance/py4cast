@@ -59,7 +59,9 @@ def save_named_tensors_to_grib(
     grib_features = get_grib_param_dataframe(pred, params)
     grib_groups = get_grib_groups(grib_features)
     # Get the valid hours for a list of timestamps
-    validtimes = compute_hours_of_day(sample.output_timestamps.datetime, sample.output_timestamps.timedeltas)
+    validtimes = compute_hours_of_day(
+        sample.output_timestamps.datetime, sample.output_timestamps.timedeltas
+    )
     # Get number of prediction
     predicted_time_steps = len(sample.output_timestamps.validity_times)
 
@@ -105,23 +107,18 @@ def save_named_tensors_to_grib(
                 grib_features,
             )
 
-            path_to_file = get_output_filename(
-                saving_settings, sample, leadtime
-            )
-            full_path= Path(saving_settings.directory) / path_to_file
+            path_to_file = get_output_filename(saving_settings, sample, leadtime)
+            full_path = Path(saving_settings.directory) / path_to_file
             full_path.parent.mkdir(parents=True, exist_ok=True)
 
-            option = (
-                "wb"
-                if not os.path.exists(full_path)
-                else "ab"
-            )
+            option = "wb" if not os.path.exists(full_path) else "ab"
 
             xtg.to_grib(
                 storable,
                 full_path,
                 option,
             )
+
 
 def write_storable_dataset(
     pred: NamedTensor,
@@ -163,7 +160,7 @@ def write_storable_dataset(
 
     # Fill xarray with the date in ns otherwise, GRIB raise a warning
     date = np.datetime64(sample.timestamps.datetime.date())
-    receiver_ds["time"] = date.astype('datetime64[ns]')
+    receiver_ds["time"] = date.astype("datetime64[ns]")
     ns_step = np.timedelta64(
         int(leadtime * 3600 * 1000000000),
         "ns",
@@ -245,9 +242,9 @@ def write_storable_dataset(
 
     # Fill those xarray attributes for OCTAVI use
     # stepRange for cumulated variables, cumulated on 1 hour.
-    receiver_ds[name].attrs['GRIB_stepRange'] = f"{leadtime-1}-{leadtime}"
-    receiver_ds[name].attrs['GRIB_endStep'] = leadtime
-    receiver_ds[name].attrs['GRIB_forecastTime'] = leadtime -1 
+    receiver_ds[name].attrs["GRIB_stepRange"] = f"{leadtime-1}-{leadtime}"
+    receiver_ds[name].attrs["GRIB_endStep"] = leadtime
+    receiver_ds[name].attrs["GRIB_forecastTime"] = leadtime - 1
     return receiver_ds
 
 
@@ -256,9 +253,13 @@ def get_output_filename(
 ) -> str:
     identifiers = []
     for ident in saving_settings.sample_identifiers:
-        if ident == "runtime": 
+        if ident == "runtime":
             # Get the max of the input timestamps which is t0
-            runtime = max(set(sample.timestamps.validity_times).difference(set(sample.output_timestamps.validity_times))).strftime("%Y%m%dT%H%MP")
+            runtime = max(
+                set(sample.timestamps.validity_times).difference(
+                    set(sample.output_timestamps.validity_times)
+                )
+            ).strftime("%Y%m%dT%H%MP")
             identifiers.append(runtime)
         elif ident == "leadtime":
             identifiers.append(leadtime)
@@ -268,7 +269,7 @@ def get_output_filename(
             # format string
             mb = str(member).zfill(3)
             identifiers.append(mb)
- 
+
     path_to_file = saving_settings.output_fmt.format(
         *saving_settings.output_kwargs, *identifiers
     )
@@ -292,10 +293,10 @@ def get_grib_param_dataframe(pred: NamedTensor, params: list) -> pd.DataFrame:
     list_features = []
     for param in params:
         level, name, tol = (
-                param.level,
-                param.name,
-                param.level_type,
-            )
+            param.level,
+            param.name,
+            param.level_type,
+        )
         trial_name = f"{name}_{level}_{tol}"
         if trial_name in pred_feature_names:
             list_features.append(
