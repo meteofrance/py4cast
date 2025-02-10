@@ -1,17 +1,17 @@
 {
     "periods": {
         "train": {
-            "start": 2022201,
+            "start": 20210101,
             "end": 20221231,
             "obs_step": 3600
         },
         "valid": {
-            "start": 20231201,
+            "start": 20230101,
             "end": 20231231,
             "obs_step": 3600
         },
         "test": {
-            "start": 20231201,
+            "start": 20230101,
             "end": 20231231,
             "obs_step": 3600
         }

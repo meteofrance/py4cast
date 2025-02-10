@@ -8,4 +8,4 @@ model:
   channels_last: False # True: B W H C
   settings_init_args:
     init_features: 64
-    autopad_enabled: False # not recognized by CLI but present in UNETRPPSettings -> strange O.o
+    autopad_enabled: True
