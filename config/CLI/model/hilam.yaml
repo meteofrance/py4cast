@@ -6,6 +6,7 @@ model:
   num_samples_to_plot: 1
   training_strategy: diff_ar # diff_ar or scaled_ar
   channels_last: False # True: B W H C
+  io_conf : null
   settings_init_args:
     tmp_dir: /tmp  # nosec B108
     hidden_dims: 64

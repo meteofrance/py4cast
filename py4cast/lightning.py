@@ -647,8 +647,15 @@ class AutoRegressiveLightning(LightningModule):
                     f"Training: {self.input_feature_names}, Inference: {batch.inputs.feature_names}"
                 )
         preds = self.forward(batch)
+
+        # Remove batch dimension
+        preds.flatten_("timestep", 0,1)
+
+        # Save gribs if a io config file is given
         if not (self.io_conf is None):
-            self.grib_writing(preds)
+            # Save the prediction of the first sample of the dataloader as a grib
+            if batch_idx == 0:
+                self.grib_writing(preds)
         return preds
 
     def grib_writing(self, preds):
@@ -662,8 +669,10 @@ class AutoRegressiveLightning(LightningModule):
                     f"Filename fmt has {ph} placeholders,\
                     but {kw} output_kwargs and {fi} sample identifiers."
                 )
-        for sample, pred in zip(self.infer_ds.sample_list, preds):
-            save_named_tensors_to_grib(pred, self.infer_ds, sample, save_settings)
+
+            save_named_tensors_to_grib(preds, self.infer_ds, self.infer_ds.sample_list[0], save_settings)
+        # for sample, pred in zip(self.infer_ds.sample_list, preds):
+        #     save_named_tensors_to_grib(pred, self.infer_ds, sample, save_settings)
 
     def forward(self, x: ItemBatch) -> NamedTensor:
         """

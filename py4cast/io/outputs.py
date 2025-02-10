@@ -58,8 +58,10 @@ def save_named_tensors_to_grib(
 
     grib_features = get_grib_param_dataframe(pred, params)
     grib_groups = get_grib_groups(grib_features)
-    validtimes = compute_hours_of_day(sample.date, sample.output_terms)
-    predicted_time_steps = len(sample.output_terms)
+    # Get the valid hours for a list of timestamps
+    validtimes = compute_hours_of_day(sample.output_timestamps.datetime, sample.output_timestamps.timedeltas)
+    # Get number of prediction
+    predicted_time_steps = len(sample.output_timestamps.validity_times)
 
     model_ds = {
         c: xr.open_dataset(
@@ -77,6 +79,9 @@ def save_named_tensors_to_grib(
                     "parameterCategory",
                     "parameterNumber",
                     "unit",
+                    "stepRange",
+                    "endStep",
+                    "forecastTime",
                 ],
                 "filter_by_keys": grib_groups[c],
             },
@@ -85,6 +90,7 @@ def save_named_tensors_to_grib(
     }
 
     for t_idx in range(predicted_time_steps):
+        leadtime = t_idx + 1
         for group in model_ds.keys():
             raw_data = pred.select_dim("timestep", t_idx, bare_tensor=False)
             storable = write_storable_dataset(
@@ -94,24 +100,28 @@ def save_named_tensors_to_grib(
                 group,
                 sample,
                 validtimes[t_idx],
-                sample.output_terms[t_idx],
+                leadtime,
                 raw_data,
                 grib_features,
             )
-            filename = get_output_filename(
-                saving_settings, sample, sample.output_terms[t_idx]
+
+            path_to_file = get_output_filename(
+                saving_settings, sample, leadtime
             )
+            full_path= Path(saving_settings.directory) / path_to_file
+            full_path.parent.mkdir(parents=True, exist_ok=True)
+
             option = (
                 "wb"
-                if not os.path.exists(f"{saving_settings.directory}/{filename}")
+                if not os.path.exists(full_path)
                 else "ab"
             )
+
             xtg.to_grib(
                 storable,
-                Path(saving_settings.directory) / filename,
+                full_path,
                 option,
             )
-
 
 def write_storable_dataset(
     pred: NamedTensor,
@@ -151,7 +161,9 @@ def write_storable_dataset(
         longmax,
     ) = latlon
 
-    receiver_ds["time"] = sample.date
+    # Fill xarray with the date in ns otherwise, GRIB raise a warning
+    date = np.datetime64(sample.timestamps.datetime.date())
+    receiver_ds["time"] = date.astype('datetime64[ns]')
     ns_step = np.timedelta64(
         int(leadtime * 3600 * 1000000000),
         "ns",
@@ -161,7 +173,7 @@ def write_storable_dataset(
         "ns",
     )
     receiver_ds["step"] = ns_step
-    receiver_ds["valid_time"] = np.datetime64(sample.date) + ns_valid
+    receiver_ds["valid_time"] = date + ns_valid
 
     # retrieving key metadata to be able to parallelize writing
     namelist = list(receiver_ds.keys())
@@ -231,6 +243,11 @@ def write_storable_dataset(
         )
         receiver_ds[name] = receiver_ds[name].assign_attrs(**template_ds[name].attrs)
 
+    # Fill those xarray attributes for OCTAVI use
+    # stepRange for cumulated variables, cumulated on 1 hour.
+    receiver_ds[name].attrs['GRIB_stepRange'] = f"{leadtime-1}-{leadtime}"
+    receiver_ds[name].attrs['GRIB_endStep'] = leadtime
+    receiver_ds[name].attrs['GRIB_forecastTime'] = leadtime -1 
     return receiver_ds
 
 
@@ -239,14 +256,23 @@ def get_output_filename(
 ) -> str:
     identifiers = []
     for ident in saving_settings.sample_identifiers:
-        if ident != "leadtime":
-            identifiers.append(getattr(sample, ident))
-        else:
+        if ident == "runtime": 
+            # Get the max of the input timestamps which is t0
+            runtime = max(set(sample.timestamps.validity_times).difference(set(sample.output_timestamps.validity_times))).strftime("%Y%m%dT%H%MP")
+            identifiers.append(runtime)
+        elif ident == "leadtime":
             identifiers.append(leadtime)
-    filename = saving_settings.output_fmt.format(
+        elif ident == "member":
+            # get member, offset of 1. To start at 1.
+            member = getattr(sample, ident) + 1
+            # format string
+            mb = str(member).zfill(3)
+            identifiers.append(mb)
+ 
+    path_to_file = saving_settings.output_fmt.format(
         *saving_settings.output_kwargs, *identifiers
     )
-    return filename
+    return path_to_file
 
 
 def get_grib_param_dataframe(pred: NamedTensor, params: list) -> pd.DataFrame:
@@ -265,26 +291,25 @@ def get_grib_param_dataframe(pred: NamedTensor, params: list) -> pd.DataFrame:
     unmatched_feature_names = set(pred.feature_names)
     list_features = []
     for param in params:
-        trial_names = param.parameter_short_name
-        for ft_idx, ftname in enumerate(trial_names):
-            if ftname in pred_feature_names:
-                level, name, tol = (
-                    param.levels[ft_idx],
-                    param.shortname,
-                    param.level_type,
+        level, name, tol = (
+                param.level,
+                param.name,
+                param.level_type,
+            )
+        trial_name = f"{name}_{level}_{tol}"
+        if trial_name in pred_feature_names:
+            list_features.append(
+                pd.DataFrame(
+                    {
+                        "feature_name": [trial_name],
+                        "level": [level],
+                        "name": [name],
+                        "typeOfLevel": [tol],
+                    },
+                    index=[trial_name],
                 )
-                list_features.append(
-                    pd.DataFrame(
-                        {
-                            "feature_name": [ftname],
-                            "level": [level],
-                            "name": [name],
-                            "typeOfLevel": [tol],
-                        },
-                        index=[ftname],
-                    )
-                )
-                unmatched_feature_names.remove(ftname)
+            )
+            unmatched_feature_names.remove(trial_name)
     # pd.concat is more efficient than df.append so we concat at the end
     grib_features = pd.concat(list_features)
 
