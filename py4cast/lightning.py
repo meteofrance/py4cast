@@ -471,7 +471,6 @@ class AutoRegressiveLightning(LightningModule):
             * Update next_state = y
             * No Intermediary steps
 
-
         Derived/Inspired from https://github.com/joeloskarsson/neural-lam/
 
         In inference mode, we assume batch.outputs is None and we disable output based border forcing.

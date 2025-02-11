@@ -54,9 +54,9 @@ class Item:
         """
         Insert a new dimension dim_name at dim_index of size 1
         """
+        self.outputs.unsqueeze_(dim_name, dim_index)
         if self.inputs:
             self.inputs.unsqueeze_(dim_name, dim_index)
-        self.outputs.unsqueeze_(dim_name, dim_index)
         if self.forcing:
             self.forcing.unsqueeze_(dim_name, dim_index)
 
@@ -65,9 +65,9 @@ class Item:
         Squeeze the underlying tensor along the dimension(s)
         given its/their name(s).
         """
+        self.outputs.squeeze_(dim_name)
         if self.inputs:
             self.inputs.squeeze_(dim_name)
-        self.outputs.squeeze_(dim_name)
         if self.forcing:
             self.forcing.squeeze_(dim_name)
 
@@ -75,9 +75,9 @@ class Item:
         """
         'In place' operation to call torch's 'to' method on the underlying NamedTensors.
         """
+        self.outputs.to_(*args, **kwargs)
         if self.inputs:
             self.inputs.to_(*args, **kwargs)
-        self.outputs.to_(*args, **kwargs)
         if self.forcing:
             self.forcing.to_(*args, **kwargs)
 
@@ -86,9 +86,9 @@ class Item:
         Custom Item must implement this method to pin the underlying tensors to memory.
         See https://pytorch.org/docs/stable/data.html#memory-pinning
         """
+        self.outputs.pin_memory_()
         if self.inputs:
             self.inputs.pin_memory_()
-        self.forcing.pin_memory_()
         if self.forcing:
             self.forcing.pin_memory_()
         return self
@@ -503,6 +503,7 @@ class Sample:
         inputs = NamedTensor.concat(linputs) if linputs else None
         outputs = NamedTensor.concat(loutputs) if loutputs else None
         forcing = NamedTensor.concat(lforcings) if lforcings else None
+
         if outputs is None:
             raise ValueError(
                 "Can't train anything without target data: list of outputs is empty."
