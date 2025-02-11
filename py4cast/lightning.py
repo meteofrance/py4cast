@@ -516,7 +516,12 @@ class AutoRegressiveLightning(LightningModule):
                 # Graph (B, N_grid, d_f) or Conv (B, N_lat,N_lon d_f)
                 if self.channels_last:
                     x = x.to(memory_format=torch.channels_last)
-
+                if (
+                    self.dataset_name == "rainfall"
+                ):  # Use torch.nan_to_num to replace NaN with -1
+                    x = torch.nan_to_num(x, nan=-1)
+                if self.mask_ratio != 0:
+                    x = self.mask_tensor(x)
                 # Here we adapt our tensors to the order of dimensions of CNNs and ViTs
                 if self.model.features_second:
                     x = features_last_to_second(x)
@@ -591,6 +596,24 @@ class AutoRegressiveLightning(LightningModule):
                 prediction.type_as(batch.outputs.tensor), batch.outputs
             )
         return pred_out, batch.outputs
+
+    def mask_tensor(self, x):
+        _, height, width, _ = x.shape
+        num_blocks = int((1 - self.mask_ratio) * height * width)
+        block_size_h = height // int(height**0.5)
+        block_size_w = width // int(width**0.5)
+        mask = torch.ones_like(x, dtype=torch.bool)
+        block_indices = torch.randperm(height * width)[:num_blocks]
+        for i in block_indices:
+            row = i // width
+            col = i % width
+            mask[
+                :,
+                row * block_size_h : (row + 1) * block_size_h,
+                col * block_size_w : (col + 1) * block_size_w,
+                :,
+            ] = False
+        return x * mask
 
     def on_train_start(self):
         self.train_plotters = []
