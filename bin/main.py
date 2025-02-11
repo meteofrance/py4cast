@@ -57,11 +57,6 @@ class Py4castLightningCLI(LightningCLI):
             apply_on="instantiate",
         )
         parser.link_arguments(
-            "data.len_train_dl",
-            "model.len_train_loader",
-            apply_on="instantiate",
-        )
-        parser.link_arguments(
             "data.infer_ds",
             "model.infer_ds",
             apply_on="instantiate",
