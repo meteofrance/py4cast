@@ -18,40 +18,28 @@ registry = {}
 try:
     from .titan import TitanAccessor
 
-    registry["titan"] = (
-        TitanAccessor,
-        DEFAULT_CONFIG_DIR / "datasets" / "titan_refacto.json",
-    )
+    registry["titan"] = TitanAccessor
 except (ImportError, FileNotFoundError, ModuleNotFoundError):
     warnings.warn(f"Could not import TitanAccessor. {traceback.format_exc()}")
 
 try:
     from .poesy import PoesyAccessor
 
-    registry["poesy"] = (
-        PoesyAccessor,
-        DEFAULT_CONFIG_DIR / "datasets" / "poesy_refacto.json",
-    )
+    registry["poesy"] = PoesyAccessor
 except ImportError:
     warnings.warn(f"Could not import PoesyAccessor. {traceback.format_exc()}")
 
 try:
     from .dummy import DummyAccessor
 
-    registry["dummy"] = (
-        DummyAccessor,
-        DEFAULT_CONFIG_DIR / "datasets" / "dummy_config.json",
-    )
+    registry["dummy"] = DummyAccessor
 except ImportError:
     warnings.warn(f"Could not import DummyAccessor. {traceback.format_exc()}")
 
 try:
     from .rainfall import RainfallAccessor
 
-    registry["rainfall"] = (
-        RainfallAccessor,
-        DEFAULT_CONFIG_DIR / "datasets" / "rainfall.json",
-    )
+    registry["rainfall"] = RainfallAccessor,
 except ImportError:
     warnings.warn(f"Could not import RainfallAccessor. {traceback.format_exc()}")
 
@@ -77,7 +65,7 @@ def get_datasets(
             registered_name = k
             break
     try:
-        accessor_kls, _ = registry[registered_name]
+        accessor_kls = registry[registered_name]
     except KeyError as ke:
         raise ValueError(
             f"Dataset {name} doesn't match a registry substring, available datasets are :{registry.keys()}"

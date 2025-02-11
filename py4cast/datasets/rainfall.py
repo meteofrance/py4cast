@@ -24,7 +24,7 @@ from py4cast.datasets.base import DatasetABC
 #                          SETTINGS                         #
 #############################################################
 FORMATSTR = "%Y%m%d%H%M"
-SCRATCH_PATH = Path("/scratch/shared/RADAR_DATA/antilope_5min")
+SCRATCH_PATH = Path("/scratch/shared/RADAR_DATA/reflectivite_npz")
 DEFAULT_CONFIG = Path(__file__).parents[2] / "config/datasets/rainfall.json"
 
 app = Typer()
@@ -107,8 +107,8 @@ class RainfallAccessor(DataAccessor):
         2D array is saved as one file to optimize IO during training."""
         return (
             SCRATCH_PATH
-            / file_format
             / "Hexagone"
+            / f"{date.strftime(FORMATSTR)[0:3]}"
             / f"{date.strftime(FORMATSTR)}.{file_format}"
         )
 
