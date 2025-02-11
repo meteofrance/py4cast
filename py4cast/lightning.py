@@ -425,9 +425,43 @@ class AutoRegressiveLightning(LightningModule):
         self.print_summary_model()
         self.inspect_tensors()
 
-#############################################################
-#                          FORWARD                          #
-#############################################################
+    def _next_x(
+        self, batch: ItemBatch, prev_states: NamedTensor, step_idx: int
+    ) -> torch.Tensor:
+        """
+        Build the next x input for the model at timestep step_idx using the :
+        - previous states
+        - forcing
+        - static features
+
+        If downscaling strategy, the previous_states are set to 0.
+        """
+        forcing = batch.forcing.select_dim("timestep", step_idx, bare_tensor=False)
+        ds = self.training_strategy == "downscaling_only"
+        inputs = [
+            prev_states.select_dim("timestep", idx) * (1 - ds)
+            for idx in range(batch.num_input_steps)
+        ]
+        x = torch.cat(
+            inputs + [self.grid_static_features[: batch.batch_size], forcing.tensor],
+            dim=forcing.dim_index("features"),
+        )
+        return x
+
+    def _step_diffs(
+        self, feature_names: List[str], device: torch.device
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Get the mean and std of the differences between two consecutive states on the desired device.
+        """
+        step_diff_std = self.diff_stats.to_list("std", feature_names).to(
+            device,
+            non_blocking=True,
+        )
+        step_diff_mean = self.diff_stats.to_list("mean", feature_names).to(
+            device, non_blocking=True
+        )
+        return step_diff_std, step_diff_mean
 
     def forward(self, x: ItemBatch) -> NamedTensor:
         """
