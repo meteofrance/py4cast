@@ -168,7 +168,7 @@ class AutoRegressiveLightning(LightningModule):
         ] = "diff_ar",
         channels_last: bool = False,
         io_conf: Path | None = None,
-        mask_ratio : float = 0,
+        mask_ratio: float = 0,
         *args,
         **kwargs,
     ):
@@ -191,7 +191,6 @@ class AutoRegressiveLightning(LightningModule):
         self.channels_last = channels_last
         self.io_conf = io_conf
         self.mask_ratio = mask_ratio
-
 
         if self.training_strategy == "downscaling_only":
             print(
@@ -293,9 +292,9 @@ class AutoRegressiveLightning(LightningModule):
             raise TypeError(f"Unknown loss function: {loss_name}")
         self.loss.prepare(self, statics.interior_mask, dataset_info)
 
-#############################################################
-#                           SETUP                           #
-#############################################################
+    #############################################################
+    #                           SETUP                           #
+    #############################################################
 
     def setup(self, stage=None):
         self.logger.log_hyperparams(self.hparams, metrics={"val_mean_loss": 0.0})
@@ -361,7 +360,6 @@ class AutoRegressiveLightning(LightningModule):
                 self.interior_mask, "(x y) h -> x y h", x=self.grid_shape[0]
             )
         return self.interior_mask
-    
 
     @cached_property
     def mlflow_logger(self) -> Union[MLFlowLogger, None]:
@@ -425,9 +423,9 @@ class AutoRegressiveLightning(LightningModule):
         self.print_summary_model()
         self.inspect_tensors()
 
-#############################################################
-#                          FORWARD                          #
-#############################################################
+    #############################################################
+    #                          FORWARD                          #
+    #############################################################
 
     def forward(self, x: ItemBatch) -> NamedTensor:
         """
@@ -517,7 +515,7 @@ class AutoRegressiveLightning(LightningModule):
                 # Graph (B, N_grid, d_f) or Conv (B, N_lat,N_lon d_f)
                 if self.channels_last:
                     x = x.to(memory_format=torch.channels_last)
-                if self.dataset_name == "rainfall" :
+                if self.dataset_name == "rainfall":
                     x = torch.nan_to_num(x, nan=-1)
                 if self.mask_ratio != 0:
                     x = self.mask_tensor(x)
@@ -670,10 +668,9 @@ class AutoRegressiveLightning(LightningModule):
             ] = False
         return x * mask
 
-
-#############################################################
-#                          FIT/TRAIN                        #
-#############################################################
+    #############################################################
+    #                          FIT/TRAIN                        #
+    #############################################################
 
     def on_train_start(self):
         self.train_plotters = []
@@ -710,7 +707,7 @@ class AutoRegressiveLightning(LightningModule):
         if self.logging_enabled:
             avg_loss = torch.stack([x for x in outputs]).mean()
             tb = self.logger.experiment
-            tb.add_scalar(f"mean_loss_epoch/{train}", avg_loss, self.current_epoch)
+            tb.add_scalar("mean_loss_epoch/train", avg_loss, self.current_epoch)
             self.training_step_losses.clear()  # free memory
 
     def on_train_end(self):
@@ -732,10 +729,9 @@ class AutoRegressiveLightning(LightningModule):
                     signature=signature,
                 )
 
-#############################################################
-#                         VALIDATION                        #
-#############################################################
-
+    #############################################################
+    #                         VALIDATION                        #
+    #############################################################
 
     def on_validation_start(self):
         """
@@ -837,7 +833,7 @@ class AutoRegressiveLightning(LightningModule):
         if self.logging_enabled:
             avg_loss = torch.stack([x for x in outputs]).mean()
             tb = self.logger.experiment
-            tb.add_scalar(f"mean_loss_epoch/validation", avg_loss, self.current_epoch)
+            tb.add_scalar("mean_loss_epoch/validation", avg_loss, self.current_epoch)
         # free memory
         self.validation_step_losses.clear()
 
@@ -847,9 +843,9 @@ class AutoRegressiveLightning(LightningModule):
                 for plotter in self.valid_plotters:
                     plotter.on_step_end(self, label="Valid")
 
-#############################################################
-#                            TEST                           #
-#############################################################
+    #############################################################
+    #                            TEST                           #
+    #############################################################
 
     def on_test_start(self):
         """
@@ -944,10 +940,9 @@ class AutoRegressiveLightning(LightningModule):
             for plotter in self.test_plotters:
                 plotter.on_step_end(self, label="Test")
 
-
-#############################################################
-#                          PREDICT                          #
-#############################################################
+    #############################################################
+    #                          PREDICT                          #
+    #############################################################
 
     def predict_step(self, batch: ItemBatch, batch_idx: int) -> torch.Tensor:
         """
