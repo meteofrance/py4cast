@@ -168,6 +168,7 @@ class AutoRegressiveLightning(LightningModule):
         ] = "diff_ar",
         channels_last: bool = False,
         io_conf: Path | None = None,
+        mask_ratio : float = 0,
         *args,
         **kwargs,
     ):
@@ -189,6 +190,7 @@ class AutoRegressiveLightning(LightningModule):
         self.len_train_loader = len_train_loader
         self.channels_last = channels_last
         self.io_conf = io_conf
+        self.mask_ratio = mask_ratio
 
 
         if self.training_strategy == "downscaling_only":

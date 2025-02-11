@@ -7,6 +7,7 @@ model:
   training_strategy: diff_ar # diff_ar or scaled_ar or downscaling_only
   channels_last: False # True: B W H C
   io_conf : null
+  mask_ratio : 0
   settings_init_args:
     hidden_size: 256
     num_heads_encoder: 4
