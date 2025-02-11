@@ -616,15 +616,6 @@ class AutoRegressiveLightning(LightningModule):
     def on_train_start(self):
         self.train_plotters = []
 
-    def _shared_epoch_end(self, outputs: List[torch.Tensor], label: str) -> None:
-        """Computes and logs the averaged metrics at the end of an epoch.
-        Step shared by training and validation epochs.
-        """
-        if self.logging_enabled:
-            avg_loss = torch.stack([x for x in outputs]).mean()
-            tb = self.logger.experiment
-            tb.add_scalar(f"mean_loss_epoch/{label}", avg_loss, self.current_epoch)
-
     def training_step(self, batch: ItemBatch, batch_idx: int) -> torch.Tensor:
         """
         Train on single batch
@@ -708,8 +699,11 @@ class AutoRegressiveLightning(LightningModule):
 
     def on_train_epoch_end(self):
         outputs = self.training_step_losses
-        self._shared_epoch_end(outputs, "train")
-        self.training_step_losses.clear()  # free memory
+        if self.logging_enabled:
+            avg_loss = torch.stack([x for x in outputs]).mean()
+            tb = self.logger.experiment
+            tb.add_scalar(f"mean_loss_epoch/{train}", avg_loss, self.current_epoch)
+            self.training_step_losses.clear()  # free memory
 
     def on_train_end(self):
         if self.mlflow_logger:
@@ -754,7 +748,10 @@ class AutoRegressiveLightning(LightningModule):
                 ),
             ]
 
-    def _shared_val_test_step(self, batch: ItemBatch, batch_idx, label: str):
+    def validation_step(self, batch: ItemBatch, batch_idx):
+        """
+        Run validation on single batch
+        """
         with torch.no_grad():
             prediction, target = self.common_step(batch)
 
@@ -764,26 +761,18 @@ class AutoRegressiveLightning(LightningModule):
         if self.logging_enabled:
             # Log loss per timestep
             loss_dict = {
-                f"timestep_losses/{label}_step_{step}": time_step_loss[step]
+                "timestep_losses/val_step_{step}": time_step_loss[step]
                 for step in range(time_step_loss.shape[0])
             }
             self.log_dict(loss_dict, on_epoch=True, sync_dist=True)
             self.log(
-                f"{label}_mean_loss",
+                "val_mean_loss",
                 mean_loss,
                 on_epoch=True,
                 sync_dist=True,
-                prog_bar=(label == "val"),
+                prog_bar=True,
             )
-        return prediction, target, mean_loss
 
-    def validation_step(self, batch: ItemBatch, batch_idx):
-        """
-        Run validation on single batch
-        """
-        prediction, target, mean_loss = self._shared_val_test_step(
-            batch, batch_idx, "val"
-        )
         self.validation_step_losses.append(mean_loss)
 
         self.val_mean_loss = mean_loss
@@ -832,8 +821,10 @@ class AutoRegressiveLightning(LightningModule):
                     )
 
         outputs = self.validation_step_losses
-        self._shared_epoch_end(outputs, "validation")
-
+        if self.logging_enabled:
+            avg_loss = torch.stack([x for x in outputs]).mean()
+            tb = self.logger.experiment
+            tb.add_scalar(f"mean_loss_epoch/{validation}", avg_loss, self.current_epoch)
         # free memory
         self.validation_step_losses.clear()
 
@@ -869,7 +860,27 @@ class AutoRegressiveLightning(LightningModule):
         """
         Run test on single batch
         """
-        prediction, target, _ = self._shared_val_test_step(batch, batch_idx, "test")
+        with torch.no_grad():
+            prediction, target = self.common_step(batch)
+
+        time_step_loss = torch.mean(self.loss(prediction, target), dim=0)
+        mean_loss = torch.mean(time_step_loss)
+
+        if self.logging_enabled:
+            # Log loss per timestep
+            loss_dict = {
+                "timestep_losses/test_step_{step}": time_step_loss[step]
+                for step in range(time_step_loss.shape[0])
+            }
+            self.log_dict(loss_dict, on_epoch=True, sync_dist=True)
+            self.log(
+                "test_mean_loss",
+                mean_loss,
+                on_epoch=True,
+                sync_dist=True,
+                prog_bar=False,
+            )
+        return prediction, target, mean_loss
 
         if self.logging_enabled:
             # Notify plotters & metrics
