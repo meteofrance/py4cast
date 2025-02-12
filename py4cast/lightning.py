@@ -155,6 +155,7 @@ class AutoRegressiveLightning(LightningModule):
         ] = "diff_ar",
         channels_last: bool = False,
         io_conf: Path | None = None,
+        mask_ratio: float = 0,
         *args,
         **kwargs,
     ):
@@ -175,6 +176,7 @@ class AutoRegressiveLightning(LightningModule):
         self.training_strategy = training_strategy
         self.channels_last = channels_last
         self.io_conf = io_conf
+        self.mask_ratio = mask_ratio
 
         if self.training_strategy == "downscaling_only":
             print(
@@ -276,7 +278,9 @@ class AutoRegressiveLightning(LightningModule):
             raise TypeError(f"Unknown loss function: {loss_name}")
         self.loss.prepare(self, statics.interior_mask, dataset_info)
 
-        exp_summary(self)
+    #############################################################
+    #                           SETUP                           #
+    #############################################################
 
     def setup(self, stage=None):
         self.logger.log_hyperparams(self.hparams, metrics={"val_mean_loss": 0.0})
@@ -299,6 +303,24 @@ class AutoRegressiveLightning(LightningModule):
         }
         self.logger.experiment.add_custom_scalars(layout)
 
+    def on_save_checkpoint(self, checkpoint):
+        """
+        We store our feature and dim names in the checkpoint
+        """
+        checkpoint["input_feature_names"] = self.input_feature_names
+        checkpoint["output_feature_names"] = self.output_feature_names
+        checkpoint["output_dim_names"] = self.output_dim_names
+        checkpoint["output_dtype"] = self.output_dtype
+
+    def on_load_checkpoint(self, checkpoint):
+        """
+        We load our feature and dim names from the checkpoint
+        """
+        self.input_feature_names = checkpoint["input_feature_names"]
+        self.output_feature_names = checkpoint["output_feature_names"]
+        self.output_dim_names = checkpoint["output_dim_names"]
+        self.output_dtype = checkpoint["output_dtype"]
+
     @property
     def logging_enabled(self) -> bool:
         """
@@ -313,6 +335,28 @@ class AutoRegressiveLightning(LightningModule):
         """
         return str_to_dtype[self.trainer.precision]
 
+    @cached_property
+    def interior_2d(self) -> torch.Tensor:
+        """
+        Get the interior mask as a 2d mask.
+        Usefull when stored as 1D in statics.
+        """
+        if self.num_spatial_dims == 1:
+            return einops.rearrange(
+                self.interior_mask, "(x y) h -> x y h", x=self.grid_shape[0]
+            )
+        return self.interior_mask
+
+    @cached_property
+    def mlflow_logger(self) -> Union[MLFlowLogger, None]:
+        """
+        Get the MLFlowLogger if it has been set.
+        """
+        return next(
+            iter([o for o in self.loggers if isinstance(o, MLFlowLogger)]), None
+        )
+
+    @rank_zero_only
     def print_summary_model(self):
         self.dataset_info.summary()
         print(f"Number of input_steps : {self.num_input_steps}")
@@ -328,6 +372,7 @@ class AutoRegressiveLightning(LightningModule):
         print(f"Loss {self.loss}")
         print(f"Batch size {self.batch_size}")
         print("---------------------------")
+        summary(self.model)
 
     @rank_zero_only
     def inspect_tensors(self):
@@ -361,62 +406,18 @@ class AutoRegressiveLightning(LightningModule):
 
     def on_fit_start(self):
         self.log_hparams_tb()
+        self.print_summary_model()
+        self.inspect_tensors()
 
-    def _next_x(
-        self, batch: ItemBatch, prev_states: NamedTensor, step_idx: int
-    ) -> torch.Tensor:
-        """
-        Build the next x input for the model at timestep step_idx using the :
-        - previous states
-        - forcing
-        - static features
+    #############################################################
+    #                          FORWARD                          #
+    #############################################################
 
-        If downscaling strategy, the previous_states are set to 0.
+    def forward(self, x: ItemBatch) -> NamedTensor:
         """
-        forcing = batch.forcing.select_dim("timestep", step_idx, bare_tensor=False)
-        ds = self.training_strategy == "downscaling_only"
-        inputs = [
-            prev_states.select_dim("timestep", idx) * (1 - ds)
-            for idx in range(batch.num_input_steps)
-        ]
-        x = torch.cat(
-            inputs + [self.grid_static_features[: batch.batch_size], forcing.tensor],
-            dim=forcing.dim_index("features"),
-        )
-        return x
-
-    def _step_diffs(
-        self, feature_names: List[str], device: torch.device
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        Forward pass of the model
         """
-        Get the mean and std of the differences between two consecutive states on the desired device.
-        """
-        step_diff_std = self.diff_stats.to_list("std", feature_names).to(
-            device,
-            non_blocking=True,
-        )
-        step_diff_mean = self.diff_stats.to_list("mean", feature_names).to(
-            device, non_blocking=True
-        )
-        return step_diff_std, step_diff_mean
-
-    def _strategy_params(self) -> Tuple[bool, bool, int]:
-        """
-        Return the parameters for the desired strategy:
-        - force_border
-        - scale_y
-        - num_inter_steps
-        """
-        force_border: bool = True if self.training_strategy == "scaled_ar" else False
-        scale_y: bool = True if self.training_strategy == "scaled_ar" else False
-        # raise if mismatch between strategy and num_inter_steps
-        if self.training_strategy == "diff_ar":
-            if self.num_inter_steps != 1:
-                raise ValueError(
-                    "Diff AR strategy requires exactly 1 intermediary step."
-                )
-
-        return force_border, scale_y, self.num_inter_steps
+        return self.common_step(x, inference=True)[0]
 
     def common_step(
         self, batch: ItemBatch, batch_idx: int, phase: str
@@ -510,7 +511,10 @@ class AutoRegressiveLightning(LightningModule):
                 # Graph (B, N_grid, d_f) or Conv (B, N_lat,N_lon d_f)
                 if self.channels_last:
                     x = x.to(memory_format=torch.channels_last)
-
+                if self.dataset_name == "rainfall":
+                    x = torch.nan_to_num(x, nan=-1)
+                if self.mask_ratio != 0:  # maskedautoencoder strategy
+                    x = self.mask_tensor(x)
                 # Here we adapt our tensors to the order of dimensions of CNNs and ViTs
                 if self.model.features_second:
                     x = features_last_to_second(x)
@@ -586,17 +590,86 @@ class AutoRegressiveLightning(LightningModule):
             )
         return pred_out, batch.outputs
 
+    def _strategy_params(self) -> Tuple[bool, bool, int]:
+        """
+        Return the parameters for the desired strategy:
+        - force_border
+        - scale_y
+        - num_inter_steps
+        """
+        force_border: bool = True if self.training_strategy == "scaled_ar" else False
+        scale_y: bool = True if self.training_strategy == "scaled_ar" else False
+        # raise if mismatch between strategy and num_inter_steps
+        if self.training_strategy == "diff_ar":
+            if self.num_inter_steps != 1:
+                raise ValueError(
+                    "Diff AR strategy requires exactly 1 intermediary step."
+                )
+
+        return force_border, scale_y, self.num_inter_steps
+
+    def _step_diffs(
+        self, feature_names: List[str], device: torch.device
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Get the mean and std of the differences between two consecutive states on the desired device.
+        """
+        step_diff_std = self.diff_stats.to_list("std", feature_names).to(
+            device,
+            non_blocking=True,
+        )
+        step_diff_mean = self.diff_stats.to_list("mean", feature_names).to(
+            device, non_blocking=True
+        )
+        return step_diff_std, step_diff_mean
+
+    def _next_x(
+        self, batch: ItemBatch, prev_states: NamedTensor, step_idx: int
+    ) -> torch.Tensor:
+        """
+        Build the next x input for the model at timestep step_idx using the :
+        - previous states
+        - forcing
+        - static features
+
+        If downscaling strategy, the previous_states are set to 0.
+        """
+        forcing = batch.forcing.select_dim("timestep", step_idx, bare_tensor=False)
+        ds = self.training_strategy == "downscaling_only"
+        inputs = [
+            prev_states.select_dim("timestep", idx) * (1 - ds)
+            for idx in range(batch.num_input_steps)
+        ]
+        x = torch.cat(
+            inputs + [self.grid_static_features[: batch.batch_size], forcing.tensor],
+            dim=forcing.dim_index("features"),
+        )
+        return x
+
+    def mask_tensor(self, x):
+        _, height, width, _ = x.shape
+        num_blocks = int((1 - self.mask_ratio) * height * width)
+        block_size_h = height // int(height**0.5)
+        block_size_w = width // int(width**0.5)
+        mask = torch.ones_like(x, dtype=torch.bool)
+        block_indices = torch.randperm(height * width)[:num_blocks]
+        for i in block_indices:
+            row = i // width
+            col = i % width
+            mask[
+                :,
+                row * block_size_h : (row + 1) * block_size_h,
+                col * block_size_w : (col + 1) * block_size_w,
+                :,
+            ] = False
+        return x * mask
+
+    #############################################################
+    #                          FIT/TRAIN                        #
+    #############################################################
+
     def on_train_start(self):
         self.train_plotters = []
-
-    def _shared_epoch_end(self, outputs: List[torch.Tensor], label: str) -> None:
-        """Computes and logs the averaged metrics at the end of an epoch.
-        Step shared by training and validation epochs.
-        """
-        if self.logging_enabled:
-            avg_loss = torch.stack([x for x in outputs]).mean()
-            tb = self.logger.experiment
-            tb.add_scalar(f"mean_loss_epoch/{label}", avg_loss, self.current_epoch)
 
     def training_step(self, batch: ItemBatch, batch_idx: int) -> torch.Tensor:
         """
@@ -678,8 +751,11 @@ class AutoRegressiveLightning(LightningModule):
 
     def on_train_epoch_end(self):
         outputs = self.training_step_losses
-        self._shared_epoch_end(outputs, "train")
-        self.training_step_losses.clear()  # free memory
+        if self.logging_enabled:
+            avg_loss = torch.stack([x for x in outputs]).mean()
+            tb = self.logger.experiment
+            tb.add_scalar("mean_loss_epoch/train", avg_loss, self.current_epoch)
+            self.training_step_losses.clear()  # free memory
 
     def on_train_end(self):
         if self.mlflow_logger:
@@ -699,6 +775,10 @@ class AutoRegressiveLightning(LightningModule):
                     artifact_path="model",
                     signature=signature,
                 )
+
+    #############################################################
+    #                         VALIDATION                        #
+    #############################################################
 
     def on_validation_start(self):
         """
@@ -724,7 +804,10 @@ class AutoRegressiveLightning(LightningModule):
                 ),
             ]
 
-    def _shared_val_test_step(self, batch: ItemBatch, batch_idx, label: str):
+    def validation_step(self, batch: ItemBatch, batch_idx):
+        """
+        Run validation on single batch
+        """
         with torch.no_grad():
             prediction, target = self.common_step(batch, batch_idx, phase="val_test")
 
@@ -734,26 +817,18 @@ class AutoRegressiveLightning(LightningModule):
         if self.logging_enabled:
             # Log loss per timestep
             loss_dict = {
-                f"timestep_losses/{label}_step_{step}": time_step_loss[step]
+                "timestep_losses/val_step_{step}": time_step_loss[step]
                 for step in range(time_step_loss.shape[0])
             }
             self.log_dict(loss_dict, on_epoch=True, sync_dist=True)
             self.log(
-                f"{label}_mean_loss",
+                "val_mean_loss",
                 mean_loss,
                 on_epoch=True,
                 sync_dist=True,
-                prog_bar=(label == "val"),
+                prog_bar=True,
             )
-        return prediction, target, mean_loss
 
-    def validation_step(self, batch: ItemBatch, batch_idx):
-        """
-        Run validation on single batch
-        """
-        prediction, target, mean_loss = self._shared_val_test_step(
-            batch, batch_idx, "val"
-        )
         self.validation_step_losses.append(mean_loss)
 
         self.val_mean_loss = mean_loss
@@ -802,8 +877,10 @@ class AutoRegressiveLightning(LightningModule):
                     )
 
         outputs = self.validation_step_losses
-        self._shared_epoch_end(outputs, "validation")
-
+        if self.logging_enabled:
+            avg_loss = torch.stack([x for x in outputs]).mean()
+            tb = self.logger.experiment
+            tb.add_scalar("mean_loss_epoch/validation", avg_loss, self.current_epoch)
         # free memory
         self.validation_step_losses.clear()
 
@@ -812,6 +889,10 @@ class AutoRegressiveLightning(LightningModule):
             if self.current_epoch % PLOT_PERIOD == 0:
                 for plotter in self.valid_plotters:
                     plotter.on_step_end(self, label="Valid")
+
+    #############################################################
+    #                            TEST                           #
+    #############################################################
 
     def on_test_start(self):
         """
@@ -839,7 +920,26 @@ class AutoRegressiveLightning(LightningModule):
         """
         Run test on single batch
         """
-        prediction, target, _ = self._shared_val_test_step(batch, batch_idx, "test")
+        with torch.no_grad():
+            prediction, target = self.common_step(batch)
+
+        time_step_loss = torch.mean(self.loss(prediction, target), dim=0)
+        mean_loss = torch.mean(time_step_loss)
+
+        if self.logging_enabled:
+            # Log loss per timestep
+            loss_dict = {
+                "timestep_losses/test_step_{step}": time_step_loss[step]
+                for step in range(time_step_loss.shape[0])
+            }
+            self.log_dict(loss_dict, on_epoch=True, sync_dist=True)
+            self.log(
+                "test_mean_loss",
+                mean_loss,
+                on_epoch=True,
+                sync_dist=True,
+                prog_bar=False,
+            )
 
         if self.logging_enabled:
             # Notify plotters & metrics
@@ -849,18 +949,6 @@ class AutoRegressiveLightning(LightningModule):
             self.acc_metric.update(prediction, target)
             self.psd_plot_metric.update(prediction, target, self.original_shape)
             self.rmse_psd_plot_metric.update(prediction, target, self.original_shape)
-
-    @cached_property
-    def interior_2d(self) -> torch.Tensor:
-        """
-        Get the interior mask as a 2d mask.
-        Usefull when stored as 1D in statics.
-        """
-        if self.num_spatial_dims == 1:
-            return einops.rearrange(
-                self.interior_mask, "(x y) h -> x y h", x=self.grid_shape[0]
-            )
-        return self.interior_mask
 
     def on_test_epoch_end(self):
         """
@@ -899,17 +987,36 @@ class AutoRegressiveLightning(LightningModule):
             for plotter in self.test_plotters:
                 plotter.on_step_end(self, label="Test")
 
-    @cached_property
-    def mlflow_logger(self) -> Union[MLFlowLogger, None]:
-        """
-        Get the MLFlowLogger if it has been set.
-        """
-        return next(
-            iter([o for o in self.loggers if isinstance(o, MLFlowLogger)]), None
-        )
+    #############################################################
+    #                          PREDICT                          #
+    #############################################################
 
+    def predict_step(self, batch: ItemBatch, batch_idx: int) -> torch.Tensor:
+        """
+        Check if the feature names are the same as the one used during training
+        and make a prediction and accumulate if io_conf =/= none.
+        """
+        if batch_idx == 0:
+            if self.input_feature_names != batch.inputs.feature_names:
+                raise ValueError(
+                    f"Input Feature names mismatch between training and inference. "
+                    f"Training: {self.input_feature_names}, Inference: {batch.inputs.feature_names}"
+                )
+        preds = self.forward(batch)
+        if not (self.io_conf is None):
+            self.grib_writing(preds)
+        return preds
 
-@rank_zero_only
-def exp_summary(model: AutoRegressiveLightning):
-    model.print_summary_model()
-    summary(model.model)
+    def grib_writing(self, preds):
+        with open(self.io_conf, "r") as f:
+            save_settings = GribSavingSettings(**json.load(f))
+            ph = len(save_settings.output_fmt.split("{}")) - 1
+            kw = len(save_settings.output_kwargs)
+            fi = len(save_settings.sample_identifiers)
+            if ph != (fi + kw):
+                raise ValueError(
+                    f"Filename fmt has {ph} placeholders,\
+                    but {kw} output_kwargs and {fi} sample identifiers."
+                )
+        for sample, pred in zip(self.infer_ds.sample_list, preds):
+            save_named_tensors_to_grib(pred, self.infer_ds, sample, save_settings)
