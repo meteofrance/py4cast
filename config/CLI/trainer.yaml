@@ -12,7 +12,7 @@ lr_scheduler:
   class_path: pl_bolts.optimizers.lr_scheduler.LinearWarmupCosineAnnealingLR
   init_args:
     warmup_epochs: 1
-    max_epochs: 50
+    max_epochs: 500
     eta_min: 0
 
 
@@ -20,7 +20,7 @@ trainer:               # Native training arguments of ligthining.pytorch.Trainer
 
   fast_dev_run: False  # True: fit with only 1 batch and 1 epoch, use for dev (logging & checkpointing disabled)
   num_nodes: 1         # Num of GPU nodes (1 if device=cpu)
-  max_epochs: 50
+  max_epochs: 500
   profiler: null       # Performance profiler. Possibilities are [null, simple, or specific custom class (see doc)]
 
   logger:
@@ -64,7 +64,7 @@ trainer:               # Native training arguments of ligthining.pytorch.Trainer
       init_args:
         monitor: val_mean_loss
         mode: min
-        patience: 5
+        patience: 50
 
   log_every_n_steps: 50        # Num of batches btw logging
   accumulate_grad_batches: 10  # Num of batches before optim step
