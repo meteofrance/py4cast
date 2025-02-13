@@ -1,14 +1,14 @@
+import glob
 import os
 import os.path as osp
 import re
-import glob
 import time
+
+import dask.array as da
 import numpy as np
 import xarray as xr
-import dask.array as da
 import zarr
 from numcodecs import Blosc
-
 
 # General paths
 titan_path = "/fs1/AROME/TITAN"
@@ -21,15 +21,12 @@ landsea_mask_file = osp.join(titan_path, "PEARO_EURW1S40_Orography_crop.npy")
 
 def get_version(string):
     """Extract the version of a zarr dataset path name, and convert to int."""
-    return int(re.findall(r'-v(\d+).zarr', string)[0])
+    return int(re.findall(r"-v(\d+).zarr", string)[0])
 
 
 # Set the zarr directory
 zarr_path = "/fs1/AROME/titan_2021-2023_PAAROME_1S40_4_1h_100-612-240-880-0p025deg-chunk-1-v0.zarr"
-zarr_datasets = sorted(
-    glob.glob(zarr_path.replace("v0", "v*")),
-    key=get_version
-)
+zarr_datasets = sorted(glob.glob(zarr_path.replace("v0", "v*")), key=get_version)
 if zarr_datasets:
     version = get_version(zarr_datasets[-1]) + 1
     zarr_path = zarr_path.replace("v0", f"v{version}")
@@ -126,15 +123,10 @@ surf_var_names = [
     "tp",
 ]
 # Pressure level variables names
-p_var_names = [
-    "t",
-    "u",
-    "v",
-    "z"
-]
+p_var_names = ["t", "u", "v", "z"]
 
 # The list of delta of time used to compute the std_diff statistics on each variables
-time_deltas = [1, 3, 6, 12] # in hours
+time_deltas = [1, 3, 6, 12]  # in hours
 
 
 def main(batch: int = 1):
@@ -214,22 +206,26 @@ def main(batch: int = 1):
 
     for i in range(0, len(dates), batch):
         # The list of dates (as strings) included in the batch
-        batch_dates = dates[i:i+batch]
+        batch_dates = dates[i : i + batch]
 
         # Format the string dates to np.datetime64
         times = np.array(
-            [np.datetime64(d.replace("_", "T").replace("h", ":") + ":00") for d in batch_dates],
+            [
+                np.datetime64(d.replace("_", "T").replace("h", ":") + ":00")
+                for d in batch_dates
+            ],
             dtype="datetime64[ns]",
         )
         print(
-            f'Treating date {times}' if len(times) == 1
-             else f'Treating date range {(str(times[0]),str(times[-1]))}'
+            f"Treating date {times}"
+            if len(times) == 1
+            else f"Treating date range {(str(times[0]),str(times[-1]))}"
         )
 
         # Init the batch dicts of data
         batch_surf_var = {}
         batch_p_var = {}
-        
+
         # Init missing date list for the batch
         missing_batch_dates = []
         # Iterate on each date in the batch
@@ -262,20 +258,26 @@ def main(batch: int = 1):
             # Stack the pressure level data
             for k_level, v in date_p_level.items():
                 var_key = k_level.split("_level")[0]
-                batch_p_var.setdefault(var_key, []).append(da.stack(v, axis=-1).rechunk(plevel_chunks))
+                batch_p_var.setdefault(var_key, []).append(
+                    da.stack(v, axis=-1).rechunk(plevel_chunks)
+                )
 
         # Store the missing dates
         if missing_batch_dates:
             print(f"There are {len(set(missing_batch_dates))} missing dates.")
             missing_dates.extend(missing_batch_dates)
 
-        # Check if there is 
+        # Check if there is
         if batch_surf_var and batch_p_var:
             # Convert each batch data to dask.array
             for var_key, var in batch_surf_var.items():
-                batch_surf_var[var_key] = da.stack(var, axis=0).rechunk((1,) + surface_chunks)
+                batch_surf_var[var_key] = da.stack(var, axis=0).rechunk(
+                    (1,) + surface_chunks
+                )
             for var_key, var in batch_p_var.items():
-                batch_p_var[var_key] = da.stack(var, axis=0).rechunk((1,) + plevel_chunks)
+                batch_p_var[var_key] = da.stack(var, axis=0).rechunk(
+                    (1,) + plevel_chunks
+                )
 
             # Merge the two dicts
             batch_dict = {**batch_p_var, **batch_surf_var}
@@ -285,47 +287,44 @@ def main(batch: int = 1):
                 {
                     "10m_u_component_of_wind": (
                         ["time", "latitude", "longitude"],
-                        batch_dict[var_info["10m_u_component_of_wind"]["short_name"]]
+                        batch_dict[var_info["10m_u_component_of_wind"]["short_name"]],
                     ),
                     "10m_v_component_of_wind": (
                         ["time", "latitude", "longitude"],
-                        batch_dict[var_info["10m_v_component_of_wind"]["short_name"]]
+                        batch_dict[var_info["10m_v_component_of_wind"]["short_name"]],
                     ),
                     "2m_relative_humidity": (
                         ["time", "latitude", "longitude"],
-                        batch_dict[var_info["2m_relative_humidity"]["short_name"]]
+                        batch_dict[var_info["2m_relative_humidity"]["short_name"]],
                     ),
                     "2m_temperature": (
                         ["time", "latitude", "longitude"],
-                        batch_dict[var_info["2m_temperature"]["short_name"]]
+                        batch_dict[var_info["2m_temperature"]["short_name"]],
                     ),
                     "geopotential": (
                         ["time", "latitude", "longitude", "level"],
-                        batch_dict[var_info["geopotential"]["short_name"]]
+                        batch_dict[var_info["geopotential"]["short_name"]],
                     ),
                     "geopotential_at_surface": (
                         ["latitude", "longitude"],
                         z_surf,
                     ),
-                    "land_sea_mask": (
-                        ["latitude", "longitude"],
-                        landsea_mask
-                    ),
+                    "land_sea_mask": (["latitude", "longitude"], landsea_mask),
                     "temperature": (
                         ["time", "latitude", "longitude", "level"],
-                        batch_dict[var_info["temperature"]["short_name"]]
+                        batch_dict[var_info["temperature"]["short_name"]],
                     ),
                     "total_precipitation": (
                         ["time", "latitude", "longitude"],
-                        batch_dict[var_info["total_precipitation"]["short_name"]]
+                        batch_dict[var_info["total_precipitation"]["short_name"]],
                     ),
                     "u_component_of_wind": (
                         ["time", "latitude", "longitude", "level"],
-                        batch_dict[var_info["u_component_of_wind"]["short_name"]]
+                        batch_dict[var_info["u_component_of_wind"]["short_name"]],
                     ),
                     "v_component_of_wind": (
                         ["time", "latitude", "longitude", "level"],
-                        batch_dict[var_info["v_component_of_wind"]["short_name"]]
+                        batch_dict[var_info["v_component_of_wind"]["short_name"]],
                     ),
                 },
                 coords={
@@ -356,7 +355,7 @@ def main(batch: int = 1):
                     group="/",
                     consolidated=True,
                     zarr_format=2,
-                    append_dim="time"
+                    append_dim="time",
                 )
 
     print(f"Conversion done in : {time.time() - start}s")
@@ -376,32 +375,52 @@ def main(batch: int = 1):
         time_diff = {}
         for delta_t in time_deltas:
             if delta_t < time_length:
-                d1, d2 = xr.align(xr_ds.time[delta_t:], xr_ds.time[:-delta_t], join='override')
+                d1, d2 = xr.align(
+                    xr_ds.time[delta_t:], xr_ds.time[:-delta_t], join="override"
+                )
                 time_diff[delta_t] = d1 - d2
             else:
-                print(f"Warning: delta_t' value '{delta_t}' skipped. The 'delta_t' value is larger "
-                    f"than the dataset size: {delta_t} > {time_length}")
+                print(
+                    f"Warning: delta_t' value '{delta_t}' skipped. The 'delta_t' value is larger "
+                    f"than the dataset size: {delta_t} > {time_length}"
+                )
                 time_deltas.remove(delta_t)
 
         # Compute the statistics
         for var in xr_ds.data_vars:
             print(f"Computing statistics for {var}")
-            op_dims = list(xr_ds[var].dims[:-1]) if "level" in xr_ds[var].dims else list(xr_ds[var].dims)
-            zarr_ds.get(var).attrs.update({
-                "mean": xr_ds[var].mean(dim=op_dims, skipna=True).values.tolist(),
-                "std": xr_ds[var].std(dim=op_dims, skipna=True, ddof=1).values.tolist(),
-                "min": xr_ds[var].min(dim=op_dims, skipna=True).values.tolist(),
-                "max": xr_ds[var].max(dim=op_dims, skipna=True).values.tolist(),
-            })
-            if "time" in  xr_ds[var].coords:
+            op_dims = (
+                list(xr_ds[var].dims[:-1])
+                if "level" in xr_ds[var].dims
+                else list(xr_ds[var].dims)
+            )
+            zarr_ds.get(var).attrs.update(
+                {
+                    "mean": xr_ds[var].mean(dim=op_dims, skipna=True).values.tolist(),
+                    "std": xr_ds[var]
+                    .std(dim=op_dims, skipna=True, ddof=1)
+                    .values.tolist(),
+                    "min": xr_ds[var].min(dim=op_dims, skipna=True).values.tolist(),
+                    "max": xr_ds[var].max(dim=op_dims, skipna=True).values.tolist(),
+                }
+            )
+            if "time" in xr_ds[var].coords:
                 for delta_t in time_deltas:
-                    valid_diff = xr_ds[var].diff(dim="time").where(
-                        time_diff[delta_t] == np.timedelta64(delta_t, 'h'),
-                        drop=True
+                    valid_diff = (
+                        xr_ds[var]
+                        .diff(dim="time")
+                        .where(
+                            time_diff[delta_t] == np.timedelta64(delta_t, "h"),
+                            drop=True,
+                        )
                     )
-                    zarr_ds.get(var).attrs.update({
-                        f"std_diff_{delta_t}": valid_diff.std(dim=op_dims, skipna=True, ddof=1).values.tolist()
-                    })
+                    zarr_ds.get(var).attrs.update(
+                        {
+                            f"std_diff_{delta_t}": valid_diff.std(
+                                dim=op_dims, skipna=True, ddof=1
+                            ).values.tolist()
+                        }
+                    )
 
     # Sync zarr .zmetadata
     zarr.consolidate_metadata(zarr_path)
