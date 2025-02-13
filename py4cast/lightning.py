@@ -688,72 +688,6 @@ class AutoRegressiveLightning(LightningModule):
 
         return batch_loss
 
-
-    def on_save_checkpoint(self, checkpoint):
-        """
-        We store our feature and dim names in the checkpoint
-        """
-        checkpoint["input_feature_names"] = self.input_feature_names
-        checkpoint["output_feature_names"] = self.output_feature_names
-        checkpoint["output_dim_names"] = self.output_dim_names
-        checkpoint["output_dtype"] = self.output_dtype
-
-    def on_load_checkpoint(self, checkpoint):
-        """
-        We load our feature and dim names from the checkpoint
-        """
-        self.input_feature_names = checkpoint["input_feature_names"]
-        self.output_feature_names = checkpoint["output_feature_names"]
-        self.output_dim_names = checkpoint["output_dim_names"]
-        self.output_dtype = checkpoint["output_dtype"]
-
-    def predict_step(self, batch: ItemBatch, batch_idx: int) -> torch.Tensor:
-        """
-        Check if the feature names are the same as the one used during training
-        and make a prediction and accumulate if io_conf =/= none.
-        """
-        if batch_idx == 0:
-            if self.input_feature_names != batch.inputs.feature_names:
-                raise ValueError(
-                    f"Input Feature names mismatch between training and inference. "
-                    f"Training: {self.input_feature_names}, Inference: {batch.inputs.feature_names}"
-                )
-        preds = self.forward(batch)
-
-        # Remove batch dimension
-        preds.flatten_("timestep", 0, 1)
-
-        # Save gribs if a io config file is given
-        if not (self.io_conf is None):
-            # Save the prediction of the first sample of the dataloader as a grib
-            if batch_idx == 0:
-                self.grib_writing(preds)
-        return preds
-
-    def grib_writing(self, preds):
-        with open(self.io_conf, "r") as f:
-            save_settings = GribSavingSettings(**json.load(f))
-            ph = len(save_settings.output_fmt.split("{}")) - 1
-            kw = len(save_settings.output_kwargs)
-            fi = len(save_settings.sample_identifiers)
-            if ph != (fi + kw):
-                raise ValueError(
-                    f"Filename fmt has {ph} placeholders,\
-                    but {kw} output_kwargs and {fi} sample identifiers."
-                )
-
-            save_named_tensors_to_grib(
-                preds, self.infer_ds, self.infer_ds.sample_list[0], save_settings
-            )
-        # for sample, pred in zip(self.infer_ds.sample_list, preds):
-        #     save_named_tensors_to_grib(pred, self.infer_ds, sample, save_settings)
-
-    def forward(self, x: ItemBatch) -> NamedTensor:
-        """
-        Forward pass of the model
-        """
-        return self.common_step(x, inference=True)[0]
-
     def on_train_epoch_end(self):
         outputs = self.training_step_losses
         if self.logging_enabled:
@@ -1008,8 +942,15 @@ class AutoRegressiveLightning(LightningModule):
                     f"Training: {self.input_feature_names}, Inference: {batch.inputs.feature_names}"
                 )
         preds = self.forward(batch)
+
+        # Remove batch dimension
+        preds.flatten_("timestep", 0, 1)
+
+        # Save gribs if a io config file is given
         if not (self.io_conf is None):
-            self.grib_writing(preds)
+            # Save the prediction of the first sample of the dataloader as a grib
+            if batch_idx == 0:
+                self.grib_writing(preds)
         return preds
 
     def grib_writing(self, preds):
@@ -1023,5 +964,7 @@ class AutoRegressiveLightning(LightningModule):
                     f"Filename fmt has {ph} placeholders,\
                     but {kw} output_kwargs and {fi} sample identifiers."
                 )
-        for sample, pred in zip(self.infer_ds.sample_list, preds):
-            save_named_tensors_to_grib(pred, self.infer_ds, sample, save_settings)
+
+        save_named_tensors_to_grib(
+            preds, self.infer_ds, self.infer_ds.sample_list[0], save_settings
+        )
