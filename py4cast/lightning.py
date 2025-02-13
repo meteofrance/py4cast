@@ -303,6 +303,24 @@ class AutoRegressiveLightning(LightningModule):
         }
         self.logger.experiment.add_custom_scalars(layout)
 
+    def on_save_checkpoint(self, checkpoint):
+        """
+        We store our feature and dim names in the checkpoint
+        """
+        checkpoint["input_feature_names"] = self.input_feature_names
+        checkpoint["output_feature_names"] = self.output_feature_names
+        checkpoint["output_dim_names"] = self.output_dim_names
+        checkpoint["output_dtype"] = self.output_dtype
+
+    def on_load_checkpoint(self, checkpoint):
+        """
+        We load our feature and dim names from the checkpoint
+        """
+        self.input_feature_names = checkpoint["input_feature_names"]
+        self.output_feature_names = checkpoint["output_feature_names"]
+        self.output_dim_names = checkpoint["output_dim_names"]
+        self.output_dtype = checkpoint["output_dtype"]
+
     @property
     def logging_enabled(self) -> bool:
         """
@@ -670,24 +688,6 @@ class AutoRegressiveLightning(LightningModule):
                 plotter.update(self, prediction=self.prediction, target=self.target)
 
         return batch_loss
-
-    def on_save_checkpoint(self, checkpoint):
-        """
-        We store our feature and dim names in the checkpoint
-        """
-        checkpoint["input_feature_names"] = self.input_feature_names
-        checkpoint["output_feature_names"] = self.output_feature_names
-        checkpoint["output_dim_names"] = self.output_dim_names
-        checkpoint["output_dtype"] = self.output_dtype
-
-    def on_load_checkpoint(self, checkpoint):
-        """
-        We load our feature and dim names from the checkpoint
-        """
-        self.input_feature_names = checkpoint["input_feature_names"]
-        self.output_feature_names = checkpoint["output_feature_names"]
-        self.output_dim_names = checkpoint["output_dim_names"]
-        self.output_dtype = checkpoint["output_dtype"]
 
     def on_train_epoch_end(self):
         outputs = self.training_step_losses
