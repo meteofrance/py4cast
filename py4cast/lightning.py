@@ -861,7 +861,7 @@ class AutoRegressiveLightning(LightningModule):
         Run test on single batch
         """
         with torch.no_grad():
-            prediction, target = self.common_step(batch)
+            prediction, target = self.common_step(batch, batch_idx, phase="val_test")
 
         time_step_loss = torch.mean(self.loss(prediction, target), dim=0)
         mean_loss = torch.mean(time_step_loss)
