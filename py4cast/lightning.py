@@ -942,7 +942,7 @@ class AutoRegressiveLightning(LightningModule):
                     f"Input Feature names mismatch between training and inference. "
                     f"Training: {self.input_feature_names}, Inference: {batch.inputs.feature_names}"
                 )
-        preds = self.forward(batch)
+        preds = self.forward(batch, batch_idx)
         if not (self.io_conf is None):
             # Save the prediction of the first sample of the dataloader as a grib
             if batch_idx == 0:
