@@ -20,10 +20,12 @@ class Py4castLightningCLI(LightningCLI):
         present in the folder, useful for development.
     """
 
-    def __init__(self, model_class, datamodule_class):
+    def __init__(self, model_class, datamodule_class, *args, **kwargs):
         super().__init__(
             model_class,
             datamodule_class,
+            *args,
+            **kwargs,
         )
 
     def add_arguments_to_parser(self, parser):
