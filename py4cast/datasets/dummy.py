@@ -38,11 +38,6 @@ class DummyAccessor(DataAccessor):
         },
     }
 
-    jsonconfig = json.dumps(config, sort_keys=True, indent=4)
-
-    with open(DEFAULT_CONFIG_DIR / "datasets" / "dummy_config.json", "w") as outfile:
-        outfile.write(jsonconfig)
-
     def cache_dir(self, name: str, grid: Grid) -> Path:
         path = CACHE_DIR / f"{name}_{grid.name}"
         os.makedirs(path, mode=0o777, exist_ok=True)
