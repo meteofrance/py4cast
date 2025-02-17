@@ -11,7 +11,7 @@ import zarr
 from numcodecs import Blosc
 
 # General paths
-titan_path = "/fs1/AROME/TITAN"
+titan_path = "<npy-dataset-root>/AROME/TITAN"
 data_path = osp.join(
     titan_path, "subdatasets/titan_full_PAAROME_1S40_100-612-240-880/data"
 )
@@ -25,7 +25,7 @@ def get_version(string):
 
 
 # Set the zarr directory
-zarr_path = "/fs1/AROME/titan_2021-2023_PAAROME_1S40_4_1h_100-612-240-880-0p025deg-chunk-1-v0.zarr"
+zarr_path = "<zarr-dataset-root>/AROME/titan_2021-2023_PAAROME_1S40_4_1h_100-612-240-880-0p025deg-chunk-1-v0.zarr"
 zarr_datasets = sorted(glob.glob(zarr_path.replace("v0", "v*")), key=get_version)
 if zarr_datasets:
     version = get_version(zarr_datasets[-1]) + 1
