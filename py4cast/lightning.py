@@ -413,30 +413,30 @@ class AutoRegressiveLightning(LightningModule):
     #                          FORWARD                          #
     #############################################################
 
-    def forward(self, x: ItemBatch) -> NamedTensor:
+    def forward(self, x: ItemBatch, batch_idx: int) -> NamedTensor:
         """
         Forward pass of the model
         """
-        return self.common_step(x, inference=True)[0]
+        return self.common_step(x, batch_idx, phase="inference")[0]
 
     def common_step(
-        self, batch: ItemBatch, inference: bool = False
+        self, batch: ItemBatch, batch_idx: int, phase: str
     ) -> Tuple[NamedTensor, NamedTensor]:
         """
         Handling autocast subtelty for mixed precision on GPU and CPU (only bf16 for the later).
         """
         if torch.cuda.is_available():
             with torch.amp.autocast("cuda", dtype=self.dtype):
-                return self._common_step(batch, inference)
+                return self._common_step(batch, batch_idx, phase)
         else:
-            if not inference and "bf16" in self.trainer.precision:
+            if not (phase == "inference") and "bf16" in self.trainer.precision:
                 with torch.amp.autocast("cuda", dtype=self.dtype):
-                    return self._common_step(batch, inference)
+                    return self._common_step(batch, batch_idx, phase)
             else:
-                return self._common_step(batch, inference)
+                return self._common_step(batch, batch_idx, phase)
 
     def _common_step(
-        self, batch: ItemBatch, inference: bool = False
+        self, batch: ItemBatch, batch_idx: int, phase: str
     ) -> Tuple[NamedTensor, NamedTensor]:
         """
         Two Autoregressive strategies are implemented here for train, val, test and inference:
@@ -470,10 +470,20 @@ class AutoRegressiveLightning(LightningModule):
             # Graph model, we flatten the batch spatial dims
             batch.inputs.flatten_("ngrid", *batch.inputs.spatial_dim_idx)
 
-            if not inference:
+            if not (phase == "inference"):
                 batch.outputs.flatten_("ngrid", *batch.outputs.spatial_dim_idx)
 
             batch.forcing.flatten_("ngrid", *batch.forcing.spatial_dim_idx)
+
+        # we save the feature names at the first batch of training
+        # to check at inference time if the feature names are the same
+        # also useful to build NamedTensor outputs with same feature and dim names
+        # If model type is graph, flat the lon/lat dim before saving the dims
+        if batch_idx == 0 and phase == "train":
+            self.input_feature_names = batch.inputs.feature_names
+            self.output_feature_names = batch.outputs.feature_names
+            self.output_dim_names = batch.outputs.names
+            self.output_dtype = batch.outputs.tensor.dtype
 
         prev_states = batch.inputs
         prediction_list = []
@@ -481,14 +491,14 @@ class AutoRegressiveLightning(LightningModule):
         # Here we do the autoregressive prediction looping
         # for the desired number of ar steps.
         for i in range(batch.num_pred_steps):
-            if not inference:
+            if not (phase == "inference"):
                 border_state = batch.outputs.select_dim("timestep", i)
 
             if scale_y:
                 step_diff_std, step_diff_mean = self._step_diffs(
                     (
                         self.output_feature_names
-                        if inference
+                        if (phase == "inference")
                         else batch.outputs.feature_names
                     ),
                     prev_states.device,
@@ -529,7 +539,7 @@ class AutoRegressiveLightning(LightningModule):
 
                 # Overwrite border with true state
                 # Force it to true state for all intermediary step
-                if not inference and force_border:
+                if not (phase == "inference") and force_border:
                     new_state = (
                         self.border_mask * border_state
                         + self.interior_mask * predicted_state
@@ -568,7 +578,7 @@ class AutoRegressiveLightning(LightningModule):
 
         # In inference mode we use a "trained" module which MUST have the output feature names
         # and the output dim names attributes set.
-        if inference:
+        if phase == "inference":
             pred_out = NamedTensor(
                 prediction.type(self.output_dtype),
                 self.output_dim_names,
@@ -666,16 +676,7 @@ class AutoRegressiveLightning(LightningModule):
         Train on single batch
         """
 
-        # we save the feature names at the first batch
-        # to check at inference time if the feature names are the same
-        # also useful to build NamedTensor outputs with same feature and dim names
-        if batch_idx == 0:
-            self.input_feature_names = batch.inputs.feature_names
-            self.output_feature_names = batch.outputs.feature_names
-            self.output_dim_names = batch.outputs.names
-            self.output_dtype = batch.outputs.tensor.dtype
-
-        prediction, target = self.common_step(batch)
+        prediction, target = self.common_step(batch, batch_idx, phase="train")
         # Compute loss: mean over unrolled times and batch
         batch_loss = torch.mean(self.loss(prediction, target))
 
@@ -748,7 +749,7 @@ class AutoRegressiveLightning(LightningModule):
         Run validation on single batch
         """
         with torch.no_grad():
-            prediction, target = self.common_step(batch)
+            prediction, target = self.common_step(batch, batch_idx, phase="val_test")
 
         time_step_loss = torch.mean(self.loss(prediction, target), dim=0)
         mean_loss = torch.mean(time_step_loss)
@@ -860,7 +861,7 @@ class AutoRegressiveLightning(LightningModule):
         Run test on single batch
         """
         with torch.no_grad():
-            prediction, target = self.common_step(batch)
+            prediction, target = self.common_step(batch, batch_idx, phase="val_test")
 
         time_step_loss = torch.mean(self.loss(prediction, target), dim=0)
         mean_loss = torch.mean(time_step_loss)
@@ -941,7 +942,8 @@ class AutoRegressiveLightning(LightningModule):
                     f"Input Feature names mismatch between training and inference. "
                     f"Training: {self.input_feature_names}, Inference: {batch.inputs.feature_names}"
                 )
-        preds = self.forward(batch)
+
+        preds = self.forward(batch, batch_idx)
 
         # Remove batch dimension
         preds.flatten_("timestep", 0, 1)
