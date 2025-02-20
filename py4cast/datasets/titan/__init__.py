@@ -43,6 +43,15 @@ class TitanAccessor(DataAccessor):
         grid_info = METADATA["GRIDS"][name]
         full_size = grid_info["size"]
         landsea_mask = None
+        print()
+        print()
+        print(full_size)
+        print(conf_ds.latitude.values)
+        print(conf_ds.longitude.values)
+        print(conf_ds.h.values)
+        print(landsea_mask)
+        print()
+        print()
         grid_conf = GridConfig(
             full_size,
             conf_ds.latitude.values,
