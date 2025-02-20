@@ -1,4 +1,3 @@
-import json
 import os
 from pathlib import Path
 from typing import List, Literal
@@ -14,7 +13,7 @@ from py4cast.datasets.access import (
     Timestamps,
     WeatherParam,
 )
-from py4cast.settings import CACHE_DIR, DEFAULT_CONFIG_DIR
+from py4cast.settings import CACHE_DIR
 
 
 class DummyAccessor(DataAccessor):

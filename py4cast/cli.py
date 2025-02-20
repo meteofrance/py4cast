@@ -1,5 +1,6 @@
 from lightning.pytorch.cli import LightningCLI
 
+
 class Py4castLightningCLI(LightningCLI):
     """
     CLI - Command Line Interface from lightning

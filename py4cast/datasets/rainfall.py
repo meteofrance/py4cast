@@ -6,9 +6,9 @@ from typing import List, Literal
 
 import numpy as np
 import xarray as xr
+from cartopy.crs import PlateCarree, Stereographic
 from tqdm import trange
 from typer import Typer
-from cartopy.crs import PlateCarree, Stereographic
 
 from py4cast.datasets import compute_dataset_stats as cds
 from py4cast.datasets.access import (
@@ -30,6 +30,7 @@ DEFAULT_CONFIG = Path(__file__).parents[2] / "config/CLI/datasets/rainfall.yaml"
 
 app = Typer()
 
+
 def domain_to_extent(domain):
     crs = Stereographic(central_latitude=45)
     lower_right = crs.transform_point(*domain["lower_right"], PlateCarree())
@@ -38,6 +39,7 @@ def domain_to_extent(domain):
     maxy, miny = upper_right[1], lower_left[1]
     minx, maxx = lower_left[0], lower_right[0]
     return (minx, maxx, miny, maxy)
+
 
 class RainfallAccessor(DataAccessor):
     @staticmethod
@@ -66,7 +68,7 @@ class RainfallAccessor(DataAccessor):
         #     altitude,
         #     landsea_mask,
         # )
-        #MODIFIED
+        # MODIFIED
         DOMAIN = {
             "upper_left": (-9.965, 53.670),
             "lower_right": (10.259217, 39.46785),
