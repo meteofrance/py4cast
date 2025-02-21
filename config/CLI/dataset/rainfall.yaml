@@ -28,9 +28,11 @@ data:
         obs_step: 300
         obs_step_btw_t0: 10800
     grid:
-      name: FRANXL1S100
+      name: 
       border_size: 0
-      projection_kwargs: {}
+      proj_name: Stereographic
+      projection_kwargs:
+        central_latitude: 45
     settings:
       standardize: true
       file_format: npz

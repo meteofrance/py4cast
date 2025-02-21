@@ -76,8 +76,8 @@ class RainfallAccessor(DataAccessor):
             "lower_left": (-6.977881, 39.852361),
         }
         shape = [1536, 1536]
-        startlon, endlon, startlat, endlat = domain_to_extent(DOMAIN)
-        lat = np.linspace(startlon, endlon, 1536)
+        startlon, endlon, endlat, startlat = domain_to_extent(DOMAIN)
+        lat = np.linspace(startlat, endlat, 1536)
         lon = np.linspace(startlon, endlon, 1536)
         altitude = np.zeros(shape)
         landsea_mask = None
@@ -168,6 +168,7 @@ class RainfallAccessor(DataAccessor):
                 arr = np.load(data_path)
                 arr = arr["arr_0"]
             arr = np.nan_to_num(arr)  # Replace nan by 0
+            arr = arr[::-1]
             arr_list.append(np.expand_dims(arr, axis=-1))
         return np.stack(arr_list)
 
