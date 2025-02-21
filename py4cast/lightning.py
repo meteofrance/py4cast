@@ -946,6 +946,10 @@ class AutoRegressiveLightning(LightningModule):
         preds = self.forward(batch, batch_idx)
 
         # Remove batch dimension
+        if preds.tensor.shape[0] != 1:
+            raise ValueError(
+                f"Prediction should have a batch dimension of 1 instead of { preds.tensor.shape[0]}"
+            )
         preds.flatten_("timestep", 0, 1)
 
         # Save gribs if a io config file is given

@@ -13,6 +13,7 @@ import torch
 import xarray as xr
 from mfai.torch.namedtensor import NamedTensor
 
+from py4cast.datasets.access import Timestamps
 from py4cast.datasets.base import DatasetABC
 from py4cast.datasets.dummy import DummyAccessor
 from py4cast.io import outputs as out
@@ -270,17 +271,6 @@ class FakeHaGDs:
 
 
 @dataclass
-class Timestamps:
-    datetime: datetime
-
-    def __post_init__(self):
-        self.validity_times = [
-            datetime.datetime(1911, 10, 30),
-            datetime.datetime(1911, 9, 30),
-        ]
-
-
-@dataclass
 class FakeSample:
     timestamps: Timestamps
     fancy_ident: str
@@ -315,8 +305,13 @@ def test_write_template_dataset():
     dummy_template = FakeIsoDs(lat[::-1], lon, levels, variables)
     validtime = 1.0
     leadtime = 1.0
+
     sample = FakeSample(
-        Timestamps(datetime.datetime(1911, 10, 30)), "first solvay congress"
+        Timestamps(
+            datetime.datetime(1911, 10, 30),
+            [datetime.timedelta(days=i) for i in range(1, 3)],
+        ),
+        "first solvay congress",
     )
     _, _, dummy_ds = DatasetABC.from_json(
         DummyAccessor,
@@ -379,7 +374,12 @@ def test_write_template_dataset():
     dummy_template = FakeSurfaceDs(lat[::-1], lon, levels, variables)
     validtime = 1.0
     leadtime = 1.0
-    sample = FakeSample(Timestamps(datetime.datetime.now()), "right now")
+    sample = FakeSample(
+        Timestamps(
+            datetime.datetime.now(), [datetime.timedelta(days=i) for i in range(1, 3)]
+        ),
+        "right now",
+    )
     _, _, dummy_ds = DatasetABC.from_json(
         DummyAccessor,
         DEFAULT_CONFIG_DIR / "datasets" / "dummy_config.json",
@@ -438,7 +438,11 @@ def test_write_template_dataset():
     validtime = 1.0
     leadtime = 1.0
     sample = FakeSample(
-        Timestamps(datetime.datetime(1911, 10, 30)), "first solvay congress"
+        Timestamps(
+            datetime.datetime(1911, 10, 30),
+            [datetime.timedelta(days=i) for i in range(1, 3)],
+        ),
+        "first solvay congress",
     )
     _, _, dummy_ds = DatasetABC.from_json(
         DummyAccessor,
@@ -496,7 +500,11 @@ def test_write_template_dataset():
     validtime = 1.0
     leadtime = 1.0
     sample = FakeSample(
-        Timestamps(datetime.datetime(1911, 10, 30)), "first solvay congress"
+        Timestamps(
+            datetime.datetime(1911, 10, 30),
+            [datetime.timedelta(days=i) for i in range(1, 3)],
+        ),
+        "first solvay congress",
     )
     _, _, dummy_ds = DatasetABC.from_json(
         DummyAccessor,
@@ -542,20 +550,22 @@ def test_get_output_filename():
         output_fmt="no_dataset/{}/mb{}/forecast/grid.emul_aro_ai_ech_{}.grib",
     )
     sample = FakeSample(
-        timestamps=Timestamps(datetime.datetime(1911, 10, 30)),
+        timestamps=Timestamps(
+            datetime.datetime(1911, 10, 30),
+            [datetime.timedelta(days=i) for i in range(1, 5)],
+        ),
         fancy_ident="first solvay congress",
-        output_timestamps=Timestamps(datetime.datetime(1911, 11, 3)),
+        output_timestamps=Timestamps(
+            datetime.datetime(1911, 10, 30),
+            [datetime.timedelta(days=i) for i in range(3, 5)],
+        ),
     )
     leadtime = 1.0
 
-    sample.output_timestamps.validity_times = [
-        datetime.datetime(1911, 10, 30),
-        datetime.datetime(1911, 11, 4),
-    ]
     filename = out.get_output_filename(saving_settings, sample, leadtime)
     assert (
         filename
-        == "no_dataset/19110930T0000P/mb002/forecast/grid.emul_aro_ai_ech_1.0.grib"
+        == "no_dataset/19111101T0000P/mb002/forecast/grid.emul_aro_ai_ech_1.0.grib"
     )
 
     saving_settings = out.GribSavingSettings(
@@ -567,3 +577,7 @@ def test_get_output_filename():
     )
 
     filename = out.get_output_filename(saving_settings, sample, leadtime)
+
+
+test_get_output_filename()
+test_write_template_dataset()
