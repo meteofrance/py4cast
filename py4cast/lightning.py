@@ -942,7 +942,17 @@ class AutoRegressiveLightning(LightningModule):
                     f"Input Feature names mismatch between training and inference. "
                     f"Training: {self.input_feature_names}, Inference: {batch.inputs.feature_names}"
                 )
+
         preds = self.forward(batch, batch_idx)
+
+        # Remove batch dimension
+        if preds.tensor.shape[0] != 1:
+            raise ValueError(
+                f"Prediction should have a batch dimension of 1 instead of { preds.tensor.shape[0]}"
+            )
+        preds.flatten_("timestep", 0, 1)
+
+        # Save gribs if a io config file is given
         if not (self.io_conf is None):
             # Save the prediction of the first sample of the dataloader as a grib
             if batch_idx == 0:
