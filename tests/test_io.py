@@ -577,7 +577,3 @@ def test_get_output_filename():
     )
 
     filename = out.get_output_filename(saving_settings, sample, leadtime)
-
-
-test_get_output_filename()
-test_write_template_dataset()
