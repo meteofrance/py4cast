@@ -5,10 +5,10 @@ Unit tests for datasets and NamedTensor.
 import datetime
 from dataclasses import dataclass, field
 from functools import cached_property
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
-import Path
 import pytest
 import torch
 import xarray as xr
