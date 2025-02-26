@@ -2,7 +2,8 @@
 Unit tests for datasets and NamedTensor.
 """
 
-from dataclasses import dataclass
+import datetime
+from dataclasses import dataclass, field
 from functools import cached_property
 
 import numpy as np
@@ -12,6 +13,7 @@ import torch
 import xarray as xr
 from mfai.torch.namedtensor import NamedTensor
 
+from py4cast.datasets.access import Timestamps
 from py4cast.datasets.base import DatasetABC
 from py4cast.datasets.dummy import DummyAccessor
 from py4cast.io import outputs as out
@@ -94,28 +96,28 @@ def test_nan_mask():
 
 @dataclass
 class FakeParam:
-    shortname: str = "u"
-    levels: tuple[float, ...] = (850.0,)
+    name: str = "u"
+    level: float = 850.0
     level_type: str = "isobaricInhPa"
 
     @cached_property
     def parameter_short_name(self):
-        return [f"{self.shortname}_{lvl}" for lvl in self.levels]
+        return [f"{self.name}_{self.level}_{self.level_type}"]
 
 
 def test_get_grib_param_dataframe():
     names = ["u", "v", "t2m", "u10"]
     lvl_types = ["isobaricInhPa", "heightAboveGround"]
     params = [
-        FakeParam(names[i], (900.0, 50.0), lvl_types[0]) for i in range(len(names[:2]))
+        FakeParam(names[i], 900.0, lvl_types[0]) for i in range(len(names[:2]))
     ] + [
-        FakeParam(names[2], (2,), lvl_types[1]),
-        FakeParam(names[3], (10,), lvl_types[1]),
+        FakeParam(names[2], 2, lvl_types[1]),
+        FakeParam(names[3], 10, lvl_types[1]),
     ]
     plist = []
     for p in params:
         plist.extend(p.parameter_short_name)
-    tensor = torch.ones(4, 32, 32, 6)
+    tensor = torch.ones(4, 32, 32, 4)
     pred = NamedTensor(
         tensor, names=["batch", "lat", "lon", "features"], feature_names=plist
     )
@@ -124,25 +126,26 @@ def test_get_grib_param_dataframe():
     reference = pd.DataFrame(
         {
             "feature_name": [
-                "u_900.0",
-                "u_50.0",
-                "v_900.0",
-                "v_50.0",
-                "t2m_2",
-                "u10_10",
+                "u_900.0_isobaricInhPa",
+                "v_900.0_isobaricInhPa",
+                "t2m_2_heightAboveGround",
+                "u10_10_heightAboveGround",
             ],
-            "level": [900.0, 50.0, 900.0, 50.0, 2, 10],
-            "name": ["u", "u", "v", "v", "t2m", "u10"],
+            "level": [900.0, 900.0, 2, 10],
+            "name": ["u", "v", "t2m", "u10"],
             "typeOfLevel": [
-                "isobaricInhPa",
-                "isobaricInhPa",
                 "isobaricInhPa",
                 "isobaricInhPa",
                 "heightAboveGround",
                 "heightAboveGround",
             ],
         },
-        index=["u_900.0", "u_50.0", "v_900.0", "v_50.0", "t2m_2", "u10_10"],
+        index=[
+            "u_900.0_isobaricInhPa",
+            "v_900.0_isobaricInhPa",
+            "t2m_2_heightAboveGround",
+            "u10_10_heightAboveGround",
+        ],
     )
     assert reference.equals(dataframe)
 
@@ -269,8 +272,10 @@ class FakeHaGDs:
 
 @dataclass
 class FakeSample:
-    date: str
+    timestamps: Timestamps
     fancy_ident: str
+    output_timestamps: Timestamps = field(default=None)
+    member: int = 1
 
 
 def test_write_template_dataset():
@@ -300,7 +305,14 @@ def test_write_template_dataset():
     dummy_template = FakeIsoDs(lat[::-1], lon, levels, variables)
     validtime = 1.0
     leadtime = 1.0
-    sample = FakeSample("1911-10-30", "first solvay congress")
+
+    sample = FakeSample(
+        Timestamps(
+            datetime.datetime(1911, 10, 30),
+            [datetime.timedelta(days=i) for i in range(1, 3)],
+        ),
+        "first solvay congress",
+    )
     _, _, dummy_ds = DatasetABC.from_json(
         DummyAccessor,
         DEFAULT_CONFIG_DIR / "datasets" / "dummy_config.json",
@@ -362,7 +374,12 @@ def test_write_template_dataset():
     dummy_template = FakeSurfaceDs(lat[::-1], lon, levels, variables)
     validtime = 1.0
     leadtime = 1.0
-    sample = FakeSample("1911-10-30", "first solvay congress")
+    sample = FakeSample(
+        Timestamps(
+            datetime.datetime.now(), [datetime.timedelta(days=i) for i in range(1, 3)]
+        ),
+        "right now",
+    )
     _, _, dummy_ds = DatasetABC.from_json(
         DummyAccessor,
         DEFAULT_CONFIG_DIR / "datasets" / "dummy_config.json",
@@ -420,7 +437,13 @@ def test_write_template_dataset():
     dummy_template = FakeSurfaceDs(lat[::-1], lon, levels, variables)
     validtime = 1.0
     leadtime = 1.0
-    sample = FakeSample("1911-10-30", "first solvay congress")
+    sample = FakeSample(
+        Timestamps(
+            datetime.datetime(1911, 10, 30),
+            [datetime.timedelta(days=i) for i in range(1, 3)],
+        ),
+        "first solvay congress",
+    )
     _, _, dummy_ds = DatasetABC.from_json(
         DummyAccessor,
         DEFAULT_CONFIG_DIR / "datasets" / "dummy_config.json",
@@ -476,7 +499,13 @@ def test_write_template_dataset():
     levels = [10]
     validtime = 1.0
     leadtime = 1.0
-    sample = FakeSample("1911-10-30", "first solvay congress")
+    sample = FakeSample(
+        Timestamps(
+            datetime.datetime(1911, 10, 30),
+            [datetime.timedelta(days=i) for i in range(1, 3)],
+        ),
+        "first solvay congress",
+    )
     _, _, dummy_ds = DatasetABC.from_json(
         DummyAccessor,
         DEFAULT_CONFIG_DIR / "datasets" / "dummy_config.json",
@@ -517,21 +546,34 @@ def test_get_output_filename():
     saving_settings = out.GribSavingSettings(
         template_grib="fake_grib.grib",
         directory="fakedirectory",
-        sample_identifiers=("date", "leadtime"),
-        output_fmt="grid.forecast_ai_date_{}_ech_{}.json",
+        sample_identifiers=["runtime", "member", "leadtime"],
+        output_fmt="no_dataset/{}/mb{}/forecast/grid.emul_aro_ai_ech_{}.grib",
     )
-    sample = FakeSample(date="1911-10-30", fancy_ident="first solvay congress")
+    sample = FakeSample(
+        timestamps=Timestamps(
+            datetime.datetime(1911, 10, 30),
+            [datetime.timedelta(days=i) for i in range(1, 5)],
+        ),
+        fancy_ident="first solvay congress",
+        output_timestamps=Timestamps(
+            datetime.datetime(1911, 10, 30),
+            [datetime.timedelta(days=i) for i in range(3, 5)],
+        ),
+    )
     leadtime = 1.0
 
     filename = out.get_output_filename(saving_settings, sample, leadtime)
-    assert filename == f"grid.forecast_ai_date_1911-10-30_ech_{leadtime}.json"
+    assert (
+        filename
+        == "no_dataset/19111101T0000P/mb002/forecast/grid.emul_aro_ai_ech_1.0.grib"
+    )
 
     saving_settings = out.GribSavingSettings(
         template_grib="fake_grib.grib",
         directory="fakedirectory",
         output_kwargs=("congress",),
-        sample_identifiers=("date", "leadtime"),
-        output_fmt="grid.forecast_{}_date_{}_ech_{}.json",
+        sample_identifiers=["runtime", "member", "leadtime"],
+        output_fmt="dataset_{}/{}/mb{}/forecast/grid.emul_aro_ai_ech_{}.grib",
     )
 
     filename = out.get_output_filename(saving_settings, sample, leadtime)
