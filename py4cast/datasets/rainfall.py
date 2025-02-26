@@ -203,7 +203,7 @@ def prepare(
 
     print("Load train dataset configuration...")
     with open(path_config, "r") as fp:
-        conf = yaml.load(fp)
+        conf = yaml.safe_load(fp)
 
     print("instantiate train dataset configuration...")
     train_ds, _, _ = DatasetABC.from_dict(
