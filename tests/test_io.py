@@ -20,9 +20,9 @@ from py4cast.datasets.base import DatasetABC
 from py4cast.datasets.dummy import DummyAccessor
 from py4cast.io import outputs as out
 
-DUMMY_CONFIG = Path(__file__).parents[1] / "config/CLI/datasets/rainfall.yaml"
+DUMMY_CONFIG = Path(__file__).parents[1] / "config/CLI/datasets/dummy.yaml"
 
-with open(path_config, "r") as fp:
+with open(DUMMY_CONFIG, "r") as fp:
     conf = yaml.safe_load(fp)
 
 
