@@ -156,6 +156,8 @@ class ItemBatch(Item):
 
     @cached_property
     def num_input_steps(self):
+        if self.inputs.dim_size("timestep") is None:
+            return self.outputs.dim_size("timestep")
         return self.inputs.dim_size("timestep")
 
     @cached_property
@@ -859,7 +861,7 @@ class DatasetABC(Dataset):
         num_pred_steps_train: int,
         num_pred_steps_val_test: int,
     ) -> Tuple[Type["DatasetABC"], Type["DatasetABC"], Type["DatasetABC"]]:
-        grid = Grid(load_grid_info_func=accessor_kls.load_grid_info, **conf["grid"])
+        grid = Grid(load_grid_info_func=accessor_kls.load_grid_info, **conf["dataset.conf.grid"])
 
         try:
             members = conf["members"]
