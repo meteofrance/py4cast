@@ -54,21 +54,6 @@ class RainfallAccessor(DataAccessor):
     #############################################################
     @staticmethod
     def load_grid_info(name: str) -> GridConfig:
-        # if name not in ["FRANXL1S100"]:
-        #     raise NotImplementedError("Grid must be in ['FRANXL1S100'].")
-
-        # path = SCRATCH_PATH / f"conf_{name}.grib"
-        # conf_ds = xr.open_dataset(path)
-        # altitude = np.zeros(conf_ds.prec.shape)
-        # landsea_mask = None
-        # grid_conf = GridConfig(
-        #     conf_ds.prec.shape,
-        #     conf_ds.latitude.values,
-        #     conf_ds.longitude.values,
-        #     altitude,
-        #     landsea_mask,
-        # )
-        # MODIFIED
         DOMAIN = {
             "upper_left": (-9.965, 53.670),
             "lower_right": (10.259217, 39.46785),
@@ -88,7 +73,6 @@ class RainfallAccessor(DataAccessor):
             altitude,
             landsea_mask,
         )
-
         return grid_conf
 
     @property
