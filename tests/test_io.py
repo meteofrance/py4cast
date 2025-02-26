@@ -45,7 +45,7 @@ def test_nan_mask():
         DUMMY_CONFIG,
         num_input_steps=1,
         num_pred_steps_train=2,
-        num_pred_steps_val_tests=2,
+        num_pred_steps_val_test=2,
     )
 
     exact_lat = (np.arange(64) - 16) * 0.5
@@ -320,7 +320,7 @@ def test_write_template_dataset():
         DUMMY_CONFIG,
         num_input_steps=1,
         num_pred_steps_train=2,
-        num_pred_steps_val_tests=2,
+        num_pred_steps_val_test=2,
     )
 
     pred = NamedTensor(
@@ -387,7 +387,7 @@ def test_write_template_dataset():
         DUMMY_CONFIG,
         num_input_steps=1,
         num_pred_steps_train=2,
-        num_pred_steps_val_tests=2,
+        num_pred_steps_val_test=2,
     )
     pred = NamedTensor(
         torch.ones((1, 5, 2, 64, 64), dtype=torch.float32) * 3.14160000,
@@ -451,7 +451,7 @@ def test_write_template_dataset():
         DUMMY_CONFIG,
         num_input_steps=1,
         num_pred_steps_train=2,
-        num_pred_steps_val_tests=2,
+        num_pred_steps_val_test=2,
     )
 
     pred = NamedTensor(
@@ -513,7 +513,7 @@ def test_write_template_dataset():
         DUMMY_CONFIG,
         num_input_steps=1,
         num_pred_steps_train=2,
-        num_pred_steps_val_tests=2,
+        num_pred_steps_val_test=2,
     )
 
     pred = NamedTensor(
