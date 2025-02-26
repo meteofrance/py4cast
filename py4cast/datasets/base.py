@@ -862,7 +862,7 @@ class DatasetABC(Dataset):
         num_pred_steps_val_test: int,
     ) -> Tuple[Type["DatasetABC"], Type["DatasetABC"], Type["DatasetABC"]]:
         grid = Grid(
-            load_grid_info_func=accessor_kls.load_grid_info, **conf["dataset.conf.grid"]
+            load_grid_info_func=accessor_kls.load_grid_info, **conf["grid"]
         )
 
         try:

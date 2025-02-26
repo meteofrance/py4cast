@@ -2,9 +2,9 @@ data:
   #args forwarded (linked) to model
   dataset_name: rainfall
   num_input_steps: 2
-  num_pred_steps_train: 3
+  num_pred_steps_train: 1
   num_pred_steps_val_test: 3
-  batch_size: 4
+  batch_size: 1
 
   #other args
   num_workers: 10
