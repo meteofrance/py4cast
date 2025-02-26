@@ -12,6 +12,7 @@ import pandas as pd
 import pytest
 import torch
 import xarray as xr
+import yaml
 from mfai.torch.namedtensor import NamedTensor
 
 from py4cast.datasets.access import Timestamps
