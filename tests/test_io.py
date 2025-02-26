@@ -21,6 +21,9 @@ from py4cast.io import outputs as out
 
 DUMMY_CONFIG = Path(__file__).parents[1] / "config/CLI/datasets/rainfall.yaml"
 
+with open(path_config, "r") as fp:
+    conf = yaml.safe_load(fp)
+
 
 class FakeXarrayLatLon(xr.Dataset):
     def __init__(self, lat, lon):
