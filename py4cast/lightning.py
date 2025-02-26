@@ -484,7 +484,7 @@ class AutoRegressiveLightning(LightningModule):
             self.output_dim_names = batch.outputs.names
             self.output_dtype = batch.outputs.tensor.dtype
 
-        prev_states = batch.inputs        
+        prev_states = batch.inputs
         prediction_list = []
 
         # Here we do the autoregressive prediction looping

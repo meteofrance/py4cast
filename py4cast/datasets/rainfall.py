@@ -93,7 +93,7 @@ class RainfallAccessor(DataAccessor):
 
     @property
     def dataset_name(self):
-        return("rainfall")
+        return "rainfall"
 
     @staticmethod
     def get_grid_coords(param: WeatherParam) -> List[int]:
@@ -172,8 +172,8 @@ class RainfallAccessor(DataAccessor):
                 arr = np.load(data_path)
                 arr = arr["arr_0"]
                 arr = np.where(arr < 0, 0, arr)  # Put 0 outside of radar field
-                arr = arr / 100 # convert from mm10-2 to mm in 5 minutes
-                arr = arr * 12 # convert to mm/h
+                arr = arr / 100  # convert from mm10-2 to mm in 5 minutes
+                arr = arr * 12  # convert to mm/h
             arr = arr[::-1]
             arr_list.append(np.expand_dims(arr, axis=-1))
         return np.stack(arr_list)
