@@ -1,11 +1,11 @@
 import datetime as dt
-import json
 import time
 from pathlib import Path
 from typing import List, Literal
 
 import numpy as np
 import xarray as xr
+import yaml
 from cartopy.crs import PlateCarree, Stereographic
 from tqdm import trange
 from typer import Typer
@@ -203,7 +203,7 @@ def prepare(
 
     print("Load train dataset configuration...")
     with open(path_config, "r") as fp:
-        conf = json.load(fp)
+        conf = yaml.load(fp)
 
     print("instantiate train dataset configuration...")
     train_ds, _, _ = DatasetABC.from_dict(
