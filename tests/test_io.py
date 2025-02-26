@@ -8,6 +8,7 @@ from functools import cached_property
 
 import numpy as np
 import pandas as pd
+import Path
 import pytest
 import torch
 import xarray as xr
@@ -17,7 +18,8 @@ from py4cast.datasets.access import Timestamps
 from py4cast.datasets.base import DatasetABC
 from py4cast.datasets.dummy import DummyAccessor
 from py4cast.io import outputs as out
-from py4cast.settings import DEFAULT_CONFIG_DIR
+
+DUMMY_CONFIG = Path(__file__).parents[1] / "config/CLI/datasets/rainfall.yaml"
 
 
 class FakeXarrayLatLon(xr.Dataset):
@@ -38,9 +40,9 @@ class FakeXarrayLatLon(xr.Dataset):
 def test_nan_mask():
     """Test the make_nan_mask function"""
 
-    _, _, dummy_ds = DatasetABC.from_json(
+    _, _, dummy_ds = DatasetABC.from_dict(
         DummyAccessor,
-        DEFAULT_CONFIG_DIR / "datasets" / "dummy_config.json",
+        DUMMY_CONFIG,
         num_input_steps=1,
         num_pred_steps_train=2,
         num_pred_steps_val_tests=2,
@@ -313,9 +315,9 @@ def test_write_template_dataset():
         ),
         "first solvay congress",
     )
-    _, _, dummy_ds = DatasetABC.from_json(
+    _, _, dummy_ds = DatasetABC.from_dict(
         DummyAccessor,
-        DEFAULT_CONFIG_DIR / "datasets" / "dummy_config.json",
+        DUMMY_CONFIG,
         num_input_steps=1,
         num_pred_steps_train=2,
         num_pred_steps_val_tests=2,
@@ -380,9 +382,9 @@ def test_write_template_dataset():
         ),
         "right now",
     )
-    _, _, dummy_ds = DatasetABC.from_json(
+    _, _, dummy_ds = DatasetABC.from_dict(
         DummyAccessor,
-        DEFAULT_CONFIG_DIR / "datasets" / "dummy_config.json",
+        DUMMY_CONFIG,
         num_input_steps=1,
         num_pred_steps_train=2,
         num_pred_steps_val_tests=2,
@@ -444,9 +446,9 @@ def test_write_template_dataset():
         ),
         "first solvay congress",
     )
-    _, _, dummy_ds = DatasetABC.from_json(
+    _, _, dummy_ds = DatasetABC.from_dict(
         DummyAccessor,
-        DEFAULT_CONFIG_DIR / "datasets" / "dummy_config.json",
+        DUMMY_CONFIG,
         num_input_steps=1,
         num_pred_steps_train=2,
         num_pred_steps_val_tests=2,
@@ -506,9 +508,9 @@ def test_write_template_dataset():
         ),
         "first solvay congress",
     )
-    _, _, dummy_ds = DatasetABC.from_json(
+    _, _, dummy_ds = DatasetABC.from_dict(
         DummyAccessor,
-        DEFAULT_CONFIG_DIR / "datasets" / "dummy_config.json",
+        DUMMY_CONFIG,
         num_input_steps=1,
         num_pred_steps_train=2,
         num_pred_steps_val_tests=2,
