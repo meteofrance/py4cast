@@ -45,8 +45,9 @@ def test_nan_mask():
     """Test the make_nan_mask function"""
 
     _, _, dummy_ds = DatasetABC.from_dict(
-        DummyAccessor,
-        DUMMY_CONFIG,
+        accessor_kls=DummyAccessor,
+        name="dummy",
+        conf=conf,
         num_input_steps=1,
         num_pred_steps_train=2,
         num_pred_steps_val_test=2,
@@ -320,8 +321,9 @@ def test_write_template_dataset():
         "first solvay congress",
     )
     _, _, dummy_ds = DatasetABC.from_dict(
-        DummyAccessor,
-        DUMMY_CONFIG,
+        accessor_kls=DummyAccessor,
+        name="dummy",
+        conf=conf,
         num_input_steps=1,
         num_pred_steps_train=2,
         num_pred_steps_val_test=2,
@@ -387,8 +389,9 @@ def test_write_template_dataset():
         "right now",
     )
     _, _, dummy_ds = DatasetABC.from_dict(
-        DummyAccessor,
-        DUMMY_CONFIG,
+        accessor_kls=DummyAccessor,
+        name="dummy",
+        conf=conf,
         num_input_steps=1,
         num_pred_steps_train=2,
         num_pred_steps_val_test=2,
@@ -451,8 +454,9 @@ def test_write_template_dataset():
         "first solvay congress",
     )
     _, _, dummy_ds = DatasetABC.from_dict(
-        DummyAccessor,
-        DUMMY_CONFIG,
+        accessor_kls=DummyAccessor,
+        name="dummy",
+        conf=conf,
         num_input_steps=1,
         num_pred_steps_train=2,
         num_pred_steps_val_test=2,
@@ -513,8 +517,9 @@ def test_write_template_dataset():
         "first solvay congress",
     )
     _, _, dummy_ds = DatasetABC.from_dict(
-        DummyAccessor,
-        DUMMY_CONFIG,
+        accessor_kls=DummyAccessor,
+        name="dummy",
+        conf=conf,
         num_input_steps=1,
         num_pred_steps_train=2,
         num_pred_steps_val_test=2,
