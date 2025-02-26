@@ -2,9 +2,9 @@ data:
   #args forwarded (linked) to model
   dataset_name: rainfall
   num_input_steps: 2
-  num_pred_steps_train: 1
+  num_pred_steps_train: 3
   num_pred_steps_val_test: 3
-  batch_size: 1
+  batch_size: 4
 
   #other args
   num_workers: 10
@@ -13,18 +13,18 @@ data:
   dataset_conf:
     periods:
       train:
-        start: 20200101
-        end: 20230101
+        start: 20230101
+        end: 20240801
         obs_step: 300
         obs_step_btw_t0: 10800
       valid:
-        start: 20230101
-        end: 20240101
+        start: 20240801
+        end: 20240901
         obs_step: 300
         obs_step_btw_t0: 10800
       test:
-        start: 20240101
-        end: 20250101
+        start: 20240901
+        end: 20241009
         obs_step: 300
         obs_step_btw_t0: 10800
     grid:

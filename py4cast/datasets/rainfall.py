@@ -25,7 +25,7 @@ from py4cast.datasets.base import DatasetABC
 #                          SETTINGS                         #
 #############################################################
 FORMATSTR = "%Y%m%d%H%M"
-SCRATCH_PATH = Path("/scratch/shared/RADAR_DATA/reflectivite_npz")
+SCRATCH_PATH = Path("/scratch/shared/RADAR_DATA/lame_eau_npz")
 DEFAULT_CONFIG = Path(__file__).parents[2] / "config/CLI/datasets/rainfall.yaml"
 
 app = Typer()
@@ -91,6 +91,10 @@ class RainfallAccessor(DataAccessor):
 
         return grid_conf
 
+    @property
+    def dataset_name(self):
+        return("rainfall")
+
     @staticmethod
     def get_grid_coords(param: WeatherParam) -> List[int]:
         return [51.5, 41.0, -6.0, 10.5]
@@ -103,9 +107,9 @@ class RainfallAccessor(DataAccessor):
         if name not in ["precip"]:
             raise NotImplementedError("Param must be in ['precip'].")
         return ParamConfig(
-            unit="kg m**-2",
+            unit="mm/h",
             level_type="surface",
-            long_name="antilope_precipitation",
+            long_name="lame d'eau Serval",
             grid=name,
             grib_name=None,
             grib_param="prec",
@@ -159,7 +163,7 @@ class RainfallAccessor(DataAccessor):
         """
         dates = timestamps.validity_times
         arr_list = []
-        for date in dates:
+        for i, date in enumerate(dates):
             data_path = cls.get_filepath(ds_name, param, date, file_format)
             if file_format == "grib":
                 arr = xr.open_dataset(data_path)
@@ -167,7 +171,9 @@ class RainfallAccessor(DataAccessor):
             else:
                 arr = np.load(data_path)
                 arr = arr["arr_0"]
-            arr = np.nan_to_num(arr)  # Replace nan by 0
+                arr = np.where(arr < 0, 0, arr)  # Put 0 outside of radar field
+                arr = arr / 100 # convert from mm10-2 to mm in 5 minutes
+                arr = arr * 12 # convert to mm/h
             arr = arr[::-1]
             arr_list.append(np.expand_dims(arr, axis=-1))
         return np.stack(arr_list)
