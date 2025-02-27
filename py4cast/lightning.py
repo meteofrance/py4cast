@@ -510,8 +510,6 @@ class AutoRegressiveLightning(LightningModule):
                 # Graph (B, N_grid, d_f) or Conv (B, N_lat,N_lon d_f)
                 if self.channels_last:
                     x = x.to(memory_format=torch.channels_last)
-                # if self.dataset_name == "rainfall":
-                #     x = torch.nan_to_num(x, nan=-1)
                 if self.mask_ratio != 0:  # maskedautoencoder strategy
                     x = self.mask_tensor(x)
                 # Here we adapt our tensors to the order of dimensions of CNNs and ViTs

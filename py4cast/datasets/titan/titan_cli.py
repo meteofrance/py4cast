@@ -1,4 +1,4 @@
-import json
+import yaml
 import time
 from pathlib import Path
 
@@ -76,7 +76,7 @@ def prepare(
 
     print("Load dataset configuration...")
     with open(path_config, "r") as fp:
-        conf = json.load(fp)
+        conf = yaml.safe_load(fp)
 
     print("Creating folders...")
     train_ds, valid_ds, test_ds = DatasetABC.from_dict(
@@ -126,9 +126,10 @@ def prepare(
 @app.command()
 def describe(path_config: Path = DEFAULT_CONFIG, dataset_name: str = "titan"):
     """Describes Titan."""
-    train_ds, _, _ = DatasetABC.from_json(
+    train_ds, _, _ = DatasetABC.from_dict(
         TitanAccessor,
         fname=path_config,
+        conf=conf,
         num_input_steps=2,
         num_pred_steps_train=1,
         num_pred_steps_val_tests=5,
@@ -142,9 +143,10 @@ def describe(path_config: Path = DEFAULT_CONFIG, dataset_name: str = "titan"):
 @app.command()
 def plot(path_config: Path = DEFAULT_CONFIG, dataset_name: str = "titan"):
     """Plots a png and a gif for one sample."""
-    train_ds, _, _ = DatasetABC.from_json(
+    train_ds, _, _ = DatasetABC.from_dict(
         TitanAccessor,
         fname=path_config,
+        conf=conf,
         num_input_steps=2,
         num_pred_steps_train=1,
         num_pred_steps_val_tests=5,
@@ -163,9 +165,10 @@ def speedtest(
     path_config: Path = DEFAULT_CONFIG, n_iter: int = 5, dataset_name: str = "titan"
 ):
     """Makes a loading speed test."""
-    train_ds, _, _ = DatasetABC.from_json(
+    train_ds, _, _ = DatasetABC.from_dict(
         TitanAccessor,
         fname=path_config,
+        conf=conf,
         num_input_steps=2,
         num_pred_steps_train=1,
         num_pred_steps_val_tests=5,

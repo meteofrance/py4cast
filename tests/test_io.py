@@ -23,7 +23,7 @@ from py4cast.io import outputs as out
 DUMMY_CONFIG = Path(__file__).parents[1] / "config/CLI/dataset/dummy.yaml"
 
 with open(DUMMY_CONFIG, "r") as fp:
-    conf = yaml.safe_load(fp)["dataset_conf"]
+    conf = yaml.safe_load(fp)["data"]["dataset_conf"]
 
 
 class FakeXarrayLatLon(xr.Dataset):

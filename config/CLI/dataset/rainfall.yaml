@@ -28,7 +28,7 @@ data:
         obs_step: 300
         obs_step_btw_t0: 10800
     grid:
-      name: 
+      name: rainfallgrid
       border_size: 0
       proj_name: Stereographic
       projection_kwargs:
