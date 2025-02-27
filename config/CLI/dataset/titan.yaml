@@ -3,12 +3,12 @@ data:
   dataset_name: titan_lbc_refacto
   num_input_steps: 1
   num_pred_steps_train: 1
-  num_pred_steps_val_test: 1
-  batch_size: 2
+  num_pred_steps_val_test: 24
+  batch_size: 1
 
   #other args
-  num_workers: 10
-  prefetch_factor: null
+  num_workers: 4
+  prefetch_factor: 2
   pin_memory: False 
   dataset_conf:
     periods:
@@ -22,7 +22,7 @@ data:
         obs_step: 3600
       test:
         start: 20231201
-        end: 20231231
+        end: 20231201
         obs_step: 3600
     grid:
       name: PAAROME_1S40

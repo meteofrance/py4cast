@@ -7,8 +7,11 @@ from typing import Any, Tuple, Union
 import numpy as np
 import pandas as pd
 import torch
+
+import epygram
 import xarray as xr
 from cfgrib import xarray_to_grib as xtg
+
 from dataclasses_json import dataclass_json
 from mfai.torch.namedtensor import NamedTensor
 
@@ -55,8 +58,9 @@ def save_named_tensors_to_grib(
     """
 
     params = ds.params
+    parameter_namer = ds.accessor.parameter_namer
 
-    grib_features = get_grib_param_dataframe(pred, params)
+    grib_features = get_grib_param_dataframe(pred, params, parameter_namer)
     grib_groups = get_grib_groups(grib_features)
     # Get the valid hours for a list of timestamps
     validtimes = compute_hours_of_day(
@@ -64,7 +68,7 @@ def save_named_tensors_to_grib(
     )
     # Get number of prediction
     predicted_time_steps = len(sample.output_timestamps.validity_times)
-
+    tmplt_ds = epygram.formats.resource(Path(saving_settings.directory) / saving_settings.template_grib, 'r')
     model_ds = {
         c: xr.open_dataset(
             Path(saving_settings.directory) / saving_settings.template_grib,
@@ -90,11 +94,40 @@ def save_named_tensors_to_grib(
         )
         for c in grib_groups.keys()
     }
+    gg = next(iter(grib_groups))
+    _ds = model_ds[gg]
+    pass
+    # conversion_dict ={}
+    # conversion_dict['aro_t2m_2m'] = {'editionNumber': 2, 'name': '2 metre temperature', 'shortName': '2t', 'discipline': 0, 'parameterCategory': 0, 'parameterNumber': 0, 'typeOfFirstFixedSurface': 103, 'level': 2, 'typeOfSecondFixedSurface': 255, 'tablesVersion': 15, 'productDefinitionTemplateNumber': 1}
 
     for t_idx in range(predicted_time_steps):
         leadtime = t_idx + 1
+        raw_data = pred.select_dim("timestep", t_idx, bare_tensor=False)
+
+        w = epygram.formats.resource(f"/scratch/shared/py4cast/gribs_writing/todel/ech_{leadtime}.grib",'w',fmt='GRIB')
+
+        temp_field = {'editionNumber': 2, 'name': '2 metre temperature', 'shortName': '2t', 'discipline': 0, 'parameterCategory': 0, 'parameterNumber': 0, 'typeOfFirstFixedSurface': 103, 'level': 2, 'typeOfSecondFixedSurface': 255, 'tablesVersion': 15, 'productDefinitionTemplateNumber': 1}
+        for feature in pred.feature_names:
+
+            if feature in ["aro_t2m_2m", "t2m_2_heightAboveGround"]:
+                f = tmplt_ds.readfield(temp_field).clone()
+                lon, lat = f.geometry.get_lonlat_grid()
+                
+                # nanmask, latlon = make_nan_mask(ds, model_ds['t2m_heightAboveGround'])
+                nanmask, latlon = make_nan_mask2(ds, lon, lat)
+                (
+                    latmin,
+                    latmax,
+                    longmin,
+                    longmax,
+                ) = latlon
+                
+
+        # data = raw_data.index_select_dim("features", feature_idx).squeeze().cpu().numpy()
+        
+
         for group in model_ds.keys():
-            raw_data = pred.select_dim("timestep", t_idx, bare_tensor=False)
+            
             storable = write_storable_dataset(
                 pred,
                 ds,
@@ -148,7 +181,6 @@ def write_storable_dataset(
         xr.Dataset: the template dataset, filled with data from raw_data, in the correct format
     """
     receiver_ds = deepcopy(template_ds)
-
     # if the shape of the dataset grid doesn't match grib template, fill the rest of the data with NaNs
     nanmask, latlon = make_nan_mask(ds, receiver_ds)
     (
@@ -276,7 +308,7 @@ def get_output_filename(
     return path_to_file
 
 
-def get_grib_param_dataframe(pred: NamedTensor, params: list) -> pd.DataFrame:
+def get_grib_param_dataframe(pred: NamedTensor, params: list, parameter_namer) -> pd.DataFrame:
     """Match feature names of the pred named tensor to grid-readable levels and parameter names.
     Throw warnings if feature names are found that do not match any parameter (these features will not be saved).
     Args:
@@ -292,12 +324,13 @@ def get_grib_param_dataframe(pred: NamedTensor, params: list) -> pd.DataFrame:
     unmatched_feature_names = set(pred.feature_names)
     list_features = []
     for param in params:
+        trial_name = parameter_namer(param)
         level, name, tol = (
             param.level,
             param.name,
             param.level_type,
         )
-        trial_name = f"{name}_{level}_{tol}"
+        # trial_name = f"{name}_{level}_{tol}"
         if trial_name in pred_feature_names:
             list_features.append(
                 pd.DataFrame(
@@ -456,6 +489,93 @@ def make_nan_mask(
             )[0],
             np.where(
                 np.round(template_dataset.longitude.values, 5)
+                == round(infer_dataset.grid.lon.max(), 5)
+            )[0],
+        )
+
+        latmin, latmax, longmin, longmax = (
+            latmin.item(),
+            latmax.item(),
+            longmin.item(),
+            longmax.item(),
+        )
+
+    else:
+        raise ValueError(
+            f"Lat/Lon dims of the {infer_dataset} do not fit in template grid, cannot write grib."
+        )
+
+    return nanmask, (latmin, latmax, longmin, longmax)
+
+
+
+
+def make_nan_mask2(
+    infer_dataset: DatasetABC, lon, lat
+) -> Tuple[Union[np.ndarray, None], Tuple]:
+    """This is to ensure that the infer_dataset grid can be matched with the grib template's grid
+    (at this point grib data is passed to an xarray Dataset).
+    If the inference grid is stricly embeddable in the template one, then it will be padded with NaNs.
+    If the two grids exactly match, nothing is done.
+    If the two grids do not match, this function raises an exception.
+
+    Args:
+        infer_dataset (DatasetABC): the inference dataset, should possess a grid attribute.
+        template_dataset (xr.Dataset): the xarray Dataset created from the template grib file.
+
+    Returns:
+        Tuple[Union[np.ndarray, None], Tuple]:
+            nanmask : np.ndarray of the shape of template_dataset grid, filled with nans, or None if the grids match.
+            (latmin, latmax, longmin, longmax) : int, indices of the infer grid frontier in the template grid.
+    """
+    try:
+        assert hasattr(infer_dataset, "grid")
+    except AssertionError:
+        raise NotImplementedError(
+            f"The dataset {infer_dataset} has no grid attribute, cannot write grib."
+        )
+
+    if (
+        (
+            np.array(lat.min())
+            <= infer_dataset.grid.lat[:, 0].min()
+        )
+        and (
+            np.array(lat.max())
+            >= infer_dataset.grid.lat[:, 0].max()
+        )
+        and (
+            np.array(lon.min())
+            <= infer_dataset.grid.lon[:, 0].min()
+        )
+        and (
+            np.array(lon.max())
+            >= infer_dataset.grid.lon[:, 0].max()
+        )
+    ):
+        nanmask = np.empty(
+            lat.shape
+        )
+        nanmask[:] = np.nan
+        # matching latitudes
+        latmin, latmax = (
+            np.where(
+                np.round(lat[:,0], 5)
+                == round(infer_dataset.grid.lat.min(), 5)
+            )[0],
+            np.where(
+                np.round(lat[:,0], 5)
+                == round(infer_dataset.grid.lat.max(), 5)
+            )[0],
+        )
+        # matching longitudes
+        longmin, longmax = (
+            np.where(
+                np.round(lon[0], 5)
+                == round(infer_dataset.grid.lon.min(), 5)
+            )[0],
+            np.where(
+                np.round(lon[0], 5)
                 == round(infer_dataset.grid.lon.max(), 5)
             )[0],
         )

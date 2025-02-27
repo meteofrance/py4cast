@@ -75,6 +75,7 @@ class PlDataModule(LightningDataModule):
             num_pred_steps_val_test,
             dataset_conf,
         )
+        self.test_ds[0]
 
     @property
     def train_dataset_info(self) -> DatasetInfo:
@@ -970,7 +971,7 @@ class AutoRegressiveLightning(LightningModule):
                     f"Filename fmt has {ph} placeholders,\
                     but {kw} output_kwargs and {fi} sample identifiers."
                 )
-
+        
         save_named_tensors_to_grib(
             preds, self.infer_ds, self.infer_ds.sample_list[0], save_settings
         )

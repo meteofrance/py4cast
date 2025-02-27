@@ -3,7 +3,7 @@ data:
   dataset_name: Poesy
   num_input_steps: 1
   num_pred_steps_train: 1
-  num_pred_steps_val_test: 1
+  num_pred_steps_val_test: 24
   batch_size: 1
 
   #other args
@@ -22,7 +22,7 @@ data:
         refcst_leadtime_step_in_sec: 3600
       test:
         start: 20210616
-        end: 20210716
+        end: 20210616
         refcst_daily_runs:
           - 75600
         refcst_leadtime_start_in_sec: 3600
@@ -70,4 +70,3 @@ data:
           - 0
     members:
       - 0
-      - 1
