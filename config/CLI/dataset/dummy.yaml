@@ -12,11 +12,11 @@ data:
   pin_memory: False 
   dataset_conf:
     grid:
-      border_size: 0
       name: dummygrid
+      border_size: 0
+      subdomain: [0, 64, 0, 64]
       proj_name: PlateCarree
       projection_kwargs: {}
-      subdomain: [0, 64, 0, 64]
     params:
       dummy_parameter:
         kind: input_output

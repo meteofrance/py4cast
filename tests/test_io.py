@@ -5,19 +5,25 @@ Unit tests for datasets and NamedTensor.
 import datetime
 from dataclasses import dataclass, field
 from functools import cached_property
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import pytest
 import torch
 import xarray as xr
+import yaml
 from mfai.torch.namedtensor import NamedTensor
 
 from py4cast.datasets.access import Timestamps
 from py4cast.datasets.base import DatasetABC
 from py4cast.datasets.dummy import DummyAccessor
 from py4cast.io import outputs as out
-from py4cast.settings import DEFAULT_CONFIG_DIR
+
+DUMMY_CONFIG = Path(__file__).parents[1] / "config/CLI/dataset/dummy.yaml"
+
+with open(DUMMY_CONFIG, "r") as fp:
+    conf = yaml.safe_load(fp)["data"]["dataset_conf"]
 
 
 class FakeXarrayLatLon(xr.Dataset):
@@ -38,12 +44,13 @@ class FakeXarrayLatLon(xr.Dataset):
 def test_nan_mask():
     """Test the make_nan_mask function"""
 
-    _, _, dummy_ds = DatasetABC.from_json(
-        DummyAccessor,
-        DEFAULT_CONFIG_DIR / "datasets" / "dummy_config.json",
+    _, _, dummy_ds = DatasetABC.from_dict(
+        accessor_kls=DummyAccessor,
+        name="dummy",
+        conf=conf,
         num_input_steps=1,
         num_pred_steps_train=2,
-        num_pred_steps_val_tests=2,
+        num_pred_steps_val_test=2,
     )
 
     exact_lat = (np.arange(64) - 16) * 0.5
@@ -313,12 +320,13 @@ def test_write_template_dataset():
         ),
         "first solvay congress",
     )
-    _, _, dummy_ds = DatasetABC.from_json(
-        DummyAccessor,
-        DEFAULT_CONFIG_DIR / "datasets" / "dummy_config.json",
+    _, _, dummy_ds = DatasetABC.from_dict(
+        accessor_kls=DummyAccessor,
+        name="dummy",
+        conf=conf,
         num_input_steps=1,
         num_pred_steps_train=2,
-        num_pred_steps_val_tests=2,
+        num_pred_steps_val_test=2,
     )
 
     pred = NamedTensor(
@@ -380,12 +388,13 @@ def test_write_template_dataset():
         ),
         "right now",
     )
-    _, _, dummy_ds = DatasetABC.from_json(
-        DummyAccessor,
-        DEFAULT_CONFIG_DIR / "datasets" / "dummy_config.json",
+    _, _, dummy_ds = DatasetABC.from_dict(
+        accessor_kls=DummyAccessor,
+        name="dummy",
+        conf=conf,
         num_input_steps=1,
         num_pred_steps_train=2,
-        num_pred_steps_val_tests=2,
+        num_pred_steps_val_test=2,
     )
     pred = NamedTensor(
         torch.ones((1, 5, 2, 64, 64), dtype=torch.float32) * 3.14160000,
@@ -444,12 +453,13 @@ def test_write_template_dataset():
         ),
         "first solvay congress",
     )
-    _, _, dummy_ds = DatasetABC.from_json(
-        DummyAccessor,
-        DEFAULT_CONFIG_DIR / "datasets" / "dummy_config.json",
+    _, _, dummy_ds = DatasetABC.from_dict(
+        accessor_kls=DummyAccessor,
+        name="dummy",
+        conf=conf,
         num_input_steps=1,
         num_pred_steps_train=2,
-        num_pred_steps_val_tests=2,
+        num_pred_steps_val_test=2,
     )
 
     pred = NamedTensor(
@@ -506,12 +516,13 @@ def test_write_template_dataset():
         ),
         "first solvay congress",
     )
-    _, _, dummy_ds = DatasetABC.from_json(
-        DummyAccessor,
-        DEFAULT_CONFIG_DIR / "datasets" / "dummy_config.json",
+    _, _, dummy_ds = DatasetABC.from_dict(
+        accessor_kls=DummyAccessor,
+        name="dummy",
+        conf=conf,
         num_input_steps=1,
         num_pred_steps_train=2,
-        num_pred_steps_val_tests=2,
+        num_pred_steps_val_test=2,
     )
 
     pred = NamedTensor(
