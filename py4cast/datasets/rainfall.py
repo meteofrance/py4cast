@@ -31,7 +31,9 @@ DEFAULT_CONFIG = Path(__file__).parents[2] / "config/CLI/dataset/rainfall.yaml"
 app = Typer()
 
 
-def domain_to_extent(domain): # Cartopy needs regular lat lon data so conversion is needed
+def domain_to_extent(
+    domain,
+):  # Cartopy needs regular lat lon data so conversion is needed
     crs = Stereographic(central_latitude=45)
     lower_right = crs.transform_point(*domain["lower_right"], PlateCarree())
     upper_right = crs.transform_point(*domain["upper_right"], PlateCarree())
@@ -64,7 +66,7 @@ class RainfallAccessor(DataAccessor):
         startlon, endlon, endlat, startlat = domain_to_extent(DOMAIN)
         lat = np.linspace(startlat, endlat, 1536)
         lon = np.linspace(startlon, endlon, 1536)
-        altitude = np.zeros(shape) # Dummy topography mask
+        altitude = np.zeros(shape)  # Dummy topography mask
         landsea_mask = None
         grid_conf = GridConfig(
             shape,

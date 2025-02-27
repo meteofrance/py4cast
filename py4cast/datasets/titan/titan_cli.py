@@ -1,9 +1,9 @@
-import yaml
 import time
 from pathlib import Path
 
 import numpy as np
 import tqdm
+import yaml
 from typer import Typer
 
 from py4cast.datasets import compute_dataset_stats as cds
@@ -126,6 +126,10 @@ def prepare(
 @app.command()
 def describe(path_config: Path = DEFAULT_CONFIG, dataset_name: str = "titan"):
     """Describes Titan."""
+    print("Load dataset configuration...")
+    with open(path_config, "r") as fp:
+        conf = yaml.safe_load(fp)
+
     train_ds, _, _ = DatasetABC.from_dict(
         TitanAccessor,
         fname=path_config,
@@ -143,6 +147,10 @@ def describe(path_config: Path = DEFAULT_CONFIG, dataset_name: str = "titan"):
 @app.command()
 def plot(path_config: Path = DEFAULT_CONFIG, dataset_name: str = "titan"):
     """Plots a png and a gif for one sample."""
+    print("Load dataset configuration...")
+    with open(path_config, "r") as fp:
+        conf = yaml.safe_load(fp)
+
     train_ds, _, _ = DatasetABC.from_dict(
         TitanAccessor,
         fname=path_config,
@@ -165,6 +173,10 @@ def speedtest(
     path_config: Path = DEFAULT_CONFIG, n_iter: int = 5, dataset_name: str = "titan"
 ):
     """Makes a loading speed test."""
+    print("Load dataset configuration...")
+    with open(path_config, "r") as fp:
+        conf = yaml.safe_load(fp)
+
     train_ds, _, _ = DatasetABC.from_dict(
         TitanAccessor,
         fname=path_config,
