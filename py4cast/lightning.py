@@ -407,7 +407,6 @@ class AutoRegressiveLightning(LightningModule):
     def on_fit_start(self):
         self.log_hparams_tb()
         self.print_summary_model()
-        self.inspect_tensors()
 
     #############################################################
     #                          FORWARD                          #
