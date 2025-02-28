@@ -66,7 +66,7 @@ class RainfallAccessor(DataAccessor):
         startlon, endlon, endlat, startlat = domain_to_extent(DOMAIN)
         lat = np.linspace(startlat, endlat, 1536)
         lon = np.linspace(startlon, endlon, 1536)
-        altitude = np.zeros(shape)  # Dummy topography mask
+        altitude = np.ones(shape)  # Dummy topography mask, if np.zeros then NaN
         landsea_mask = None
         grid_conf = GridConfig(
             shape,
