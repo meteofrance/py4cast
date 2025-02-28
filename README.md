@@ -139,7 +139,7 @@ For Meteo-France user, you should export the variable `INJECT_MF_CERT` to use th
 ```sh
 export INJECT_MF_CERT=1
 ```
-Then, build with the following command 
+Then, build with the following command
 ```sh
 bash ./oci-image-build.sh --runtime docker
 ```
@@ -374,9 +374,9 @@ with the proxy path depending on your machine.
 
 ## Delving into the design
 
-main.py uses a LightningCLI to train (`bin/main.py fit`), test (`bin/main.py test`) or predict (`bin/main.py predict`). 
+``main.py` uses a LightningCLI to train (`bin/main.py fit`), test (`bin/main.py test`) or predict (`bin/main.py predict`).
 
-This LightningCLI calls the LightningModule (where the model is initialized and methods are written) and the DataModule (where the dataset is initialized). 
+This LightningCLI calls the LightningModule (where the model is initialized and training steps are defined) and the DataModule (where the dataset is initialized).
 
 The native args of the LightningCLI (trainer), the args of the LightningModule (model) and the args of the DataModule (data) are accessible through the trainer.yaml, model.yaml and dataset.yaml. Here is a standard command line :
 ```bash
@@ -384,37 +384,37 @@ usage : python bin/main.py <mode> --config config/CLI/trainer.yaml --config conf
 ```
 When you want to change an argument, you can either modify the config.yaml where it is parsed or override it by parsing it directly. For instance if you want to change the loss_name argument accessible in unetrpp.yaml, you can use the following command line :
 ```bash
-usage : python bin/main.py <mode> --config config/CLI/trainer.yaml --config config/CLI/dataset/<datatset>.yaml --config config/CLI/model/<model>.yaml --model.loss_name mae
+usage : python bin/main.py <fit/test/predict> --config config/CLI/trainer.yaml --config config/CLI/dataset/<datatset>.yaml --config config/CLI/model/<model>.yaml --model.loss_name mae
 ```
 
-Quick note: `trainer.fast_dev_run` is a useful option to try to fit the model with minimal computation. It fixes `max_epochs: 1` and `limit_train_batches: 1`
+Quick note: `trainer.fast_dev_run` is a useful option to try to fit the model with minimal computation. It fixes `max_epochs: 1`, `limit_train_batches: 1` and `logger: None`.
 
 ### Dataset initialization
 
-As in neural-lam, before training you must first compute the mean and std of each feature.
+As in neural-lam, before training you must first prepare the dataset by computing the mean and std of each feature. In the case of Titan, we also convert the grib files to npy for quicker loading times during training.
 
-To compute the stats of the Titan dataset:
+To prepare the Titan dataset:
 
 ```bash
 python py4cast/datasets/titan/titan_cli.py prepare
 ```
 
-To train on a dataset with its default settings just pass the name of the dataset (all lowercase) :
+To train on a dataset with its default settings just pass the yaml config file of the dataset (all lowercase) :
 
 ```bash
 python bin/main.py fit --config config/CLI/trainer.yaml --config config/CLI/dataset/titan.yaml --config config/CLI/model/hilam.yaml
 ```
 
-You can override the dataset default configuration file :
+To change the configuration, you can:
 
-- either by modifying dataset.yaml :
+- modify the dataset yaml file:
 ```bash
 data:
-  dataset_conf: config/datasets/titan_refacto2.json
+  num_input_steps: 3
 ```
-- or by parsing the argument :
+- or parse the argument via the CLI:
 ```bash
-python bin/main.py fit --config config/CLI/trainer.yaml --config config/CLI/dataset/titan.yaml --config config/CLI/model/hilam.yaml --data.dataset_conf config/datasets/titan_refacto2.json
+python bin/main.py fit --config config/CLI/trainer.yaml --config config/CLI/dataset/titan.yaml --config config/CLI/model/hilam.yaml --data.num_input_steps 3
 ```
 
 [Details on available datasets.](doc/features.md/#available-datasets)
@@ -423,7 +423,7 @@ python bin/main.py fit --config config/CLI/trainer.yaml --config config/CLI/data
 
 1. **Configuring the neural network**
 
-To train on a dataset using a network with its default settings just pass the name of the architecture (all lowercase) as shown below:
+To train on a dataset using a network with its default settings just pass the yaml config file of the architecture (all lowercase) as shown below:
 
 ```bash
 python bin/main.py fit --config config/CLI/trainer.yaml --config config/CLI/dataset/smeagol.yaml --config config/CLI/model/hilam.yaml
@@ -431,9 +431,9 @@ python bin/main.py fit --config config/CLI/trainer.yaml --config config/CLI/data
 python bin/main.py fit --config config/CLI/trainer.yaml --config config/CLI/dataset/smeagol.yaml --config config/CLI/model/halfunet.yaml
 ```
 
-You can override some settings of the model using a json config file (here we increase the number of filter to 128 and use ghost modules):
+You can change the settings of the model:
 
-- either by modifying model.yaml :
+- either by modifying the model yaml file:
 ```bash
 model:
   settings_init_args:
@@ -499,11 +499,20 @@ Then you can access the tensorboard server at the following address: `http://YOU
 
 #### MLFlow
 
-Optionally, you can use MLFlow, in addition to Tensorboard, to track your experiment and log your model. To activate the MLFlow logger simply add the `--mlflow_log` option on the `bin/train.py` command line.
+Optionally, you can use MLFlow, in addition to Tensorboard, to track your experiment and log your model. To activate the MLFlow logger uncomment the MLFlow configuration in the `trainer.yaml`:
+
+```yaml
+    - class_path: lightning.pytorch.loggers.MLFlowLogger
+      init_args:
+        experiment_name: "$MLFLOW_EXPERIMENT_NAME"
+        run_name: run_name
+        log_model: True
+        save_dir: /scratch/shared/py4cast/logs/test_cli/mlflow/
+```
 
 **Local usage**
 
-Without a MLFlow server, the logs are stored in your root path, at `PY4CAST_ROOTDIR/logs/mlflow`.
+Without a MLFlow server, the logs are stored in the specified `save_dir`.
 
 **With a MLFlow server**
 
@@ -534,7 +543,7 @@ You can compare multiple trained models on specific case studies and visualize t
 
 Warnings:
 - For now this script only works with models trained with Titan dataset.
-- If you want to use AROME as a model, you have to manually download the forecast before.
+- If you want to use AROME as a comparison model, you have to manually download the forecast before.
 
 ```bash
 Usage: gif_comparison.py [-h] --ckpt CKPT --date DATE [--num_pred_steps NUM_PRED_STEPS]

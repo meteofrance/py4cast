@@ -17,26 +17,6 @@ from py4cast.settings import CACHE_DIR
 
 
 class DummyAccessor(DataAccessor):
-    print("importing DummyAccessor automatically creates directory and dummy config")
-    config = {
-        "periods": {
-            "train": {"start": 20230101, "end": 20230101, "obs_step": 3600},
-            "valid": {"start": 20230101, "end": 20230101, "obs_step": 3600},
-            "test": {"start": 20230101, "end": 20230101, "obs_step": 3600},
-        },
-        "settings": {"standardize": "true", "file_format": "npy"},
-        "grid": {
-            "name": "dummygrid",
-            "border_size": 0,
-            "subdomain": [0, 64, 0, 64],
-            "proj_name": "PlateCarree",
-            "projection_kwargs": {},
-        },
-        "params": {
-            "dummy_parameter": {"levels": [500], "kind": "input_output"},
-        },
-    }
-
     def cache_dir(self, name: str, grid: Grid) -> Path:
         path = CACHE_DIR / f"{name}_{grid.name}"
         os.makedirs(path, mode=0o777, exist_ok=True)
