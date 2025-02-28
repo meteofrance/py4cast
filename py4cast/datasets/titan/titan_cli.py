@@ -7,10 +7,9 @@ from typer import Typer
 from tqdm import tqdm, trange
 
 from py4cast.datasets import compute_dataset_stats as cds
-from py4cast.datasets.access import Timestamps
 from py4cast.datasets.base import DatasetABC
 from py4cast.datasets.titan import TitanAccessor
-from py4cast.datasets.titan.settings import DEFAULT_CONFIG, FORMATSTR
+from py4cast.datasets.titan.settings import DEFAULT_CONFIG
 
 app = Typer()
 
