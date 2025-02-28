@@ -27,7 +27,12 @@ from py4cast.datasets.base import DatasetABC
 FORMATSTR = "%Y%m%d%H%M"
 SCRATCH_PATH = Path("/scratch/shared/RADAR_DATA/lame_eau_npz")
 DEFAULT_CONFIG = Path(__file__).parents[2] / "config/CLI/dataset/rainfall.yaml"
-
+DOMAIN = {
+    "upper_left": (-9.965, 53.670),
+    "lower_right": (10.259217, 39.46785),
+    "upper_right": (14.564706, 53.071644),
+    "lower_left": (-6.977881, 39.852361),
+}
 app = Typer()
 
 
@@ -56,12 +61,6 @@ class RainfallAccessor(DataAccessor):
     #############################################################
     @staticmethod
     def load_grid_info(name: str) -> GridConfig:
-        DOMAIN = {
-            "upper_left": (-9.965, 53.670),
-            "lower_right": (10.259217, 39.46785),
-            "upper_right": (14.564706, 53.071644),
-            "lower_left": (-6.977881, 39.852361),
-        }
         shape = [1536, 1536]
         startlon, endlon, endlat, startlat = domain_to_extent(DOMAIN)
         lat = np.linspace(startlat, endlat, 1536)
@@ -149,7 +148,7 @@ class RainfallAccessor(DataAccessor):
         """
         dates = timestamps.validity_times
         arr_list = []
-        for i, date in enumerate(dates):
+        for date in dates:
             data_path = cls.get_filepath(ds_name, param, date, file_format)
             if file_format == "grib":
                 arr = xr.open_dataset(data_path)
