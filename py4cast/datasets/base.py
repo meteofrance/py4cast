@@ -157,7 +157,9 @@ class ItemBatch(Item):
     @cached_property
     def num_input_steps(self):
         if self.inputs.dim_size("timestep") is None:
+            # if downscaling
             return self.outputs.dim_size("timestep")
+        # if not downscaling
         return self.inputs.dim_size("timestep")
 
     @cached_property
