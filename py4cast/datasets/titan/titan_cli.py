@@ -1,10 +1,10 @@
 import time
 from pathlib import Path
-import yaml
 
 import numpy as np
-from typer import Typer
+import yaml
 from tqdm import tqdm, trange
+from typer import Typer
 
 from py4cast.datasets import compute_dataset_stats as cds
 from py4cast.datasets.base import DatasetABC
@@ -25,7 +25,7 @@ def convert_samples_grib2_numpy(dataset: DatasetABC):
                     dataset.name, p, date, file_format="npy"
                 )
                 if dest_file.exists():
-                    continue   # already converted
+                    continue  # already converted
                 try:
                     arr = TitanAccessor.load_data_for_date(
                         dataset.name, p, date, file_format="grib"
@@ -106,7 +106,7 @@ def prepare(
         cds.compute_time_step_stats(train_ds)
 
 
-def load_simple_train_ds(path_config:Path):
+def load_simple_train_ds(path_config: Path):
     print("Using config", path_config)
     with open(path_config, "r") as fp:
         conf = yaml.safe_load(fp)["data"]
@@ -145,9 +145,7 @@ def plot(path_config: Path = DEFAULT_CONFIG):
 
 
 @app.command()
-def speedtest(
-    path_config: Path = DEFAULT_CONFIG, n_iter: int = 5
-):
+def speedtest(path_config: Path = DEFAULT_CONFIG, n_iter: int = 5):
     """Makes a loading speed test."""
     train_ds = load_simple_train_ds(path_config)
     data_iter = iter(train_ds.torch_dataloader())

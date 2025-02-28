@@ -17,7 +17,6 @@ from py4cast.settings import CACHE_DIR
 
 
 class DummyAccessor(DataAccessor):
-
     def cache_dir(self, name: str, grid: Grid) -> Path:
         path = CACHE_DIR / f"{name}_{grid.name}"
         os.makedirs(path, mode=0o777, exist_ok=True)
