@@ -61,10 +61,10 @@ class RainfallAccessor(DataAccessor):
     #############################################################
     @staticmethod
     def load_grid_info(name: str) -> GridConfig:
-        shape = [1536, 1536]
+        shape = (1536, 1536)
         startlon, endlon, endlat, startlat = domain_to_extent(DOMAIN)
-        lat = np.linspace(startlat, endlat, 1536)
-        lon = np.linspace(startlon, endlon, 1536)
+        lat = np.linspace(startlat, endlat, shape[0])
+        lon = np.linspace(startlon, endlon, shape[1])
         altitude = np.ones(shape)  # Dummy topography mask, if np.zeros then NaN
         landsea_mask = None
         grid_conf = GridConfig(
