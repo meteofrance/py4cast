@@ -1,11 +1,12 @@
 import datetime as dt
-import json
 import time
 from pathlib import Path
 from typing import List, Literal
 
 import numpy as np
 import xarray as xr
+import yaml
+from cartopy.crs import PlateCarree, Stereographic
 from tqdm import trange
 from typer import Typer
 
@@ -24,10 +25,27 @@ from py4cast.datasets.base import DatasetABC
 #                          SETTINGS                         #
 #############################################################
 FORMATSTR = "%Y%m%d%H%M"
-SCRATCH_PATH = Path("/scratch/shared/RADAR_DATA/reflectivite_npz")
-DEFAULT_CONFIG = Path(__file__).parents[2] / "config/datasets/rainfall.json"
-
+SCRATCH_PATH = Path("/scratch/shared/RADAR_DATA/lame_eau_npz")
+DEFAULT_CONFIG = Path(__file__).parents[2] / "config/CLI/dataset/rainfall.yaml"
+DOMAIN = {
+    "upper_left": (-9.965, 53.670),
+    "lower_right": (10.259217, 39.46785),
+    "upper_right": (14.564706, 53.071644),
+    "lower_left": (-6.977881, 39.852361),
+}
 app = Typer()
+
+
+def domain_to_extent(
+    domain,
+):  # Cartopy needs regular lat lon data so conversion is needed
+    crs = Stereographic(central_latitude=45)
+    lower_right = crs.transform_point(*domain["lower_right"], PlateCarree())
+    upper_right = crs.transform_point(*domain["upper_right"], PlateCarree())
+    lower_left = crs.transform_point(*domain["lower_left"], PlateCarree())
+    maxy, miny = upper_right[1], lower_left[1]
+    minx, maxx = lower_left[0], lower_right[0]
+    return (minx, maxx, miny, maxy)
 
 
 class RainfallAccessor(DataAccessor):
@@ -43,21 +61,24 @@ class RainfallAccessor(DataAccessor):
     #############################################################
     @staticmethod
     def load_grid_info(name: str) -> GridConfig:
-        if name not in ["FRANXL1S100"]:
-            raise NotImplementedError("Grid must be in ['FRANXL1S100'].")
-
-        path = SCRATCH_PATH / f"conf_{name}.grib"
-        conf_ds = xr.open_dataset(path)
-        altitude = np.zeros(conf_ds.prec.shape)
+        shape = (1536, 1536)
+        startlon, endlon, endlat, startlat = domain_to_extent(DOMAIN)
+        lat = np.linspace(startlat, endlat, shape[0])
+        lon = np.linspace(startlon, endlon, shape[1])
+        altitude = np.ones(shape)  # Dummy topography mask, if np.zeros then NaN
         landsea_mask = None
         grid_conf = GridConfig(
-            conf_ds.prec.shape,
-            conf_ds.latitude.values,
-            conf_ds.longitude.values,
+            shape,
+            lat,
+            lon,
             altitude,
             landsea_mask,
         )
         return grid_conf
+
+    @property
+    def dataset_name(self):
+        return "rainfall"
 
     @staticmethod
     def get_grid_coords(param: WeatherParam) -> List[int]:
@@ -71,9 +92,9 @@ class RainfallAccessor(DataAccessor):
         if name not in ["precip"]:
             raise NotImplementedError("Param must be in ['precip'].")
         return ParamConfig(
-            unit="kg m**-2",
+            unit="mm/h",
             level_type="surface",
-            long_name="antilope_precipitation",
+            long_name="lame d'eau Serval",
             grid=name,
             grib_name=None,
             grib_param="prec",
@@ -98,7 +119,7 @@ class RainfallAccessor(DataAccessor):
         ds_name: str,
         param: WeatherParam,
         date: dt.datetime,
-        file_format: Literal["npz", "grib"],
+        file_format: Literal["npz"],
     ) -> Path:
         """
         Returns the path of the file containing the parameter data.
@@ -108,7 +129,7 @@ class RainfallAccessor(DataAccessor):
         return (
             SCRATCH_PATH
             / "Hexagone"
-            / f"{date.strftime(FORMATSTR)[0:3]}"
+            / f"{date.year}"
             / f"{date.strftime(FORMATSTR)}.{file_format}"
         )
 
@@ -120,7 +141,7 @@ class RainfallAccessor(DataAccessor):
         timestamps: Timestamps,
         # the member parameter is not accessed if irrelevant
         member: int = 0,
-        file_format: Literal["npz", "grib"] = "grib",
+        file_format: Literal["npz"] = "npz",
     ):
         """
         Function to load invidiual parameter and lead time from a file stored in disk
@@ -135,7 +156,10 @@ class RainfallAccessor(DataAccessor):
             else:
                 arr = np.load(data_path)
                 arr = arr["arr_0"]
-            arr = np.nan_to_num(arr)  # Replace nan by 0
+                arr = np.where(arr < 0, 0, arr)  # Put 0 outside of radar field
+                arr = arr / 100  # convert from mm10-2 to mm in 5 minutes
+                arr = arr * 12  # convert to mm/h
+            arr = arr[::-1]
             arr_list.append(np.expand_dims(arr, axis=-1))
         return np.stack(arr_list)
 
@@ -145,7 +169,7 @@ class RainfallAccessor(DataAccessor):
         ds_name: str,
         param: WeatherParam,
         timestamps: Timestamps,
-        file_format: Literal["npy", "grib"] = "grib",
+        file_format: Literal["npz"] = "npz",
     ) -> bool:
         for date in timestamps.validity_times:
             filepath = cls.get_filepath(ds_name, param, date, file_format)
@@ -164,9 +188,9 @@ class RainfallAccessor(DataAccessor):
 @app.command()
 def prepare(
     path_config: Path = DEFAULT_CONFIG,
-    num_input_steps: int = 4,
-    num_pred_steps_train: int = 36,
-    num_pred_steps_val_test: int = 36,
+    num_input_steps: int = 2,
+    num_pred_steps_train: int = 1,
+    num_pred_steps_val_test: int = 3,
     compute_stats: bool = True,
 ):
     """
@@ -180,7 +204,7 @@ def prepare(
 
     print("Load train dataset configuration...")
     with open(path_config, "r") as fp:
-        conf = json.load(fp)
+        conf = yaml.safe_load(fp)
 
     print("instantiate train dataset configuration...")
     train_ds, _, _ = DatasetABC.from_dict(
@@ -216,12 +240,12 @@ def prepare(
 @app.command()
 def describe(path_config: Path = DEFAULT_CONFIG):
     """Describes Rainfall DataSet."""
-    train_ds, _, _ = DatasetABC.from_json(
+    train_ds, _, _ = DatasetABC.from_dict(
         RainfallAccessor,
-        fname=path_config,
-        num_input_steps=4,
-        num_pred_steps_train=36,
-        num_pred_steps_val_tests=5,
+        fname=path_config.stem,
+        num_input_steps=2,
+        num_pred_steps_train=1,
+        num_pred_steps_val_tests=3,
     )
     train_ds.dataset_info.summary()
     print("Len dataset : ", len(train_ds))
@@ -232,12 +256,12 @@ def describe(path_config: Path = DEFAULT_CONFIG):
 @app.command()
 def plot(path_config: Path = DEFAULT_CONFIG):
     """Plots a png and a gif for one sample."""
-    train_ds, _, _ = DatasetABC.from_json(
+    train_ds, _, _ = DatasetABC.from_dict(
         RainfallAccessor,
-        fname=path_config,
+        fname=path_config.stem,
         num_input_steps=2,
         num_pred_steps_train=1,
-        num_pred_steps_val_tests=5,
+        num_pred_steps_val_tests=3,
     )
     print("Plot gif of one sample...")
     sample = train_ds.sample_list[0]
@@ -250,12 +274,12 @@ def plot(path_config: Path = DEFAULT_CONFIG):
 @app.command()
 def speedtest(path_config: Path = DEFAULT_CONFIG, n_iter: int = 5):
     print("Speed test:")
-    train_ds, _, _ = DatasetABC.from_json(
+    train_ds, _, _ = DatasetABC.from_dict(
         RainfallAccessor,
-        fname=path_config,
+        fname=path_config.stem,
         num_input_steps=2,
         num_pred_steps_train=1,
-        num_pred_steps_val_tests=5,
+        num_pred_steps_val_tests=3,
     )
     data_iter = iter(train_ds.torch_dataloader())
     start_time = time.time()

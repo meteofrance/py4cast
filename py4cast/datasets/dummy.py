@@ -1,4 +1,3 @@
-import json
 import os
 from pathlib import Path
 from typing import List, Literal
@@ -14,7 +13,7 @@ from py4cast.datasets.access import (
     Timestamps,
     WeatherParam,
 )
-from py4cast.settings import CACHE_DIR, DEFAULT_CONFIG_DIR
+from py4cast.settings import CACHE_DIR
 
 
 class DummyAccessor(DataAccessor):
@@ -37,11 +36,6 @@ class DummyAccessor(DataAccessor):
             "dummy_parameter": {"levels": [500], "kind": "input_output"},
         },
     }
-
-    jsonconfig = json.dumps(config, sort_keys=True, indent=4)
-
-    with open(DEFAULT_CONFIG_DIR / "datasets" / "dummy_config.json", "w") as outfile:
-        outfile.write(jsonconfig)
 
     def cache_dir(self, name: str, grid: Grid) -> Path:
         path = CACHE_DIR / f"{name}_{grid.name}"
