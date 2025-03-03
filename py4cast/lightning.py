@@ -146,7 +146,6 @@ class AutoRegressiveLightning(LightningModule):
         batch_size: int = 2,
         # non-linked args
         model_name: Literal[tuple(model_registry.keys())] = "HalfUNet",
-        model_conf: Path | None = None,
         loss_name: Literal["mse", "mae"] = "mse",
         num_inter_steps: int = 1,
         num_samples_to_plot: int = 1,
@@ -166,7 +165,6 @@ class AutoRegressiveLightning(LightningModule):
         self.dataset_conf = dataset_conf
         self.dataset_info = dataset_info
         self.batch_size = batch_size
-        self.model_conf = model_conf
         self.model_name = model_name
         self.num_input_steps = num_input_steps
         self.num_pred_steps_train = num_pred_steps_train
@@ -367,7 +365,6 @@ class AutoRegressiveLightning(LightningModule):
         print(
             f"Model step duration : {self.dataset_info.pred_step /self.num_inter_steps}"
         )
-        print(f"Model conf {self.model_conf}")
         print("---------------------")
         print(f"Loss {self.loss}")
         print(f"Batch size {self.batch_size}")
