@@ -1,6 +1,6 @@
 data:
   #args forwarded (linked) to model
-  dataset_name: titan_lbc_refacto
+  dataset_name: titan_aro_arp
   num_input_steps: 1
   num_pred_steps_train: 1
   num_pred_steps_val_test: 1
@@ -9,21 +9,21 @@ data:
   #other args
   num_workers: 10
   prefetch_factor: null
-  pin_memory: False 
+  pin_memory: False
   dataset_conf:
     periods:
       train:
-        start: 2022201
+        start: 20200101
         end: 20221231
         obs_step: 3600
       valid:
-        start: 20231201
+        start: 20230101
         end: 20231231
-        obs_step: 3600
+        obs_step: 10800
       test:
-        start: 20231201
-        end: 20231231
-        obs_step: 3600
+        start: 20240101
+        end: 20240831
+        obs_step: 10800
     grid:
       name: PAAROME_1S40
       border_size: 0
