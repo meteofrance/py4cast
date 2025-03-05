@@ -24,6 +24,9 @@ def convert_samples_grib2_numpy(dataset: DatasetABC):
                 dest_file = TitanAccessor.get_filepath(
                     dataset.name, p, date, file_format="npy"
                 )
+
+                # Create date folder if needed 
+                Path(dest_file).parent.mkdir(exist_ok=True)
                 if dest_file.exists():
                     continue  # already converted
                 try:
