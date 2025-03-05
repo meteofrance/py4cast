@@ -1,13 +1,12 @@
 model:
   model_name: UNet
-  model_conf: null # Path to model_conf
   loss_name: mse # mse or mae
   num_inter_steps: 1 # Number of intermediary steps (without any data)
   num_samples_to_plot: 1
   training_strategy: diff_ar # diff_ar or scaled_ar
   channels_last: False # True: B W H C
   io_conf : null
-  mask_ratio : 0 # 0<mask_ratio<1. If !=0 apply maskedautoencoderstrategy. 
+  mask_ratio : 0 # 0<mask_ratio<1. If !=0 apply maskedautoencoderstrategy.
   settings_init_args:
     init_features: 64
     autopad_enabled: True

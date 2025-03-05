@@ -109,6 +109,29 @@ class TitanAccessor(DataAccessor):
             return npy_path / date.strftime(FORMATSTR) / filename
 
     @classmethod
+    def load_data_for_date(
+        cls,
+        ds_name: str,
+        param: WeatherParam,
+        date: dt.datetime,
+        # the member parameter is not accessed if irrelevant
+        file_format: Literal["npy", "grib"] = "grib",
+    ):
+        """
+        Function to load invidiual parameter and lead time from a file stored in disk
+        """
+        data_path = cls.get_filepath(ds_name, param, date, file_format)
+        if file_format == "grib":
+            arr, lons, lats = load_data_grib(param, data_path)
+            arr = fit_to_grid(param, arr, lons, lats, cls.get_grid_coords)
+        else:
+            arr = np.load(data_path)
+
+        if file_format == "grib":
+            arr = arr[::-1]  # invert latitude
+        return arr
+
+    @classmethod
     def load_data_from_disk(
         cls,
         ds_name: str,
@@ -124,15 +147,7 @@ class TitanAccessor(DataAccessor):
         dates = timestamps.validity_times
         arr_list = []
         for date in dates:
-            data_path = cls.get_filepath(ds_name, param, date, file_format)
-            if file_format == "grib":
-                arr, lons, lats = load_data_grib(param, data_path)
-                arr = fit_to_grid(param, arr, lons, lats, cls.get_grid_coords)
-            else:
-                arr = np.load(data_path)
-
-            if file_format == "grib":
-                arr = arr[::-1]  # invert latitude
+            arr = cls.load_data_for_date(ds_name, param, date, file_format)
             arr_list.append(np.expand_dims(arr, axis=-1))
         return np.stack(arr_list)
 
