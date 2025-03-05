@@ -146,7 +146,6 @@ class AutoRegressiveLightning(LightningModule):
         batch_size: int = 2,
         # non-linked args
         model_name: Literal[tuple(model_registry.keys())] = "HalfUNet",
-        model_conf: Path | None = None,
         loss_name: Literal["mse", "mae"] = "mse",
         num_inter_steps: int = 1,
         num_samples_to_plot: int = 1,
@@ -166,7 +165,6 @@ class AutoRegressiveLightning(LightningModule):
         self.dataset_conf = dataset_conf
         self.dataset_info = dataset_info
         self.batch_size = batch_size
-        self.model_conf = model_conf
         self.model_name = model_name
         self.num_input_steps = num_input_steps
         self.num_pred_steps_train = num_pred_steps_train
@@ -285,7 +283,7 @@ class AutoRegressiveLightning(LightningModule):
     def setup(self, stage=None):
         self.logger.log_hyperparams(self.hparams, metrics={"val_mean_loss": 0.0})
         if self.logging_enabled:
-            self.save_path = Path(self.trainer.logger.log_dir)
+            self.save_path = Path(self.trainer.log_dir)
             max_pred_step = self.num_pred_steps_val_test - 1
             self.rmse_psd_plot_metric = MetricPSDVar(pred_step=max_pred_step)
             self.psd_plot_metric = MetricPSDK(self.save_path, pred_step=max_pred_step)
@@ -326,7 +324,7 @@ class AutoRegressiveLightning(LightningModule):
         """
         Check if logging is enabled
         """
-        return self.trainer.logger.log_dir is not None
+        return self.trainer.log_dir is not None
 
     @property
     def dtype(self):
@@ -367,7 +365,6 @@ class AutoRegressiveLightning(LightningModule):
         print(
             f"Model step duration : {self.dataset_info.pred_step /self.num_inter_steps}"
         )
-        print(f"Model conf {self.model_conf}")
         print("---------------------")
         print(f"Loss {self.loss}")
         print(f"Batch size {self.batch_size}")
@@ -407,7 +404,6 @@ class AutoRegressiveLightning(LightningModule):
     def on_fit_start(self):
         self.log_hparams_tb()
         self.print_summary_model()
-        self.inspect_tensors()
 
     #############################################################
     #                          FORWARD                          #
@@ -511,8 +507,6 @@ class AutoRegressiveLightning(LightningModule):
                 # Graph (B, N_grid, d_f) or Conv (B, N_lat,N_lon d_f)
                 if self.channels_last:
                     x = x.to(memory_format=torch.channels_last)
-                if self.dataset_name == "rainfall":
-                    x = torch.nan_to_num(x, nan=-1)
                 if self.mask_ratio != 0:  # maskedautoencoder strategy
                     x = self.mask_tensor(x)
                 # Here we adapt our tensors to the order of dimensions of CNNs and ViTs

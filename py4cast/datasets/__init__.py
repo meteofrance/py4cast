@@ -37,7 +37,7 @@ except ImportError:
 try:
     from .rainfall import RainfallAccessor
 
-    registry["rainfall"] = (RainfallAccessor,)
+    registry["rainfall"] = RainfallAccessor
 except ImportError:
     warnings.warn(f"Could not import RainfallAccessor. {traceback.format_exc()}")
 

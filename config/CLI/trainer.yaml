@@ -77,11 +77,3 @@ trainer:               # Native training arguments of ligthining.pytorch.Trainer
   limit_train_batches: null    # Limit num of batches per epoch (to do very short training)
   limit_val_batches: null
   limit_test_batches: null
-
-
-  # TODO :
-# print folder of logs at beginning and end
-# script that launches fit and then test
-# rajputer tests avec CLI
-# se passer des fichiers de conf json data et model
-# link max epoch of trainer and lr scheduler

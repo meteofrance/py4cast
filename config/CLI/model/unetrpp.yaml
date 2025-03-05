@@ -1,16 +1,15 @@
 model:
   model_name: UNETRPP
-  model_conf: config/models/unetrpp8512_linear_up.json # Path to model_conf
   loss_name: mse # mse or mae
   num_inter_steps: 1 # Number of intermediary steps (without any data)
   num_samples_to_plot: 1
   training_strategy: scaled_ar # diff_ar or scaled_ar or downscaling_only
   channels_last: False # True: B W H C
   io_conf : null
-  mask_ratio : 0 # 0<mask_ratio<1. If !=0 apply maskedautoencoderstrategy. 
+  mask_ratio : 0 # 0<mask_ratio<1. If !=0 apply maskedautoencoderstrategy.
   settings_init_args:
-    hidden_size: 256
-    num_heads_encoder: 4
+    hidden_size: 1024
+    num_heads_encoder: 16
     num_heads_decoder: 4
     pos_embed: "perceptron"
     norm_name: "instance"
@@ -19,7 +18,7 @@ model:
     conv_op: "Conv2d"
     # do_ds: false # not recognized by CLI but present in UNETRPPSettings -> strange O.o
     # spatial_dims: 2 # not recognized by CLI but present in UNETRPPSettings -> strange O.o
-    linear_upsampling: false
+    linear_upsampling: true
     downsampling_rate: 4
     decoder_proj_size: 64
     encoder_proj_sizes: [64, 64, 64, 32]
