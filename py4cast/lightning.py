@@ -324,7 +324,7 @@ class AutoRegressiveLightning(LightningModule):
         """
         Check if logging is enabled
         """
-        return self.trainer.log_dir is not None
+        return self.trainer.logger.log_dir is not None
 
     @property
     def dtype(self):
