@@ -946,6 +946,13 @@ class AutoRegressiveLightning(LightningModule):
             )
         preds.flatten_("timestep", 0, 1)
 
+        # Unnormalize data
+        for feature_name in preds.feature_names:
+            means = torch.asarray(self.stats[feature_name]["mean"])
+            std = torch.asarray(self.stats[feature_name]["std"])
+            preds.tensor[:,:,:,preds.feature_names_to_idx[feature_name]] *= std
+            preds.tensor[:,:,:,preds.feature_names_to_idx[feature_name]] += means
+
         # Save gribs if a io config file is given
         if not (self.io_conf is None):
             # Save the prediction of the first sample of the dataloader as a grib
