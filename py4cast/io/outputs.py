@@ -102,8 +102,8 @@ def save_named_tensors_to_grib(
                 feature_not_accepted.append(feature)
                 continue
             
+            # Get template grib coordinates
             f = tmplt_ds.readfield(fid).clone()
-
             lon, lat = f.geometry.get_lonlat_grid()
             nanmask, latlon = make_nan_mask(ds, lat[:, 0], lon[0])
             (
