@@ -1,6 +1,6 @@
 {
-    "template_grib": "../template/grid.arome-forecast.eurw1s40+0001:00.grib",
-    "directory" : "/scratch/shared/py4cast/gribs_writing/exp1_test",
+    "template_grib": "../template/grid.arome-oper.eurw1s40+0001:00.grib",
+    "directory" : "/scratch/shared/py4cast/gribs_writing/todel/",
     "output_kwargs" : ["poesy_eurw1s40"],
     "sample_identifiers" : ["runtime", "member", "leadtime"],
     "output_fmt" : "dataset_{}/{}/mb{}/forecast/grid.emul_aro_ai_ech_{}.grib"
