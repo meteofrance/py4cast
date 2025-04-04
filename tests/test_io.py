@@ -55,14 +55,13 @@ def test_nan_mask():
 
     exact_lat = (np.arange(64) - 16) * 0.5
     exact_lon = (np.arange(64) + 30) * 0.5
-    dummy_template = FakeXarrayLatLon(exact_lat, exact_lon)
 
     # the function should throw no error and return an exact fit
-    nanmask, latlons_idx = out.make_nan_mask(dummy_ds, dummy_template.template_ds)
+    nanmask, latlons_idx = out.make_nan_mask(dummy_ds, exact_lat, exact_lon)
 
     # returning all None
     # nanmask definition
-    assert nanmask.shape == dummy_template.Shape
+    assert nanmask.shape == (len(exact_lat), len(exact_lon))
 
     # checking values for latitudes, then longitudes
 
@@ -72,13 +71,11 @@ def test_nan_mask():
     fitting_lat = (np.arange(70) - 16) * 0.5
     fitting_lon = (np.arange(70) + 30) * 0.5
 
-    dummy_template = FakeXarrayLatLon(fitting_lat, fitting_lon)
-
     # the function should throw no error and have correct results
-    nanmask, latlons_idx = out.make_nan_mask(dummy_ds, dummy_template.template_ds)
+    nanmask, latlons_idx = out.make_nan_mask(dummy_ds, fitting_lat, fitting_lon)
 
     # nanmask definition
-    assert nanmask.shape == dummy_template.Shape
+    assert nanmask.shape == (len(fitting_lat), len(fitting_lon))
 
     # checking values for latitudes, then longitudes
     assert latlons_idx[:2] == (0, 63)
@@ -88,17 +85,15 @@ def test_nan_mask():
     with pytest.raises(ValueError):
         unfit_lat = (np.arange(64) - 20) * 0.5
         fit_lon = (np.arange(64) + 30) * 0.5
-        dummy_template = FakeXarrayLatLon(unfit_lat, fit_lon)
 
-        nanmask, latlons_idx = out.make_nan_mask(dummy_ds, dummy_template.template_ds)
+        nanmask, latlons_idx = out.make_nan_mask(dummy_ds, unfit_lat, fit_lon)
 
     # wrong longitude grid
     with pytest.raises(ValueError):
         fit_lat = (np.arange(64) - 16) * 0.5
         unfit_lon = (np.arange(64) + 25) * 0.5
-        dummy_template = FakeXarrayLatLon(fit_lat, unfit_lon)
 
-        nanmask, latlons_idx = out.make_nan_mask(dummy_ds, dummy_template.template_ds)
+        nanmask, latlons_idx = out.make_nan_mask(dummy_ds, fit_lat, unfit_lon)
 
 
 @dataclass
