@@ -930,6 +930,7 @@ class AutoRegressiveLightning(LightningModule):
         Check if the feature names are the same as the one used during training
         and make a prediction and accumulate if io_conf =/= none.
         """
+        # Save the prediction of the first sample of the dataloader as a grib
         if batch_idx == 0:
             if self.input_feature_names != batch.inputs.feature_names:
                 raise ValueError(
@@ -942,7 +943,7 @@ class AutoRegressiveLightning(LightningModule):
         # Remove batch dimension
         if preds.tensor.shape[0] != 1:
             raise ValueError(
-                f"Prediction should have a batch dimension of 1 instead of { preds.tensor.shape[0]}"
+                f"Prediction should have a batch dimension of 1 instead of {preds.tensor.shape[0]}"
             )
         preds.flatten_("timestep", 0, 1)
 
@@ -950,17 +951,38 @@ class AutoRegressiveLightning(LightningModule):
         for feature_name in preds.feature_names:
             means = torch.asarray(self.stats[feature_name]["mean"])
             std = torch.asarray(self.stats[feature_name]["std"])
-            preds.tensor[:,:,:,preds.feature_names_to_idx[feature_name]] *= std
-            preds.tensor[:,:,:,preds.feature_names_to_idx[feature_name]] += means
+            preds.tensor[:, :, :, preds.feature_names_to_idx[feature_name]] *= std
+            preds.tensor[:, :, :, preds.feature_names_to_idx[feature_name]] += means
+            # Restrict data for specific feature.
+            if feature_name == "aro_r2_2m":
+                preds.tensor[:, :, :, preds.feature_names_to_idx[feature_name]] = (
+                    torch.clip(
+                        preds.tensor[:, :, :, preds.feature_names_to_idx[feature_name]],
+                        min=0,
+                        max=100,
+                    )
+                )
+            elif feature_name == "aro_tp_0m":
+                preds.tensor[:, :, :, preds.feature_names_to_idx[feature_name]] = (
+                    torch.clip(
+                        preds.tensor[:, :, :, preds.feature_names_to_idx[feature_name]],
+                        min=0,
+                    )
+                )
 
         # Save gribs if a io config file is given
         if not (self.io_conf is None):
-            # Save the prediction of the first sample of the dataloader as a grib
-            if batch_idx == 0:
-                self.grib_writing(preds)
+            self.grib_writing(preds, batch_idx)
+
         return preds
 
-    def grib_writing(self, preds):
+    def grib_writing(self, preds: NamedTensor, batch_idx: int):
+        """
+        Write grib at the path define by the io_conf.
+        Args:
+            pred (NamedTensor): the output tensor (pred)
+            batch_idx: the batch_idx is used to compute the runtime hour of the prediction
+        """
         with open(self.io_conf, "r") as f:
             save_settings = GribSavingSettings(**json.load(f))
             ph = len(save_settings.output_fmt.split("{}")) - 1
@@ -973,5 +995,5 @@ class AutoRegressiveLightning(LightningModule):
                 )
 
         save_named_tensors_to_grib(
-            preds, self.infer_ds, self.infer_ds.sample_list[0], save_settings
+            preds, self.infer_ds, self.infer_ds.sample_list[batch_idx], save_settings
         )

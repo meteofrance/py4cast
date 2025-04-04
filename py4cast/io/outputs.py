@@ -1,22 +1,14 @@
-import os
-from copy import deepcopy
+import datetime as dt
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Tuple, Union
-
-import numpy as np
-import pandas as pd
-import torch
-import datetime as dt
+from typing import Any, Dict, Tuple, Union
 
 import epygram
-import xarray as xr
-from cfgrib import xarray_to_grib as xtg
+import numpy as np
 from dataclasses_json import dataclass_json
 from mfai.torch.namedtensor import NamedTensor
 
 from py4cast.datasets.base import DatasetABC
-from py4cast.forcingutils import compute_hours_of_day
 
 
 @dataclass_json
@@ -59,20 +51,28 @@ def save_named_tensors_to_grib(
     # Get number of prediction
     predicted_time_steps = len(sample.output_timestamps.validity_times)
     # Open template grib
-    tmplt_ds = epygram.formats.resource(Path(saving_settings.directory) / saving_settings.template_grib, 'r')
+    tmplt_ds = epygram.formats.resource(
+        Path(saving_settings.directory) / saving_settings.template_grib, "r"
+    )
 
-    datetime = sample.output_timestamps.datetime 
-    
+    datetime = sample.output_timestamps.datetime
+
     # Get time between 2 consecutive steps in hours
-    time_step = int((sample.timestamps.timedeltas[1] - sample.timestamps.timedeltas[0]).total_seconds())
+    time_step = int(
+        (
+            sample.timestamps.timedeltas[1] - sample.timestamps.timedeltas[0]
+        ).total_seconds()
+    )
 
     for step_idx in range(predicted_time_steps):
 
         # Get data
         raw_data = pred.select_dim("timestep", step_idx, bare_tensor=False)
-        # Define leadtime 
-        leadtime = int(sample.output_timestamps.timedeltas[step_idx].total_seconds() / 60**2)
-        
+        # Define leadtime
+        leadtime = int(
+            sample.output_timestamps.timedeltas[step_idx].total_seconds() / 60**2
+        )
+
         # Get timedelta & validity time from initial datetime
         timedelta = sample.output_timestamps.timedeltas[step_idx]
         validity_time = sample.output_timestamps.validity_times[step_idx]
@@ -83,25 +83,25 @@ def save_named_tensors_to_grib(
         full_path.parent.mkdir(parents=True, exist_ok=True)
 
         # Create a GRIB
-        grib_final = epygram.formats.resource(full_path, 'w',fmt='GRIB')
+        grib_final = epygram.formats.resource(full_path, "w", fmt="GRIB")
 
         feature_not_accepted = []
         for feature in pred.feature_names:
 
             # validity
             dict_val = {
-                "date_time" : validity_time,
+                "date_time": validity_time,
                 "basis": datetime,
-                "term": timedelta,  
-                }
-    
+                "term": timedelta,
+            }
+
             # Get FID of the current feature
             fid = feature2fid(feature, dict_val, time_step)
-            # if feature2fid return None continue the for loop
+            # if fid is None continue the for loop
             if not fid:
                 feature_not_accepted.append(feature)
                 continue
-            
+
             # Get template grib coordinates
             f = tmplt_ds.readfield(fid).clone()
             lon, lat = f.geometry.get_lonlat_grid()
@@ -112,23 +112,28 @@ def save_named_tensors_to_grib(
                 longmin,
                 longmax,
             ) = latlon
-            
-             # Create mask for masked array in the field
+
+            # Create mask for masked array in the field
             mask = np.full(nanmask.shape, True, dtype=bool)
-            mask[latmin-1:latmax, longmin-1:longmax] = False
+            mask[latmin - 1 : latmax, longmin - 1 : longmax] = False
 
             # Select correct feature in py4cast prediction
-            data = raw_data.tensor[:,:, raw_data.feature_names_to_idx[feature]].cpu().numpy()
+            data = (
+                raw_data.tensor[:, :, raw_data.feature_names_to_idx[feature]]
+                .cpu()
+                .numpy()
+            )
             # Create data for masked array filled with default value
-            _data = np.full(nanmask.shape,f.data.data[0][0], dtype=np.float64)
-            _data[latmin-1:latmax, longmin-1:longmax] = data
-            
-            f.setdata(np.ma.MaskedArray(_data, mask, fill_value =f.data.fill_value))
+            _data = np.full(nanmask.shape, f.data.data[0][0], dtype=np.float64)
+            _data[latmin - 1 : latmax, longmin - 1 : longmax] = data
+
+            f.setdata(np.ma.MaskedArray(_data, mask, fill_value=f.data.fill_value))
             f.validity[0].set(**dict_val)
             grib_final.writefield(f)
 
         print(f"Leadtime {leadtime} has been written in {full_path}")
         print(f"Following features were not accepted : {feature_not_accepted}")
+
 
 def get_output_filename(
     saving_settings: GribSavingSettings, sample: Any, leadtime: float
@@ -152,6 +157,7 @@ def get_output_filename(
         *saving_settings.output_kwargs, *identifiers
     )
     return path_to_file
+
 
 def make_nan_mask(
     infer_dataset: DatasetABC, lat: np.ndarray, lon: np.ndarray
@@ -177,50 +183,24 @@ def make_nan_mask(
         raise NotImplementedError(
             f"The dataset {infer_dataset} has no grid attribute, cannot write grib."
         )
-    
+
     if (
-        (
-            np.array(lat.min())
-            <= infer_dataset.grid.lat[:, 0].min()
-        )
-        and (
-            np.array(lat.max())
-            >= infer_dataset.grid.lat[:, 0].max()
-        )
-        and (
-            np.array(lon.min())
-            <= infer_dataset.grid.lon[:, 0].min()
-        )
-        and (
-            np.array(lon.max())
-            >= infer_dataset.grid.lon[:, 0].max()
-        )
+        (np.array(lat.min()) <= infer_dataset.grid.lat[:, 0].min())
+        and (np.array(lat.max()) >= infer_dataset.grid.lat[:, 0].max())
+        and (np.array(lon.min()) <= infer_dataset.grid.lon[:, 0].min())
+        and (np.array(lon.max()) >= infer_dataset.grid.lon[:, 0].max())
     ):
-        nanmask = np.empty(
-            [len(lat), len(lon)]
-        )
-        nanmask[:,:] = np.nan
+        nanmask = np.empty([len(lat), len(lon)])
+        nanmask[:, :] = np.nan
         # matching latitudes
         latmin, latmax = (
-            np.where(
-                np.round(lat, 5)
-                == round(infer_dataset.grid.lat.min(), 5)
-            )[0],
-            np.where(
-                np.round(lat, 5)
-                == round(infer_dataset.grid.lat.max(), 5)
-            )[0],
+            np.where(np.round(lat, 5) == round(infer_dataset.grid.lat.min(), 5))[0],
+            np.where(np.round(lat, 5) == round(infer_dataset.grid.lat.max(), 5))[0],
         )
         # matching longitudes
         longmin, longmax = (
-            np.where(
-                np.round(lon, 5)
-                == round(infer_dataset.grid.lon.min(), 5)
-            )[0],
-            np.where(
-                np.round(lon, 5)
-                == round(infer_dataset.grid.lon.max(), 5)
-            )[0],
+            np.where(np.round(lon, 5) == round(infer_dataset.grid.lon.min(), 5))[0],
+            np.where(np.round(lon, 5) == round(infer_dataset.grid.lon.max(), 5))[0],
         )
 
         latmin, latmax, longmin, longmax = (
@@ -237,26 +217,32 @@ def make_nan_mask(
 
     return nanmask, (latmin, latmax, longmin, longmax)
 
-def feature2fid(feature, dict_val, time_step):
+
+def feature2fid(feature: str, dict_val: Dict[str, dt.datetime], time_step: int):
+    """
+    Return fid from the feature name.
+    TODO should be automatic.
+    """
     name2fid = {}
-    name2fid.update({
-        "temperature": {
-            'editionNumber': 2,
-            'name': '2 metre temperature',
-            'shortName': '2t',
-            'discipline': 0,
-            'parameterCategory': 0,
-            'parameterNumber': 0,
-            'typeOfFirstFixedSurface': 103,
-            'level': 2,
-            'typeOfSecondFixedSurface': 255,
-            'tablesVersion': 15,
-            'productDefinitionTemplateNumber': 0
-        },
-        "u10": {
+    name2fid.update(
+        {
+            "temperature": {
                 "editionNumber": 2,
-                "name": '10 metre U wind component',
-                "shortName": '10u',
+                "name": "2 metre temperature",
+                "shortName": "2t",
+                "discipline": 0,
+                "parameterCategory": 0,
+                "parameterNumber": 0,
+                "typeOfFirstFixedSurface": 103,
+                "level": 2,
+                "typeOfSecondFixedSurface": 255,
+                "tablesVersion": 15,
+                "productDefinitionTemplateNumber": 0,
+            },
+            "u10": {
+                "editionNumber": 2,
+                "name": "10 metre U wind component",
+                "shortName": "10u",
                 "discipline": 0,
                 "parameterCategory": 2,
                 "parameterNumber": 2,
@@ -265,11 +251,11 @@ def feature2fid(feature, dict_val, time_step):
                 "typeOfSecondFixedSurface": 255,
                 "tablesVersion": 15,
                 "productDefinitionTemplateNumber": 0,
-        },    
-    "v10": { 
+            },
+            "v10": {
                 "editionNumber": 2,
-                "name": '10 metre V wind component',
-                "shortName": '10v',
+                "name": "10 metre V wind component",
+                "shortName": "10v",
                 "discipline": 0,
                 "parameterCategory": 2,
                 "parameterNumber": 3,
@@ -278,11 +264,11 @@ def feature2fid(feature, dict_val, time_step):
                 "typeOfSecondFixedSurface": 255,
                 "tablesVersion": 15,
                 "productDefinitionTemplateNumber": 0,
-        },
-    "r2": {
+            },
+            "r2": {
                 "editionNumber": 2,
-                "name": '2 metre relative humidity',
-                "shortName": '2r',
+                "name": "2 metre relative humidity",
+                "shortName": "2r",
                 "discipline": 0,
                 "parameterCategory": 1,
                 "parameterNumber": 1,
@@ -291,11 +277,11 @@ def feature2fid(feature, dict_val, time_step):
                 "typeOfSecondFixedSurface": 255,
                 "tablesVersion": 15,
                 "productDefinitionTemplateNumber": 0,
-        },
-    "pmer": {
+            },
+            "pmer": {
                 "editionNumber": 2,
-                "name": 'Pressure reduced to MSL',
-                "shortName": 'prmsl',
+                "name": "Pressure reduced to MSL",
+                "shortName": "prmsl",
                 "discipline": 0,
                 "parameterCategory": 3,
                 "parameterNumber": 1,
@@ -304,11 +290,11 @@ def feature2fid(feature, dict_val, time_step):
                 "typeOfSecondFixedSurface": 255,
                 "tablesVersion": 15,
                 "productDefinitionTemplateNumber": 0,
-        },
-    "tp": {
+            },
+            "tp": {
                 "editionNumber": 2,
-                "name": 'Time integral of rain flux',
-                "shortName": 'tirf',
+                "name": "Time integral of rain flux",
+                "shortName": "tirf",
                 "discipline": 0,
                 "parameterCategory": 1,
                 "parameterNumber": 65,
@@ -319,23 +305,24 @@ def feature2fid(feature, dict_val, time_step):
                 "productDefinitionTemplateNumber": 8,
                 "lengthOfTimeRange": 1,
                 "typeOfStatisticalProcessing": 1,
-        },
-    })
+            },
+        }
+    )
     if feature in ["aro_t2m_2m", "t2m_2_heightAboveGround"]:
         fid = name2fid["temperature"]
-    elif feature in ['u10_10_heightAboveGround', "aro_u10_10m"]:
+    elif feature in ["u10_10_heightAboveGround", "aro_u10_10m"]:
         fid = name2fid["u10"]
-    elif feature in ['v10_10_heightAboveGround', "aro_v10_10m"]:
-        fid  = name2fid["v10"]
+    elif feature in ["v10_10_heightAboveGround", "aro_v10_10m"]:
+        fid = name2fid["v10"]
     # Pressure reduced to MSL
-    elif feature == 'aro_prmsl_0hpa':
-        fid  = name2fid["pmer"]
+    elif feature == "aro_prmsl_0hpa":
+        fid = name2fid["pmer"]
         # 2 metre relative humidity
-    elif feature == 'aro_r2_2m':
-        fid  = name2fid["r2"]
+    elif feature == "aro_r2_2m":
+        fid = name2fid["r2"]
     # Time integral of rain flux
-    elif feature == 'aro_tp_0m':
-        fid  = name2fid["tp"]
+    elif feature == "aro_tp_0m":
+        fid = name2fid["tp"]
         dict_val["cumulativeduration"] = dt.timedelta(seconds=time_step)
     else:
         return None
