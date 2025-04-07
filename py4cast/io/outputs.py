@@ -142,7 +142,14 @@ def get_output_filename(
     for ident in saving_settings.sample_identifiers:
         if ident == "runtime":
             # Get the max of the input timestamps which is t0
-            runtime = sample.timestamps.datetime.strftime("%Y%m%dT%H%MP")
+            last_input = max(
+                set(sample.timestamps.timedeltas)
+                - set(sample.output_timestamps.timedeltas)
+            )
+            idx_last_input = sample.timestamps.timedeltas.index(last_input)
+            runtime = sample.timestamps.validity_times[idx_last_input].strftime(
+                "%Y%m%dT%H%MP"
+            )
             identifiers.append(runtime)
         elif ident == "leadtime":
             identifiers.append(leadtime)
