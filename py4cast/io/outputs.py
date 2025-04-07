@@ -105,17 +105,8 @@ def save_named_tensors_to_grib(
             # Get template grib coordinates
             f = tmplt_ds.readfield(fid).clone()
             lon, lat = f.geometry.get_lonlat_grid()
-            nanmask, latlon = make_nan_mask(ds, lat[:, 0], lon[0])
-            (
-                latmin,
-                latmax,
-                longmin,
-                longmax,
-            ) = latlon
-
-            # Create mask for masked array in the field
-            mask = np.full(nanmask.shape, True, dtype=bool)
-            mask[latmin - 1 : latmax, longmin - 1 : longmax] = False
+            _lat = lat[:, 0]
+            _lon = lon[0, :]
 
             # Select correct feature in py4cast prediction
             data = (
@@ -123,11 +114,18 @@ def save_named_tensors_to_grib(
                 .cpu()
                 .numpy()
             )
-            # Create data for masked array filled with default value
-            _data = np.full(nanmask.shape, f.data.data[0][0], dtype=np.float64)
-            _data[latmin - 1 : latmax, longmin - 1 : longmax] = data
 
-            f.setdata(np.ma.MaskedArray(_data, mask, fill_value=f.data.fill_value))
+            # Match the latitude and longitude between the template grib and the prediction
+            latlon_extremum = get_matching_latlon(ds, _lat, _lon)
+
+            # Make nan mask
+            nanmask = np.empty([len(_lat), len(_lon)])
+            nanmask[:, :] = np.nan
+
+            # Create masked array
+            m_arr = create_masked_array(data, f, latlon_extremum, nanmask)
+
+            f.setdata(m_arr)
             f.validity[0].set(**dict_val)
             grib_final.writefield(f)
 
@@ -166,7 +164,40 @@ def get_output_filename(
     return path_to_file
 
 
-def make_nan_mask(
+def create_masked_array(data, f, latlon, nanmask):
+    """
+    This function returns a maskedArray similar to f.data with the predicted data.
+     Args:
+        data (numpy.ndarray): the predicted data by the inference
+        f (epygram.fields.H2DField.H2DField) : A field of the template grib
+        latlon (tuple): Tuple of extremum of latlon
+        nanmask (numpy.ndarray): An masked array of bool
+        lat (numpy.ndarray): the latitude of reference as numpy vector
+        lon (numpy.ndarray): the longitude of reference as numpy vector
+    Returns MaskedArray
+    """
+
+    # Create mask for masked array in the field
+    (
+        latmin,
+        latmax,
+        longmin,
+        longmax,
+    ) = latlon
+
+    mask = np.full(nanmask.shape, True, dtype=bool)
+    mask[latmin - 1 : latmax, longmin - 1 : longmax] = False
+
+    # Create data for masked array filled with default value
+    _data = np.full(nanmask.shape, f.data.data[0][0], dtype=np.float64)
+    _data[latmin - 1 : latmax, longmin - 1 : longmax] = data
+
+    m_arr = np.ma.MaskedArray(_data, mask, fill_value=f.data.fill_value)
+
+    return m_arr
+
+
+def get_matching_latlon(
     infer_dataset: DatasetABC, lat: np.ndarray, lon: np.ndarray
 ) -> Tuple[Union[np.ndarray, None], Tuple]:
     """This is to ensure that the infer_dataset grid can be matched with the given lat lon.
@@ -180,8 +211,7 @@ def make_nan_mask(
         lon (numpy.ndarray): the longitude of reference as numpy vector
 
     Returns:
-        Tuple[Union[np.ndarray, None], Tuple]:
-            nanmask : np.ndarray of the shape of template_dataset grid, filled with nans, or None if the grids match.
+        Tuple
             (latmin, latmax, longmin, longmax) : int, indices of the infer grid frontier in the template grid.
     """
     try:
@@ -197,8 +227,7 @@ def make_nan_mask(
         and (np.array(lon.min()) <= infer_dataset.grid.lon[:, 0].min())
         and (np.array(lon.max()) >= infer_dataset.grid.lon[:, 0].max())
     ):
-        nanmask = np.empty([len(lat), len(lon)])
-        nanmask[:, :] = np.nan
+
         # matching latitudes
         latmin, latmax = (
             np.where(np.round(lat, 5) == round(infer_dataset.grid.lat.min(), 5))[0],
@@ -222,7 +251,7 @@ def make_nan_mask(
             f"Lat/Lon dims of the {infer_dataset} do not fit in template grid, cannot write grib."
         )
 
-    return nanmask, (latmin, latmax, longmin, longmax)
+    return (latmin, latmax, longmin, longmax)
 
 
 def feature2fid(feature: str, dict_val: Dict[str, dt.datetime], time_step: int):
@@ -324,10 +353,10 @@ def feature2fid(feature: str, dict_val: Dict[str, dt.datetime], time_step: int):
     # Pressure reduced to MSL
     elif feature == "aro_prmsl_0hpa":
         fid = name2fid["pmer"]
-        # 2 metre relative humidity
+    # 2 metre relative humidity
     elif feature == "aro_r2_2m":
         fid = name2fid["r2"]
-    # Time integral of rain flux
+    # Total precipitation
     elif feature == "aro_tp_0m":
         fid = name2fid["tp"]
         dict_val["cumulativeduration"] = dt.timedelta(seconds=time_step)

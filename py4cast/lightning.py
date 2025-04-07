@@ -972,6 +972,7 @@ class AutoRegressiveLightning(LightningModule):
 
         # Save gribs if a io config file is given
         if not (self.io_conf is None):
+            print("Writing gribs...")
             self.grib_writing(preds, batch_idx)
 
         return preds
