@@ -104,9 +104,10 @@ def save_named_tensors_to_grib(
 
             # Get template grib coordinates
             f = tmplt_ds.readfield(fid).clone()
-            lon, lat = f.geometry.get_lonlat_grid()
-            _lat = lat[:, 0]
-            _lon = lon[0, :]
+            lon_grib, lat_grib = f.geometry.get_lonlat_grid()
+            _lat_grib = lat_grib[:, 0]
+            _lon_grib = lon_grib[0, :]
+            shape_grib_latlon = (len(_lat_grib), len(_lon_grib))
 
             # Select correct feature in py4cast prediction
             data = (
@@ -115,15 +116,26 @@ def save_named_tensors_to_grib(
                 .numpy()
             )
 
-            # Match the latitude and longitude between the template grib and the prediction
-            latlon_extremum = get_matching_latlon(ds, _lat, _lon)
+            # Position the infer dataset into the latlon grib, return latlon idx in the grib.
+            idxs_latlon_grib = match_latlon(ds, _lat_grib, _lon_grib)
 
-            # Make nan mask
-            nanmask = np.empty([len(_lat), len(_lon)])
-            nanmask[:, :] = np.nan
+            # Create data for masked array filled with default value
+            mask = fill_tensor_with(
+                embedded_data=False,
+                embedded_idxs=idxs_latlon_grib,
+                shape=shape_grib_latlon,
+                default_v=True,
+                _dtype=bool,
+            )
+            _data = fill_tensor_with(
+                embedded_data=data,
+                embedded_idxs=idxs_latlon_grib,
+                shape=shape_grib_latlon,
+                default_v=f.data.data[0][0],
+                _dtype=np.float64,
+            )
 
-            # Create masked array
-            m_arr = create_masked_array(data, f, latlon_extremum, nanmask)
+            m_arr = np.ma.MaskedArray(_data, mask, fill_value=f.data.fill_value)
 
             f.setdata(m_arr)
             f.validity[0].set(**dict_val)
@@ -164,40 +176,33 @@ def get_output_filename(
     return path_to_file
 
 
-def create_masked_array(data, f, latlon, nanmask):
+def fill_tensor_with(embedded_data, embedded_idxs, shape, default_v, _dtype):
     """
-    This function returns a maskedArray similar to f.data with the predicted data.
-     Args:
-        data (numpy.ndarray): the predicted data by the inference
-        f (epygram.fields.H2DField.H2DField) : A field of the template grib
-        latlon (tuple): Tuple of extremum of latlon
-        nanmask (numpy.ndarray): An masked array of bool
-        lat (numpy.ndarray): the latitude of reference as numpy vector
-        lon (numpy.ndarray): the longitude of reference as numpy vector
-    Returns MaskedArray
+    This function creates a numpy array of shape shape with a value defined by default_v.
+    The embedded data should be embeddable in this array, and are positions at the index in embedded_idxs.
+    Args:
+        embedded_data (Union[numpy.ndarray, bool]): the data to position in the grib
+        embedded_idxs (Tuple): A tuple of 4 idx ; represents the position in the array.
+        shape (Tuple): shape of the returned array,
+        default_v (Union[bool, float64]): fill the rest of the array with this default value
+        _dtype: dtype of the array
+    Return :
+        a numpy.ndarray
     """
-
-    # Create mask for masked array in the field
     (
         latmin,
         latmax,
         longmin,
         longmax,
-    ) = latlon
+    ) = embedded_idxs
 
-    mask = np.full(nanmask.shape, True, dtype=bool)
-    mask[latmin - 1 : latmax, longmin - 1 : longmax] = False
+    _tensor = np.full(shape, default_v, dtype=_dtype)
+    _tensor[latmin - 1 : latmax, longmin - 1 : longmax] = embedded_data
 
-    # Create data for masked array filled with default value
-    _data = np.full(nanmask.shape, f.data.data[0][0], dtype=np.float64)
-    _data[latmin - 1 : latmax, longmin - 1 : longmax] = data
-
-    m_arr = np.ma.MaskedArray(_data, mask, fill_value=f.data.fill_value)
-
-    return m_arr
+    return _tensor
 
 
-def get_matching_latlon(
+def match_latlon(
     infer_dataset: DatasetABC, lat: np.ndarray, lon: np.ndarray
 ) -> Tuple[Union[np.ndarray, None], Tuple]:
     """This is to ensure that the infer_dataset grid can be matched with the given lat lon.
