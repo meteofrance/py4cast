@@ -92,9 +92,9 @@ def test_fill_tensor_with():
         _dtype=_dtype,
     )
 
-    assert np.all(~tensor[499:600, 249:350])
+    assert np.all(~tensor[500:600, 250:350])
     mask = np.ones_like(tensor, dtype=bool)
-    mask[499:600, 249:350] = False
+    mask[500:601, 250:351] = False
     assert np.all(tensor[mask])
 
 
