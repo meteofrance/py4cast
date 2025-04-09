@@ -128,7 +128,7 @@ def save_named_tensors_to_grib(
                 _dtype=bool,
             )
             _data = fill_tensor_with(
-                embedded_data=data,
+                embedded_data=data[::-1],  # return data from the matrix for the plot
                 embedded_idxs=idxs_latlon_grib,
                 shape=shape_grib_latlon,
                 default_v=f.data.data[0][0],
@@ -197,7 +197,7 @@ def fill_tensor_with(embedded_data, embedded_idxs, shape, default_v, _dtype):
     ) = embedded_idxs
 
     _tensor = np.full(shape, default_v, dtype=_dtype)
-    _tensor[latmin - 1 : latmax, longmin - 1 : longmax] = embedded_data
+    _tensor[latmin : latmax + 1, longmin : longmax + 1] = embedded_data
 
     return _tensor
 
