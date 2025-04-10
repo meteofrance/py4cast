@@ -930,7 +930,6 @@ class AutoRegressiveLightning(LightningModule):
         Check if the feature names are the same as the one used during training
         and make a prediction and accumulate if io_conf =/= none.
         """
-        # Save the prediction of the first sample of the dataloader as a grib
         if batch_idx == 0:
             if self.input_feature_names != batch.inputs.feature_names:
                 raise ValueError(
@@ -953,23 +952,7 @@ class AutoRegressiveLightning(LightningModule):
             std = torch.asarray(self.stats[feature_name]["std"])
             preds.tensor[:, :, :, preds.feature_names_to_idx[feature_name]] *= std
             preds.tensor[:, :, :, preds.feature_names_to_idx[feature_name]] += means
-            # Restrict data for specific feature.
-            if feature_name == "aro_r2_2m":
-                preds.tensor[:, :, :, preds.feature_names_to_idx[feature_name]] = (
-                    torch.clip(
-                        preds.tensor[:, :, :, preds.feature_names_to_idx[feature_name]],
-                        min=0,
-                        max=100,
-                    )
-                )
-            elif feature_name == "aro_tp_0m":
-                preds.tensor[:, :, :, preds.feature_names_to_idx[feature_name]] = (
-                    torch.clip(
-                        preds.tensor[:, :, :, preds.feature_names_to_idx[feature_name]],
-                        min=0,
-                    )
-                )
-
+            
         # Save gribs if a io config file is given
         if not (self.io_conf is None):
             print("Writing gribs...")

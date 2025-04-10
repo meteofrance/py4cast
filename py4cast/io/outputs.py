@@ -128,7 +128,7 @@ def save_named_tensors_to_grib(
                 _dtype=bool,
             )
             _data = fill_tensor_with(
-                embedded_data=data[::-1],  # return data from the matrix for the plot
+                embedded_data=data[::-1],  # flip data from the matrix for the plot
                 embedded_idxs=idxs_latlon_grib,
                 shape=shape_grib_latlon,
                 default_v=f.data.data[0][0],
