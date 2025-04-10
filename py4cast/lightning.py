@@ -952,7 +952,7 @@ class AutoRegressiveLightning(LightningModule):
             std = torch.asarray(self.stats[feature_name]["std"])
             preds.tensor[:, :, :, preds.feature_names_to_idx[feature_name]] *= std
             preds.tensor[:, :, :, preds.feature_names_to_idx[feature_name]] += means
-            
+
         # Save gribs if a io config file is given
         if not (self.io_conf is None):
             print("Writing gribs...")
