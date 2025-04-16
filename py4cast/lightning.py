@@ -631,7 +631,7 @@ class AutoRegressiveLightning(LightningModule):
         forcing = batch.forcing.select_dim("timestep", step_idx)
         ds = self.training_strategy == "downscaling_only"
         inputs = [
-            prev_states.select_dim("timestep", idx) * (1 - ds)
+            prev_states.select_tensor_dim("timestep", idx) * (1 - ds)
             for idx in range(batch.num_input_steps)
         ]
         x = torch.cat(
