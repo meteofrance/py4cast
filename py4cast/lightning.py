@@ -628,7 +628,7 @@ class AutoRegressiveLightning(LightningModule):
 
         If downscaling strategy, the previous_states are set to 0.
         """
-        forcing = batch.forcing.select_dim("timestep", step_idx, bare_tensor=False)
+        forcing = batch.forcing.select_dim("timestep", step_idx)
         ds = self.training_strategy == "downscaling_only"
         inputs = [
             prev_states.select_dim("timestep", idx) * (1 - ds)
