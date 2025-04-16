@@ -488,7 +488,7 @@ class AutoRegressiveLightning(LightningModule):
         # for the desired number of ar steps.
         for i in range(batch.num_pred_steps):
             if not (phase == "inference"):
-                border_state = batch.outputs.select_dim("timestep", i)
+                border_state = batch.outputs.select_tensor_dim("timestep", i)
 
             if scale_y:
                 step_diff_std, step_diff_mean = self._step_diffs(
@@ -521,14 +521,14 @@ class AutoRegressiveLightning(LightningModule):
                 if scale_y:
                     predicted_state = (
                         # select the last timestep
-                        prev_states.select_dim("timestep", -1)
+                        prev_states.select_tensor_dim("timestep", -1)
                         + y * step_diff_std
                         + step_diff_mean
                     )
                 else:
                     ds = self.training_strategy == "downscaling_only"
                     predicted_state = (
-                        prev_states.select_dim("timestep", -1) * (1 - ds) + y
+                        prev_states.select_tensor_dim("timestep", -1) * (1 - ds) + y
                     )
 
                 # Overwrite border with true state
