@@ -548,7 +548,7 @@ class AutoRegressiveLightning(LightningModule):
                     new_prev_states_tensor = torch.cat(
                         [
                             # Drop the oldest timestep (select all but the first)
-                            prev_states.index_select_dim(
+                            prev_states.index_select_tensor_dim(
                                 "timestep",
                                 range(1, prev_states.dim_size("timestep")),
                             ),

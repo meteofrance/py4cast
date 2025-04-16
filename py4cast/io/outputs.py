@@ -94,7 +94,7 @@ def save_named_tensors_to_grib(
     for t_idx in range(predicted_time_steps):
         leadtime = t_idx + 1
         for group in model_ds.keys():
-            raw_data = pred.select_dim("timestep", t_idx, bare_tensor=False)
+            raw_data = pred.select_dim("timestep", t_idx)
             storable = write_storable_dataset(
                 pred,
                 ds,
@@ -182,7 +182,7 @@ def write_storable_dataset(
     tol = used_grib_feat["typeOfLevel"].drop_duplicates().tolist()[0]
     feature_idx = torch.tensor([pred.feature_names_to_idx[f] for f in feature_names])
 
-    data = raw_data.index_select_dim("features", feature_idx).squeeze().cpu().numpy()
+    data = raw_data.index_select_tensor_dim("features", feature_idx).squeeze().cpu().numpy()
 
     if f"{name}_{tol}" == group:
         # there might be a third dimension (eg isobaricInhPa) : basis for nanmask duplication
