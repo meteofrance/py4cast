@@ -220,9 +220,10 @@ class AutoRegressiveLightning(LightningModule):
 
         # Compute the number of input features for the neural network
         # Should be directly supplied by datasetinfo ?
+        ds = self.training_strategy == "downscaling_only"
 
         num_input_features = (
-            num_input_steps * dataset_info.weather_dim
+            num_input_steps * dataset_info.weather_dim * (1 - ds)
             + num_grid_static_features
             + dataset_info.forcing_dim
         )
@@ -631,13 +632,23 @@ class AutoRegressiveLightning(LightningModule):
         forcing = batch.forcing.select_dim("timestep", step_idx)
         ds = self.training_strategy == "downscaling_only"
         inputs = [
-            prev_states.select_tensor_dim("timestep", idx) * (1 - ds)
+            prev_states.select_tensor_dim("timestep", idx)
             for idx in range(batch.num_input_steps)
         ]
         x = torch.cat(
-            inputs + [self.grid_static_features[: batch.batch_size], forcing.tensor],
+            inputs * (1 - ds) + [self.grid_static_features[: batch.batch_size], forcing.tensor],
             dim=forcing.dim_index("features"),
         )
+
+        import matplotlib.pyplot as plt
+        plt.figure(figsize=(18, 6))
+        for i in range(x.shape[-1]):
+            plt.subplot(5, 5, i + 1)
+            plt.imshow(x[0, :, :, i].detach().cpu().numpy())
+            plt.title(f"x {i}")
+        plt.tight_layout()
+        plt.savefig("test_x.png")
+
         return x
 
     def mask_tensor(self, x):
