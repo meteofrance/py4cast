@@ -488,7 +488,7 @@ class AutoRegressiveLightning(LightningModule):
         # for the desired number of ar steps.
         for i in range(batch.num_pred_steps):
             if not (phase == "inference"):
-                border_state = batch.outputs.select_dim("timestep", i)
+                border_state = batch.outputs.select_tensor_dim("timestep", i)
 
             if scale_y:
                 step_diff_std, step_diff_mean = self._step_diffs(
@@ -521,14 +521,14 @@ class AutoRegressiveLightning(LightningModule):
                 if scale_y:
                     predicted_state = (
                         # select the last timestep
-                        prev_states.select_dim("timestep", -1)
+                        prev_states.select_tensor_dim("timestep", -1)
                         + y * step_diff_std
                         + step_diff_mean
                     )
                 else:
                     ds = self.training_strategy == "downscaling_only"
                     predicted_state = (
-                        prev_states.select_dim("timestep", -1) * (1 - ds) + y
+                        prev_states.select_tensor_dim("timestep", -1) * (1 - ds) + y
                     )
 
                 # Overwrite border with true state
@@ -548,7 +548,7 @@ class AutoRegressiveLightning(LightningModule):
                     new_prev_states_tensor = torch.cat(
                         [
                             # Drop the oldest timestep (select all but the first)
-                            prev_states.index_select_dim(
+                            prev_states.index_select_tensor_dim(
                                 "timestep",
                                 range(1, prev_states.dim_size("timestep")),
                             ),
@@ -628,10 +628,10 @@ class AutoRegressiveLightning(LightningModule):
 
         If downscaling strategy, the previous_states are set to 0.
         """
-        forcing = batch.forcing.select_dim("timestep", step_idx, bare_tensor=False)
+        forcing = batch.forcing.select_dim("timestep", step_idx)
         ds = self.training_strategy == "downscaling_only"
         inputs = [
-            prev_states.select_dim("timestep", idx) * (1 - ds)
+            prev_states.select_tensor_dim("timestep", idx) * (1 - ds)
             for idx in range(batch.num_input_steps)
         ]
         x = torch.cat(
