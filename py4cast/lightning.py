@@ -635,6 +635,8 @@ class AutoRegressiveLightning(LightningModule):
             prev_states.select_tensor_dim("timestep", idx)
             for idx in range(batch.num_input_steps)
         ]
+
+        # If downscaling only, inputs are not concatenated only use static features and forcings.
         x = torch.cat(
             inputs * (1 - ds)
             + [self.grid_static_features[: batch.batch_size], forcing.tensor],
