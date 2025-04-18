@@ -21,6 +21,7 @@ from mfai.torch.models.utils import (
 )
 from mlflow.models.signature import infer_signature
 from torchinfo import summary
+from transformers.optimization import get_cosine_with_min_lr_schedule_with_warmup
 
 from py4cast.datasets import get_datasets
 from py4cast.datasets.base import DatasetInfo, ItemBatch, NamedTensor, Statics
@@ -155,6 +156,10 @@ class AutoRegressiveLightning(LightningModule):
         channels_last: bool = False,
         io_conf: Path | None = None,
         mask_ratio: float = 0,
+        learning_rate: float = 1e-4,
+        min_learning_rate: float = 1e-6,
+        num_warmup_steps: int = 0,
+        betas: tuple = (0.9, 0.999),
         *args,
         **kwargs,
     ):
@@ -175,6 +180,10 @@ class AutoRegressiveLightning(LightningModule):
         self.channels_last = channels_last
         self.io_conf = io_conf
         self.mask_ratio = mask_ratio
+        self.learning_rate = learning_rate
+        self.min_learning_rate = min_learning_rate
+        self.num_warmup_steps = num_warmup_steps
+        self.betas = betas
 
         if self.training_strategy == "downscaling_only":
             print(
@@ -282,7 +291,6 @@ class AutoRegressiveLightning(LightningModule):
     #############################################################
 
     def setup(self, stage=None):
-        self.logger.log_hyperparams(self.hparams, metrics={"val_mean_loss": 0.0})
         if self.logging_enabled:
             self.save_path = Path(self.trainer.log_dir)
             max_pred_step = self.num_pred_steps_val_test - 1
@@ -405,6 +413,33 @@ class AutoRegressiveLightning(LightningModule):
     def on_fit_start(self):
         self.log_hparams_tb()
         self.print_summary_model()
+    
+    def configure_optimizers(self):
+        """
+        Configure the optimizer and scheduler
+        """
+        optimizer = torch.optim.AdamW(
+            self.parameters(),
+            lr=self.hparams.learning_rate,
+            betas=self.hparams.betas,
+        )
+
+        # Scheduler
+        scheduler = get_cosine_with_min_lr_schedule_with_warmup(
+            optimizer,
+            num_warmup_steps=self.hparams.num_warmup_steps,
+            num_training_steps=self.trainer.estimated_stepping_batches,
+            min_lr=self.hparams.min_learning_rate,
+        )
+
+        return {
+            "optimizer": optimizer,
+            "lr_scheduler": {
+                "scheduler": scheduler,
+                "interval": "step",
+                "frequency": 1,
+            },
+        }
 
     #############################################################
     #                          FORWARD                          #
@@ -693,7 +728,7 @@ class AutoRegressiveLightning(LightningModule):
         if self.logging_enabled:
             avg_loss = torch.stack([x for x in outputs]).mean()
             tb = self.logger.experiment
-            tb.add_scalar("mean_loss_epoch/train", avg_loss, self.current_epoch)
+            tb.add_scalar("mean_loss_epoch/train", avg_loss, self.global_step)
             self.training_step_losses.clear()  # free memory
 
     def on_train_end(self):
@@ -756,7 +791,7 @@ class AutoRegressiveLightning(LightningModule):
         if self.logging_enabled:
             # Log loss per timestep
             loss_dict = {
-                "timestep_losses/val_step_{step}": time_step_loss[step]
+                f"timestep_losses/val_step_{step}": time_step_loss[step]
                 for step in range(time_step_loss.shape[0])
             }
             self.log_dict(loss_dict, on_epoch=True, sync_dist=True)
@@ -819,7 +854,7 @@ class AutoRegressiveLightning(LightningModule):
         if self.logging_enabled:
             avg_loss = torch.stack([x for x in outputs]).mean()
             tb = self.logger.experiment
-            tb.add_scalar("mean_loss_epoch/validation", avg_loss, self.current_epoch)
+            tb.add_scalar("mean_loss_epoch/validation", avg_loss, self.global_step)
         # free memory
         self.validation_step_losses.clear()
 

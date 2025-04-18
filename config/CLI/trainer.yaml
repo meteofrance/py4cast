@@ -3,19 +3,6 @@ seed_everything: true
 
 ckpt_path: #EMPTY: runs as usual. NOT EMPTY: load weights and hyperparameters from checkpoint
 
-optimizer:
-  class_path: torch.optim.AdamW
-  init_args:
-    lr: 0.001
-
-lr_scheduler:
-  class_path: pl_bolts.optimizers.lr_scheduler.LinearWarmupCosineAnnealingLR
-  init_args:
-    warmup_epochs: 1
-    max_epochs: 500
-    eta_min: 0
-
-
 trainer:               # Native training arguments of ligthining.pytorch.Trainer
 
   fast_dev_run: False  # True: fit with only 1 batch and 1 epoch, use for dev (logging & checkpointing disabled)
@@ -66,6 +53,7 @@ trainer:               # Native training arguments of ligthining.pytorch.Trainer
         mode: min
         patience: 50
 
+  num_sanity_val_steps: 0
   log_every_n_steps: 50        # Num of batches btw logging
   accumulate_grad_batches: 10  # Num of batches before optim step
   deterministic: False         # True for reproducibility but increases computation time
