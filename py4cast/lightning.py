@@ -517,6 +517,8 @@ class AutoRegressiveLightning(LightningModule):
                 else:
                     y = self.model(x)
 
+                torch.save(x, "x.pt")
+
                 # We update the latest of our prev_states with the network output
                 if scale_y:
                     predicted_state = (
