@@ -16,11 +16,7 @@ from mfai.torch import export_to_onnx, onnx_load_and_infer
 from mfai.torch.models.base import ModelType
 from mfai.torch.models.utils import features_last_to_second, features_second_to_last
 
-from py4cast.models import (
-    all_nn_architectures,
-    get_model_kls_and_settings,
-    nn_architectures,
-)
+from py4cast.models import nn_architectures
 
 
 def to_numpy(tensor):
