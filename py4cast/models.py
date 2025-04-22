@@ -23,7 +23,6 @@ discovered_modules = {
     for _, name, _ in pkgutil.iter_modules()
     if name.startswith(PLUGIN_PREFIX)
 }
-print(discovered_modules)
 
 # We now add to the registry all the models found in the plugins.
 # Valid models are ModelABC subclasses contained in a module prefixed by PLUGIN_PREFIX.
@@ -51,11 +50,6 @@ nn_architectures: dict[ModelType, list[type[ModelABC]]] = {
     ]
     for model_type in ModelType
 }
-print('nn_architectures')
-for key, value in nn_architectures.items():
-    print(key)
-    print(value)
-    print()
 
 
 def get_model_kls_and_settings(model_name: str, settings: dict):
