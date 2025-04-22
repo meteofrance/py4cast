@@ -413,7 +413,7 @@ class AutoRegressiveLightning(LightningModule):
     def on_fit_start(self):
         self.log_hparams_tb()
         self.print_summary_model()
-    
+
     def configure_optimizers(self):
         """
         Configure the optimizer and scheduler
