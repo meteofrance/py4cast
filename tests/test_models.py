@@ -16,7 +16,11 @@ from mfai.torch import export_to_onnx, onnx_load_and_infer
 from mfai.torch.models.base import ModelType
 from mfai.torch.models.utils import features_last_to_second, features_second_to_last
 
-from py4cast.models import all_nn_architectures, nn_architectures, get_model_kls_and_settings
+from py4cast.models import (
+    all_nn_architectures,
+    get_model_kls_and_settings,
+    nn_architectures,
+)
 
 
 def to_numpy(tensor):
@@ -39,6 +43,7 @@ class FakeSumDataset(torch.utils.data.Dataset):
         x = torch.rand((self.grid_height, self.grid_width, self.num_inputs))
         y = torch.sum(x, -1).unsqueeze(-1)
         return x, y
+
 
 class FakePanguDataset(torch.utils.data.Dataset):
     def __init__(
@@ -71,6 +76,7 @@ class FakePanguDataset(torch.utils.data.Dataset):
             "target_plevel": target_plevel,
         }
 
+
 @dataclass
 class FakeStatics:
     """
@@ -90,10 +96,12 @@ class FakeStatics:
         return torch.from_numpy(np.asarray([xx, yy]))
 
 
-@pytest.mark.parametrize("model_kls",
-                         nn_architectures[ModelType.GRAPH]
-                         + nn_architectures[ModelType.CONVOLUTIONAL]
-                         + nn_architectures[ModelType.VISION_TRANSFORMER])
+@pytest.mark.parametrize(
+    "model_kls",
+    nn_architectures[ModelType.GRAPH]
+    + nn_architectures[ModelType.CONVOLUTIONAL]
+    + nn_architectures[ModelType.VISION_TRANSFORMER],
+)
 def test_torch_training_loop(model_kls):
     """
     Checks that our models are trainable on a toy problem (sum).
