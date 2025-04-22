@@ -1,6 +1,6 @@
 data:
   #args forwarded (linked) to model
-  dataset_name: titan_full
+  dataset_name: titan_aro_arp
   num_input_steps: 1
   num_pred_steps_train: 1
   num_pred_steps_val_test: 1
