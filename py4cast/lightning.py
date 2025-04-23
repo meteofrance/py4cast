@@ -155,6 +155,7 @@ class AutoRegressiveLightning(LightningModule):
         channels_last: bool = False,
         io_conf: Path | None = None,
         mask_ratio: float = 0,
+        mask_on_nan: bool = False,
         *args,
         **kwargs,
     ):
@@ -175,6 +176,7 @@ class AutoRegressiveLightning(LightningModule):
         self.channels_last = channels_last
         self.io_conf = io_conf
         self.mask_ratio = mask_ratio
+        self.mask_on_nan = mask_on_nan
 
         if self.training_strategy == "downscaling_only":
             print(
@@ -226,6 +228,7 @@ class AutoRegressiveLightning(LightningModule):
             num_input_steps * dataset_info.weather_dim * (1 - ds)
             + num_grid_static_features
             + dataset_info.forcing_dim
+            + self.mask_on_nan
         )
 
         num_output_features = dataset_info.weather_dim
@@ -638,10 +641,26 @@ class AutoRegressiveLightning(LightningModule):
             for idx in range(batch.num_input_steps)
         ]
 
+        mask = []
+
+        # creer un mask qui correspond à l'union des nans dans l'input et les forcings
+        if self.mask_on_nan:
+            combined_mask = torch.zeros_like(inputs[0], dtype=torch.bool)
+            # Combiner les masques pour les entrées
+            for input in inputs:
+                mask = torch.is_nan(input)
+                combined_mask = combined_mask | mask  # Union des masques
+
+            # Combiner les masques pour les forçages
+            for forcing_tensor in forcing_tensors:
+                mask = torch.is_nan(forcing_tensor)
+                combined_mask = combined_mask | mask  # Union des masques
+            mask.append(combined_mask)
+
         # If downscaling only, inputs are not concatenated: only use static features and forcings.
         x = torch.cat(
             inputs * (1 - ds)  # = [] if downscaling strategy
-            + [self.grid_static_features[: batch.batch_size], forcing.tensor],
+            + [self.grid_static_features[: batch.batch_size], forcing.tensor] + mask,
             dim=forcing.dim_index("features"),
         )
 
