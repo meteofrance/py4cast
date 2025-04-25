@@ -647,7 +647,7 @@ class AutoRegressiveLightning(LightningModule):
         if self.mask_on_nan:
             combined_mask = torch.zeros_like(inputs[0], dtype=torch.bool)
 
-            print(inputs.shape)
+            print(len(inputs))
 
             # Combiner les masques pour les entrées
             for input in inputs:
