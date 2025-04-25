@@ -657,7 +657,7 @@ class AutoRegressiveLightning(LightningModule):
 
             print(forcing.tensor.shape)
 
-            mask = torch.isnan(forcing_tensor)
+            mask = torch.isnan(forcing.tensor)
             # Combiner les masques pour les forçages
             for i in range(mask.shape[-1]):
                combined_mask = combined_mask | mask[:, :, :, i] # Union des masques de taille (batch, lat, lon)
