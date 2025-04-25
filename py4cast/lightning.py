@@ -657,6 +657,10 @@ class AutoRegressiveLightning(LightningModule):
                 combined_mask = combined_mask | mask  # Union des masques
             mask.append(combined_mask)
 
+            #remplcer les nan par des zeros (on pourrait aussi remplcer par la moyennes des pixels)
+            inputs = torch.nan_to_num(inputs)
+            forcing.tensor = torch.nan_to_num(forcing.tensor)
+
         # If downscaling only, inputs are not concatenated: only use static features and forcings.
         x = torch.cat(
             inputs * (1 - ds)  # = [] if downscaling strategy
@@ -698,8 +702,16 @@ class AutoRegressiveLightning(LightningModule):
 
         prediction, target = self.common_step(batch, batch_idx, phase="train")
         torch.save(target.tensor, "y.pt")
+
+        if self.mask_on_nan:
+            # Obtenir le masque sur la target pour que le model n'aprenne pas dessus
+            mask = ~torch.is_nan(target.tensor)
+            target.tensor = torch.nan_to_num(target.tensor)
+        else:
+            mask = torch.ones_like(target.tensor)
+
         # Compute loss: mean over unrolled times and batch
-        batch_loss = torch.mean(self.loss(prediction, target))
+        batch_loss = torch.mean(self.loss(prediction, target, mask = mask))
 
         self.training_step_losses.append(batch_loss)
 
