@@ -645,7 +645,7 @@ class AutoRegressiveLightning(LightningModule):
 
         # creer un mask qui correspond à l'union des nans dans l'input et les forcings
         if self.mask_on_nan:
-            combined_mask = torch.zeros_like(inputs[0, :, :, 0], dtype=torch.bool)
+            combined_mask = torch.zeros_like(inputs[0][:, :, :, 0], dtype=torch.bool)
 
             print(len(inputs))
 
