@@ -641,30 +641,30 @@ class AutoRegressiveLightning(LightningModule):
             for idx in range(batch.num_input_steps)
         ]
 
-        mask = []
+        mask_list = []
 
         # creer un mask qui correspond à l'union des nans dans l'input et les forcings
         if self.mask_on_nan:
-            combined_mask = torch.zeros_like(inputs[0], dtype=torch.bool)
+            combined_mask = torch.zeros_like(inputs[0, :, :, 0], dtype=torch.bool)
 
             print(len(inputs))
 
             # Combiner les masques pour les entrées
             for input in inputs:
                 mask = torch.isnan(input)
-                combined_mask = combined_mask | mask  # Union des masques
+                for i in range(mask.shape[-1]):
+                    combined_mask = combined_mask | mask[:, :, :, i]  # Union des masques de taille (batch, lat, lon)
 
             print(forcing.tensor.shape)
 
+            mask = torch.isnan(forcing_tensor)
             # Combiner les masques pour les forçages
-            for forcing_tensor in forcing.tensor:
-                mask = torch.isnan(forcing_tensor)
-                # je pourrais directement faire torch.isnan puis apres union non ?
-                combined_mask = combined_mask | mask  # Union des masques
-            mask.append(combined_mask)
+            for i in range(mask.shape[-1]):
+               combined_mask = combined_mask | mask[:, :, :, i] # Union des masques de taille (batch, lat, lon)
+            mask_list.append(~combined_mask.unsqueeze(-1)) # shape [(batch, lat, lon, param)]
 
             #remplcer les nan par des zeros (on pourrait aussi remplcer par la moyennes des pixels)
-            inputs = torch.nan_to_num(inputs)
+            inputs = [torch.nan_to_num(input) for input in inputs]
             forcing.tensor = torch.nan_to_num(forcing.tensor)
 
         # If downscaling only, inputs are not concatenated: only use static features and forcings.
