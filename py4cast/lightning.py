@@ -649,11 +649,13 @@ class AutoRegressiveLightning(LightningModule):
             # Combiner les masques pour les entrées
             for input in inputs:
                 mask = torch.isnan(input)
+                print(mask.shape)
                 combined_mask = combined_mask | mask  # Union des masques
 
             # Combiner les masques pour les forçages
             for forcing_tensor in forcing.tensor:
                 mask = torch.isnan(forcing_tensor)
+                print(mask.shape)
                 # je pourrais directement faire torch.isnan puis apres union non ?
                 combined_mask = combined_mask | mask  # Union des masques
             mask.append(combined_mask)
