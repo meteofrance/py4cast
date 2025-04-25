@@ -35,7 +35,7 @@ class Py4CastLoss(ABC):
         """
 
     @abstractmethod
-    def forward(self, prediction: NamedTensor, target: NamedTensor) -> torch.Tensor:
+    def forward(self, prediction: NamedTensor, target: NamedTensor, mask: torch.Tensor) -> torch.Tensor:
         """
         Compute the loss function
         """
