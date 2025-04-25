@@ -648,12 +648,12 @@ class AutoRegressiveLightning(LightningModule):
             combined_mask = torch.zeros_like(inputs[0], dtype=torch.bool)
             # Combiner les masques pour les entrées
             for input in inputs:
-                mask = torch.is_nan(input)
+                mask = torch.isnan(input)
                 combined_mask = combined_mask | mask  # Union des masques
 
             # Combiner les masques pour les forçages
             for forcing_tensor in forcing_tensors:
-                mask = torch.is_nan(forcing_tensor)
+                mask = torch.isnan(forcing_tensor)
                 combined_mask = combined_mask | mask  # Union des masques
             mask.append(combined_mask)
 
@@ -705,7 +705,7 @@ class AutoRegressiveLightning(LightningModule):
 
         if self.mask_on_nan:
             # Obtenir le masque sur la target pour que le model n'aprenne pas dessus
-            mask = ~torch.is_nan(target.tensor)
+            mask = ~torch.isnan(target.tensor)
             target.tensor = torch.nan_to_num(target.tensor)
         else:
             mask = torch.ones_like(target.tensor)
@@ -786,7 +786,7 @@ class AutoRegressiveLightning(LightningModule):
 
         if self.mask_on_nan:
             # Obtenir le masque sur la target pour que le model n'aprenne pas dessus
-            mask = ~torch.is_nan(target.tensor)
+            mask = ~torch.isnan(target.tensor)
             target.tensor = torch.nan_to_num(target.tensor)
         else:
             mask = torch.ones_like(target.tensor)
