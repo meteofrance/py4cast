@@ -646,16 +646,19 @@ class AutoRegressiveLightning(LightningModule):
         # creer un mask qui correspond à l'union des nans dans l'input et les forcings
         if self.mask_on_nan:
             combined_mask = torch.zeros_like(inputs[0], dtype=torch.bool)
+
+            print(inputs.shape)
+
             # Combiner les masques pour les entrées
             for input in inputs:
                 mask = torch.isnan(input)
-                print(mask.shape)
                 combined_mask = combined_mask | mask  # Union des masques
+
+            print(forcing.tensor.shape)
 
             # Combiner les masques pour les forçages
             for forcing_tensor in forcing.tensor:
                 mask = torch.isnan(forcing_tensor)
-                print(mask.shape)
                 # je pourrais directement faire torch.isnan puis apres union non ?
                 combined_mask = combined_mask | mask  # Union des masques
             mask.append(combined_mask)
