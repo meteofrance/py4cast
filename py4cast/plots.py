@@ -222,6 +222,7 @@ class Plotter(ABC):
         obj: "AutoRegressiveLightning",
         prediction: NamedTensor,
         target: NamedTensor,
+        mask: torch.Tensor,
     ) -> None:
         """
         Do an action when "step" is trigger
@@ -259,6 +260,7 @@ class MapPlot(Plotter):
         obj: "AutoRegressiveLightning",
         prediction: NamedTensor,
         target: NamedTensor,
+        mask: torch.Tensor,
     ) -> None:
         """
         Update. Should be call by "on_{training/validation/test}_step
@@ -589,6 +591,7 @@ class SpatialErrorPlot(Plotter):
         obj: "AutoRegressiveLightning",
         prediction: NamedTensor,
         target: NamedTensor,
+        mask: torch.Tensor,
     ) -> None:
         spatial_loss = obj.loss(prediction, target, reduce_spatial_dim=False)
         # Getting only spatial loss for the required val_step_errors
