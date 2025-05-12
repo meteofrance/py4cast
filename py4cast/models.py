@@ -8,12 +8,12 @@ import pkgutil
 from typing import Any, Tuple
 
 from mfai.torch.models import registry as mfai_registry
-from mfai.torch.models.base import ModelABC
+from mfai.torch.models.base import ModelABC, ModelType
 
 # Models MUST be added to the registry
 # in order to be used by the training script.
 # We init the registry with the models from mfai.
-registry = {}
+registry: dict[str, type[ModelABC]] = {}
 registry.update(mfai_registry)
 
 
@@ -41,7 +41,15 @@ for module_name, module in discovered_modules.items():
                     f"Model {kls.__name__} from plugin {module_name} already exists in the registry."
                 )
             registry[kls.__name__] = kls
-all_nn_architectures = list(registry)
+all_nn_architectures: list[type[ModelABC]] = list(registry.values())
+nn_architectures: dict[ModelType, list[type[ModelABC]]] = {
+    model_type: [
+        architecture
+        for architecture in all_nn_architectures
+        if architecture.model_type == model_type
+    ]
+    for model_type in ModelType
+}
 
 
 def get_model_kls_and_settings(model_name: str, settings: dict):
