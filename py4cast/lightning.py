@@ -521,8 +521,6 @@ class AutoRegressiveLightning(LightningModule):
                 else:
                     y = self.model(x)
 
-                torch.save(x, "x.pt")
-
                 # We update the latest of our prev_states with the network output
                 if scale_y:
                     predicted_state = (
@@ -647,15 +645,11 @@ class AutoRegressiveLightning(LightningModule):
         if self.mask_on_nan:
             combined_mask = torch.zeros_like(inputs[0][:, :, :, 0], dtype=torch.bool)
 
-            print(len(inputs))
-
             # Combiner les masques pour les entrées
             for input in inputs:
                 mask = torch.isnan(input)
                 for i in range(mask.shape[-1]):
                     combined_mask = combined_mask | mask[:, :, :, i]  # Union des masques de taille (batch, lat, lon)
-
-            print(forcing.tensor.shape)
 
             mask = torch.isnan(forcing.tensor)
             # Combiner les masques pour les forçages
@@ -707,7 +701,6 @@ class AutoRegressiveLightning(LightningModule):
         """
 
         prediction, target = self.common_step(batch, batch_idx, phase="train")
-        torch.save(target.tensor, "y.pt")
 
         if self.mask_on_nan:
             # Obtenir le masque sur la target pour que le model n'aprenne pas dessus
@@ -715,8 +708,6 @@ class AutoRegressiveLightning(LightningModule):
             target.tensor = torch.nan_to_num(target.tensor)
         else:
             mask = torch.ones_like(target.tensor)
-
-        torch.save(mask, "mask.pt")
 
         # Compute loss: mean over unrolled times and batch
         batch_loss = torch.mean(self.loss(prediction, target, mask = mask))
