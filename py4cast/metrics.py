@@ -162,7 +162,7 @@ class MetricPSDVar(Metric):
         # Step counter, needed to compute psd mean at each epoch.
         self.add_state("step_count", default=torch.tensor(0.0), dist_reduce_fx="sum")
 
-    def update(self, preds: NamedTensor, targets: NamedTensor, maks: torch.Tensor, shape: tuple):
+    def update(self, preds: NamedTensor, targets: NamedTensor, mask: torch.Tensor, shape: tuple):
         """
         compute the RSME between target and pred PSD.
         called at each end of step
