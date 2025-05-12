@@ -706,6 +706,7 @@ class AutoRegressiveLightning(LightningModule):
             # Obtenir le masque sur la target pour que le model n'aprenne pas dessus
             mask = ~torch.isnan(target.tensor)
             target.tensor = torch.nan_to_num(target.tensor)
+            prediction.tensor = torch.nan_to_num(prediction.tensor)
         else:
             mask = torch.ones_like(target.tensor)
 
@@ -789,6 +790,7 @@ class AutoRegressiveLightning(LightningModule):
             # Obtenir le masque sur la target pour que le model n'aprenne pas dessus
             mask = ~torch.isnan(target.tensor)
             target.tensor = torch.nan_to_num(target.tensor)
+            prediction.tensor = torch.nan_to_num(prediction.tensor)
         else:
             mask = torch.ones_like(target.tensor)
 
