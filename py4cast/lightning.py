@@ -712,12 +712,14 @@ class AutoRegressiveLightning(LightningModule):
         # Compute loss: mean over unrolled times and batch
         batch_loss = torch.mean(self.loss(prediction, target, mask = mask))
 
+        print("batch_loss : ", batch_loss)
+
         self.training_step_losses.append(batch_loss)
 
         # Notify every plotters
         if self.logging_enabled:
             for plotter in self.train_plotters:
-                plotter.update(self, prediction=self.prediction, target=self.target, mask=mask)
+                plotter.update(self, prediction=prediction, target=target, mask=mask)
 
         return batch_loss
 
