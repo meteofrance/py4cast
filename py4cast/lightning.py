@@ -726,7 +726,7 @@ class AutoRegressiveLightning(LightningModule):
         # Notify every plotters
         if self.logging_enabled:
             for plotter in self.train_plotters:
-                plotter.update(self, prediction=self.prediction, target=self.target)
+                plotter.update(self, prediction=self.prediction, target=self.target, mask=mask)
 
         return batch_loss
 
@@ -825,10 +825,10 @@ class AutoRegressiveLightning(LightningModule):
             # Notify every plotters
             if self.current_epoch % PLOT_PERIOD == 0:
                 for plotter in self.valid_plotters:
-                    plotter.update(self, prediction=prediction, target=target)
-            self.psd_plot_metric.update(prediction, target, self.original_shape)
-            self.rmse_psd_plot_metric.update(prediction, target, self.original_shape)
-            self.acc_metric.update(prediction, target)
+                    plotter.update(self, prediction=prediction, target=target, mask=mask)
+            self.psd_plot_metric.update(prediction, target, mask, self.original_shape)
+            self.rmse_psd_plot_metric.update(prediction, target, mask, self.original_shape)
+            self.acc_metric.update(prediction, target, mask)
 
     def on_validation_epoch_end(self):
         """
@@ -910,6 +910,8 @@ class AutoRegressiveLightning(LightningModule):
         """
         with torch.no_grad():
             prediction, target = self.common_step(batch, batch_idx, phase="val_test")
+        
+        mask = torch.ones_like(target.tensor)
 
         time_step_loss = torch.mean(self.loss(prediction, target), dim=0)
         mean_loss = torch.mean(time_step_loss)
@@ -932,11 +934,11 @@ class AutoRegressiveLightning(LightningModule):
         if self.logging_enabled:
             # Notify plotters & metrics
             for plotter in self.test_plotters:
-                plotter.update(self, prediction=prediction, target=target)
+                plotter.update(self, prediction=prediction, target=target, mask=mask)
 
             self.acc_metric.update(prediction, target)
-            self.psd_plot_metric.update(prediction, target, self.original_shape)
-            self.rmse_psd_plot_metric.update(prediction, target, self.original_shape)
+            self.psd_plot_metric.update(prediction, target, mask, self.original_shape)
+            self.rmse_psd_plot_metric.update(prediction, target, mask, self.original_shape)
 
     def on_test_epoch_end(self):
         """

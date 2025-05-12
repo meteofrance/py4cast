@@ -502,6 +502,7 @@ class StateErrorPlot(Plotter):
         obj: "AutoRegressiveLightning",
         prediction: NamedTensor,
         target: NamedTensor,
+        mask: torch.Tensor,
     ) -> None:
         """
         Compute the metric. Append to a dictionnary
@@ -509,7 +510,7 @@ class StateErrorPlot(Plotter):
         for name in self.metrics:
             self.losses[name].append(
                 obj.trainer.strategy.reduce(
-                    self.metrics[name](prediction, target), reduce_op="mean"
+                    self.metrics[name](prediction, target, mask), reduce_op="mean"
                 ).cpu()
             )
         if not self.initialized:
