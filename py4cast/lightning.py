@@ -670,7 +670,7 @@ class AutoRegressiveLightning(LightningModule):
         # If downscaling only, inputs are not concatenated: only use static features and forcings.
         x = torch.cat(
             inputs * (1 - ds)  # = [] if downscaling strategy
-            + [self.grid_static_features[: batch.batch_size], forcing.tensor] + mask,
+            + [self.grid_static_features[: batch.batch_size], forcing.tensor] + mask_list,
             dim=forcing.dim_index("features"),
         )
 
