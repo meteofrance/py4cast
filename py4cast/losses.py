@@ -115,7 +115,7 @@ class WeightedLoss(Py4CastLoss):
         returns (B, pred_steps)
         """
         # Compute Torch loss (defined in the parent class when this Mixin is used)
-        torch_loss = self.loss(prediction.tensor[mask], target.tensor[mask])
+        torch_loss = self.loss(prediction.tensor*mask, target.tensor*mask)
 
 
         # Retrieve the weights for each feature
@@ -139,7 +139,7 @@ class WeightedLoss(Py4CastLoss):
                 weighted_loss * self.lm.interior_mask_s,
                 dim=target.spatial_dim_idx,
             )
-            / self.num_interior 
+            / (self.num_interior - (~mask).sum()) 
         )
         return time_step_mean_loss
 
@@ -165,7 +165,7 @@ class ScaledLoss(Py4CastLoss):
         returns (B, pred_steps)
         """
         # Compute Torch loss (defined in the parent class when this Mixin is used)
-        torch_loss = self.loss(prediction.tensor[mask], target.tensor[mask])
+        torch_loss = self.loss(prediction.tensor*mask, target.tensor*mask)
 
         # Compute the mean loss value over spatial dimensions
         mean_loss = (
@@ -173,7 +173,7 @@ class ScaledLoss(Py4CastLoss):
                 torch_loss * self.lm.interior_mask,
                 dim=target.spatial_dim_idx,
             )
-            / self.num_interior
+            / (self.num_interior - (~mask).sum())
         )
 
         if self.loss.__class__ == MSELoss:
