@@ -1,19 +1,14 @@
-import os
-from copy import deepcopy
+import datetime as dt
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Tuple, Union
+from typing import Any, Dict, Tuple, Union
 
+import epygram
 import numpy as np
-import pandas as pd
-import torch
-import xarray as xr
-from cfgrib import xarray_to_grib as xtg
 from dataclasses_json import dataclass_json
 from mfai.torch.namedtensor import NamedTensor
 
 from py4cast.datasets.base import DatasetABC
-from py4cast.forcingutils import compute_hours_of_day
 
 
 @dataclass_json
@@ -51,201 +46,103 @@ def save_named_tensors_to_grib(
         sample (Any) : an instance of the DataSet Sample, containing informations on parameters, date, leadtimes
         date (dt.datetime) : the date of the initial state
         saving_settings (GribaSavingSettings) : settings for the writing process
-
     """
 
-    params = ds.params
-
-    grib_features = get_grib_param_dataframe(pred, params)
-    grib_groups = get_grib_groups(grib_features)
-    # Get the valid hours for a list of timestamps
-    validtimes = compute_hours_of_day(
-        sample.output_timestamps.datetime, sample.output_timestamps.timedeltas
-    )
     # Get number of prediction
     predicted_time_steps = len(sample.output_timestamps.validity_times)
-
-    model_ds = {
-        c: xr.open_dataset(
-            Path(saving_settings.directory) / saving_settings.template_grib,
-            backend_kwargs={
-                "indexpath": "",
-                "read_keys": [
-                    "level",
-                    "shortname",
-                    "centre",
-                    "typeOfGeneratingProcess",
-                    "generatingProcessIdentifier",
-                    "typeOfLevel",
-                    "discipline",
-                    "parameterCategory",
-                    "parameterNumber",
-                    "unit",
-                    "stepRange",
-                    "endStep",
-                    "forecastTime",
-                ],
-                "filter_by_keys": grib_groups[c],
-            },
-        )
-        for c in grib_groups.keys()
-    }
-
-    for t_idx in range(predicted_time_steps):
-        leadtime = t_idx + 1
-        for group in model_ds.keys():
-            raw_data = pred.select_dim("timestep", t_idx, bare_tensor=False)
-            storable = write_storable_dataset(
-                pred,
-                ds,
-                model_ds[group],
-                group,
-                sample,
-                validtimes[t_idx],
-                leadtime,
-                raw_data,
-                grib_features,
-            )
-
-            path_to_file = get_output_filename(saving_settings, sample, leadtime)
-            full_path = Path(saving_settings.directory) / path_to_file
-            full_path.parent.mkdir(parents=True, exist_ok=True)
-
-            option = "wb" if not os.path.exists(full_path) else "ab"
-
-            xtg.to_grib(
-                storable,
-                full_path,
-                option,
-            )
-
-
-def write_storable_dataset(
-    pred: NamedTensor,
-    ds: DatasetABC,
-    template_ds: xr.Dataset,
-    group: str,
-    sample: Any,
-    validtime: float,
-    leadtime: float,
-    raw_data: NamedTensor,
-    grib_features: pd.DataFrame,
-) -> xr.Dataset:
-    """Write the template xarray dataset with raw data tensor from inference
-
-    Args:
-        pred (NamedTensor): complete namedtensor, containing feature names
-        ds (DatasetABC): inference dataset
-        template_ds (xr.Dataset): xarray dataset extracted from the template grib
-        group (str): index of the template_ds in the template dict containing coherent groups
-        sample (Any): the inference sample to be saved
-        validtime (float): time of validity of the current sample
-        leadtime (float): lead time of the current sample
-        raw_data (NamedTensor): extraction from pred at current timestep
-        grib_features (pd.DataFrame): complete description of feature names and definition
-
-    Returns:
-        xr.Dataset: the template dataset, filled with data from raw_data, in the correct format
-    """
-    receiver_ds = deepcopy(template_ds)
-
-    # if the shape of the dataset grid doesn't match grib template, fill the rest of the data with NaNs
-    nanmask, latlon = make_nan_mask(ds, receiver_ds)
-    (
-        latmin,
-        latmax,
-        longmin,
-        longmax,
-    ) = latlon
-
-    # Fill xarray with the date in ns otherwise, GRIB raise a warning
-    date = np.datetime64(sample.timestamps.datetime.date())
-    receiver_ds["time"] = date.astype("datetime64[ns]")
-    ns_step = np.timedelta64(
-        int(leadtime * 3600 * 1000000000),
-        "ns",
+    # Open template grib
+    tmplt_ds = epygram.formats.resource(
+        Path(saving_settings.directory) / saving_settings.template_grib, "r"
     )
-    ns_valid = np.timedelta64(
-        int(validtime * 3600 * 1000000000),
-        "ns",
+
+    datetime = sample.output_timestamps.datetime
+
+    # Get time between 2 consecutive steps in hours
+    time_step = int(
+        (
+            sample.timestamps.timedeltas[1] - sample.timestamps.timedeltas[0]
+        ).total_seconds()
     )
-    receiver_ds["step"] = ns_step
-    receiver_ds["valid_time"] = date + ns_valid
 
-    # retrieving key metadata to be able to parallelize writing
-    namelist = list(receiver_ds.keys())
-    used_grib_feat = grib_features[(grib_features["name"].isin(namelist))]
+    for step_idx in range(predicted_time_steps):
 
-    # will only be used if namelist has a single item
-    name = namelist[0]
-    feature_names = used_grib_feat["feature_name"].tolist()
-    tol = used_grib_feat["typeOfLevel"].drop_duplicates().tolist()[0]
-    feature_idx = torch.tensor([pred.feature_names_to_idx[f] for f in feature_names])
+        # Get data
+        raw_data = pred.select_dim("timestep", step_idx, bare_tensor=False)
+        # Define leadtime
+        leadtime = int(
+            sample.output_timestamps.timedeltas[step_idx].total_seconds() / 60**2
+        )
 
-    data = raw_data.index_select_dim("features", feature_idx).squeeze().cpu().numpy()
+        # Get timedelta & validity time from initial datetime
+        timedelta = sample.output_timestamps.timedeltas[step_idx]
+        validity_time = sample.output_timestamps.validity_times[step_idx]
 
-    if f"{name}_{tol}" == group:
-        # there might be a third dimension (eg isobaricInhPa) : basis for nanmask duplication
-        dims = template_ds.dims
+        # Get the name of the file
+        path_to_file = get_output_filename(saving_settings, sample, leadtime)
+        full_path = Path(saving_settings.directory) / path_to_file
+        full_path.parent.mkdir(parents=True, exist_ok=True)
 
-        try:
-            # supplementary dim
-            maybe_repeat = template_ds.sizes[tol]
-            data2grib = np.repeat(nanmask[np.newaxis], maybe_repeat, axis=0)
-            data2grib[:, latmax : latmin + 1, longmin : longmax + 1] = data
-            receiver_ds[name] = (dims, data2grib.astype(np.float32))
-            receiver_ds[name] = receiver_ds[name].assign_attrs(
-                **template_ds[name].attrs
+        # Create a GRIB
+        grib_final = epygram.formats.resource(full_path, "w", fmt="GRIB")
+
+        feature_not_accepted = []
+        for feature in pred.feature_names:
+
+            # validity
+            dict_val = {
+                "date_time": validity_time,
+                "basis": datetime,
+                "term": timedelta,
+            }
+
+            # Get FID of the current feature
+            fid = feature2fid(feature, dict_val, time_step)
+            # if fid is None continue the for loop
+            if not fid:
+                feature_not_accepted.append(feature)
+                continue
+
+            # Get template grib coordinates
+            f = tmplt_ds.readfield(fid).clone()
+            lon_grib, lat_grib = f.geometry.get_lonlat_grid()
+            _lat_grib = lat_grib[:, 0]
+            _lon_grib = lon_grib[0, :]
+            shape_grib_latlon = (len(_lat_grib), len(_lon_grib))
+
+            # Select correct feature in py4cast prediction
+            data = (
+                raw_data.tensor[:, :, raw_data.feature_names_to_idx[feature]]
+                .cpu()
+                .numpy()
             )
 
-        except KeyError:
-            maybe_repeat = len(feature_idx) if len(feature_idx) > 1 else 0
-            if maybe_repeat:
-                # no suplementary dim but several variables
-                data2grib = np.repeat(nanmask[np.newaxis], maybe_repeat, axis=0)
-                data2grib[:, latmax : latmin + 1, longmin : longmax + 1] = data
-                if set(namelist).issubset(set(receiver_ds.keys())):
-                    receiver_ds.update(
-                        {
-                            f: (dims, data2grib[pred.feature_names_to_idx[f]])
-                            for f in feature_names
-                        }
-                    )
-                else:
-                    receiver_ds.assign(
-                        {
-                            f: (dims, data2grib[pred.feature_names_to_idx[f]])
-                            for f in feature_names
-                        }
-                    )
-            else:
-                "only one variable"
-                data2grib = nanmask
-                data2grib[latmax : latmin + 1, longmin : longmax + 1] = data
-                receiver_ds[name] = (dims, data2grib.astype(np.float32))
-                receiver_ds[name] = receiver_ds[name].assign_attrs(
-                    **template_ds[name].attrs
-                )
-    elif tol == group:
-        # in this case, there might be several variables : basis for nanmask duplication
-        dims = template_ds.dims
-        maybe_repeat = len(feature_idx)
-        # Stack n nanmasks on a newaxis for n features
-        data2grib = np.repeat(nanmask[np.newaxis], maybe_repeat, axis=0)
-        # Write data among nan values
-        data2grib[:, latmax : latmin + 1, longmin : longmax + 1] = data
+            # Position the infer dataset into the latlon grib, return latlon idx in the grib.
+            idxs_latlon_grib = match_latlon(ds, _lat_grib, _lon_grib)
 
-        receiver_ds.update(
-            {f: (dims, data2grib[idx, :, :]) for idx, f in enumerate(feature_names)}
-        )
-        receiver_ds[name] = receiver_ds[name].assign_attrs(**template_ds[name].attrs)
+            # Create data for masked array filled with default value
+            mask = fill_tensor_with(
+                embedded_data=False,
+                embedded_idxs=idxs_latlon_grib,
+                shape=shape_grib_latlon,
+                default_v=True,
+                _dtype=bool,
+            )
+            _data = fill_tensor_with(
+                embedded_data=data,
+                embedded_idxs=idxs_latlon_grib,
+                shape=shape_grib_latlon,
+                default_v=f.data.data[0][0],
+                _dtype=np.float64,
+            )
 
-    # Fill those xarray attributes for OCTAVI use
-    # stepRange for cumulated variables, cumulated on 1 hour.
-    receiver_ds[name].attrs["GRIB_stepRange"] = f"{leadtime-1}-{leadtime}"
-    receiver_ds[name].attrs["GRIB_endStep"] = leadtime
-    receiver_ds[name].attrs["GRIB_forecastTime"] = leadtime - 1
-    return receiver_ds
+            m_arr = np.ma.MaskedArray(_data, mask, fill_value=f.data.fill_value)
+
+            f.setdata(m_arr)
+            f.validity[0].set(**dict_val)
+            grib_final.writefield(f)
+
+        print(f"Leadtime {leadtime} has been written in {full_path}")
+        print(f"Following features were not accepted : {feature_not_accepted}")
 
 
 def get_output_filename(
@@ -255,16 +152,19 @@ def get_output_filename(
     for ident in saving_settings.sample_identifiers:
         if ident == "runtime":
             # Get the max of the input timestamps which is t0
-            runtime = max(
-                set(sample.timestamps.validity_times).difference(
-                    set(sample.output_timestamps.validity_times)
-                )
-            ).strftime("%Y%m%dT%H%MP")
+            last_input = max(
+                set(sample.timestamps.timedeltas)
+                - set(sample.output_timestamps.timedeltas)
+            )
+            idx_last_input = sample.timestamps.timedeltas.index(last_input)
+            runtime = sample.timestamps.validity_times[idx_last_input].strftime(
+                "%Y%m%dT%H%MP"
+            )
             identifiers.append(runtime)
         elif ident == "leadtime":
             identifiers.append(leadtime)
         elif ident == "member":
-            # get member, offset of 1. To start at 1.
+            # Offset of 1. To start at 1 instead of 0.
             member = getattr(sample, ident) + 1
             # format string
             mb = str(member).zfill(3)
@@ -276,135 +176,47 @@ def get_output_filename(
     return path_to_file
 
 
-def get_grib_param_dataframe(pred: NamedTensor, params: list) -> pd.DataFrame:
-    """Match feature names of the pred named tensor to grid-readable levels and parameter names.
-    Throw warnings if feature names are found that do not match any parameter (these features will not be saved).
-    Args:
-        pred (NamedTensor): input named tensor
-        params (list): list of parameters, implementing typical Param instances used to describe datasets.
-
-
-    Returns:
-        pd.Dataframe : relating all feature names with name, level, typeOfLevel
+def fill_tensor_with(embedded_data, embedded_idxs, shape, default_v, _dtype):
     """
-
-    pred_feature_names = pred.feature_names
-    unmatched_feature_names = set(pred.feature_names)
-    list_features = []
-    for param in params:
-        level, name, tol = (
-            param.level,
-            param.name,
-            param.level_type,
-        )
-        trial_name = f"{name}_{level}_{tol}"
-        if trial_name in pred_feature_names:
-            list_features.append(
-                pd.DataFrame(
-                    {
-                        "feature_name": [trial_name],
-                        "level": [level],
-                        "name": [name],
-                        "typeOfLevel": [tol],
-                    },
-                    index=[trial_name],
-                )
-            )
-            unmatched_feature_names.remove(trial_name)
-    # pd.concat is more efficient than df.append so we concat at the end
-    grib_features = pd.concat(list_features)
-
-    if len(unmatched_feature_names) != 0:
-        raise UserWarning(
-            f"There where unmatched features in pred tensor (no associated param found) : {unmatched_feature_names}"
-        )
-    return grib_features
-
-
-def get_grib_groups(grib_features: pd.DataFrame) -> dict[str:dict]:
-    """Identify the largest possible groups of keys to open the grib file a the least possible number of times.
-
-    This has a strong impact on the program's I/O performance, as reading a (possibly large) grib file
-    is expensive. Unfortunately, the fields stored in the grib can have incompatible dimensions when viewed
-    as xarray Datasets. Therefore, we are forced to open the grib at least as many times as there are incompatible
-    fields in the pred tensor feature names.
-
-    This function parses the grib_features to get groups of compatible fields. The current strategy is to identify
-    either variables or levels as group identifiers, and gather all fields that share this identifiers.
-    Also, different typeOfLevels are easy-to-use group identifiers / separators.
-
-    Notes :
-        -> the main incompatibilities postulated in the current strategy are typeOfLevels and variable names/levels.
-        other types of incompatibilities might include typeOfStatisticalProcessing, thresholding,
-        vertical-wise integration, etc.
-        -> more efficient strategies likely exist, but solving the problem in a general manner is NP-hard,
-        even if you know all compatibility relations (bipartite dimension problem).
-        -> for a low number of fields, this does not provide a large amount of acceleration, but should be
-        more efficient.
-
+    This function creates a numpy array of shape shape with a value defined by default_v.
+    The embedded data should be embeddable in this array, and are positions at the index in embedded_idxs.
     Args:
-        grib_features (pd.DataFrame): output of get_grib_param_dataframe function
-
-    Returns:
-        dict[str : dict]: mapping of group identifiers to grib-style key filtering
+        embedded_data (Union[numpy.ndarray, bool]): the data to position in the grib
+        embedded_idxs (Tuple): A tuple of 4 idx ; represents the position in the array.
+        shape (Tuple): shape of the returned array,
+        default_v (Union[bool, float64]): fill the rest of the array with this default value
+        _dtype: dtype of the array
+    Return :
+        a numpy.ndarray
     """
-    if "surface" in grib_features["typeOfLevel"].values:
-        grib_groups = {
-            "surface": {
-                "cfVarName": grib_features["name"]
-                .loc[(grib_features["typeOfLevel"] == "surface")]
-                .tolist(),
-                "typeOfLevel": "surface",
-            },
-        }
-    else:
-        grib_groups = {}
+    (
+        latmin,
+        latmax,
+        longmin,
+        longmax,
+    ) = embedded_idxs
 
-    typesOflevel = grib_features["typeOfLevel"].drop_duplicates().tolist()
+    _tensor = np.full(shape, default_v, dtype=_dtype)
+    _tensor[latmin : latmax + 1, longmin : longmax + 1] = embedded_data
 
-    for tol in typesOflevel:
-        if tol != "surface":
-            levels_tol = grib_features["level"].loc[
-                (grib_features["typeOfLevel"] == tol)
-            ]
-            names_tol = grib_features["name"].loc[(grib_features["typeOfLevel"] == tol)]
-
-            cribler = levels_tol if len(levels_tol) < len(names_tol) else names_tol
-            cribler_flag = "level" if len(levels_tol) < len(names_tol) else "name"
-            for c in cribler:
-                if cribler_flag == "level":
-                    filter_keys = {
-                        "level": c,
-                        "cfVarName": names_tol[(grib_features["level"] == c)].tolist(),
-                        "typeOfLevel": tol,
-                    }
-                else:
-                    filter_keys = {
-                        "level": levels_tol[(grib_features["name"] == c)].tolist(),
-                        "cfVarName": c,
-                        "typeOfLevel": tol,
-                    }
-                grib_groups[f"{c}_{tol}"] = filter_keys
-
-    return grib_groups
+    return _tensor
 
 
-def make_nan_mask(
-    infer_dataset: DatasetABC, template_dataset: xr.Dataset
+def match_latlon(
+    infer_dataset: DatasetABC, lat: np.ndarray, lon: np.ndarray
 ) -> Tuple[Union[np.ndarray, None], Tuple]:
-    """This is to ensure that the infer_dataset grid can be matched with the grib template's grid
-    (at this point grib data is passed to an xarray Dataset).
-    If the inference grid is stricly embeddable in the template one, then it will be padded with NaNs.
-    If the two grids exactly match, nothing is done.
+    """This is to ensure that the infer_dataset grid can be matched with the given lat lon.
+    If the inference grid is stricly embeddable in the given coordinates, then it will be padded with NaNs.
+    If it's exactly match, nothing is done.
     If the two grids do not match, this function raises an exception.
 
     Args:
         infer_dataset (DatasetABC): the inference dataset, should possess a grid attribute.
-        template_dataset (xr.Dataset): the xarray Dataset created from the template grib file.
+        lat (numpy.ndarray): the latitude of reference as numpy vector
+        lon (numpy.ndarray): the longitude of reference as numpy vector
 
     Returns:
-        Tuple[Union[np.ndarray, None], Tuple]:
-            nanmask : np.ndarray of the shape of template_dataset grid, filled with nans, or None if the grids match.
+        Tuple
             (latmin, latmax, longmin, longmax) : int, indices of the infer grid frontier in the template grid.
     """
     try:
@@ -415,49 +227,21 @@ def make_nan_mask(
         )
 
     if (
-        (
-            np.array(template_dataset.latitude.values.min())
-            <= infer_dataset.grid.lat[:, 0].min()
-        )
-        and (
-            np.array(template_dataset.latitude.values.max())
-            >= infer_dataset.grid.lat[:, 0].max()
-        )
-        and (
-            np.array(template_dataset.longitude.values.min())
-            <= infer_dataset.grid.lon[:, 0].min()
-        )
-        and (
-            np.array(template_dataset.longitude.values.max())
-            >= infer_dataset.grid.lon[:, 0].max()
-        )
+        (np.array(lat.min()) <= infer_dataset.grid.lat[:, 0].min())
+        and (np.array(lat.max()) >= infer_dataset.grid.lat[:, 0].max())
+        and (np.array(lon.min()) <= infer_dataset.grid.lon[:, 0].min())
+        and (np.array(lon.max()) >= infer_dataset.grid.lon[:, 0].max())
     ):
-        nanmask = np.empty(
-            (len(template_dataset.latitude), len(template_dataset.longitude))
-        )
-        nanmask[:] = np.nan
+
         # matching latitudes
         latmin, latmax = (
-            np.where(
-                np.round(template_dataset.latitude.values, 5)
-                == round(infer_dataset.grid.lat.min(), 5)
-            )[0],
-            np.where(
-                np.round(template_dataset.latitude.values, 5)
-                == round(infer_dataset.grid.lat.max(), 5)
-            )[0],
+            np.where(np.round(lat, 5) == round(infer_dataset.grid.lat.min(), 5))[0],
+            np.where(np.round(lat, 5) == round(infer_dataset.grid.lat.max(), 5))[0],
         )
-
         # matching longitudes
         longmin, longmax = (
-            np.where(
-                np.round(template_dataset.longitude.values, 5)
-                == round(infer_dataset.grid.lon.min(), 5)
-            )[0],
-            np.where(
-                np.round(template_dataset.longitude.values, 5)
-                == round(infer_dataset.grid.lon.max(), 5)
-            )[0],
+            np.where(np.round(lon, 5) == round(infer_dataset.grid.lon.min(), 5))[0],
+            np.where(np.round(lon, 5) == round(infer_dataset.grid.lon.max(), 5))[0],
         )
 
         latmin, latmax, longmin, longmax = (
@@ -472,4 +256,115 @@ def make_nan_mask(
             f"Lat/Lon dims of the {infer_dataset} do not fit in template grid, cannot write grib."
         )
 
-    return nanmask, (latmin, latmax, longmin, longmax)
+    return (latmin, latmax, longmin, longmax)
+
+
+def feature2fid(feature: str, dict_val: Dict[str, dt.datetime], time_step: int):
+    """
+    Return fid from the feature name.
+    TODO should be automatic.
+    """
+    name2fid = {}
+    name2fid.update(
+        {
+            "temperature": {
+                "editionNumber": 2,
+                "name": "2 metre temperature",
+                "shortName": "2t",
+                "discipline": 0,
+                "parameterCategory": 0,
+                "parameterNumber": 0,
+                "typeOfFirstFixedSurface": 103,
+                "level": 2,
+                "typeOfSecondFixedSurface": 255,
+                "tablesVersion": 15,
+                "productDefinitionTemplateNumber": 0,
+            },
+            "u10": {
+                "editionNumber": 2,
+                "name": "10 metre U wind component",
+                "shortName": "10u",
+                "discipline": 0,
+                "parameterCategory": 2,
+                "parameterNumber": 2,
+                "typeOfFirstFixedSurface": 103,
+                "level": 10,
+                "typeOfSecondFixedSurface": 255,
+                "tablesVersion": 15,
+                "productDefinitionTemplateNumber": 0,
+            },
+            "v10": {
+                "editionNumber": 2,
+                "name": "10 metre V wind component",
+                "shortName": "10v",
+                "discipline": 0,
+                "parameterCategory": 2,
+                "parameterNumber": 3,
+                "typeOfFirstFixedSurface": 103,
+                "level": 10,
+                "typeOfSecondFixedSurface": 255,
+                "tablesVersion": 15,
+                "productDefinitionTemplateNumber": 0,
+            },
+            "r2": {
+                "editionNumber": 2,
+                "name": "2 metre relative humidity",
+                "shortName": "2r",
+                "discipline": 0,
+                "parameterCategory": 1,
+                "parameterNumber": 1,
+                "typeOfFirstFixedSurface": 103,
+                "level": 2,
+                "typeOfSecondFixedSurface": 255,
+                "tablesVersion": 15,
+                "productDefinitionTemplateNumber": 0,
+            },
+            "pmer": {
+                "editionNumber": 2,
+                "name": "Pressure reduced to MSL",
+                "shortName": "prmsl",
+                "discipline": 0,
+                "parameterCategory": 3,
+                "parameterNumber": 1,
+                "typeOfFirstFixedSurface": 101,
+                "level": 0,
+                "typeOfSecondFixedSurface": 255,
+                "tablesVersion": 15,
+                "productDefinitionTemplateNumber": 0,
+            },
+            "tp": {
+                "editionNumber": 2,
+                "name": "Time integral of rain flux",
+                "shortName": "tirf",
+                "discipline": 0,
+                "parameterCategory": 1,
+                "parameterNumber": 65,
+                "typeOfFirstFixedSurface": 1,
+                "level": 0,
+                "typeOfSecondFixedSurface": 255,
+                "tablesVersion": 15,
+                "productDefinitionTemplateNumber": 8,
+                "lengthOfTimeRange": 1,
+                "typeOfStatisticalProcessing": 1,
+            },
+        }
+    )
+    if feature in ["aro_t2m_2m", "t2m_2_heightAboveGround"]:
+        fid = name2fid["temperature"]
+    elif feature in ["u10_10_heightAboveGround", "aro_u10_10m"]:
+        fid = name2fid["u10"]
+    elif feature in ["v10_10_heightAboveGround", "aro_v10_10m"]:
+        fid = name2fid["v10"]
+    # Pressure reduced to MSL
+    elif feature == "aro_prmsl_0hpa":
+        fid = name2fid["pmer"]
+    # 2 metre relative humidity
+    elif feature == "aro_r2_2m":
+        fid = name2fid["r2"]
+    # Total precipitation
+    elif feature == "aro_tp_0m":
+        fid = name2fid["tp"]
+        dict_val["cumulativeduration"] = dt.timedelta(seconds=time_step)
+    else:
+        return None
+    return fid

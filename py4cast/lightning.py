@@ -21,6 +21,7 @@ from mfai.torch.models.utils import (
 )
 from mlflow.models.signature import infer_signature
 from torchinfo import summary
+from transformers.optimization import get_cosine_with_min_lr_schedule_with_warmup
 
 from py4cast.datasets import get_datasets
 from py4cast.datasets.base import DatasetInfo, ItemBatch, NamedTensor, Statics
@@ -155,6 +156,10 @@ class AutoRegressiveLightning(LightningModule):
         channels_last: bool = False,
         io_conf: Path | None = None,
         mask_ratio: float = 0,
+        learning_rate: float = 1e-4,
+        min_learning_rate: float = 1e-6,
+        num_warmup_steps: int = 0,
+        betas: tuple = (0.9, 0.999),
         *args,
         **kwargs,
     ):
@@ -175,6 +180,10 @@ class AutoRegressiveLightning(LightningModule):
         self.channels_last = channels_last
         self.io_conf = io_conf
         self.mask_ratio = mask_ratio
+        self.learning_rate = learning_rate
+        self.min_learning_rate = min_learning_rate
+        self.num_warmup_steps = num_warmup_steps
+        self.betas = betas
 
         if self.training_strategy == "downscaling_only":
             print(
@@ -220,9 +229,10 @@ class AutoRegressiveLightning(LightningModule):
 
         # Compute the number of input features for the neural network
         # Should be directly supplied by datasetinfo ?
+        ds = self.training_strategy == "downscaling_only"
 
         num_input_features = (
-            num_input_steps * dataset_info.weather_dim
+            num_input_steps * dataset_info.weather_dim * (1 - ds)
             + num_grid_static_features
             + dataset_info.forcing_dim
         )
@@ -281,7 +291,6 @@ class AutoRegressiveLightning(LightningModule):
     #############################################################
 
     def setup(self, stage=None):
-        self.logger.log_hyperparams(self.hparams, metrics={"val_mean_loss": 0.0})
         if self.logging_enabled:
             self.save_path = Path(self.trainer.log_dir)
             max_pred_step = self.num_pred_steps_val_test - 1
@@ -405,6 +414,33 @@ class AutoRegressiveLightning(LightningModule):
         self.log_hparams_tb()
         self.print_summary_model()
 
+    def configure_optimizers(self):
+        """
+        Configure the optimizer and scheduler
+        """
+        optimizer = torch.optim.AdamW(
+            self.parameters(),
+            lr=self.hparams.learning_rate,
+            betas=self.hparams.betas,
+        )
+
+        # Scheduler
+        scheduler = get_cosine_with_min_lr_schedule_with_warmup(
+            optimizer,
+            num_warmup_steps=self.hparams.num_warmup_steps,
+            num_training_steps=self.trainer.estimated_stepping_batches,
+            min_lr=self.hparams.min_learning_rate,
+        )
+
+        return {
+            "optimizer": optimizer,
+            "lr_scheduler": {
+                "scheduler": scheduler,
+                "interval": "step",
+                "frequency": 1,
+            },
+        }
+
     #############################################################
     #                          FORWARD                          #
     #############################################################
@@ -488,7 +524,7 @@ class AutoRegressiveLightning(LightningModule):
         # for the desired number of ar steps.
         for i in range(batch.num_pred_steps):
             if not (phase == "inference"):
-                border_state = batch.outputs.select_dim("timestep", i)
+                border_state = batch.outputs.select_tensor_dim("timestep", i)
 
             if scale_y:
                 step_diff_std, step_diff_mean = self._step_diffs(
@@ -521,14 +557,14 @@ class AutoRegressiveLightning(LightningModule):
                 if scale_y:
                     predicted_state = (
                         # select the last timestep
-                        prev_states.select_dim("timestep", -1)
+                        prev_states.select_tensor_dim("timestep", -1)
                         + y * step_diff_std
                         + step_diff_mean
                     )
                 else:
                     ds = self.training_strategy == "downscaling_only"
                     predicted_state = (
-                        prev_states.select_dim("timestep", -1) * (1 - ds) + y
+                        prev_states.select_tensor_dim("timestep", -1) * (1 - ds) + y
                     )
 
                 # Overwrite border with true state
@@ -548,7 +584,7 @@ class AutoRegressiveLightning(LightningModule):
                     new_prev_states_tensor = torch.cat(
                         [
                             # Drop the oldest timestep (select all but the first)
-                            prev_states.index_select_dim(
+                            prev_states.index_select_tensor_dim(
                                 "timestep",
                                 range(1, prev_states.dim_size("timestep")),
                             ),
@@ -628,16 +664,20 @@ class AutoRegressiveLightning(LightningModule):
 
         If downscaling strategy, the previous_states are set to 0.
         """
-        forcing = batch.forcing.select_dim("timestep", step_idx, bare_tensor=False)
+        forcing = batch.forcing.select_dim("timestep", step_idx)
         ds = self.training_strategy == "downscaling_only"
         inputs = [
-            prev_states.select_dim("timestep", idx) * (1 - ds)
+            prev_states.select_tensor_dim("timestep", idx)
             for idx in range(batch.num_input_steps)
         ]
+
+        # If downscaling only, inputs are not concatenated: only use static features and forcings.
         x = torch.cat(
-            inputs + [self.grid_static_features[: batch.batch_size], forcing.tensor],
+            inputs * (1 - ds)  # = [] if downscaling strategy
+            + [self.grid_static_features[: batch.batch_size], forcing.tensor],
             dim=forcing.dim_index("features"),
         )
+
         return x
 
     def mask_tensor(self, x):
@@ -688,7 +728,7 @@ class AutoRegressiveLightning(LightningModule):
         if self.logging_enabled:
             avg_loss = torch.stack([x for x in outputs]).mean()
             tb = self.logger.experiment
-            tb.add_scalar("mean_loss_epoch/train", avg_loss, self.current_epoch)
+            tb.add_scalar("mean_loss_epoch/train", avg_loss, self.global_step)
             self.training_step_losses.clear()  # free memory
 
     def on_train_end(self):
@@ -751,7 +791,7 @@ class AutoRegressiveLightning(LightningModule):
         if self.logging_enabled:
             # Log loss per timestep
             loss_dict = {
-                "timestep_losses/val_step_{step}": time_step_loss[step]
+                f"timestep_losses/val_step_{step}": time_step_loss[step]
                 for step in range(time_step_loss.shape[0])
             }
             self.log_dict(loss_dict, on_epoch=True, sync_dist=True)
@@ -814,7 +854,7 @@ class AutoRegressiveLightning(LightningModule):
         if self.logging_enabled:
             avg_loss = torch.stack([x for x in outputs]).mean()
             tb = self.logger.experiment
-            tb.add_scalar("mean_loss_epoch/validation", avg_loss, self.current_epoch)
+            tb.add_scalar("mean_loss_epoch/validation", avg_loss, self.global_step)
         # free memory
         self.validation_step_losses.clear()
 
@@ -942,18 +982,31 @@ class AutoRegressiveLightning(LightningModule):
         # Remove batch dimension
         if preds.tensor.shape[0] != 1:
             raise ValueError(
-                f"Prediction should have a batch dimension of 1 instead of { preds.tensor.shape[0]}"
+                f"Prediction should have a batch dimension of 1 instead of {preds.tensor.shape[0]}"
             )
         preds.flatten_("timestep", 0, 1)
 
+        # Unnormalize data
+        for feature_name in preds.feature_names:
+            means = torch.asarray(self.stats[feature_name]["mean"])
+            std = torch.asarray(self.stats[feature_name]["std"])
+            preds.tensor[:, :, :, preds.feature_names_to_idx[feature_name]] *= std
+            preds.tensor[:, :, :, preds.feature_names_to_idx[feature_name]] += means
+
         # Save gribs if a io config file is given
         if not (self.io_conf is None):
-            # Save the prediction of the first sample of the dataloader as a grib
-            if batch_idx == 0:
-                self.grib_writing(preds)
+            print("Writing gribs...")
+            self.grib_writing(preds, batch_idx)
+
         return preds
 
-    def grib_writing(self, preds):
+    def grib_writing(self, preds: NamedTensor, batch_idx: int):
+        """
+        Write grib at the path define by the io_conf.
+        Args:
+            pred (NamedTensor): the output tensor (pred)
+            batch_idx: the batch_idx is used to compute the runtime hour of the prediction
+        """
         with open(self.io_conf, "r") as f:
             save_settings = GribSavingSettings(**json.load(f))
             ph = len(save_settings.output_fmt.split("{}")) - 1
@@ -966,5 +1019,5 @@ class AutoRegressiveLightning(LightningModule):
                 )
 
         save_named_tensors_to_grib(
-            preds, self.infer_ds, self.infer_ds.sample_list[0], save_settings
+            preds, self.infer_ds, self.infer_ds.sample_list[batch_idx], save_settings
         )
