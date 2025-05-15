@@ -28,9 +28,7 @@ def compute_mean_std_min_max(
     if torch.isnan(flat_input).any():
         flat_input = torch.nan_to_num(flat_input)
         warnings.warn(
-            "Your dataset contain NaN values, statistics will be calculated with zeros instead of NaN.",
-            
-            ,
+            "Your dataset contain NaN values, statistics will be calculated with zeros instead of NaN."
         )
 
     counter = 0
