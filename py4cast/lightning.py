@@ -202,6 +202,8 @@ class AutoRegressiveLightning(LightningModule):
             )
 
         self.save_hyperparameters()  # write hparams.yaml in save folder
+        self.hparams["dataset_info"] = dataset_info
+        self.hparams["infer_ds"] = infer_ds
 
         # Load static features for grid/data
         # We do not want to change dataset statics inplace
