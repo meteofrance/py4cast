@@ -20,37 +20,51 @@ def compute_mean_std_min_max(
     sum_squares = torch.zeros(n_features)
     ndim_features = len(named_tensor.tensor.shape) - 1
     flat_input = named_tensor.tensor.flatten(0, ndim_features - 1)  # (X, Features)
-    best_min = torch.min(flat_input, dim=0).values
-    best_max = torch.max(flat_input, dim=0).values
+    # pevent etre calculer en remplacant nan soit par +inf soit -inf
+    # torch.nan_to_num(a, -torch.inf)
+    best_min = torch.min(torch.nan_to_num(flat_input, torch.inf), dim=0).values
+    best_max = torch.max(torch.nan_to_num(flat_input, -torch.inf), dim=0).values
 
-    if torch.isnan(best_min).any() or torch.isnan(best_max).any():
-        raise ValueError(
-            "Your dataset contain NaN values, which prevent the calculation of statistics."
+    if torch.isnan(flat_input).any():
+        flat_input = torch.nan_to_num(flat_input)
+        warnings.warn(
+            "Your dataset contain NaN values, statistics will be calculated with zeros instead of NaN.",
+            
+            ,
         )
 
     counter = 0
     if dataset.settings.standardize:
         raise ValueError("Your dataset should not be standardized.")
 
+    # à parralelliser 
     for batch in tqdm(
         dataset.torch_dataloader(),
         desc=f"Computing {type_tensor} stats",
     ):
-        tensor = getattr(batch, type_tensor).tensor
+    # Donc la on reprends a chaque fois le meme dataloader pour charger inputs, outputs ou forcings.
+    # pas possible de tout faire en meme temps et de calculer pour les parametre plutot que pour les inputs, outputs, forcings
+    # si tous de la meme taille on concatene sur les features ou sinon on fait un flatten pour chaque en enlevant les parametre qui ont deja été calculé
+       tensor = getattr(batch, type_tensor).tensor
         tensor = tensor.flatten(1, 3)  # Flatten to be (Batch, X, Features)
         counter += tensor.shape[0]  # += batch size
 
-        sum_means += torch.sum(tensor.mean(dim=1), dim=0)  # (d_features)
-        sum_squares += torch.sum((tensor**2).mean(dim=1), dim=0)  # (d_features)
+        sum_means += torch.sum(tensor.nanmean(dim=1), dim=0)  # (d_features)
+        sum_squares += torch.sum((tensor**2).nanmean(dim=1), dim=0)  # (d_features)
 
-        mini = torch.min(tensor, 1).values[0]
+        # pevent etre calculer en remplacant nan soit par +inf soit -inf
+        # torch.nan_to_num(a, -torch.inf)
+        mini = torch.min(torch.nan_to_num(tensor, torch.inf), 1).values[0]
         stack_mini = torch.stack([best_min, mini], dim=0)
         best_min = torch.min(stack_mini, dim=0).values  # (d_features)
 
-        maxi = torch.max(tensor, 1).values[0]
+        # pevent etre calculer en remplacant nan soit par +inf soit -inf
+        # torch.nan_to_num(a, -torch.inf)
+        maxi = torch.max(torch.nan_to_num(tensor, -torch.inf), 1).values[0]
         stack_maxi = torch.stack([best_max, maxi], dim=0)
         best_max = torch.max(stack_maxi, dim=0).values  # (d_features)
 
+    # attention dans counter aux colonne de nan pour l'instant pas pris en compte
     mean = sum_means / counter
     second_moment = sum_squares / counter
     std = torch.sqrt(second_moment - mean**2)  # (d_features)
@@ -71,6 +85,7 @@ def compute_parameters_stats(dataset: DatasetABC):
     Compute mean and standard deviation for this dataset.
     """
     all_stats = {}
+    # les param en input output calculé 2 fois wtf
     for type_tensor in ["inputs", "outputs", "forcing"]:
         stats_dict = compute_mean_std_min_max(dataset, type_tensor)
         for feature, stats in stats_dict.items():
@@ -102,8 +117,8 @@ def compute_time_step_stats(dataset: DatasetABC):
         diff = diff.flatten(1, 3)  # Flatten everybody to be (Batch, X, Features)
 
         counter += in_out.shape[0]  # += batch size
-        sum_means += torch.sum(diff.mean(dim=1), dim=0)  # (d_features)
-        sum_squares += torch.sum((diff**2).mean(dim=1), dim=0)  # (d_features)
+        sum_means += torch.sum(diff.nanmean(dim=1), dim=0)  # (d_features)
+        sum_squares += torch.sum((diff**2).nanmean(dim=1), dim=0)  # (d_features)
 
     diff_mean = sum_means / counter
     diff_second_moment = sum_squares / counter
