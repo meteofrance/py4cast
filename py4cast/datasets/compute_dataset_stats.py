@@ -48,8 +48,8 @@ def compute_mean_std_min_max(
         tensor = tensor.flatten(1, 3)  # Flatten to be (Batch, X, Features)
         counter += tensor.shape[0]  # += batch size
 
-        sum_means += torch.sum(tensor.nanmean(dim=1), dim=0)  # (d_features)
-        sum_squares += torch.sum((tensor**2).nanmean(dim=1), dim=0)  # (d_features)
+        sum_means += torch.nansum(tensor.nanmean(dim=1), dim=0)  # (d_features)
+        sum_squares += torch.nansum((tensor**2).nanmean(dim=1), dim=0)  # (d_features)
 
         # pevent etre calculer en remplacant nan soit par +inf soit -inf
         # torch.nan_to_num(a, -torch.inf)
@@ -76,6 +76,7 @@ def compute_mean_std_min_max(
             "min": best_min[i],
             "max": best_max[i],
         }
+    print(stats)
     return stats
 
 
@@ -116,8 +117,8 @@ def compute_time_step_stats(dataset: DatasetABC):
         diff = diff.flatten(1, 3)  # Flatten everybody to be (Batch, X, Features)
 
         counter += in_out.shape[0]  # += batch size
-        sum_means += torch.sum(diff.nanmean(dim=1), dim=0)  # (d_features)
-        sum_squares += torch.sum((diff**2).nanmean(dim=1), dim=0)  # (d_features)
+        sum_means += torch. nansum(diff.nanmean(dim=1), dim=0)  # (d_features)
+        sum_squares += torch.nansum((diff**2).nanmean(dim=1), dim=0)  # (d_features)
 
     diff_mean = sum_means / counter
     diff_second_moment = sum_squares / counter
