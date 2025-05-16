@@ -294,6 +294,7 @@ class AutoRegressiveLightning(LightningModule):
 
     def setup(self, stage=None):
         if self.logging_enabled:
+            self.logger.log_hyperparams(self.hparams)
             self.save_path = Path(self.trainer.log_dir)
             max_pred_step = self.num_pred_steps_val_test - 1
             self.rmse_psd_plot_metric = MetricPSDVar(pred_step=max_pred_step)
