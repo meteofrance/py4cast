@@ -128,6 +128,8 @@ class WeightedLoss(Py4CastLoss):
         if not reduce_spatial_dim:
             return weighted_loss
 
+        union_mask = mask.any(mask, dim=(0, 1, 4))
+
         # Compute the mean loss over all spatial dimensions
         # Take (unweighted) mean over only non-border (interior) grid nodes/pixels
         # We use forward indexing for the spatial_dim_idx of the target tensor
@@ -139,10 +141,10 @@ class WeightedLoss(Py4CastLoss):
                 weighted_loss * self.lm.interior_mask_s,
                 dim=target.spatial_dim_idx,
             )
-            / (self.num_interior - (~mask).sum()) 
+            / (self.num_interior - (~union_mask).sum()) 
         )
         print(self.num_interior)
-        print((~mask).sum())
+        print((~union_mask).sum())
         return time_step_mean_loss
 
 
@@ -169,13 +171,15 @@ class ScaledLoss(Py4CastLoss):
         # Compute Torch loss (defined in the parent class when this Mixin is used)
         torch_loss = self.loss(prediction.tensor*mask, target.tensor*mask)
 
+        union_mask = mask.any(mask, dim=(0, 1, 4))
+
         # Compute the mean loss value over spatial dimensions
         mean_loss = (
             torch.sum(
                 torch_loss * self.lm.interior_mask,
                 dim=target.spatial_dim_idx,
             )
-            / (self.num_interior - (~mask).sum())
+            / (self.num_interior - (~union_mask).sum()) 
         )
 
         if self.loss.__class__ == MSELoss:
