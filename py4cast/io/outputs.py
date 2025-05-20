@@ -39,6 +39,10 @@ class OutputSavingSettings:
     gif_identifiers: tuple[str, ...] = ("runtime", "feature")
 
     def get_path(self, dir_path, runtime, idents, idents_dict, fmt):
+        """
+        return the dir_path in arg concatenated with the path to the runtime and the format given.
+        """
+        # Tests if number of placeholders are matching numer of id.
         ph = len((fmt).split("{}")) - 1
         fi = len(idents)
         if ph != fi:
