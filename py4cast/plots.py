@@ -220,6 +220,7 @@ class Plotter(ABC):
     def update(
         self,
         obj: "AutoRegressiveLightning",
+        batch: ItemBatch,
         prediction: NamedTensor,
         target: NamedTensor,
         mask: torch.Tensor,
@@ -258,6 +259,7 @@ class MapPlot(Plotter):
     def update(
         self,
         obj: "AutoRegressiveLightning",
+        batch: ItemBatch,
         prediction: NamedTensor,
         target: NamedTensor,
         mask: torch.Tensor,
@@ -361,6 +363,7 @@ class PredictionTimestepPlot(MapPlot):
     def plot_map(
         self,
         obj: "AutoRegressiveLightning",
+        batch: ItemBatch,
         prediction: torch.tensor,
         target: torch.tensor,
         feature_names: List[str],
@@ -502,6 +505,7 @@ class StateErrorPlot(Plotter):
     def update(
         self,
         obj: "AutoRegressiveLightning",
+        batch: ItemBatch,
         prediction: NamedTensor,
         target: NamedTensor,
         mask: torch.Tensor,
@@ -589,6 +593,7 @@ class SpatialErrorPlot(Plotter):
     def update(
         self,
         obj: "AutoRegressiveLightning",
+        batch: ItemBatch,
         prediction: NamedTensor,
         target: NamedTensor,
         mask: torch.Tensor,

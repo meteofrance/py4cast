@@ -777,7 +777,7 @@ class AutoRegressiveLightning(LightningModule):
                 ),
             ]
 
-    def validation_step(self, batch: ItemBatch, batch_idx):
+    def validation_step(self, batch: ItemBatch, batch_idx: int):
         """
         Run validation on single batch
         """
@@ -814,11 +814,17 @@ class AutoRegressiveLightning(LightningModule):
 
         self.val_mean_loss = mean_loss
 
-        if self.logging_enabled:
+        self.validation_step_logging(batch, prediction, target, mask)
+
+    def validation_step_logging(self, batch: ItemBatch, prediction: NamedTensor, target: NamedTensor, mask: torch.Tensor):
+        '''
+        Save metrics and plots of validation to the tensorboard
+        '''
+         if self.logging_enabled:
             # Notify every plotters
             if self.current_epoch % PLOT_PERIOD == 0:
                 for plotter in self.valid_plotters:
-                    plotter.update(self, prediction=prediction, target=target, mask=mask)
+                    plotter.update(self, batch=batch, prediction=prediction, target=target, mask=mask)
             self.psd_plot_metric.update(prediction, target, mask, self.original_shape)
             self.rmse_psd_plot_metric.update(prediction, target, mask, self.original_shape)
             self.acc_metric.update(prediction, target, mask)
@@ -897,7 +903,7 @@ class AutoRegressiveLightning(LightningModule):
                 ),
             ]
 
-    def test_step(self, batch: ItemBatch, batch_idx):
+    def test_step(self, batch: ItemBatch, batch_idx: int):
         """
         Run test on single batch
         """
@@ -930,10 +936,16 @@ class AutoRegressiveLightning(LightningModule):
                 prog_bar=False,
             )
 
+        self.test_step_logging(batch, prediction, target, mask)
+
+    def test_step_logging(self, batch: ItemBatch, prediction: NamedTensor, target: NamedTensor, mask: torch.Tensor):
+        '''
+        Save metrics and plots of test to the tensorboard
+        '''
         if self.logging_enabled:
             # Notify plotters & metrics
             for plotter in self.test_plotters:
-                plotter.update(self, prediction=prediction, target=target, mask=mask)
+                plotter.update(self, batch=batch, prediction=prediction, target=target, mask=mask)
 
             self.acc_metric.update(prediction, target, mask)
             self.psd_plot_metric.update(prediction, target, mask, self.original_shape)
