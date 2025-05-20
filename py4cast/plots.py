@@ -319,6 +319,7 @@ class MapPlot(Plotter):
 
                 self.plot_map(
                     obj,
+                    batch,
                     pred_slice,
                     target_slice,
                     feature_names,
