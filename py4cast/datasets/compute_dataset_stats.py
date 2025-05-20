@@ -1,5 +1,5 @@
-from typing import Literal
 import warnings
+from typing import Literal
 
 import torch
 from tqdm import tqdm
@@ -29,21 +29,21 @@ def compute_mean_std_min_max(
     if torch.isnan(flat_input).any():
         flat_input = torch.nan_to_num(flat_input)
         warnings.warn(
-            "Your dataset contain NaN values, statistics will be calculated with zeros instead of NaN."
+            "Your dataset contain NaN values, statistics will be calculated ignoring the NaN."
         )
 
     counter = 0
     if dataset.settings.standardize:
         raise ValueError("Your dataset should not be standardized.")
 
-    # à parralelliser 
+    # à parralelliser
     for batch in tqdm(
         dataset.torch_dataloader(),
         desc=f"Computing {type_tensor} stats",
     ):
-    # Donc la on reprends a chaque fois le meme dataloader pour charger inputs, outputs ou forcings.
-    # pas possible de tout faire en meme temps et de calculer pour les parametre plutot que pour les inputs, outputs, forcings
-    # si tous de la meme taille on concatene sur les features ou sinon on fait un flatten pour chaque en enlevant les parametre qui ont deja été calculé
+        # Donc la on reprends a chaque fois le meme dataloader pour charger inputs, outputs ou forcings.
+        # pas possible de tout faire en meme temps et de calculer pour les parametre plutot que pour les inputs, outputs, forcings
+        # si tous de la meme taille on concatene sur les features ou sinon on fait un flatten pour chaque en enlevant les parametre qui ont deja été calculé
         tensor = getattr(batch, type_tensor).tensor
         tensor = tensor.flatten(1, 3)  # Flatten to be (Batch, X, Features)
         counter += tensor.shape[0]  # += batch size
@@ -93,7 +93,7 @@ def compute_parameters_stats(dataset: DatasetABC):
             if feature not in all_stats.keys():
                 all_stats[feature] = stats
 
-    dest_file = dataset.cache_dir / "parameters_stats1.pt"
+    dest_file = dataset.cache_dir / "parameters_stats.pt"
     torch_save(all_stats, dest_file)
     print(f"Parameters statistics saved in {dest_file}")
 
@@ -117,7 +117,7 @@ def compute_time_step_stats(dataset: DatasetABC):
         diff = diff.flatten(1, 3)  # Flatten everybody to be (Batch, X, Features)
 
         counter += in_out.shape[0]  # += batch size
-        sum_means += torch. nansum(diff.nanmean(dim=1), dim=0)  # (d_features)
+        sum_means += torch.nansum(diff.nanmean(dim=1), dim=0)  # (d_features)
         sum_squares += torch.nansum((diff**2).nanmean(dim=1), dim=0)  # (d_features)
 
     diff_mean = sum_means / counter
@@ -135,6 +135,6 @@ def compute_time_step_stats(dataset: DatasetABC):
     # store fixed values : mean = 0, std = 1
     for name in batch.forcing.feature_names:
         store_d[name] = {"mean": torch.tensor(0), "std": torch.tensor(1)}
-    dest_file = dataset.cache_dir / "diff_stats1.pt"
-    torch_save(store_d, dataset.cache_dir / "diff_stats1.pt")
+    dest_file = dataset.cache_dir / "diff_stats.pt"
+    torch_save(store_d, dataset.cache_dir / "diff_stats.pt")
     print(f"Parameters time diff stats saved in {dest_file}")

@@ -38,7 +38,9 @@ class MetricPSDK(Metric):
         # Step counter, needed to compute psd mean at each epoch.
         self.add_state("step_count", default=torch.tensor(0.0), dist_reduce_fx="sum")
 
-    def update(self, preds: NamedTensor, targets: NamedTensor, mask: torch.Tensor, shape: tuple):
+    def update(
+        self, preds: NamedTensor, targets: NamedTensor, mask: torch.Tensor, shape: tuple
+    ):
         """
         Add PSD to their respective sum. Should be called at each validation step's end
         """
@@ -60,10 +62,10 @@ class MetricPSDK(Metric):
 
         # Add PSD to the sums
         self.sum_psd_pred = self.add_psd(
-            preds.tensor*mask, self.sum_psd_pred, self.pred_step
+            preds.tensor * mask, self.sum_psd_pred, self.pred_step
         )
         self.sum_psd_target = self.add_psd(
-            targets.tensor*mask, self.sum_psd_target, self.pred_step
+            targets.tensor * mask, self.sum_psd_target, self.pred_step
         )
 
         # Increment count_step
@@ -162,7 +164,9 @@ class MetricPSDVar(Metric):
         # Step counter, needed to compute psd mean at each epoch.
         self.add_state("step_count", default=torch.tensor(0.0), dist_reduce_fx="sum")
 
-    def update(self, preds: NamedTensor, targets: NamedTensor, mask: torch.Tensor, shape: tuple):
+    def update(
+        self, preds: NamedTensor, targets: NamedTensor, mask: torch.Tensor, shape: tuple
+    ):
         """
         compute the RSME between target and pred PSD.
         called at each end of step
@@ -181,8 +185,12 @@ class MetricPSDVar(Metric):
 
         # tensor should be (Batch, channels, Lon, Lat) or (Batch, channels, ngrids)
         # to be an argument of power_spectral_density
-        y_pred = preds.tensor.permute(0, -1, *range(2, preds.tensor.dim() - 1), 1) * mask.permute(0, -1, *range(2, preds.tensor.dim() - 1), 1)
-        y_true = targets.tensor.permute(0, -1, *range(2, targets.tensor.dim() - 1), 1) * mask.permute(0, -1, *range(2, targets.tensor.dim() - 1), 1)
+        y_pred = preds.tensor.permute(
+            0, -1, *range(2, preds.tensor.dim() - 1), 1
+        ) * mask.permute(0, -1, *range(2, preds.tensor.dim() - 1), 1)
+        y_true = targets.tensor.permute(
+            0, -1, *range(2, targets.tensor.dim() - 1), 1
+        ) * mask.permute(0, -1, *range(2, targets.tensor.dim() - 1), 1)
 
         if y_pred.shape != y_true.shape:
             raise ValueError("y_pred and y_true must have the same shape")
@@ -374,7 +382,9 @@ class MetricACC(Metric):
         # Step counter, needed to compute psd mean at each epoch.
         self.add_state("step_count", default=torch.tensor(0.0), dist_reduce_fx="sum")
 
-    def update(self, preds: NamedTensor, target: NamedTensor, mask: torch.Tensor, *args):
+    def update(
+        self, preds: NamedTensor, target: NamedTensor, mask: torch.Tensor, *args
+    ):
         """
         compute the ACC between target and pred.
         prediction/target: (B, pred_steps, N_grid, d_f) or (B, pred_steps, W, H, d_f)
@@ -398,11 +408,15 @@ class MetricACC(Metric):
         # ACC computation without m
         # https://confluence.ecmwf.int/display/FUG/Section+12.A+Statistical+Concepts+-+Deterministic+Data
         num = (
-            (preds.tensor - self.climate_means) * (target.tensor - self.climate_means) * mask
+            (preds.tensor - self.climate_means)
+            * (target.tensor - self.climate_means)
+            * mask
         ).mean(dim=(spatial_dims))
-        square_denom = (((preds.tensor - self.climate_means) * mask)** 2).mean(
+        square_denom = (((preds.tensor - self.climate_means) * mask) ** 2).mean(
             dim=(spatial_dims)
-        ) * (((target.tensor - self.climate_means) * mask) ** 2).mean(dim=(spatial_dims))
+        ) * (((target.tensor - self.climate_means) * mask) ** 2).mean(
+            dim=(spatial_dims)
+        )
         # averageing on batch samples
         res = torch.mean(num / torch.sqrt(square_denom), dim=0)
 

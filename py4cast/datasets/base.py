@@ -808,7 +808,7 @@ class DatasetABC(Dataset):
 
     @cached_property
     def stats(self) -> Stats:
-        return Stats(fname=self.cache_dir / "parameters_stats1.pt")
+        return Stats(fname=self.cache_dir / "parameters_stats.pt")
 
     @cached_property
     def diff_stats(self) -> Stats:

@@ -16,10 +16,9 @@ from PIL import Image
 from torchmetrics import Metric
 from tueplots import bundles, figsizes
 
-
 if TYPE_CHECKING:
-    from py4cast.lightning import AutoRegressiveLightning
     from py4cast.datasets.base import ItemBatch
+    from py4cast.lightning import AutoRegressiveLightning
 
 from mfai.torch.namedtensor import NamedTensor
 
@@ -32,6 +31,7 @@ class DomainInfo:
 
     grid_limits: Tuple[float, float, float, float]
     projection: cartopy.crs
+
 
 def fractional_plot_bundle(fraction):
     """

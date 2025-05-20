@@ -649,22 +649,29 @@ class AutoRegressiveLightning(LightningModule):
             for input in inputs:
                 mask = torch.isnan(input)
                 for i in range(mask.shape[-1]):
-                    combined_mask = combined_mask | mask[:, :, :, i]  # Union des masques de taille (batch, lat, lon)
+                    combined_mask = (
+                        combined_mask | mask[:, :, :, i]
+                    )  # Union des masques de taille (batch, lat, lon)
 
             mask = torch.isnan(forcing.tensor)
             # Combiner les masques pour les forçages
             for i in range(mask.shape[-1]):
-               combined_mask = combined_mask | mask[:, :, :, i] # Union des masques de taille (batch, lat, lon)
-            mask_list.append(~combined_mask.unsqueeze(-1)) # shape [(batch, lat, lon, param)]
+                combined_mask = (
+                    combined_mask | mask[:, :, :, i]
+                )  # Union des masques de taille (batch, lat, lon)
+            mask_list.append(
+                ~combined_mask.unsqueeze(-1)
+            )  # shape [(batch, lat, lon, param)]
 
-            #remplcer les nan par des zeros (on pourrait aussi remplcer par la moyennes des pixels)
+            # remplcer les nan par des zeros (on pourrait aussi remplcer par la moyennes des pixels)
             inputs = [torch.nan_to_num(input) for input in inputs]
             forcing.tensor = torch.nan_to_num(forcing.tensor)
 
         # If downscaling only, inputs are not concatenated: only use static features and forcings.
         x = torch.cat(
             inputs * (1 - ds)  # = [] if downscaling strategy
-            + [self.grid_static_features[: batch.batch_size], forcing.tensor] + mask_list,
+            + [self.grid_static_features[: batch.batch_size], forcing.tensor]
+            + mask_list,
             dim=forcing.dim_index("features"),
         )
 
@@ -711,7 +718,7 @@ class AutoRegressiveLightning(LightningModule):
             mask = torch.ones_like(target.tensor)
 
         # Compute loss: mean over unrolled times and batch
-        batch_loss = torch.mean(self.loss(prediction, target, mask = mask))
+        batch_loss = torch.mean(self.loss(prediction, target, mask=mask))
 
         self.training_step_losses.append(batch_loss)
 
@@ -816,17 +823,31 @@ class AutoRegressiveLightning(LightningModule):
 
         self.validation_step_logging(batch, prediction, target, mask)
 
-    def validation_step_logging(self, batch: ItemBatch, prediction: NamedTensor, target: NamedTensor, mask: torch.Tensor):
-        '''
+    def validation_step_logging(
+        self,
+        batch: ItemBatch,
+        prediction: NamedTensor,
+        target: NamedTensor,
+        mask: torch.Tensor,
+    ):
+        """
         Save metrics and plots of validation to the tensorboard
-        '''
-         if self.logging_enabled:
+        """
+        if self.logging_enabled:
             # Notify every plotters
             if self.current_epoch % PLOT_PERIOD == 0:
                 for plotter in self.valid_plotters:
-                    plotter.update(self, batch=batch, prediction=prediction, target=target, mask=mask)
+                    plotter.update(
+                        self,
+                        batch=batch,
+                        prediction=prediction,
+                        target=target,
+                        mask=mask,
+                    )
             self.psd_plot_metric.update(prediction, target, mask, self.original_shape)
-            self.rmse_psd_plot_metric.update(prediction, target, mask, self.original_shape)
+            self.rmse_psd_plot_metric.update(
+                prediction, target, mask, self.original_shape
+            )
             self.acc_metric.update(prediction, target, mask)
 
     def on_validation_epoch_end(self):
@@ -938,18 +959,28 @@ class AutoRegressiveLightning(LightningModule):
 
         self.test_step_logging(batch, prediction, target, mask)
 
-    def test_step_logging(self, batch: ItemBatch, prediction: NamedTensor, target: NamedTensor, mask: torch.Tensor):
-        '''
+    def test_step_logging(
+        self,
+        batch: ItemBatch,
+        prediction: NamedTensor,
+        target: NamedTensor,
+        mask: torch.Tensor,
+    ):
+        """
         Save metrics and plots of test to the tensorboard
-        '''
+        """
         if self.logging_enabled:
             # Notify plotters & metrics
             for plotter in self.test_plotters:
-                plotter.update(self, batch=batch, prediction=prediction, target=target, mask=mask)
+                plotter.update(
+                    self, batch=batch, prediction=prediction, target=target, mask=mask
+                )
 
             self.acc_metric.update(prediction, target, mask)
             self.psd_plot_metric.update(prediction, target, mask, self.original_shape)
-            self.rmse_psd_plot_metric.update(prediction, target, mask, self.original_shape)
+            self.rmse_psd_plot_metric.update(
+                prediction, target, mask, self.original_shape
+            )
 
     def on_test_epoch_end(self):
         """
