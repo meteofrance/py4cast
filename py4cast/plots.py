@@ -593,7 +593,7 @@ class SpatialErrorPlot(Plotter):
         target: NamedTensor,
         mask: torch.Tensor,
     ) -> None:
-        spatial_loss = obj.loss(prediction, target, reduce_spatial_dim=False)
+        spatial_loss = obj.loss(prediction, target, mask, reduce_spatial_dim=False)
         # Getting only spatial loss for the required val_step_errors
         if prediction.num_spatial_dims == 1:
             spatial_loss = einops.rearrange(
