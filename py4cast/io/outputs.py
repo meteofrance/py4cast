@@ -13,7 +13,7 @@ from py4cast.datasets.base import DatasetABC
 
 @dataclass_json
 @dataclass
-class GribSavingSettings:
+class OutputSavingSettings:
     """
     Class to hold data about saving settings. Return the path to save gif and gribs
     - a template grib path
@@ -39,13 +39,21 @@ class GribSavingSettings:
     gif_identifiers: tuple[str, ...] = ("runtime", "feature")
 
     def get_path(self, dir_path, runtime, idents, idents_dict, fmt):
-        ph = len(fmt.split("{}")) - 1
+        ph = len((fmt).split("{}")) - 1
         fi = len(idents)
         if ph != fi:
             raise ValueError(
                 f"fmt : {fmt} has {ph} placeholders,\
                 but {fi} identifiers."
             )
+        ph2 = len((self.path_to_runtime).split("{}")) - 1
+        kw = len(self.output_kwargs)
+        if ph2 != kw:
+            raise ValueError(
+                f"fmt : {self.path_to_runtime} has {ph2} placeholders,\
+                but {kw} identifiers."
+            )
+
         identifiers = []
         for ident in idents:
             identifiers.append(idents_dict[ident])
@@ -66,11 +74,10 @@ class GribSavingSettings:
         )
         return path
 
-    def get_grib_path(self, runtime, sample, leadtime):
+    def get_grib_path(self, runtime, member, leadtime):
 
         idents_dict = {}
         idents_dict["leadtime"] = leadtime
-        member = getattr(sample, "member") + 1
         # format string
         mb = str(member).zfill(3)
         idents_dict["member"] = mb
@@ -126,7 +133,8 @@ def save_named_tensors_to_grib(
         validity_time = sample.output_timestamps.validity_times[step_idx]
 
         # Get the name of the file
-        full_path = saving_settings.get_grib_path(runtime, sample, leadtime)
+        member = getattr(sample, "member") + 1
+        full_path = saving_settings.get_grib_path(runtime, member, leadtime)
         full_path.parent.mkdir(parents=True, exist_ok=True)
 
         # Create a GRIB
@@ -189,6 +197,7 @@ def save_named_tensors_to_grib(
             grib_final.writefield(f)
 
         print(f"Leadtime {leadtime} has been written in {full_path}")
+
 
 def fill_tensor_with(embedded_data, embedded_idxs, shape, default_v, _dtype):
     """

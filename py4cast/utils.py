@@ -1,15 +1,13 @@
 import math
 from dataclasses import fields
 from pathlib import Path
-from typing import Dict, List
+from typing import Any, Dict, List
 
 import gif
 import lightning.pytorch as pl
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
-
-from py4cast.datasets.titan.settings import METADATA
 
 PARAMS_INFO = {
     "t2m": {
@@ -118,6 +116,7 @@ def plot_frame(
     predictions: List[np.ndarray],
     proj_name: str,
     subdomain: List[int],
+    metadata: dict[str, Any],
     title: str = None,
     models_names: List[str] = None,
 ) -> None:
@@ -139,7 +138,7 @@ def plot_frame(
         cmap = "plasma"
         vmin, vmax = None, None
         short_name = "_".join(feature_name.split("_")[:2])
-        feature_str = METADATA["WEATHER_PARAMS"][short_name]["long_name"][6:]
+        feature_str = metadata["WEATHER_PARAMS"][short_name]["long_name"][6:]
         colorbar_label = (
             f"{feature_str}"  # Units: ({dataset_info.units[feature_name]})"
         )
@@ -157,8 +156,12 @@ def plot_frame(
         nrows=lines, ncols=cols, subplot_kw={"projection": proj_name}
     )
     extent = subdomain
-    # axs = axes.flat
-    axs = [axes]
+    if isinstance(axes, np.ndarray):
+        pass
+    else:
+        axes = np.array([axes])
+
+    axs = axes.flat
     data_list = [target] + predictions if target is not None else predictions
 
     for i, data in enumerate(data_list):
@@ -193,6 +196,7 @@ def make_gif(
     models_names: List[str],
     proj_name: str,
     subdomain: List[int],
+    metadata: dict[str, Any],
 ):
     """Make a gifs comparing multiple forecasts of one feature."""
 
@@ -211,6 +215,7 @@ def make_gif(
             preds_t,
             proj_name,
             subdomain,
+            metadata,
             title,
             models_names,
         )

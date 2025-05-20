@@ -26,10 +26,8 @@ from transformers.optimization import get_cosine_with_min_lr_schedule_with_warmu
 
 from py4cast.datasets import get_datasets
 from py4cast.datasets.base import DatasetInfo, ItemBatch, NamedTensor, Statics
-from py4cast.io.outputs import (
-    GribSavingSettings,
-    save_named_tensors_to_grib,
-)
+from py4cast.datasets.titan.settings import METADATA
+from py4cast.io.outputs import OutputSavingSettings, save_named_tensors_to_grib
 from py4cast.losses import ScaledLoss, WeightedLoss
 from py4cast.metrics import MetricACC, MetricPSDK, MetricPSDVar
 from py4cast.models import build_model_from_settings, get_model_kls_and_settings
@@ -1007,10 +1005,10 @@ class AutoRegressiveLightning(LightningModule):
         sample = self.infer_ds.sample_list[batch_idx]
         grid = self.infer_ds.grid
         runtime = sample.timestamps.datetime.strftime("%Y%m%d%H")
- 
+
         if sample.timestamps.datetime.hour in self.trainer.datamodule.list_run_hour:
-            
-            #TODO
+
+            # TODO
             path = "/scratch/shared/py4cast/logs/comparison/titan/unetrpp/akod_unetrpp161024_linear_up_8/weights_only.pth"
             weights = self.load_weigths(path, map_location=self.device)
             self.model.load_state_dict(weights)
@@ -1036,7 +1034,7 @@ class AutoRegressiveLightning(LightningModule):
             if not (self.io_conf is None):
                 # Save gribs if a io config file is given
                 with open(self.io_conf, "r") as f:
-                    save_settings = GribSavingSettings(**json.load(f))
+                    save_settings = OutputSavingSettings(**json.load(f))
 
                 # Write GIFS
                 if self.trainer.datamodule.save_gifs:
@@ -1055,6 +1053,7 @@ class AutoRegressiveLightning(LightningModule):
                             "Py4cast",
                             grid.projection,
                             grid.grid_limits,
+                            METADATA,
                         )
 
                         # Save gifs
