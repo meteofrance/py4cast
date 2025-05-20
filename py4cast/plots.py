@@ -19,6 +19,7 @@ from tueplots import bundles, figsizes
 
 if TYPE_CHECKING:
     from py4cast.lightning import AutoRegressiveLightning
+    from py4cast.datasets.base import ItemBatch
 
 from mfai.torch.namedtensor import NamedTensor
 
@@ -31,8 +32,6 @@ class DomainInfo:
 
     grid_limits: Tuple[float, float, float, float]
     projection: cartopy.crs
-
-from py4cast.datasets.base import ItemBatch
 
 def fractional_plot_bundle(fraction):
     """
@@ -222,7 +221,7 @@ class Plotter(ABC):
     def update(
         self,
         obj: "AutoRegressiveLightning",
-        batch: ItemBatch,
+        batch: "ItemBatch",
         prediction: NamedTensor,
         target: NamedTensor,
         mask: torch.Tensor,
@@ -261,7 +260,7 @@ class MapPlot(Plotter):
     def update(
         self,
         obj: "AutoRegressiveLightning",
-        batch: ItemBatch,
+        batch: "ItemBatch",
         prediction: NamedTensor,
         target: NamedTensor,
         mask: torch.Tensor,
@@ -365,7 +364,7 @@ class PredictionTimestepPlot(MapPlot):
     def plot_map(
         self,
         obj: "AutoRegressiveLightning",
-        batch: ItemBatch,
+        batch: "ItemBatch",
         prediction: torch.tensor,
         target: torch.tensor,
         feature_names: List[str],
@@ -507,7 +506,7 @@ class StateErrorPlot(Plotter):
     def update(
         self,
         obj: "AutoRegressiveLightning",
-        batch: ItemBatch,
+        batch: "ItemBatch",
         prediction: NamedTensor,
         target: NamedTensor,
         mask: torch.Tensor,
@@ -595,7 +594,7 @@ class SpatialErrorPlot(Plotter):
     def update(
         self,
         obj: "AutoRegressiveLightning",
-        batch: ItemBatch,
+        batch: "ItemBatch",
         prediction: NamedTensor,
         target: NamedTensor,
         mask: torch.Tensor,
