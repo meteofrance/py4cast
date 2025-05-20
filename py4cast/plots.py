@@ -329,6 +329,7 @@ class MapPlot(Plotter):
     def plot_map(
         self,
         obj: "AutoRegressiveLightning",
+        batch: "ItemBatch",
         prediction: torch.tensor,
         target: torch.tensor,
         feature_names: List[str],
