@@ -16,7 +16,7 @@ from PIL import Image
 from torchmetrics import Metric
 from tueplots import bundles, figsizes
 
-from py4cast.datasets.base import ItemBatch
+
 if TYPE_CHECKING:
     from py4cast.lightning import AutoRegressiveLightning
 
@@ -32,6 +32,7 @@ class DomainInfo:
     grid_limits: Tuple[float, float, float, float]
     projection: cartopy.crs
 
+from py4cast.datasets.base import ItemBatch
 
 def fractional_plot_bundle(fraction):
     """
