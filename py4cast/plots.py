@@ -16,6 +16,7 @@ from PIL import Image
 from torchmetrics import Metric
 from tueplots import bundles, figsizes
 
+from py4cast.datasets.base import ItemBatch
 if TYPE_CHECKING:
     from py4cast.lightning import AutoRegressiveLightning
 
