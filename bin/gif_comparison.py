@@ -196,7 +196,10 @@ def plot_frame(
     title: str = None,
     models_names: List[str] = None,
 ) -> None:
-    """Plots one frame of the animation."""
+    """Plots one frame of the animation.
+    DEPRECATED: This function has been moved to utils.py.
+    To update this script, one should use the imported plot_frame function.
+    """
 
     nb_preds = len(predictions) + 1 if target is not None else len(predictions)
     lines = int(math.sqrt(nb_preds))
@@ -268,7 +271,10 @@ def make_gif(
     models_names: List[str],
     domain_info: DomainInfo,
 ):
-    """Plots a gifs comparing multiple forecasts of one feature."""
+    """Plots a gifs comparing multiple forecasts of one feature.
+    DEPRECATED: This function has been moved to utils.py.
+    To update this script, one should use the imported make_gif function.
+    """
     date = dt.datetime.strptime(date, "%Y%m%d%H")
     date_str = date.strftime("%Y-%m-%d %Hh UTC")
 
@@ -295,6 +301,9 @@ def make_gif(
 
 
 if __name__ == "__main__":
+    """
+    This script needs to be updated since the refacto.
+    """
     parser = ArgumentParser("Plot animations")
     parser.add_argument(
         "--ckpt",

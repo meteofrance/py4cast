@@ -25,4 +25,3 @@ def test_make_gif():
             (0, 10, 0, 10),
             METADATA,
         )
-
