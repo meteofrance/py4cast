@@ -935,7 +935,7 @@ class AutoRegressiveLightning(LightningModule):
             for plotter in self.test_plotters:
                 plotter.update(self, prediction=prediction, target=target, mask=mask)
 
-            self.acc_metric.update(prediction, target)
+            self.acc_metric.update(prediction, target, mask)
             self.psd_plot_metric.update(prediction, target, mask, self.original_shape)
             self.rmse_psd_plot_metric.update(prediction, target, mask, self.original_shape)
 
