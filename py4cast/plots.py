@@ -298,7 +298,7 @@ class MapPlot(Plotter):
             )
             prediction_rescaled = pred * std + mean
             target_rescaled = targ * std + mean
-            batch_copy.input = batch_copy.input * std + mean
+            batch_copy.input = batch_copy.inputs * std + mean
             batch_copy.forcing = batch_copy.forcing * std + mean
 
             # Iterate over the examples
