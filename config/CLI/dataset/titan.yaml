@@ -19,11 +19,13 @@ data:
       valid:
         start: 20230101
         end: 20231231
-        obs_step: 10800
+        obs_step: 3600
+        obs_step_btw_t0: 10800
       test:
         start: 20240101
         end: 20240831
-        obs_step: 10800
+        obs_step: 3600
+        obs_step_btw_t0: 10800
     grid:
       name: PAAROME_1S40
       border_size: 0

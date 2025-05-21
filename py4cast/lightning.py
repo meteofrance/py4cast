@@ -156,6 +156,10 @@ class AutoRegressiveLightning(LightningModule):
         io_conf: Path | None = None,
         mask_ratio: float = 0,
         mask_on_nan: bool = False,
+        learning_rate: float = 1e-4,
+        min_learning_rate: float = 1e-6,
+        num_warmup_steps: int = 0,
+        betas: tuple = (0.9, 0.999),
         *args,
         **kwargs,
     ):
