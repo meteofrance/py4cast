@@ -1012,7 +1012,7 @@ class AutoRegressiveLightning(LightningModule):
 
             # If the weights are old, it could be not possible to use them as ckpt.
             # Weights should then be loaded with this argument.
-            if sample.trainer.datamodule.use_old_weights:
+            if self.trainer.datamodule.use_old_weights:
                 weights = self.load_weigths(
                     sample.trainer.datamodule.use_old_weights, map_location=self.device
                 )
