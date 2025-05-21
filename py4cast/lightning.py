@@ -59,6 +59,7 @@ class PlDataModule(LightningDataModule):
         save_gifs: bool = False,
         save_gribs: bool = False,
         list_run_hour: List[int] = [0],
+        use_old_weights: Union[str, bool] = False,
         num_workers: int = 1,
         prefetch_factor: int | None = None,
         pin_memory: bool = False,
@@ -72,6 +73,7 @@ class PlDataModule(LightningDataModule):
         self.save_gifs = save_gifs
         self.save_gribs = save_gribs
         self.list_run_hour = list_run_hour
+        self.use_old_weights = use_old_weights
         self.num_workers = num_workers
         self.prefetch_factor = prefetch_factor
         self.pin_memory = pin_memory
@@ -1008,10 +1010,13 @@ class AutoRegressiveLightning(LightningModule):
 
         if sample.timestamps.datetime.hour in self.trainer.datamodule.list_run_hour:
 
-            # TODO
-            path = "/scratch/shared/py4cast/logs/comparison/titan/unetrpp/akod_unetrpp161024_linear_up_8/weights_only.pth"
-            weights = self.load_weigths(path, map_location=self.device)
-            self.model.load_state_dict(weights)
+            # If the weights are old, it could be not possible to use them as ckpt.
+            # Weights should then be loaded with this argument.
+            if sample.trainer.datamodule.use_old_weights:
+                weights = self.load_weigths(
+                    sample.trainer.datamodule.use_old_weights, map_location=self.device
+                )
+                self.model.load_state_dict(weights)
 
             preds = self.forward(batch, batch_idx)
 
