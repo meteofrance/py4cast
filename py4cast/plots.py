@@ -295,8 +295,8 @@ class MapPlot(Plotter):
             mean = obj.stats.to_list("mean", prediction.feature_names).to(
                 pred, non_blocking=True
             )
-            prediction_rescaled = pred * std + mean
-            target_rescaled = targ * std + mean
+            prediction_rescaled = pred #* std + mean
+            target_rescaled = targ #* std + mean
 
             # Iterate over the examples
             # We assume examples are already on grid
