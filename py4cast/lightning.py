@@ -745,6 +745,7 @@ class AutoRegressiveLightning(LightningModule):
         if self.mask_on_nan:
             mask = ~torch.isnan(target.tensor)
             target.tensor = torch.nan_to_num(target.tensor)
+            prediction.tensor = torch.nan_to_num(prediction.tensor)
             return mask
         return torch.ones_like(target.tensor)
 
@@ -762,7 +763,7 @@ class AutoRegressiveLightning(LightningModule):
 
         prediction, target = self.common_step(batch, batch_idx, phase="train")
 
-        mask = self.get_mask_on_nan(target)
+        mask = self.get_mask_on_nan(target, prediction)
 
         # Compute loss: mean over unrolled times and batch
         batch_loss = torch.mean(self.loss(prediction, target, mask=mask))
@@ -838,7 +839,7 @@ class AutoRegressiveLightning(LightningModule):
         with torch.no_grad():
             prediction, target = self.common_step(batch, batch_idx, phase="val_test")
 
-        mask = self.get_mask_on_nan(target)
+        mask = self.get_mask_on_nan(target, prediction)
 
         time_step_loss = torch.mean(self.loss(prediction, target, mask), dim=0)
         mean_loss = torch.mean(time_step_loss)
@@ -972,7 +973,7 @@ class AutoRegressiveLightning(LightningModule):
         with torch.no_grad():
             prediction, target = self.common_step(batch, batch_idx, phase="val_test")
 
-        mask = self.get_mask_on_nan(target)
+        mask = self.get_mask_on_nan(target, prediction)
 
         time_step_loss = torch.mean(self.loss(prediction, target, mask), dim=0)
         mean_loss = torch.mean(time_step_loss)
