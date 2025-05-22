@@ -57,3 +57,5 @@ jobs:
 
         coverage combine
         coverage report  --ignore-errors --fail-under=60
+
+        ls -lh /home/runner/work/py4cast/py4cast/lightning_logs/version_test/checkpoints/

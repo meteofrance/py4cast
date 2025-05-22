@@ -105,21 +105,20 @@ def test_output_saving_settings():
         template_grib="./template/test.grib",
         dir_grib="./path/to/gribdir",
         dir_gif="./path/to/gifdir",
-        path_to_runtime="Rocky_{}/Rocky_{}",
-        output_kwargs=["Balboa", "Marciano"],
+        path_to_runtime="Rocky_{}/runtime_{}",
+        output_kwargs=["Balboa"],
         grib_fmt="mb_{}/leadtime_{}.grib",
         grib_identifiers=["member", "leadtime"],
         gif_fmt="runtime_{}_feature_{}.gif",
         gif_identifiers=["runtime", "feature"],
     )
-
     assert (
         str(settings.get_gif_path(3, "feature"))
-        == "./path/to/gifdir/Rocky_Balboa/Rocky_Marciano/runtime_3_feature_feature.gif"
+        == "path/to/gifdir/Rocky_Balboa/runtime_3/runtime_3_feature_feature.gif"
     )
     assert (
         str(settings.get_grib_path(3, 5, 2))
-        == "./path/to/gribdir/Rocky_Balboa/Rocky_Marciano/mb_005/leadtime_2.grib"
+        == "path/to/gribdir/Rocky_Balboa/runtime_3/mb_005/leadtime_2.grib"
     )
 
 
@@ -128,13 +127,13 @@ def test_output_saving_settings():
     [
         (
             "Rocky_{}/Rocky_{}",
-            ["Balboa"],
+            ["Balboa", "Marciano"],
             "runtime_{}_feature_{}.gif",
             ["runtime", "feature"],
         ),
         (
             "Rocky_{}/Rocky_{}",
-            ["Balboa", "Marciano"],
+            ["Balboa"],
             "runtime_{}_feature_{}.gif",
             ["runtime"],
         ),
@@ -165,13 +164,13 @@ def test_get_gif_path(path_to_runtime, output_kwargs, gif_fmt, gif_identifiers):
     [
         (
             "Rocky_{}/Rocky_{}",
-            ["Balboa"],
+            ["Balboa", "Marciano"],
             "mb_{}/leadtime_{}.grib",
             ["member", "leadtime"],
         ),
         (
             "Rocky_{}/Rocky_{}",
-            ["Balboa", "Marciano"],
+            ["Balboa"],
             "mb_{}/leadtime.grib",
             ["member", "leadtime"],
         ),
@@ -184,7 +183,7 @@ def test_get_grib_path(path_to_runtime, output_kwargs, grib_fmt, grib_identifier
     """
     with pytest.raises(ValueError):
         settings = out.OutputSavingSettings(
-            template_grib="./template/test.grib",
+            template_grib="/template/test.grib",
             dir_grib="./path/to/gribdir",
             dir_gif="./path/to/gifdir",
             path_to_runtime=path_to_runtime,
