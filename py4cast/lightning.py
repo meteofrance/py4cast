@@ -25,11 +25,10 @@ from transformers.optimization import get_cosine_with_min_lr_schedule_with_warmu
 
 from py4cast.datasets import get_datasets
 from py4cast.datasets.base import DatasetInfo, ItemBatch, NamedTensor, Statics
-
 from py4cast.io.outputs import (
     OutputSavingSettings,
-    save_named_tensors_to_grib,
     save_gifs,
+    save_named_tensors_to_grib,
 )
 from py4cast.losses import ScaledLoss, WeightedLoss
 from py4cast.metrics import MetricACC, MetricPSDK, MetricPSDVar
