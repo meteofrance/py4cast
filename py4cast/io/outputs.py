@@ -4,11 +4,14 @@ from pathlib import Path
 from typing import Any, Dict, Tuple, Union
 
 import epygram
+import gif
 import numpy as np
 from dataclasses_json import dataclass_json
 from mfai.torch.namedtensor import NamedTensor
 
 from py4cast.datasets.base import DatasetABC
+from py4cast.datasets.titan.settings import METADATA
+from py4cast.utils import make_gif
 
 
 @dataclass_json
@@ -50,7 +53,9 @@ class OutputSavingSettings:
                 f"fmt : {fmt} has {ph} placeholders,\
                 but {fi} identifiers."
             )
-        ph2 = len((self.path_to_runtime).split("{}")) - 1
+        ph2 = (
+            len((self.path_to_runtime).split("{}")) - 2
+        )  # minus 2 because of the runtime mandatory
         kw = len(self.output_kwargs)
         if ph2 != kw:
             raise ValueError(
@@ -62,11 +67,14 @@ class OutputSavingSettings:
         for ident in idents:
             identifiers.append(idents_dict[ident])
 
-        return (
-            Path(dir_path)
+        full_path = (
+            dir_path
             / self.path_to_runtime.format(*self.output_kwargs, runtime)
             / fmt.format(*identifiers)
         )
+
+        full_path.parent.mkdir(parents=True, exist_ok=True)
+        return full_path
 
     def get_gif_path(self, runtime, feature):
 
@@ -74,7 +82,7 @@ class OutputSavingSettings:
         idents_dict["runtime"] = runtime
         idents_dict["feature"] = feature
         path = self.get_path(
-            self.dir_gif, runtime, self.gif_identifiers, idents_dict, self.gif_fmt
+            self._dir_gif, runtime, self.gif_identifiers, idents_dict, self.gif_fmt
         )
         return path
 
@@ -86,9 +94,25 @@ class OutputSavingSettings:
         mb = str(member).zfill(3)
         idents_dict["member"] = mb
         path = self.get_path(
-            self.dir_grib, runtime, self.grib_identifiers, idents_dict, self.grib_fmt
+            self._dir_grib, runtime, self.grib_identifiers, idents_dict, self.grib_fmt
         )
         return path
+
+    @property
+    def _dir_grib(self):
+        path = Path(self.dir_grib)
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+
+    @property
+    def _dir_gif(self):
+        path = Path(self.dir_gif)
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+
+    @property
+    def _template_grib(self):
+        return self._dir_grib / self.template_grib
 
 
 def save_named_tensors_to_grib(
@@ -110,9 +134,7 @@ def save_named_tensors_to_grib(
     # Get number of prediction
     predicted_time_steps = len(sample.output_timestamps.validity_times)
     # Open template grib
-    tmplt_ds = epygram.formats.resource(
-        Path(saving_settings.dir_grib) / saving_settings.template_grib, "r"
-    )
+    tmplt_ds = epygram.formats.resource(saving_settings._template_grib, "r")
 
     datetime = sample.output_timestamps.datetime
 
@@ -139,7 +161,6 @@ def save_named_tensors_to_grib(
         # Get the name of the file
         member = getattr(sample, "member") + 1
         full_path = saving_settings.get_grib_path(runtime, member, leadtime)
-        full_path.parent.mkdir(parents=True, exist_ok=True)
 
         # Create a GRIB
         grib_final = epygram.formats.resource(full_path, "w", fmt="GRIB")
@@ -201,6 +222,27 @@ def save_named_tensors_to_grib(
             grib_final.writefield(f)
 
         print(f"Leadtime {leadtime} has been written in {full_path}")
+
+
+def save_gifs(pred, runtime, grid, save_settings):
+
+    for feature_name in pred.feature_names:
+        # Make gif
+        feat = [pred.tensor[:, :, :, pred.feature_names_to_idx[feature_name]].cpu()]
+        frames = make_gif(
+            feature_name,
+            runtime,
+            None,
+            feat,
+            "Py4cast",
+            grid.projection,
+            grid.grid_limits,
+            METADATA,
+        )
+
+        # Save gifs
+        gif_path = save_settings.get_gif_path(runtime, feature_name)
+        gif.save(frames, str(gif_path), duration=500)
 
 
 def fill_tensor_with(embedded_data, embedded_idxs, shape, default_v, _dtype):

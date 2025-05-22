@@ -7,7 +7,6 @@ from pathlib import Path
 from typing import Dict, List, Literal, Tuple, Union
 
 import einops
-import gif
 import matplotlib
 import mlflow.pytorch
 import torch
@@ -26,8 +25,12 @@ from transformers.optimization import get_cosine_with_min_lr_schedule_with_warmu
 
 from py4cast.datasets import get_datasets
 from py4cast.datasets.base import DatasetInfo, ItemBatch, NamedTensor, Statics
-from py4cast.datasets.titan.settings import METADATA
-from py4cast.io.outputs import OutputSavingSettings, save_named_tensors_to_grib
+
+from py4cast.io.outputs import (
+    OutputSavingSettings,
+    save_named_tensors_to_grib,
+    save_gifs,
+)
 from py4cast.losses import ScaledLoss, WeightedLoss
 from py4cast.metrics import MetricACC, MetricPSDK, MetricPSDVar
 from py4cast.models import build_model_from_settings, get_model_kls_and_settings
@@ -38,7 +41,7 @@ from py4cast.plots import (
     SpatialErrorPlot,
     StateErrorPlot,
 )
-from py4cast.utils import make_gif, str_to_dtype
+from py4cast.utils import str_to_dtype
 
 PLOT_PERIOD: int = 10
 
@@ -1004,71 +1007,62 @@ class AutoRegressiveLightning(LightningModule):
                     f"Training: {self.input_feature_names}, Inference: {batch.inputs.feature_names}"
                 )
 
-        sample = self.infer_ds.sample_list[batch_idx]
+        if self.io_conf is None:
+            return
+
+        # Save gribs if a io config file is given
+        with open(self.io_conf, "r") as f:
+            save_settings = OutputSavingSettings(**json.load(f))
+
         grid = self.infer_ds.grid
-        runtime = sample.timestamps.datetime.strftime("%Y%m%d%H")
+        batch_size = batch.batch_size
 
-        if sample.timestamps.datetime.hour in self.trainer.datamodule.list_run_hour:
+        idx_samples = [batch_idx * batch_size + b for b in range(batch_size)]
+        samples = [self.infer_ds.sample_list[idx] for idx in idx_samples]
+        runtimes = [
+            sample.timestamps.datetime.strftime("%Y%m%d%H") for sample in samples
+        ]
 
-            # If the weights are old, it could be not possible to use them as ckpt.
-            # Weights should then be loaded with this argument.
-            if self.trainer.datamodule.use_old_weights:
-                weights = self.load_weigths(
-                    sample.trainer.datamodule.use_old_weights, map_location=self.device
-                )
-                self.model.load_state_dict(weights)
+        samples_accepted_in_batch = [
+            sample.timestamps.datetime.hour in self.trainer.datamodule.list_run_hour
+            for sample in samples
+        ]
 
-            preds = self.forward(batch, batch_idx)
+        if not any(samples_accepted_in_batch):
+            return
 
-            # Remove batch dimension
-            if preds.tensor.shape[0] != 1:
-                raise ValueError(
-                    f"Prediction should have a batch dimension of 1 instead of {preds.tensor.shape[0]}"
-                )
-            preds.flatten_("timestep", 0, 1)
+        # If the weights are old, it could be not possible to use them as ckpt.
+        # Weights should then be loaded with this argument.
+        if self.trainer.datamodule.use_old_weights:
+            weights = self.load_weigths(
+                self.trainer.datamodule.use_old_weights, map_location=self.device
+            )
+            self.model.load_state_dict(weights)
 
-            # Unnormalize data
-            for feature_name in preds.feature_names:
-                means = torch.asarray(self.stats[feature_name]["mean"])
-                std = torch.asarray(self.stats[feature_name]["std"])
-                preds.tensor[:, :, :, preds.feature_names_to_idx[feature_name]] *= std
-                preds.tensor[:, :, :, preds.feature_names_to_idx[feature_name]] += means
+        preds = self.forward(batch, batch_idx)
 
-            # Get the max of the input timestamps which is t0
+        # Unnormalize data
+        for feature_name in preds.feature_names:
+            means = torch.asarray(self.stats[feature_name]["mean"])
+            std = torch.asarray(self.stats[feature_name]["std"])
+            preds.tensor[:, :, :, :, preds.feature_names_to_idx[feature_name]] *= std
+            preds.tensor[:, :, :, :, preds.feature_names_to_idx[feature_name]] += means
 
-            if not (self.io_conf is None):
-                # Save gribs if a io config file is given
-                with open(self.io_conf, "r") as f:
-                    save_settings = OutputSavingSettings(**json.load(f))
+        for idx, pred in enumerate(preds.iter_dim(dim_name="batch")):
+            if not samples_accepted_in_batch[idx]:
+                continue
 
-                # Write GIFS
-                if self.trainer.datamodule.save_gifs:
-                    for feature_name in preds.feature_names:
-                        # Make gif
-                        feat = [
-                            preds.tensor[
-                                :, :, :, preds.feature_names_to_idx[feature_name]
-                            ].cpu()
-                        ]
-                        frames = make_gif(
-                            feature_name,
-                            runtime,
-                            None,
-                            feat,
-                            "Py4cast",
-                            grid.projection,
-                            grid.grid_limits,
-                            METADATA,
-                        )
+            runtime = runtimes[idx]
+            sample = samples[idx]
 
-                        # Save gifs
-                        gif_path = save_settings.get_gif_path(runtime, feature_name)
-                        gif_path.parent.mkdir(parents=True, exist_ok=True)
-                        gif.save(frames, str(gif_path), duration=500)
+            # Write GIFS
+            if self.trainer.datamodule.save_gifs:
+                print("Saving gifs...")
+                save_gifs(pred, runtime, grid, save_settings)
 
+            if self.trainer.datamodule.save_gribs:
                 print("Writing gribs...")
-                if self.trainer.datamodule.save_gribs:
-                    save_named_tensors_to_grib(
-                        preds, self.infer_ds, sample, save_settings, runtime
-                    )
-            return preds
+                save_named_tensors_to_grib(
+                    pred, self.infer_ds, sample, save_settings, runtime
+                )
+        return preds
