@@ -21,6 +21,7 @@ from mfai.torch.models.utils import (
 )
 from mlflow.models.signature import infer_signature
 from torchinfo import summary
+from transformers.optimization import get_cosine_with_min_lr_schedule_with_warmup
 
 from py4cast.datasets import get_datasets
 from py4cast.datasets.base import DatasetInfo, ItemBatch, NamedTensor, Statics
@@ -734,7 +735,9 @@ class AutoRegressiveLightning(LightningModule):
             ] = False
         return x * mask
 
-    def get_mask_on_nan(self, target: NamedTensor, prediction: NamedTensor) -> torch.Tensor:
+    def get_mask_on_nan(
+        self, target: NamedTensor, prediction: NamedTensor
+    ) -> torch.Tensor:
         """
         Returns a mask matching the nan values in target, same shape as the target.
         Replaces the nan values by zeros in the target.
