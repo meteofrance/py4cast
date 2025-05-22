@@ -4,37 +4,119 @@ from pathlib import Path
 from typing import Any, Dict, Tuple, Union
 
 import epygram
+import gif
 import numpy as np
 from dataclasses_json import dataclass_json
 from mfai.torch.namedtensor import NamedTensor
 
 from py4cast.datasets.base import DatasetABC
+from py4cast.datasets.titan.settings import METADATA
+from py4cast.utils import make_gif
 
 
 @dataclass_json
 @dataclass
-class GribSavingSettings:
+class OutputSavingSettings:
     """
+    Class to hold data about saving settings. Return the path to save gif and gribs
     - a template grib path
-    - the saving directory
-    - the name format of the grib to be written (as fillable f-string with empty placeholders)
-    - the keywords to insert in the given name format.
-    - the sample identifiers to insert in the given name format.
+    - the saving grib directory
+    - the saving gif directory
+    - path_to_runtime : The path to the the runtime to concatenate to the directory
+    - output_kwargs : fill the placeholders of path_to_runtime
+    - grib_fmt : the name format of the grib to be written (as fillable f-string with empty placeholders)
+    - grib_identifiers : the keywords to insert in the given grib_fmt.
+    - gif_fmt : the name format of the gif to be written (as fillable f-string with empty placeholders)
+    - gif_identifiers : the keywords to insert in the given gif_fmt
     There should be p-i keywords, where p is the number of placeholders and i the number of sample identifiers.
     """
 
     template_grib: str
-    directory: str
+    dir_grib: str
+    dir_gif: str
+    path_to_runtime: str
+    grib_fmt: str = "grid.forecast_ai_date_{}_ech_{}.json"
     output_kwargs: tuple[str, ...] = ()
-    sample_identifiers: tuple[str, ...] = ("date", "leadtime")
-    output_fmt: str = "grid.forecast_ai_date_{}_ech_{}.json"
+    grib_identifiers: tuple[str, ...] = ("date", "leadtime")
+    gif_fmt: str = "{}_feature_{}.gif"
+    gif_identifiers: tuple[str, ...] = ("runtime", "feature")
+
+    def get_path(self, dir_path, runtime, idents, idents_dict, fmt):
+        """
+        return the dir_path in arg concatenated with the path to the runtime and the format given.
+        """
+        # Tests if number of placeholders are matching numer of id.
+        ph = len((fmt).split("{}")) - 1
+        fi = len(idents)
+        if ph != fi:
+            raise ValueError(
+                f"fmt : {fmt} has {ph} placeholders,\
+                but {fi} identifiers."
+            )
+        ph2 = (
+            len((self.path_to_runtime).split("{}")) - 2
+        )  # minus 2 because of the runtime mandatory
+        kw = len(self.output_kwargs)
+        if ph2 != kw:
+            raise ValueError(
+                f"fmt : {self.path_to_runtime} has {ph2} placeholders,\
+                but {kw} identifiers."
+            )
+
+        identifiers = []
+        for ident in idents:
+            identifiers.append(idents_dict[ident])
+
+        full_path = (
+            dir_path
+            / self.path_to_runtime.format(*self.output_kwargs, runtime)
+            / fmt.format(*identifiers)
+        )
+
+        full_path.parent.mkdir(parents=True, exist_ok=True)
+        return full_path
+
+    def get_gif_path(self, runtime, feature):
+
+        idents_dict = {}
+        idents_dict["runtime"] = runtime
+        idents_dict["feature"] = feature
+        path = self.get_path(
+            self._dir_gif, runtime, self.gif_identifiers, idents_dict, self.gif_fmt
+        )
+        return path
+
+    def get_grib_path(self, runtime, member, leadtime):
+
+        idents_dict = {}
+        idents_dict["leadtime"] = leadtime
+        # format string
+        mb = str(member).zfill(3)
+        idents_dict["member"] = mb
+        path = self.get_path(
+            self._dir_grib, runtime, self.grib_identifiers, idents_dict, self.grib_fmt
+        )
+        return path
+
+    @property
+    def _dir_grib(self):
+        path = Path(self.dir_grib)
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+
+    @property
+    def _dir_gif(self):
+        path = Path(self.dir_gif)
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+
+    @property
+    def _template_grib(self):
+        return self._dir_grib / self.template_grib
 
 
 def save_named_tensors_to_grib(
-    pred: NamedTensor,
-    ds: DatasetABC,
-    sample: Any,
-    saving_settings: dict,
+    pred: NamedTensor, ds: DatasetABC, sample: Any, saving_settings: dict, runtime: str
 ) -> None:
     """
     Write a named tensor (pred) to grib files, using a prefilled grib file as template.
@@ -46,14 +128,13 @@ def save_named_tensors_to_grib(
         sample (Any) : an instance of the DataSet Sample, containing informations on parameters, date, leadtimes
         date (dt.datetime) : the date of the initial state
         saving_settings (GribaSavingSettings) : settings for the writing process
+        runtime (str) :
     """
 
     # Get number of prediction
     predicted_time_steps = len(sample.output_timestamps.validity_times)
     # Open template grib
-    tmplt_ds = epygram.formats.resource(
-        Path(saving_settings.directory) / saving_settings.template_grib, "r"
-    )
+    tmplt_ds = epygram.formats.resource(saving_settings._template_grib, "r")
 
     datetime = sample.output_timestamps.datetime
 
@@ -67,7 +148,7 @@ def save_named_tensors_to_grib(
     for step_idx in range(predicted_time_steps):
 
         # Get data
-        raw_data = pred.select_dim("timestep", step_idx, bare_tensor=False)
+        raw_data = pred.select_dim("timestep", step_idx)
         # Define leadtime
         leadtime = int(
             sample.output_timestamps.timedeltas[step_idx].total_seconds() / 60**2
@@ -78,9 +159,8 @@ def save_named_tensors_to_grib(
         validity_time = sample.output_timestamps.validity_times[step_idx]
 
         # Get the name of the file
-        path_to_file = get_output_filename(saving_settings, sample, leadtime)
-        full_path = Path(saving_settings.directory) / path_to_file
-        full_path.parent.mkdir(parents=True, exist_ok=True)
+        member = getattr(sample, "member") + 1
+        full_path = saving_settings.get_grib_path(runtime, member, leadtime)
 
         # Create a GRIB
         grib_final = epygram.formats.resource(full_path, "w", fmt="GRIB")
@@ -142,38 +222,27 @@ def save_named_tensors_to_grib(
             grib_final.writefield(f)
 
         print(f"Leadtime {leadtime} has been written in {full_path}")
-        print(f"Following features were not accepted : {feature_not_accepted}")
 
 
-def get_output_filename(
-    saving_settings: GribSavingSettings, sample: Any, leadtime: float
-) -> str:
-    identifiers = []
-    for ident in saving_settings.sample_identifiers:
-        if ident == "runtime":
-            # Get the max of the input timestamps which is t0
-            last_input = max(
-                set(sample.timestamps.timedeltas)
-                - set(sample.output_timestamps.timedeltas)
-            )
-            idx_last_input = sample.timestamps.timedeltas.index(last_input)
-            runtime = sample.timestamps.validity_times[idx_last_input].strftime(
-                "%Y%m%dT%H%MP"
-            )
-            identifiers.append(runtime)
-        elif ident == "leadtime":
-            identifiers.append(leadtime)
-        elif ident == "member":
-            # Offset of 1. To start at 1 instead of 0.
-            member = getattr(sample, ident) + 1
-            # format string
-            mb = str(member).zfill(3)
-            identifiers.append(mb)
+def save_gifs(pred, runtime, grid, save_settings):
 
-    path_to_file = saving_settings.output_fmt.format(
-        *saving_settings.output_kwargs, *identifiers
-    )
-    return path_to_file
+    for feature_name in pred.feature_names:
+        # Make gif
+        feat = [pred.tensor[:, :, :, pred.feature_names_to_idx[feature_name]].cpu()]
+        frames = make_gif(
+            feature_name,
+            runtime,
+            None,
+            feat,
+            "Py4cast",
+            grid.projection,
+            grid.grid_limits,
+            METADATA,
+        )
+
+        # Save gifs
+        gif_path = save_settings.get_gif_path(runtime, feature_name)
+        gif.save(frames, str(gif_path), duration=500)
 
 
 def fill_tensor_with(embedded_data, embedded_idxs, shape, default_v, _dtype):

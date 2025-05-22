@@ -531,11 +531,67 @@ export MLFLOW_EXPERIMENT_NAME=py4cast/unetrpp
 
 Inference is done by running the `bin/main.py predict` script. This script will load a model and run it on a dataset using the training parameters (dataset config, timestep options, ...).
 
+The path to the ckpt should be added in the trainer.yaml file :
+
+```bash
+ckpt_path: path/to/your/ckpt.ckpt
+```
 A simple example of inference is shown below:
 
 ```bash
  runai exec_gpu python bin/main.py predict --config config/CLI/trainer.yaml --config config/CLI/dataset/titan.yaml --config config/CLI/model/unetrpp.yaml
 ```
+
+**Infer at specific hours for a period**
+More arguments can be added in the yaml file to use the inference. 
+The inference is launched on every sample of the inference dataset. To restrict the inference to sample at specific hours, for instance infer for a period at 6am and 6pm, use the argument list_run_hour. The predict_step will be launched only if the sample's runtime is in the list.
+
+**Use old weights incompatible with the model**
+Old weights can be refused by the model to instantiate itself, if the lightning module has been modified since the training. To avoid this issue, the ckpt have to be reloaded with the old model and save the bare weights with :
+```bash
+state_dict = model.state_dict()
+torch.save(state_dict, "./path.pth") 
+```
+Then the argument use_old_weights can be used to inject the old weight in the model manually.
+```bash
+use_old_weights: ./path.pth
+```
+
+**Save gribs and gifs**
+
+First, to save gribs and gifs, the following arguments has to be set as true:
+```yaml
+  data:
+    save_gifs: true
+    save_gribs: true
+```
+
+Then,the inference can export data as grib and plot gifs. A settings file should be added in the folder config/IO and should be linked to the model in the yaml file:
+```yaml
+  model:
+    io_conf : config/IO/titan_grib_settings.json
+```
+The settings file should be like this:
+```json
+{
+    "template_grib": "../template/grid.arome-oper.eurw1s40+0001:00.grib",
+    "dir_grib" : "/scratch/shared/py4cast/gribs_writing/todel/",
+    "dir_gif" : "/scratch/shared/py4cast/gifs_dir/todel/",
+    "path_to_runtime" : "dataset_{}/{}",
+    "output_kwargs" : ["titan_1s40"],
+    "grib_fmt" : "mb{}/forecast/grid.emul_aro_ai_ech_{}.grib",
+    "grib_identifiers" : ["member", "leadtime"],
+    "gif_fmt" : "{}_feature_{}.gif",
+    "gif_identifiers" : ["runtime", "feature"]
+}
+```
+
+A template grib is necessary to product gribs. The path to the template grib is the concatenation betweend dir_grib and template_grib. 
+Gribs are saved in the path concatenated with dir_grib, path_to_runtime and grib_fmt
+Gifs are saved in the path concatenated with dir_gif, path_to_runtime and gif_fmt. 
+
+gif_fmt and grib_fmt formats should have as many placeholders as identifiers.
+path_to_runtime should have as many placeholders as kwargs -1. The last placeholder is set aside for the runtime.
 
 ### Making animated plots comparing multiple models
 

@@ -5,7 +5,7 @@ model:
   num_samples_to_plot: 1
   training_strategy: scaled_ar # diff_ar or scaled_ar or downscaling_only
   channels_last: False # True: B W H C
-  io_conf : null
+  io_conf : config/IO/titan_grib_settings.json
   mask_ratio : 0 # 0<mask_ratio<1. If !=0 apply maskedautoencoderstrategy.
   learning_rate: 1e-3
   min_learning_rate: 3e-7
