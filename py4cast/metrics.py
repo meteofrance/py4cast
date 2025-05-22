@@ -185,27 +185,29 @@ class MetricPSDVar(Metric):
 
         # tensor should be (Batch, channels, Lon, Lat) or (Batch, channels, ngrids)
         # to be an argument of power_spectral_density
-        y_pred = preds.tensor.permute(
-            0, -1, *range(2, preds.tensor.dim() - 1), 1
-        ) * mask.permute(0, -1, *range(2, preds.tensor.dim() - 1), 1)
-        y_true = targets.tensor.permute(
-            0, -1, *range(2, targets.tensor.dim() - 1), 1
-        ) * mask.permute(0, -1, *range(2, targets.tensor.dim() - 1), 1)
+        mask = mask.permute(0, -1, *range(2, preds.tensor.dim() - 1), 1)
 
-        if y_pred.shape != y_true.shape:
+        y_pred_mask = (
+            preds.tensor.permute(0, -1, *range(2, preds.tensor.dim() - 1), 1) * mask
+        )
+        y_true_mask = (
+            targets.tensor.permute(0, -1, *range(2, targets.tensor.dim() - 1), 1) * mask
+        )
+
+        if y_pred_mask.shape != y_true_mask.shape:
             raise ValueError("y_pred and y_true must have the same shape")
 
-        channels = y_true.shape[1]
+        channels = y_true_mask.shape[1]
         res = np.zeros((channels,))
 
         # Compute the RMSE for each channel of x.
         for c in range(channels):
             # Compute PSD
             psd_target = power_spectral_density(
-                y_true[:, c : c + 1, :, :, self.pred_step].cpu().numpy()
+                y_true_mask[:, c : c + 1, :, :, self.pred_step].cpu().numpy()
             )
             psd_pred = power_spectral_density(
-                y_pred[:, c : c + 1, :, :, self.pred_step].cpu().numpy()
+                y_pred_mask[:, c : c + 1, :, :, self.pred_step].cpu().numpy()
             )
             # Compute RMSE
             res[c] = np.sqrt(np.mean((np.log10(psd_target) - np.log10(psd_pred)) ** 2))

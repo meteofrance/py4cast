@@ -73,7 +73,6 @@ def build_model_from_settings(
     Instanciates a model based on its name and an optional settings file.
     """
     model_kls, model_settings = get_model_kls_and_settings(network_name, settings)
-    print(type(num_output_features))
     return (
         model_kls(
             num_input_features,
