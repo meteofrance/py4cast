@@ -699,7 +699,7 @@ class AutoRegressiveLightning(LightningModule):
                 )  # Union of size masks (batch, lat, lon)
 
             mask_list.append(
-                ~combined_mask.unsqueeze(-1)
+                ~combined_mask.unsqueeze(-1)  # unsqueeze and invert combined_mask
             )  # shape [(batch, lat, lon, param)]
 
             # replace nan by 0 in inputs
@@ -833,8 +833,7 @@ class AutoRegressiveLightning(LightningModule):
             ]
 
     def validation_step(self, batch: ItemBatch, batch_idx: int):
-        """
-        Run validation on single batch
+        """Runs validation on a single batch
         """
         with torch.no_grad():
             prediction, target = self.common_step(batch, batch_idx, phase="val_test")
@@ -872,8 +871,7 @@ class AutoRegressiveLightning(LightningModule):
         target: NamedTensor,
         mask: torch.Tensor,
     ):
-        """
-        Save metrics and plots of validation to the tensorboard
+        """Saves metrics and plots of validation to the tensorboard
         """
         if self.logging_enabled:
             # Notify every plotters
@@ -967,8 +965,7 @@ class AutoRegressiveLightning(LightningModule):
             ]
 
     def test_step(self, batch: ItemBatch, batch_idx: int):
-        """
-        Run test on single batch
+        """Runs test on single batch
         """
         with torch.no_grad():
             prediction, target = self.common_step(batch, batch_idx, phase="val_test")
@@ -1002,8 +999,7 @@ class AutoRegressiveLightning(LightningModule):
         target: NamedTensor,
         mask: torch.Tensor,
     ):
-        """
-        Save metrics and plots of test to the tensorboard
+        """Saves metrics and plots of test to the tensorboard
         """
         if self.logging_enabled:
             # Notify plotters & metrics

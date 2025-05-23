@@ -26,7 +26,7 @@ def compute_mean_std_min_max(
 
     if torch.isnan(flat_input).any():
         warnings.warn(
-            "Your dataset contain NaN values, statistics will be calculated ignoring the NaN."
+            "py4cast.datasets.compute_dataset_stats.compute_mean_std_min_max:\n\tYour dataset contain NaN values, statistics will be calculated ignoring the NaN."
         )
 
     counter = 0
