@@ -17,6 +17,7 @@ from torchmetrics import Metric
 from tueplots import bundles, figsizes
 
 if TYPE_CHECKING:
+    from py4cast.datasets.base import ItemBatch
     from py4cast.lightning import AutoRegressiveLightning
 
 from mfai.torch.namedtensor import NamedTensor
@@ -220,8 +221,10 @@ class Plotter(ABC):
     def update(
         self,
         obj: "AutoRegressiveLightning",
+        batch: "ItemBatch",
         prediction: NamedTensor,
         target: NamedTensor,
+        mask: torch.Tensor,
     ) -> None:
         """
         Do an action when "step" is trigger
@@ -257,14 +260,17 @@ class MapPlot(Plotter):
     def update(
         self,
         obj: "AutoRegressiveLightning",
+        batch: "ItemBatch",
         prediction: NamedTensor,
         target: NamedTensor,
+        mask: torch.Tensor,
     ) -> None:
         """
         Update. Should be call by "on_{training/validation/test}_step
         """
         pred = deepcopy(prediction).tensor  # In order to not modify the input
         targ = deepcopy(target).tensor  # In order to not modify the input
+        batch_copy = deepcopy(batch)
 
         # Here we reshape output from GNNS to be on the grid
         if prediction.num_spatial_dims == 1:
@@ -292,6 +298,10 @@ class MapPlot(Plotter):
             )
             prediction_rescaled = pred * std + mean
             target_rescaled = targ * std + mean
+            batch_copy.inputs.tensor = batch_copy.inputs.tensor * std + mean
+            batch_copy.forcing.tensor[:, :, :, :, :-5] = (
+                batch_copy.forcing.tensor[:, :, :, :, :-5] * std + mean
+            )  # not rescalled cos_hour, ect
 
             # Iterate over the examples
             # We assume examples are already on grid
@@ -314,6 +324,7 @@ class MapPlot(Plotter):
 
                 self.plot_map(
                     obj,
+                    batch_copy,
                     pred_slice,
                     target_slice,
                     feature_names,
@@ -324,6 +335,7 @@ class MapPlot(Plotter):
     def plot_map(
         self,
         obj: "AutoRegressiveLightning",
+        batch: "ItemBatch",
         prediction: torch.tensor,
         target: torch.tensor,
         feature_names: List[str],
@@ -359,6 +371,7 @@ class PredictionTimestepPlot(MapPlot):
     def plot_map(
         self,
         obj: "AutoRegressiveLightning",
+        batch: "ItemBatch",
         prediction: torch.tensor,
         target: torch.tensor,
         feature_names: List[str],
@@ -423,6 +436,7 @@ class PredictionEpochPlot(MapPlot):
     def plot_map(
         self,
         obj: "AutoRegressiveLightning",
+        batch: "ItemBatch",
         prediction: torch.tensor,
         target: torch.tensor,
         feature_names: List[str],
@@ -500,8 +514,10 @@ class StateErrorPlot(Plotter):
     def update(
         self,
         obj: "AutoRegressiveLightning",
+        batch: "ItemBatch",
         prediction: NamedTensor,
         target: NamedTensor,
+        mask: torch.Tensor,
     ) -> None:
         """
         Compute the metric. Append to a dictionnary
@@ -509,7 +525,7 @@ class StateErrorPlot(Plotter):
         for name in self.metrics:
             self.losses[name].append(
                 obj.trainer.strategy.reduce(
-                    self.metrics[name](prediction, target), reduce_op="mean"
+                    self.metrics[name](prediction, target, mask), reduce_op="mean"
                 ).cpu()
             )
         if not self.initialized:
@@ -586,10 +602,12 @@ class SpatialErrorPlot(Plotter):
     def update(
         self,
         obj: "AutoRegressiveLightning",
+        batch: "ItemBatch",
         prediction: NamedTensor,
         target: NamedTensor,
+        mask: torch.Tensor,
     ) -> None:
-        spatial_loss = obj.loss(prediction, target, reduce_spatial_dim=False)
+        spatial_loss = obj.loss(prediction, target, mask, reduce_spatial_dim=False)
         # Getting only spatial loss for the required val_step_errors
         if prediction.num_spatial_dims == 1:
             spatial_loss = einops.rearrange(

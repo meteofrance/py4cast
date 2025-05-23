@@ -1,3 +1,4 @@
+import warnings
 from typing import Literal
 
 import torch
@@ -20,12 +21,13 @@ def compute_mean_std_min_max(
     sum_squares = torch.zeros(n_features)
     ndim_features = len(named_tensor.tensor.shape) - 1
     flat_input = named_tensor.tensor.flatten(0, ndim_features - 1)  # (X, Features)
-    best_min = torch.min(flat_input, dim=0).values
-    best_max = torch.max(flat_input, dim=0).values
+    best_min = torch.min(torch.nan_to_num(flat_input, nan=torch.inf), dim=0).values
+    best_max = torch.max(torch.nan_to_num(flat_input, nan=-torch.inf), dim=0).values
 
-    if torch.isnan(best_min).any() or torch.isnan(best_max).any():
-        raise ValueError(
-            "Your dataset contain NaN values, which prevent the calculation of statistics."
+    if torch.isnan(flat_input).any():
+        warnings.warn(
+            "py4cast.datasets.compute_dataset_stats.compute_mean_std_min_max:\n\
+            \tYour dataset contain NaN values, statistics will be calculated ignoring the NaN."
         )
 
     counter = 0
@@ -40,14 +42,14 @@ def compute_mean_std_min_max(
         tensor = tensor.flatten(1, 3)  # Flatten to be (Batch, X, Features)
         counter += tensor.shape[0]  # += batch size
 
-        sum_means += torch.sum(tensor.mean(dim=1), dim=0)  # (d_features)
-        sum_squares += torch.sum((tensor**2).mean(dim=1), dim=0)  # (d_features)
+        sum_means += torch.nansum(tensor.nanmean(dim=1), dim=0)  # (d_features)
+        sum_squares += torch.nansum((tensor**2).nanmean(dim=1), dim=0)  # (d_features)
 
-        mini = torch.min(tensor, 1).values[0]
+        mini = torch.min(torch.nan_to_num(tensor, nan=torch.inf), 1).values[0]
         stack_mini = torch.stack([best_min, mini], dim=0)
         best_min = torch.min(stack_mini, dim=0).values  # (d_features)
 
-        maxi = torch.max(tensor, 1).values[0]
+        maxi = torch.max(torch.nan_to_num(tensor, nan=-torch.inf), 1).values[0]
         stack_maxi = torch.stack([best_max, maxi], dim=0)
         best_max = torch.max(stack_maxi, dim=0).values  # (d_features)
 
@@ -102,8 +104,8 @@ def compute_time_step_stats(dataset: DatasetABC):
         diff = diff.flatten(1, 3)  # Flatten everybody to be (Batch, X, Features)
 
         counter += in_out.shape[0]  # += batch size
-        sum_means += torch.sum(diff.mean(dim=1), dim=0)  # (d_features)
-        sum_squares += torch.sum((diff**2).mean(dim=1), dim=0)  # (d_features)
+        sum_means += torch.nansum(diff.nanmean(dim=1), dim=0)  # (d_features)
+        sum_squares += torch.nansum((diff**2).nanmean(dim=1), dim=0)  # (d_features)
 
     diff_mean = sum_means / counter
     diff_second_moment = sum_squares / counter
