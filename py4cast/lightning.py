@@ -699,7 +699,7 @@ class AutoRegressiveLightning(LightningModule):
                 )  # Union of size masks (batch, lat, lon)
 
             mask_list.append(
-                ~combined_mask.unsqueeze(-1)
+                ~combined_mask.unsqueeze(-1)  # unsqueeze and invert combined_mask
             )  # shape [(batch, lat, lon, param)]
 
             # replace nan by 0 in inputs
