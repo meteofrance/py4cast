@@ -570,7 +570,9 @@ class AutoRegressiveLightning(LightningModule):
                 if scale_y:
                     predicted_state = (
                         # select the last timestep
-                        last_prev_state * (1 - ds) + y * step_diff_std + step_diff_mean
+                        last_prev_state * (1 - ds)
+                        + y * step_diff_std
+                        + step_diff_mean
                     )
                 else:
                     predicted_state = last_prev_state * (1 - ds) + y
