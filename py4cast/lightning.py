@@ -833,8 +833,7 @@ class AutoRegressiveLightning(LightningModule):
             ]
 
     def validation_step(self, batch: ItemBatch, batch_idx: int):
-        """
-        Run validation on single batch
+        """Runs validation on a single batch
         """
         with torch.no_grad():
             prediction, target = self.common_step(batch, batch_idx, phase="val_test")
