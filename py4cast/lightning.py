@@ -772,7 +772,9 @@ class AutoRegressiveLightning(LightningModule):
         # Notify every plotters
         if self.logging_enabled:
             for plotter in self.train_plotters:
-                plotter.update(self, prediction=prediction, target=target, mask=mask)
+                plotter.update(
+                    self, batch=batch, prediction=prediction, target=target, mask=mask
+                )
 
         return batch_loss
 
