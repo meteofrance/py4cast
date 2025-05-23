@@ -703,9 +703,9 @@ class AutoRegressiveLightning(LightningModule):
             )  # shape [(batch, lat, lon, param)]
 
             # replace nan by 0 in inputs
-            inputs = [torch.nan_to_num(input) for input in inputs]
+            inputs = [torch.nan_to_num(input, nan=0) for input in inputs]
             # replace nan by 0 in forcing
-            forcing.tensor = torch.nan_to_num(forcing.tensor)
+            forcing.tensor = torch.nan_to_num(forcing.tensor, nan=0)
 
         # If downscaling only, inputs are not concatenated: only use static features and forcings.
         x = torch.cat(
@@ -740,12 +740,12 @@ class AutoRegressiveLightning(LightningModule):
     ) -> torch.Tensor:
         """
         Returns a mask matching the nan values in target, same shape as the target.
-        Replaces the nan values by zeros in the target.
+        Replaces the nan values by zeros in the target and the prediction.
         """
         if self.mask_on_nan:
             mask = ~torch.isnan(target.tensor)
-            target.tensor = torch.nan_to_num(target.tensor)
-            prediction.tensor = torch.nan_to_num(prediction.tensor)
+            target.tensor = torch.nan_to_num(target.tensor, nan=0)
+            prediction.tensor = torch.nan_to_num(prediction.tensor, nan=0)
             return mask
         return torch.ones_like(target.tensor)
 
