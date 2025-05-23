@@ -965,8 +965,7 @@ class AutoRegressiveLightning(LightningModule):
             ]
 
     def test_step(self, batch: ItemBatch, batch_idx: int):
-        """
-        Run test on single batch
+        """Runs test on single batch
         """
         with torch.no_grad():
             prediction, target = self.common_step(batch, batch_idx, phase="val_test")
