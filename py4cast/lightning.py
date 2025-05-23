@@ -871,8 +871,7 @@ class AutoRegressiveLightning(LightningModule):
         target: NamedTensor,
         mask: torch.Tensor,
     ):
-        """
-        Save metrics and plots of validation to the tensorboard
+        """Saves metrics and plots of validation to the tensorboard
         """
         if self.logging_enabled:
             # Notify every plotters
