@@ -559,19 +559,21 @@ class AutoRegressiveLightning(LightningModule):
                 else:
                     y = self.model(x)
 
+                ds = self.training_strategy == "downscaling_only"
+
+                # select the last timestep
+                last_prev_state = prev_states.select_tensor_dim("timestep", -1)
+                if self.mask_on_nan:
+                    last_prev_state = torch.nan_to_num(last_prev_state, nan=0)
+
                 # We update the latest of our prev_states with the network output
                 if scale_y:
                     predicted_state = (
                         # select the last timestep
-                        prev_states.select_tensor_dim("timestep", -1)
-                        + y * step_diff_std
-                        + step_diff_mean
+                        last_prev_state * (1 - ds) + y * step_diff_std + step_diff_mean
                     )
                 else:
-                    ds = self.training_strategy == "downscaling_only"
-                    predicted_state = (
-                        prev_states.select_tensor_dim("timestep", -1) * (1 - ds) + y
-                    )
+                    predicted_state = last_prev_state * (1 - ds) + y
 
                 # Overwrite border with true state
                 # Force it to true state for all intermediary step
@@ -735,17 +737,14 @@ class AutoRegressiveLightning(LightningModule):
             ] = False
         return x * mask
 
-    def get_mask_on_nan(
-        self, target: NamedTensor, prediction: NamedTensor
-    ) -> torch.Tensor:
+    def get_mask_on_nan(self, target: NamedTensor) -> torch.Tensor:
         """
         Returns a mask matching the nan values in target, same shape as the target.
-        Replaces the nan values by zeros in the target and the prediction.
+        Replaces the nan values by zeros in the target.
         """
         if self.mask_on_nan:
             mask = ~torch.isnan(target.tensor)
             target.tensor = torch.nan_to_num(target.tensor, nan=0)
-            prediction.tensor = torch.nan_to_num(prediction.tensor, nan=0)
             return mask
         return torch.ones_like(target.tensor)
 
@@ -763,7 +762,7 @@ class AutoRegressiveLightning(LightningModule):
 
         prediction, target = self.common_step(batch, batch_idx, phase="train")
 
-        mask = self.get_mask_on_nan(target, prediction)
+        mask = self.get_mask_on_nan(target)
 
         # Compute loss: mean over unrolled times and batch
         batch_loss = torch.mean(self.loss(prediction, target, mask=mask))
@@ -833,12 +832,11 @@ class AutoRegressiveLightning(LightningModule):
             ]
 
     def validation_step(self, batch: ItemBatch, batch_idx: int):
-        """Runs validation on a single batch
-        """
+        """Runs validation on a single batch"""
         with torch.no_grad():
             prediction, target = self.common_step(batch, batch_idx, phase="val_test")
 
-        mask = self.get_mask_on_nan(target, prediction)
+        mask = self.get_mask_on_nan(target)
 
         time_step_loss = torch.mean(self.loss(prediction, target, mask), dim=0)
         mean_loss = torch.mean(time_step_loss)
@@ -871,8 +869,7 @@ class AutoRegressiveLightning(LightningModule):
         target: NamedTensor,
         mask: torch.Tensor,
     ):
-        """Saves metrics and plots of validation to the tensorboard
-        """
+        """Saves metrics and plots of validation to the tensorboard"""
         if self.logging_enabled:
             # Notify every plotters
             if self.current_epoch % PLOT_PERIOD == 0:
@@ -965,12 +962,11 @@ class AutoRegressiveLightning(LightningModule):
             ]
 
     def test_step(self, batch: ItemBatch, batch_idx: int):
-        """Runs test on single batch
-        """
+        """Runs test on single batch"""
         with torch.no_grad():
             prediction, target = self.common_step(batch, batch_idx, phase="val_test")
 
-        mask = self.get_mask_on_nan(target, prediction)
+        mask = self.get_mask_on_nan(target)
 
         time_step_loss = torch.mean(self.loss(prediction, target, mask), dim=0)
         mean_loss = torch.mean(time_step_loss)
@@ -999,8 +995,7 @@ class AutoRegressiveLightning(LightningModule):
         target: NamedTensor,
         mask: torch.Tensor,
     ):
-        """Saves metrics and plots of test to the tensorboard
-        """
+        """Saves metrics and plots of test to the tensorboard"""
         if self.logging_enabled:
             # Notify plotters & metrics
             for plotter in self.test_plotters:
