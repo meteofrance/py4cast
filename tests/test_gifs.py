@@ -3,8 +3,8 @@ from datetime import datetime
 import cartopy
 import numpy as np
 
-from bin.gif_comparison import make_gif
-from py4cast.plots import DomainInfo
+from py4cast.datasets.titan.settings import METADATA
+from py4cast.utils import make_gif
 
 
 def test_make_gif():
@@ -15,16 +15,13 @@ def test_make_gif():
         list_preds_feat = [
             np.random.rand(NUM_OUTPUS, SIZE_IMG, SIZE_IMG) for _ in range(2)
         ]
-        info = DomainInfo((0, 10, 0, 10), cartopy.crs.PlateCarree())
-        make_gif(
+        assert make_gif(
             feature_name,
             datetime(2024, 1, 1, 12).strftime("%Y%m%d%H"),
             target_feat,
             list_preds_feat,
             ["target", "model 1", "model 2"],
-            info,
+            cartopy.crs.PlateCarree(),
+            (0, 10, 0, 10),
+            METADATA,
         )
-
-
-if __name__ == "__main__":
-    test_make_gif()

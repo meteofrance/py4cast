@@ -25,7 +25,11 @@ from transformers.optimization import get_cosine_with_min_lr_schedule_with_warmu
 
 from py4cast.datasets import get_datasets
 from py4cast.datasets.base import DatasetInfo, ItemBatch, NamedTensor, Statics
-from py4cast.io.outputs import GribSavingSettings, save_named_tensors_to_grib
+from py4cast.io.outputs import (
+    OutputSavingSettings,
+    save_gifs,
+    save_named_tensors_to_grib,
+)
 from py4cast.losses import ScaledLoss, WeightedLoss
 from py4cast.metrics import MetricACC, MetricPSDK, MetricPSDVar
 from py4cast.models import build_model_from_settings, get_model_kls_and_settings
@@ -54,6 +58,10 @@ class PlDataModule(LightningDataModule):
         num_pred_steps_train: int = 1,
         num_pred_steps_val_test: int = 1,
         batch_size: int = 2,
+        save_gifs: bool = False,
+        save_gribs: bool = False,
+        list_run_hour: List[int] = [0],
+        use_old_weights: Union[str, bool] = False,
         num_workers: int = 1,
         prefetch_factor: int | None = None,
         pin_memory: bool = False,
@@ -64,6 +72,10 @@ class PlDataModule(LightningDataModule):
         self.num_pred_steps_train = num_pred_steps_train
         self.num_pred_steps_val_test = num_pred_steps_val_test
         self.batch_size = batch_size
+        self.save_gifs = save_gifs
+        self.save_gribs = save_gribs
+        self.list_run_hour = list_run_hour
+        self.use_old_weights = use_old_weights
         self.num_workers = num_workers
         self.prefetch_factor = prefetch_factor
         self.pin_memory = pin_memory
@@ -76,6 +88,10 @@ class PlDataModule(LightningDataModule):
             num_pred_steps_val_test,
             dataset_conf,
         )
+
+    @property
+    def get_grid(self):
+        return self.train_ds.grid
 
     @property
     def train_dataset_info(self) -> DatasetInfo:
@@ -1054,6 +1070,19 @@ class AutoRegressiveLightning(LightningModule):
     #                          PREDICT                          #
     #############################################################
 
+    def load_weigths(self, path, map_location):
+        """
+        delete "model." in keys in the dict.
+        """
+        from collections import OrderedDict
+
+        weights = torch.load(path, map_location)
+        new_state_dict = OrderedDict()
+        for k, v in weights.items():
+            new_key = k.replace("model.", "")
+            new_state_dict[new_key] = v
+        return new_state_dict
+
     def predict_step(self, batch: ItemBatch, batch_idx: int) -> torch.Tensor:
         """
         Check if the feature names are the same as the one used during training
@@ -1066,47 +1095,62 @@ class AutoRegressiveLightning(LightningModule):
                     f"Training: {self.input_feature_names}, Inference: {batch.inputs.feature_names}"
                 )
 
-        preds = self.forward(batch, batch_idx)
+        if self.io_conf is None:
+            return
 
-        # Remove batch dimension
-        if preds.tensor.shape[0] != 1:
-            raise ValueError(
-                f"Prediction should have a batch dimension of 1 instead of {preds.tensor.shape[0]}"
+        # Save gribs if a io config file is given
+        with open(self.io_conf, "r") as f:
+            save_settings = OutputSavingSettings(**json.load(f))
+
+        grid = self.infer_ds.grid
+        batch_size = batch.batch_size
+
+        idx_samples = [batch_idx * batch_size + b for b in range(batch_size)]
+        samples = [self.infer_ds.sample_list[idx] for idx in idx_samples]
+        runtimes = [
+            sample.timestamps.datetime.strftime("%Y%m%d%H") for sample in samples
+        ]
+
+        samples_accepted_in_batch = [
+            sample.timestamps.datetime.hour in self.trainer.datamodule.list_run_hour
+            for sample in samples
+        ]
+
+        if not any(samples_accepted_in_batch):
+            return
+
+        # If the weights are old, it could be not possible to use them as ckpt.
+        # Weights should then be loaded with this argument.
+        if self.trainer.datamodule.use_old_weights:
+            weights = self.load_weigths(
+                self.trainer.datamodule.use_old_weights, map_location=self.device
             )
-        preds.flatten_("timestep", 0, 1)
+            self.model.load_state_dict(weights)
+
+        preds = self.forward(batch, batch_idx)
 
         # Unnormalize data
         for feature_name in preds.feature_names:
             means = torch.asarray(self.stats[feature_name]["mean"])
             std = torch.asarray(self.stats[feature_name]["std"])
-            preds.tensor[:, :, :, preds.feature_names_to_idx[feature_name]] *= std
-            preds.tensor[:, :, :, preds.feature_names_to_idx[feature_name]] += means
+            preds.tensor[:, :, :, :, preds.feature_names_to_idx[feature_name]] *= std
+            preds.tensor[:, :, :, :, preds.feature_names_to_idx[feature_name]] += means
 
-        # Save gribs if a io config file is given
-        if not (self.io_conf is None):
-            print("Writing gribs...")
-            self.grib_writing(preds, batch_idx)
+        for idx, pred in enumerate(preds.iter_dim(dim_name="batch")):
+            if not samples_accepted_in_batch[idx]:
+                continue
 
-        return preds
+            runtime = runtimes[idx]
+            sample = samples[idx]
 
-    def grib_writing(self, preds: NamedTensor, batch_idx: int):
-        """
-        Write grib at the path define by the io_conf.
-        Args:
-            pred (NamedTensor): the output tensor (pred)
-            batch_idx: the batch_idx is used to compute the runtime hour of the prediction
-        """
-        with open(self.io_conf, "r") as f:
-            save_settings = GribSavingSettings(**json.load(f))
-            ph = len(save_settings.output_fmt.split("{}")) - 1
-            kw = len(save_settings.output_kwargs)
-            fi = len(save_settings.sample_identifiers)
-            if ph != (fi + kw):
-                raise ValueError(
-                    f"Filename fmt has {ph} placeholders,\
-                    but {kw} output_kwargs and {fi} sample identifiers."
+            # Write GIFS
+            if self.trainer.datamodule.save_gifs:
+                print("Saving gifs...")
+                save_gifs(pred, runtime, grid, save_settings)
+
+            if self.trainer.datamodule.save_gribs:
+                print("Writing gribs...")
+                save_named_tensors_to_grib(
+                    pred, self.infer_ds, sample, save_settings, runtime
                 )
-
-        save_named_tensors_to_grib(
-            preds, self.infer_ds, self.infer_ds.sample_list[batch_idx], save_settings
-        )
+        return preds
