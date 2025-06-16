@@ -2,7 +2,6 @@
 Unit tests for datasets and NamedTensor.
 """
 
-import datetime
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -98,38 +97,100 @@ def test_fill_tensor_with():
     assert np.all(tensor[mask])
 
 
-def test_get_output_filename():
-    saving_settings = out.GribSavingSettings(
-        template_grib="fake_grib.grib",
-        directory="fakedirectory",
-        sample_identifiers=["runtime", "member", "leadtime"],
-        output_fmt="no_dataset/{}/mb{}/forecast/grid.emul_aro_ai_ech_{}.grib",
+def test_output_saving_settings():
+    """
+    The function evaluates the output of the class's methods.
+    """
+    settings = out.OutputSavingSettings(
+        template_grib="./template/test.grib",
+        dir_grib="./path/to/gribdir",
+        dir_gif="./path/to/gifdir",
+        path_to_runtime="Rocky_{}/runtime_{}",
+        output_kwargs=["Balboa"],
+        grib_fmt="mb_{}/leadtime_{}.grib",
+        grib_identifiers=["member", "leadtime"],
+        gif_fmt="runtime_{}_feature_{}.gif",
+        gif_identifiers=["runtime", "feature"],
     )
-    sample = FakeSample(
-        timestamps=Timestamps(
-            datetime.datetime(1911, 10, 30),
-            [datetime.timedelta(days=i) for i in range(1, 5)],
-        ),
-        fancy_ident="first solvay congress",
-        output_timestamps=Timestamps(
-            datetime.datetime(1911, 10, 30),
-            [datetime.timedelta(days=i) for i in range(3, 5)],
-        ),
-    )
-    leadtime = 1.0
-
-    filename = out.get_output_filename(saving_settings, sample, leadtime)
     assert (
-        filename
-        == "no_dataset/19111101T0000P/mb002/forecast/grid.emul_aro_ai_ech_1.0.grib"
+        str(settings.get_gif_path(3, "feature"))
+        == "path/to/gifdir/Rocky_Balboa/runtime_3/runtime_3_feature_feature.gif"
+    )
+    assert (
+        str(settings.get_grib_path(3, 5, 2))
+        == "path/to/gribdir/Rocky_Balboa/runtime_3/mb_005/leadtime_2.grib"
     )
 
-    saving_settings = out.GribSavingSettings(
-        template_grib="fake_grib.grib",
-        directory="fakedirectory",
-        output_kwargs=("congress",),
-        sample_identifiers=["runtime", "member", "leadtime"],
-        output_fmt="dataset_{}/{}/mb{}/forecast/grid.emul_aro_ai_ech_{}.grib",
-    )
 
-    filename = out.get_output_filename(saving_settings, sample, leadtime)
+@pytest.mark.parametrize(
+    "path_to_runtime, output_kwargs, gif_fmt, gif_identifiers",
+    [
+        (
+            "Rocky_{}/Rocky_{}",
+            ["Balboa", "Marciano"],
+            "runtime_{}_feature_{}.gif",
+            ["runtime", "feature"],
+        ),
+        (
+            "Rocky_{}/Rocky_{}",
+            ["Balboa"],
+            "runtime_{}_feature_{}.gif",
+            ["runtime"],
+        ),
+    ],
+)
+def test_get_gif_path(path_to_runtime, output_kwargs, gif_fmt, gif_identifiers):
+    """
+    This test function iterates over get_gif_path to raise the value error of mismatch
+    between the number of placeholders and identifiers.
+    """
+    with pytest.raises(ValueError):
+        settings = out.OutputSavingSettings(
+            template_grib="./template/test.grib",
+            dir_grib="./path/to/gribdir",
+            dir_gif="./path/to/gifdir",
+            path_to_runtime=path_to_runtime,
+            output_kwargs=output_kwargs,
+            grib_fmt="mb_{}/leadtime_{}.grib",
+            grib_identifiers=["member", "leadtime"],
+            gif_fmt=gif_fmt,
+            gif_identifiers=gif_identifiers,
+        )
+        settings.get_gif_path(runtime="2024052000", feature="feature")
+
+
+@pytest.mark.parametrize(
+    "path_to_runtime, output_kwargs, grib_fmt, grib_identifiers",
+    [
+        (
+            "Rocky_{}/Rocky_{}",
+            ["Balboa", "Marciano"],
+            "mb_{}/leadtime_{}.grib",
+            ["member", "leadtime"],
+        ),
+        (
+            "Rocky_{}/Rocky_{}",
+            ["Balboa"],
+            "mb_{}/leadtime.grib",
+            ["member", "leadtime"],
+        ),
+    ],
+)
+def test_get_grib_path(path_to_runtime, output_kwargs, grib_fmt, grib_identifiers):
+    """
+    This test function iterates over get_grib_path to raise the value error of mismatch
+    between the number of placeholders and identifiers.
+    """
+    with pytest.raises(ValueError):
+        settings = out.OutputSavingSettings(
+            template_grib="/template/test.grib",
+            dir_grib="./path/to/gribdir",
+            dir_gif="./path/to/gifdir",
+            path_to_runtime=path_to_runtime,
+            output_kwargs=output_kwargs,
+            grib_fmt=grib_fmt,
+            grib_identifiers=grib_identifiers,
+            gif_fmt="runtime_{}_feature_{}.gif",
+            gif_identifiers=["runtime", "feature"],
+        )
+        settings.get_grib_path(runtime="2024052000", member=3, leadtime=1)

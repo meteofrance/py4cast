@@ -25,7 +25,11 @@ from transformers.optimization import get_cosine_with_min_lr_schedule_with_warmu
 
 from py4cast.datasets import get_datasets
 from py4cast.datasets.base import DatasetInfo, ItemBatch, NamedTensor, Statics
-from py4cast.io.outputs import GribSavingSettings, save_named_tensors_to_grib
+from py4cast.io.outputs import (
+    OutputSavingSettings,
+    save_gifs,
+    save_named_tensors_to_grib,
+)
 from py4cast.losses import ScaledLoss, WeightedLoss
 from py4cast.metrics import MetricACC, MetricPSDK, MetricPSDVar
 from py4cast.models import build_model_from_settings, get_model_kls_and_settings
@@ -54,6 +58,10 @@ class PlDataModule(LightningDataModule):
         num_pred_steps_train: int = 1,
         num_pred_steps_val_test: int = 1,
         batch_size: int = 2,
+        save_gifs: bool = False,
+        save_gribs: bool = False,
+        list_run_hour: List[int] = [0],
+        use_old_weights: Union[str, bool] = False,
         num_workers: int = 1,
         prefetch_factor: int | None = None,
         pin_memory: bool = False,
@@ -64,6 +72,10 @@ class PlDataModule(LightningDataModule):
         self.num_pred_steps_train = num_pred_steps_train
         self.num_pred_steps_val_test = num_pred_steps_val_test
         self.batch_size = batch_size
+        self.save_gifs = save_gifs
+        self.save_gribs = save_gribs
+        self.list_run_hour = list_run_hour
+        self.use_old_weights = use_old_weights
         self.num_workers = num_workers
         self.prefetch_factor = prefetch_factor
         self.pin_memory = pin_memory
@@ -76,6 +88,10 @@ class PlDataModule(LightningDataModule):
             num_pred_steps_val_test,
             dataset_conf,
         )
+
+    @property
+    def get_grid(self):
+        return self.train_ds.grid
 
     @property
     def train_dataset_info(self) -> DatasetInfo:
@@ -156,6 +172,7 @@ class AutoRegressiveLightning(LightningModule):
         channels_last: bool = False,
         io_conf: Path | None = None,
         mask_ratio: float = 0,
+        mask_on_nan: bool = False,
         learning_rate: float = 1e-4,
         min_learning_rate: float = 1e-6,
         num_warmup_steps: int = 0,
@@ -180,6 +197,7 @@ class AutoRegressiveLightning(LightningModule):
         self.channels_last = channels_last
         self.io_conf = io_conf
         self.mask_ratio = mask_ratio
+        self.mask_on_nan = mask_on_nan
         self.learning_rate = learning_rate
         self.min_learning_rate = min_learning_rate
         self.num_warmup_steps = num_warmup_steps
@@ -237,6 +255,7 @@ class AutoRegressiveLightning(LightningModule):
             num_input_steps * dataset_info.weather_dim * (1 - ds)
             + num_grid_static_features
             + dataset_info.forcing_dim
+            + self.mask_on_nan
         )
 
         num_output_features = dataset_info.weather_dim
@@ -556,19 +575,23 @@ class AutoRegressiveLightning(LightningModule):
                 else:
                     y = self.model(x)
 
+                ds = self.training_strategy == "downscaling_only"
+
+                # select the last timestep
+                last_prev_state = prev_states.select_tensor_dim("timestep", -1)
+                if self.mask_on_nan:
+                    last_prev_state = torch.nan_to_num(last_prev_state, nan=0)
+
                 # We update the latest of our prev_states with the network output
                 if scale_y:
                     predicted_state = (
                         # select the last timestep
-                        prev_states.select_tensor_dim("timestep", -1)
+                        last_prev_state * (1 - ds)
                         + y * step_diff_std
                         + step_diff_mean
                     )
                 else:
-                    ds = self.training_strategy == "downscaling_only"
-                    predicted_state = (
-                        prev_states.select_tensor_dim("timestep", -1) * (1 - ds) + y
-                    )
+                    predicted_state = last_prev_state * (1 - ds) + y
 
                 # Overwrite border with true state
                 # Force it to true state for all intermediary step
@@ -674,10 +697,41 @@ class AutoRegressiveLightning(LightningModule):
             for idx in range(batch.num_input_steps)
         ]
 
+        mask_list = []
+
+        # create a mask that corresponds to the union of the nans in the input and the forcings
+        if self.mask_on_nan:
+            combined_mask = torch.zeros_like(inputs[0][:, :, :, 0], dtype=torch.bool)
+
+            # Combine masks for inputs
+            for input in inputs:
+                mask = torch.isnan(input)
+                for i in range(mask.shape[-1]):
+                    combined_mask = (
+                        combined_mask | mask[:, :, :, i]
+                    )  # Union of size masks (batch, lat, lon)
+
+            # Combine masks for forcing
+            mask = torch.isnan(forcing.tensor)
+            for i in range(mask.shape[-1]):
+                combined_mask = (
+                    combined_mask | mask[:, :, :, i]
+                )  # Union of size masks (batch, lat, lon)
+
+            mask_list.append(
+                ~combined_mask.unsqueeze(-1)  # unsqueeze and invert combined_mask
+            )  # shape [(batch, lat, lon, param)]
+
+            # replace nan by 0 in inputs
+            inputs = [torch.nan_to_num(input, nan=0) for input in inputs]
+            # replace nan by 0 in forcing
+            forcing.tensor = torch.nan_to_num(forcing.tensor, nan=0)
+
         # If downscaling only, inputs are not concatenated: only use static features and forcings.
         x = torch.cat(
             inputs * (1 - ds)  # = [] if downscaling strategy
-            + [self.grid_static_features[: batch.batch_size], forcing.tensor],
+            + [self.grid_static_features[: batch.batch_size], forcing.tensor]
+            + mask_list,
             dim=forcing.dim_index("features"),
         )
 
@@ -701,6 +755,17 @@ class AutoRegressiveLightning(LightningModule):
             ] = False
         return x * mask
 
+    def get_mask_on_nan(self, target: NamedTensor) -> torch.Tensor:
+        """
+        Returns a mask matching the nan values in target, same shape as the target.
+        Replaces the nan values by zeros in the target.
+        """
+        if self.mask_on_nan:
+            mask = ~torch.isnan(target.tensor)
+            target.tensor = torch.nan_to_num(target.tensor, nan=0)
+            return mask
+        return torch.ones_like(target.tensor)
+
     #############################################################
     #                          FIT/TRAIN                        #
     #############################################################
@@ -714,15 +779,20 @@ class AutoRegressiveLightning(LightningModule):
         """
 
         prediction, target = self.common_step(batch, batch_idx, phase="train")
+
+        mask = self.get_mask_on_nan(target)
+
         # Compute loss: mean over unrolled times and batch
-        batch_loss = torch.mean(self.loss(prediction, target))
+        batch_loss = torch.mean(self.loss(prediction, target, mask=mask))
 
         self.training_step_losses.append(batch_loss)
 
         # Notify every plotters
         if self.logging_enabled:
             for plotter in self.train_plotters:
-                plotter.update(self, prediction=self.prediction, target=self.target)
+                plotter.update(
+                    self, batch=batch, prediction=prediction, target=target, mask=mask
+                )
 
         return batch_loss
 
@@ -781,14 +851,14 @@ class AutoRegressiveLightning(LightningModule):
                 ),
             ]
 
-    def validation_step(self, batch: ItemBatch, batch_idx):
-        """
-        Run validation on single batch
-        """
+    def validation_step(self, batch: ItemBatch, batch_idx: int):
+        """Runs validation on a single batch"""
         with torch.no_grad():
             prediction, target = self.common_step(batch, batch_idx, phase="val_test")
 
-        time_step_loss = torch.mean(self.loss(prediction, target), dim=0)
+        mask = self.get_mask_on_nan(target)
+
+        time_step_loss = torch.mean(self.loss(prediction, target, mask), dim=0)
         mean_loss = torch.mean(time_step_loss)
 
         if self.logging_enabled:
@@ -810,14 +880,32 @@ class AutoRegressiveLightning(LightningModule):
 
         self.val_mean_loss = mean_loss
 
+        self.validation_step_logging(batch, prediction, target, mask)
+
+    def validation_step_logging(
+        self,
+        batch: ItemBatch,
+        prediction: NamedTensor,
+        target: NamedTensor,
+        mask: torch.Tensor,
+    ):
+        """Saves metrics and plots of validation to the tensorboard"""
         if self.logging_enabled:
             # Notify every plotters
             if self.current_epoch % PLOT_PERIOD == 0:
                 for plotter in self.valid_plotters:
-                    plotter.update(self, prediction=prediction, target=target)
-            self.psd_plot_metric.update(prediction, target, self.original_shape)
-            self.rmse_psd_plot_metric.update(prediction, target, self.original_shape)
-            self.acc_metric.update(prediction, target)
+                    plotter.update(
+                        self,
+                        batch=batch,
+                        prediction=prediction,
+                        target=target,
+                        mask=mask,
+                    )
+            self.psd_plot_metric.update(prediction, target, mask, self.original_shape)
+            self.rmse_psd_plot_metric.update(
+                prediction, target, mask, self.original_shape
+            )
+            self.acc_metric.update(prediction, target, mask)
 
     def on_validation_epoch_end(self):
         """
@@ -893,14 +981,14 @@ class AutoRegressiveLightning(LightningModule):
                 ),
             ]
 
-    def test_step(self, batch: ItemBatch, batch_idx):
-        """
-        Run test on single batch
-        """
+    def test_step(self, batch: ItemBatch, batch_idx: int):
+        """Runs test on single batch"""
         with torch.no_grad():
             prediction, target = self.common_step(batch, batch_idx, phase="val_test")
 
-        time_step_loss = torch.mean(self.loss(prediction, target), dim=0)
+        mask = self.get_mask_on_nan(target)
+
+        time_step_loss = torch.mean(self.loss(prediction, target, mask), dim=0)
         mean_loss = torch.mean(time_step_loss)
 
         if self.logging_enabled:
@@ -918,14 +1006,28 @@ class AutoRegressiveLightning(LightningModule):
                 prog_bar=False,
             )
 
+        self.test_step_logging(batch, prediction, target, mask)
+
+    def test_step_logging(
+        self,
+        batch: ItemBatch,
+        prediction: NamedTensor,
+        target: NamedTensor,
+        mask: torch.Tensor,
+    ):
+        """Saves metrics and plots of test to the tensorboard"""
         if self.logging_enabled:
             # Notify plotters & metrics
             for plotter in self.test_plotters:
-                plotter.update(self, prediction=prediction, target=target)
+                plotter.update(
+                    self, batch=batch, prediction=prediction, target=target, mask=mask
+                )
 
-            self.acc_metric.update(prediction, target)
-            self.psd_plot_metric.update(prediction, target, self.original_shape)
-            self.rmse_psd_plot_metric.update(prediction, target, self.original_shape)
+            self.acc_metric.update(prediction, target, mask)
+            self.psd_plot_metric.update(prediction, target, mask, self.original_shape)
+            self.rmse_psd_plot_metric.update(
+                prediction, target, mask, self.original_shape
+            )
 
     def on_test_epoch_end(self):
         """
@@ -968,6 +1070,19 @@ class AutoRegressiveLightning(LightningModule):
     #                          PREDICT                          #
     #############################################################
 
+    def load_weigths(self, path, map_location):
+        """
+        delete "model." in keys in the dict.
+        """
+        from collections import OrderedDict
+
+        weights = torch.load(path, map_location)
+        new_state_dict = OrderedDict()
+        for k, v in weights.items():
+            new_key = k.replace("model.", "")
+            new_state_dict[new_key] = v
+        return new_state_dict
+
     def predict_step(self, batch: ItemBatch, batch_idx: int) -> torch.Tensor:
         """
         Check if the feature names are the same as the one used during training
@@ -980,47 +1095,62 @@ class AutoRegressiveLightning(LightningModule):
                     f"Training: {self.input_feature_names}, Inference: {batch.inputs.feature_names}"
                 )
 
-        preds = self.forward(batch, batch_idx)
+        if self.io_conf is None:
+            return
 
-        # Remove batch dimension
-        if preds.tensor.shape[0] != 1:
-            raise ValueError(
-                f"Prediction should have a batch dimension of 1 instead of {preds.tensor.shape[0]}"
+        # Save gribs if a io config file is given
+        with open(self.io_conf, "r") as f:
+            save_settings = OutputSavingSettings(**json.load(f))
+
+        grid = self.infer_ds.grid
+        batch_size = batch.batch_size
+
+        idx_samples = [batch_idx * batch_size + b for b in range(batch_size)]
+        samples = [self.infer_ds.sample_list[idx] for idx in idx_samples]
+        runtimes = [
+            sample.timestamps.datetime.strftime("%Y%m%d%H") for sample in samples
+        ]
+
+        samples_accepted_in_batch = [
+            sample.timestamps.datetime.hour in self.trainer.datamodule.list_run_hour
+            for sample in samples
+        ]
+
+        if not any(samples_accepted_in_batch):
+            return
+
+        # If the weights are old, it could be not possible to use them as ckpt.
+        # Weights should then be loaded with this argument.
+        if self.trainer.datamodule.use_old_weights:
+            weights = self.load_weigths(
+                self.trainer.datamodule.use_old_weights, map_location=self.device
             )
-        preds.flatten_("timestep", 0, 1)
+            self.model.load_state_dict(weights)
+
+        preds = self.forward(batch, batch_idx)
 
         # Unnormalize data
         for feature_name in preds.feature_names:
             means = torch.asarray(self.stats[feature_name]["mean"])
             std = torch.asarray(self.stats[feature_name]["std"])
-            preds.tensor[:, :, :, preds.feature_names_to_idx[feature_name]] *= std
-            preds.tensor[:, :, :, preds.feature_names_to_idx[feature_name]] += means
+            preds.tensor[:, :, :, :, preds.feature_names_to_idx[feature_name]] *= std
+            preds.tensor[:, :, :, :, preds.feature_names_to_idx[feature_name]] += means
 
-        # Save gribs if a io config file is given
-        if not (self.io_conf is None):
-            print("Writing gribs...")
-            self.grib_writing(preds, batch_idx)
+        for idx, pred in enumerate(preds.iter_dim(dim_name="batch")):
+            if not samples_accepted_in_batch[idx]:
+                continue
 
-        return preds
+            runtime = runtimes[idx]
+            sample = samples[idx]
 
-    def grib_writing(self, preds: NamedTensor, batch_idx: int):
-        """
-        Write grib at the path define by the io_conf.
-        Args:
-            pred (NamedTensor): the output tensor (pred)
-            batch_idx: the batch_idx is used to compute the runtime hour of the prediction
-        """
-        with open(self.io_conf, "r") as f:
-            save_settings = GribSavingSettings(**json.load(f))
-            ph = len(save_settings.output_fmt.split("{}")) - 1
-            kw = len(save_settings.output_kwargs)
-            fi = len(save_settings.sample_identifiers)
-            if ph != (fi + kw):
-                raise ValueError(
-                    f"Filename fmt has {ph} placeholders,\
-                    but {kw} output_kwargs and {fi} sample identifiers."
+            # Write GIFS
+            if self.trainer.datamodule.save_gifs:
+                print("Saving gifs...")
+                save_gifs(pred, runtime, grid, save_settings)
+
+            if self.trainer.datamodule.save_gribs:
+                print("Writing gribs...")
+                save_named_tensors_to_grib(
+                    pred, self.infer_ds, sample, save_settings, runtime
                 )
-
-        save_named_tensors_to_grib(
-            preds, self.infer_ds, self.infer_ds.sample_list[batch_idx], save_settings
-        )
+        return preds
