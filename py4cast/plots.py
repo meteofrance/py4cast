@@ -303,7 +303,7 @@ class MapPlot(Plotter):
             if batch_copy.forcing.tensor.shape[-1] > 5:
                 batch_copy.forcing.tensor[:, :, :, :, :-5] = (
                     batch_copy.forcing.tensor[:, :, :, :, :-5] * std + mean
-                ) 
+                )
 
             # Iterate over the examples
             # We assume examples are already on grid
