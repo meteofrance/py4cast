@@ -299,9 +299,11 @@ class MapPlot(Plotter):
             prediction_rescaled = pred * std + mean
             target_rescaled = targ * std + mean
             batch_copy.inputs.tensor = batch_copy.inputs.tensor * std + mean
-            batch_copy.forcing.tensor[:, :, :, :, :-5] = (
-                batch_copy.forcing.tensor[:, :, :, :, :-5] * std + mean
-            )  # not rescalled cos_hour, ect
+            # rescale other forcing variables except cos_hour etc
+            if batch_copy.forcing.tensor.shape[-1] > 5:
+                batch_copy.forcing.tensor[:, :, :, :, :-5] = (
+                    batch_copy.forcing.tensor[:, :, :, :, :-5] * std + mean
+                )
 
             # Iterate over the examples
             # We assume examples are already on grid
