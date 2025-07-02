@@ -16,7 +16,7 @@ import gif
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
-from mfai.torch.namedtensor import NamedTensor
+from mfai.pytorch.namedtensor import NamedTensor
 from tabulate import tabulate
 from torch.utils.data import DataLoader, Dataset
 from torch.utils.data._utils.collate import collate_tensor_fn

@@ -7,8 +7,8 @@ import importlib
 import pkgutil
 from typing import Any, Tuple
 
-from mfai.torch.models import registry as mfai_registry
-from mfai.torch.models.base import ModelABC
+from mfai.pytorch.models import registry as mfai_registry
+from mfai.pytorch.models.base import ModelABC
 
 # Models MUST be added to the registry
 # in order to be used by the training script.

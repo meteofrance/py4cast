@@ -13,8 +13,8 @@ import torch
 from lightning import LightningDataModule, LightningModule
 from lightning.pytorch.loggers import MLFlowLogger
 from lightning.pytorch.utilities import rank_zero_only
-from mfai.torch.models.base import ModelType
-from mfai.torch.models.utils import (
+from mfai.pytorch.models.base import ModelType
+from mfai.pytorch.models.utils import (
     expand_to_batch,
     features_last_to_second,
     features_second_to_last,
