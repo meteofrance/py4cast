@@ -559,7 +559,6 @@ class AutoRegressiveLightning(LightningModule):
                     ),
                     prev_states.device,
                 )
-                print("561", torch.isnan(step_diff_std), torch.isnan(step_diff_mean))
 
             # Intermediary steps for which we have no y_true data
             # Should be greater or equal to 1 (otherwise nothing is done).
