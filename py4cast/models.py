@@ -35,6 +35,7 @@ for module_name, module in discovered_modules.items():
             and issubclass(kls, ModelABC)
             and kls != ModelABC
             and kls.register
+            and kls.__name__!="PanguWeather"
         ):
             if kls.__name__ in registry:
                 raise ValueError(
