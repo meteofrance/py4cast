@@ -15,6 +15,7 @@ from mfai.pytorch.models.base import ModelABC
 # We init the registry with the models from mfai.
 registry = {}
 registry.update(mfai_registry)
+del registry["PanguWeather"]
 
 
 PLUGIN_PREFIX = "py4cast_plugin_"
@@ -35,7 +36,6 @@ for module_name, module in discovered_modules.items():
             and issubclass(kls, ModelABC)
             and kls != ModelABC
             and kls.register
-            and kls.__name__ != "PanguWeather"
         ):
             if kls.__name__ in registry:
                 raise ValueError(
