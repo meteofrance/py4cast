@@ -12,9 +12,9 @@ from dataclasses import dataclass
 import numpy as np
 import pytest
 import torch
-from mfai.torch import export_to_onnx, onnx_load_and_infer
-from mfai.torch.models.base import ModelType
-from mfai.torch.models.utils import features_last_to_second, features_second_to_last
+from mfai.pytorch import export_to_onnx, onnx_load_and_infer
+from mfai.pytorch.models.base import ModelType
+from mfai.pytorch.models.utils import features_last_to_second, features_second_to_last
 
 from py4cast.models import all_nn_architectures, get_model_kls_and_settings
 
@@ -154,10 +154,10 @@ def test_model_registry():
         "DeepLabV3Plus",
         "HalfUNet",
         "Segformer",
-        "SwinUNETR",
+        "SwinUNetR",
         "UNet",
-        "CustomUnet",
-        "UNETRPP",
+        "CustomUNet",
+        "UNetRPP",
         "Identity",
         "HiLAM",
         "GraphLAM",

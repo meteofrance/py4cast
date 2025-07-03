@@ -1,5 +1,5 @@
 model:
-  model_name: CustomUnet
+  model_name: CustomUNet
   loss_name: mse # mse or mae
   num_inter_steps: 1 # Number of intermediary steps (without any data)
   num_samples_to_plot: 1

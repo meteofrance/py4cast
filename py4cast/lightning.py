@@ -13,8 +13,8 @@ import torch
 from lightning import LightningDataModule, LightningModule
 from lightning.pytorch.loggers import MLFlowLogger
 from lightning.pytorch.utilities import rank_zero_only
-from mfai.torch.models.base import ModelType
-from mfai.torch.models.utils import (
+from mfai.pytorch.models.base import ModelType
+from mfai.pytorch.models.utils import (
     expand_to_batch,
     features_last_to_second,
     features_second_to_last,
@@ -547,6 +547,8 @@ class AutoRegressiveLightning(LightningModule):
         for i in range(batch.num_pred_steps):
             if not (phase == "inference"):
                 border_state = batch.outputs.select_tensor_dim("timestep", i)
+                if self.mask_on_nan:
+                    border_state = torch.nan_to_num(border_state, nan=0)
 
             if scale_y:
                 step_diff_std, step_diff_mean = self._step_diffs(

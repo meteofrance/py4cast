@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 import torch
 from dataclasses_json import dataclass_json
-from mfai.torch.models.base import ModelABC, ModelType
+from mfai.pytorch.models.base import ModelABC, ModelType
 from torch import nn
 
 

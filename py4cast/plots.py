@@ -20,7 +20,7 @@ if TYPE_CHECKING:
     from py4cast.datasets.base import ItemBatch
     from py4cast.lightning import AutoRegressiveLightning
 
-from mfai.torch.namedtensor import NamedTensor
+from mfai.pytorch.namedtensor import NamedTensor
 
 
 @dataclass(slots=True)

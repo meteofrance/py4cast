@@ -7,7 +7,7 @@ import epygram
 import gif
 import numpy as np
 from dataclasses_json import dataclass_json
-from mfai.torch.namedtensor import NamedTensor
+from mfai.pytorch.namedtensor import NamedTensor
 
 from py4cast.datasets.base import DatasetABC
 from py4cast.datasets.titan.settings import METADATA
