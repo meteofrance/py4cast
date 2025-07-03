@@ -547,6 +547,8 @@ class AutoRegressiveLightning(LightningModule):
         for i in range(batch.num_pred_steps):
             if not (phase == "inference"):
                 border_state = batch.outputs.select_tensor_dim("timestep", i)
+                if self.mask_on_nan:
+                    border_state = torch.nan_to_num(border_state, nan=0)
 
             if scale_y:
                 step_diff_std, step_diff_mean = self._step_diffs(
@@ -557,6 +559,7 @@ class AutoRegressiveLightning(LightningModule):
                     ),
                     prev_states.device,
                 )
+                print("561", torch.isnan(step_diff_std), torch.isnan(step_diff_mean))
 
             # Intermediary steps for which we have no y_true data
             # Should be greater or equal to 1 (otherwise nothing is done).
