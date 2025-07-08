@@ -1,5 +1,5 @@
 model:
-  model_name: UNETRPP
+  model_name: UNetRPP
   loss_name: mse # mse or mae
   num_inter_steps: 1 # Number of intermediary steps (without any data)
   num_samples_to_plot: 1
@@ -20,8 +20,8 @@ model:
     dropout_rate: 0.0
     depths: [3, 3, 3, 3]
     conv_op: "Conv2d"
-    # do_ds: false # not recognized by CLI but present in UNETRPPSettings -> strange O.o
-    # spatial_dims: 2 # not recognized by CLI but present in UNETRPPSettings -> strange O.o
+    # do_ds: false # not recognized by CLI but present in UNetRPPSettings -> strange O.o
+    # spatial_dims: 2 # not recognized by CLI but present in UNetRPPSettings -> strange O.o
     linear_upsampling: true
     downsampling_rate: 4
     decoder_proj_size: 64

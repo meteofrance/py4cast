@@ -12,7 +12,7 @@ import cartopy
 import einops
 import numpy as np
 import torch
-from mfai.torch.namedtensor import NamedTensor
+from mfai.pytorch.namedtensor import NamedTensor
 
 from py4cast.settings import CACHE_DIR
 
