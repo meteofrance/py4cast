@@ -564,6 +564,7 @@ class AutoRegressiveLightning(LightningModule):
             # Should be greater or equal to 1 (otherwise nothing is done).
             for k in range(num_inter_steps):
                 x = self._next_x(batch, prev_states, i)
+                torch.save(x, "input_no_pad.pt")
                 # Graph (B, N_grid, d_f) or Conv (B, N_lat,N_lon d_f)
                 if self.channels_last:
                     x = x.to(memory_format=torch.channels_last)
@@ -588,9 +589,7 @@ class AutoRegressiveLightning(LightningModule):
                 if scale_y:
                     predicted_state = (
                         # select the last timestep
-                        last_prev_state * (1 - ds)
-                        + y * step_diff_std
-                        + step_diff_mean
+                        last_prev_state * (1 - ds) + y * step_diff_std + step_diff_mean
                     )
                 else:
                     predicted_state = last_prev_state * (1 - ds) + y
