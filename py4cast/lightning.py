@@ -782,6 +782,7 @@ class AutoRegressiveLightning(LightningModule):
         prediction, target = self.common_step(batch, batch_idx, phase="train")
 
         mask = self.get_mask_on_nan(target)
+        torch.save(mask, "mask.pt")
 
         # Compute loss: mean over unrolled times and batch
         batch_loss = torch.mean(self.loss(prediction, target, mask=mask))
