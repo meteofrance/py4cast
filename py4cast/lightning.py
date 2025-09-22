@@ -163,7 +163,7 @@ class AutoRegressiveLightning(LightningModule):
         batch_size: int = 2,
         # non-linked args
         model_name: Literal[tuple(model_registry.keys())] = "HalfUNet",
-        loss_name: Literal["mse", "mae"] = "mse",
+        loss_name: Literal["mse", "mae", "perceptual"] = "mse",
         num_inter_steps: int = 1,
         num_samples_to_plot: int = 1,
         training_strategy: Literal[
@@ -303,6 +303,8 @@ class AutoRegressiveLightning(LightningModule):
             self.loss = WeightedLoss("MSELoss", reduction="none")
         elif loss_name == "mae":
             self.loss = WeightedLoss("L1Loss", reduction="none")
+        elif loss_name == "perceptual":
+            self.loss = WeightedLoss("perceptual", reduction="none")    
         else:
             raise TypeError(f"Unknown loss function: {loss_name}")
         self.loss.prepare(self, statics.interior_mask, dataset_info)

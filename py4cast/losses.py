@@ -10,6 +10,7 @@ import lightning.pytorch as pl
 import torch
 from torch.nn import MSELoss
 
+from mfai.pytorch.losses.perceptual import PerceptualLoss
 from py4cast.datasets.base import DatasetInfo, NamedTensor
 
 
@@ -21,7 +22,10 @@ class Py4CastLoss(ABC):
     """
 
     def __init__(self, loss: str, *args, **kwargs) -> None:
-        self.loss = getattr(torch.nn, loss)(*args, **kwargs)
+        if loss == "perceptual":
+            self.loss = PerceptualLoss(channel_iterative_mode=True)
+        else:
+            self.loss = getattr(torch.nn, loss)(*args, **kwargs)
 
     @abstractmethod
     def prepare(
