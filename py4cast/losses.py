@@ -24,7 +24,7 @@ class Py4CastLoss(ABC):
     def __init__(self, loss: str, *args, **kwargs) -> None:
         self.loss_name = loss
         if loss == "perceptual":
-            self.loss = PerceptualLoss(channel_iterative_mode=True)
+            self.loss = PerceptualLoss(*args, **kwargs)
         else:
             self.loss = getattr(torch.nn, loss)(*args, **kwargs)
 
