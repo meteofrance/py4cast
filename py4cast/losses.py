@@ -136,6 +136,10 @@ class WeightedLoss(Py4CastLoss):
         if self.loss_name == "perceptual":
             pred_tensor = min_max_normalization(pred_tensor)
             target_tensor = min_max_normalization(target_tensor)
+            # Feature in second dim
+            # with one timestep
+            pred_tensor = pred_tensor[:,0].permute(0, 3, 1, 2)
+            target_tensor = target_tensor[:,0].permute(0, 3, 1, 2)
         
         # Compute Torch loss (defined in the parent class when this Mixin is used)
         torch_loss = self.loss(pred_tensor * mask, target_tensor * mask)
@@ -195,6 +199,10 @@ class ScaledLoss(Py4CastLoss):
         if self.loss_name == "perceptual":
             pred_tensor = min_max_normalization(pred_tensor)
             target_tensor = min_max_normalization(target_tensor)
+            # Feature in second dim
+            # with one timestep
+            pred_tensor = pred_tensor[:,0].permute(0, 3, 1, 2)
+            target_tensor = target_tensor[:,0].permute(0, 3, 1, 2)
 
         # Compute Torch loss (defined in the parent class when this Mixin is used)
         torch_loss = self.loss(pred_tensor * mask, target_tensor* mask)
