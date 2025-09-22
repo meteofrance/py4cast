@@ -129,20 +129,20 @@ class WeightedLoss(Py4CastLoss):
         prediction/target: (B, pred_steps, N_grid, d_f) or (B, pred_steps, W, H, d_f)
         returns (B, pred_steps)
         """
-        pred_tensor = prediction.tensor
-        target_tensor = target.tensor
-
+        pred_tensor_mask = prediction.tensor * mask
+        target_tensor_mask = target.tensor * mask
+        
         # Normalize if perceptual loss
         if self.loss_name == "perceptual":
-            pred_tensor = min_max_normalization(pred_tensor)
-            target_tensor = min_max_normalization(target_tensor)
+            pred_tensor_mask = min_max_normalization(pred_tensor_mask)
+            target_tensor_mask = min_max_normalization(target_tensor_mask)
             # Feature in second dim
             # with one timestep
-            pred_tensor = pred_tensor[:,0].permute(0, 3, 1, 2)
-            target_tensor = target_tensor[:,0].permute(0, 3, 1, 2)
-        
+            pred_tensor_mask = pred_tensor_mask[:,0].permute(0, 3, 1, 2)
+            target_tensor_mask = target_tensor_mask[:,0].permute(0, 3, 1, 2)
+
         # Compute Torch loss (defined in the parent class when this Mixin is used)
-        torch_loss = self.loss(pred_tensor * mask, target_tensor * mask)
+        torch_loss = self.loss(pred_tensor_mask, target_tensor_mask)
 
         # Retrieve the weights for each feature
         weights = self.weights(tuple(prediction.feature_names), prediction.device)
@@ -192,20 +192,20 @@ class ScaledLoss(Py4CastLoss):
         prediction/target: (B, pred_steps, N_grid, d_f) or (B, pred_steps, W, H, d_f)
         returns (B, pred_steps)
         """
-        pred_tensor = prediction.tensor
-        target_tensor = target.tensor
+        pred_tensor_mask = prediction.tensor * mask
+        target_tensor_mask = target.tensor * mask
         
         # Normalize if perceptual loss
         if self.loss_name == "perceptual":
-            pred_tensor = min_max_normalization(pred_tensor)
-            target_tensor = min_max_normalization(target_tensor)
+            pred_tensor_mask = min_max_normalization(pred_tensor_mask)
+            target_tensor_mask = min_max_normalization(target_tensor_mask)
             # Feature in second dim
             # with one timestep
-            pred_tensor = pred_tensor[:,0].permute(0, 3, 1, 2)
-            target_tensor = target_tensor[:,0].permute(0, 3, 1, 2)
+            pred_tensor_mask = pred_tensor_mask[:,0].permute(0, 3, 1, 2)
+            target_tensor_mask = target_tensor_mask[:,0].permute(0, 3, 1, 2)
 
         # Compute Torch loss (defined in the parent class when this Mixin is used)
-        torch_loss = self.loss(pred_tensor * mask, target_tensor* mask)
+        torch_loss = self.loss(pred_tensor_mask, target_tensor_mask)
 
         union_mask = torch.any(mask, dim=(0, 1, 4))
 
