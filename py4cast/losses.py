@@ -22,6 +22,7 @@ class Py4CastLoss(ABC):
     """
 
     def __init__(self, loss: str, *args, **kwargs) -> None:
+        self.loss_name = loss
         if loss == "perceptual":
             self.loss = PerceptualLoss(channel_iterative_mode=True)
         else:
@@ -80,6 +81,14 @@ class Py4CastLoss(ABC):
             device, non_blocking=True
         )
 
+def min_max_normalization(x: torch.tensor)-> torch.tensor:
+    """
+    Apply a min max normalization to the tensor x.
+    Where x is of the shape (B, T, H, W, F)
+    """
+    x_min = x.amin(dim=(2,3,4), keepdim=True)
+    x_max = x.amax(dim=(2,3,4), keepdim=True)
+    return (x - x_min) / (x_max - x_min + 1e-8)
 
 class WeightedLoss(Py4CastLoss):
     """
@@ -120,8 +129,16 @@ class WeightedLoss(Py4CastLoss):
         prediction/target: (B, pred_steps, N_grid, d_f) or (B, pred_steps, W, H, d_f)
         returns (B, pred_steps)
         """
+        pred_tensor = prediction.tensor
+        target_tensor = target.tensor
+
+        # Normalize if perceptual loss
+        if self.loss_name == "perceptual":
+            pred_tensor = min_max_normalization(pred_tensor)
+            target_tensor = min_max_normalization(target_tensor)
+        
         # Compute Torch loss (defined in the parent class when this Mixin is used)
-        torch_loss = self.loss(prediction.tensor * mask, target.tensor * mask)
+        torch_loss = self.loss(pred_tensor * mask, target_tensor * mask)
 
         # Retrieve the weights for each feature
         weights = self.weights(tuple(prediction.feature_names), prediction.device)
@@ -171,8 +188,16 @@ class ScaledLoss(Py4CastLoss):
         prediction/target: (B, pred_steps, N_grid, d_f) or (B, pred_steps, W, H, d_f)
         returns (B, pred_steps)
         """
+        pred_tensor = prediction.tensor
+        target_tensor = target.tensor
+        
+        # Normalize if perceptual loss
+        if self.loss_name == "perceptual":
+            pred_tensor = min_max_normalization(pred_tensor)
+            target_tensor = min_max_normalization(target_tensor)
+
         # Compute Torch loss (defined in the parent class when this Mixin is used)
-        torch_loss = self.loss(prediction.tensor * mask, target.tensor * mask)
+        torch_loss = self.loss(pred_tensor * mask, target_tensor* mask)
 
         union_mask = torch.any(mask, dim=(0, 1, 4))
 
