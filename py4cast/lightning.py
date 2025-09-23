@@ -304,7 +304,7 @@ class AutoRegressiveLightning(LightningModule):
         elif loss_name == "mae":
             self.loss = WeightedLoss("L1Loss", reduction="none")
         elif loss_name == "perceptual":
-            self.loss = WeightedLoss("perceptual", channel_iterative_mode = False, in_channels = num_output_features)    
+            self.loss = WeightedLoss("perceptual", channel_iterative_mode = False, in_channels = num_output_features, device=self.device)    
         else:
             raise TypeError(f"Unknown loss function: {loss_name}")
         self.loss.prepare(self, statics.interior_mask, dataset_info)
