@@ -138,15 +138,18 @@ class WeightedLoss(Py4CastLoss):
             target_tensor_mask = min_max_normalization(target_tensor_mask)
             shape_pred = pred_tensor_mask.shape
             # The loss have the shape (B, pred_steps, d_f)
-            torch_loss = torch.zeros(shape_pred[0], shape_pred[1], shape_pred[-1])
+            torch_loss = torch.zeros(shape_pred[0], shape_pred[1])
             # Feature in second dim
             for t in range(shape_pred[1]):
+                # All the feature in the perceptual loss or one perceptual loss per feature ?
+                # Here one perceptual loss for all the features
                 pred_tensor_mask = pred_tensor_mask[:,t].permute(0, 3, 1, 2)
                 target_tensor_mask = target_tensor_mask[:,t].permute(0, 3, 1, 2)
                 print(self.loss(pred_tensor_mask, target_tensor_mask))
                 # Compute Torch loss (defined in the parent class when this Mixin is used)
                 torch_loss[:,t] = self.loss(pred_tensor_mask, target_tensor_mask)
-                print(torch_loss.shape)
+            print(torch_loss)
+            return torch_loss
         else:
             # Compute Torch loss (defined in the parent class when this Mixin is used)
             torch_loss = self.loss(pred_tensor_mask, target_tensor_mask)
