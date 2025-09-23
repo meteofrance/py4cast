@@ -143,11 +143,11 @@ class WeightedLoss(Py4CastLoss):
             for t in range(shape_pred[1]):
                 # All the feature in the perceptual loss or one perceptual loss per feature ?
                 # Here one perceptual loss for all the features
-                pred_tensor_mask = pred_tensor_mask[:,t].permute(0, 3, 1, 2)
-                target_tensor_mask = target_tensor_mask[:,t].permute(0, 3, 1, 2)
-                print(self.loss(pred_tensor_mask, target_tensor_mask))
+                pred_tensor_mask_t = pred_tensor_mask[:,t].permute(0, 3, 1, 2)
+                target_tensor_mask_t = target_tensor_mask[:,t].permute(0, 3, 1, 2)
+                print(self.loss(pred_tensor_mask_t, target_tensor_mask_t))
                 # Compute Torch loss (defined in the parent class when this Mixin is used)
-                torch_loss[:,t] = self.loss(pred_tensor_mask, target_tensor_mask)
+                torch_loss[:,t] = self.loss(pred_tensor_mask_t, target_tensor_mask_t)
             print(torch_loss)
             return torch_loss
         else:
