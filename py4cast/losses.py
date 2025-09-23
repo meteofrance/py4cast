@@ -143,15 +143,19 @@ class WeightedLoss(Py4CastLoss):
             for t in range(shape_pred[1]):
                 pred_tensor_mask = pred_tensor_mask[:,t].permute(0, 3, 1, 2)
                 target_tensor_mask = target_tensor_mask[:,t].permute(0, 3, 1, 2)
-                print(self.loss(pred_tensor_mask, target_tensor_mask).shape)
+                print(self.loss(pred_tensor_mask, target_tensor_mask))
                 # Compute Torch loss (defined in the parent class when this Mixin is used)
                 torch_loss[:,t] = self.loss(pred_tensor_mask, target_tensor_mask)
+                print(torch_loss.shape)
         else:
             # Compute Torch loss (defined in the parent class when this Mixin is used)
             torch_loss = self.loss(pred_tensor_mask, target_tensor_mask)
 
         # Retrieve the weights for each feature
         weights = self.weights(tuple(prediction.feature_names), prediction.device)
+
+        print(weights.shape)
+        print(self.lm.interior_mask_s.shape)
 
         # Apply the weights and sum over the feature dimension
         weighted_loss = torch.sum(torch_loss * weights, dim=-1)
