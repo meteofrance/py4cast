@@ -129,30 +129,9 @@ class WeightedLoss(Py4CastLoss):
         prediction/target: (B, pred_steps, N_grid, d_f) or (B, pred_steps, W, H, d_f)
         returns (B, pred_steps)
         """
-        pred_tensor_mask = prediction.tensor * mask
-        target_tensor_mask = target.tensor * mask
         
-        if self.loss_name == "perceptual":
-            # Normalize if perceptual loss
-            pred_tensor_mask = min_max_normalization(pred_tensor_mask)
-            target_tensor_mask = min_max_normalization(target_tensor_mask)
-            shape_pred = pred_tensor_mask.shape
-            # The loss have the shape (B, pred_steps, d_f)
-            torch_loss = torch.zeros(shape_pred[0], shape_pred[1])
-            # Feature in second dim
-            for t in range(shape_pred[1]):
-                # All the feature in the perceptual loss or one perceptual loss per feature ?
-                # Here one perceptual loss for all the features
-                pred_tensor_mask_t = pred_tensor_mask[:,t].permute(0, 3, 1, 2)
-                target_tensor_mask_t = target_tensor_mask[:,t].permute(0, 3, 1, 2)
-                print(self.loss(pred_tensor_mask_t, target_tensor_mask_t))
-                # Compute Torch loss (defined in the parent class when this Mixin is used)
-                torch_loss[:,t] = self.loss(pred_tensor_mask_t, target_tensor_mask_t)
-            print(torch_loss)
-            return torch_loss
-        else:
-            # Compute Torch loss (defined in the parent class when this Mixin is used)
-            torch_loss = self.loss(pred_tensor_mask, target_tensor_mask)
+        # Compute Torch loss (defined in the parent class when this Mixin is used)
+        torch_loss = self.loss(prediction.tensor * mask, target.tensor * mask)
 
         # Retrieve the weights for each feature
         weights = self.weights(tuple(prediction.feature_names), prediction.device)
@@ -205,20 +184,9 @@ class ScaledLoss(Py4CastLoss):
         prediction/target: (B, pred_steps, N_grid, d_f) or (B, pred_steps, W, H, d_f)
         returns (B, pred_steps)
         """
-        pred_tensor_mask = prediction.tensor * mask
-        target_tensor_mask = target.tensor * mask
-        
-        # Normalize if perceptual loss
-        if self.loss_name == "perceptual":
-            pred_tensor_mask = min_max_normalization(pred_tensor_mask)
-            target_tensor_mask = min_max_normalization(target_tensor_mask)
-            # Feature in second dim
-            # with one timestep
-            pred_tensor_mask = pred_tensor_mask[:,0].permute(0, 3, 1, 2)
-            target_tensor_mask = target_tensor_mask[:,0].permute(0, 3, 1, 2)
 
         # Compute Torch loss (defined in the parent class when this Mixin is used)
-        torch_loss = self.loss(pred_tensor_mask, target_tensor_mask)
+        torch_loss = self.loss(prediction.tensor * mask, target.tensor * mask)
 
         union_mask = torch.any(mask, dim=(0, 1, 4))
 
@@ -234,3 +202,57 @@ class ScaledLoss(Py4CastLoss):
         return mean_loss * self.weights(
             tuple(prediction.feature_names), prediction.device
         )
+
+
+class PerceptualPy4CastLoss(Py4CastLoss):
+    """
+    Compute a perceptual loss function over all the feature.
+    During the forward step, the loss is computed for all the feature in the same time.
+    """
+
+    def prepare(
+        self,
+        lm: pl.LightningModule,
+        interior_mask: torch.Tensor,
+        dataset_info: DatasetInfo,
+    ) -> None:
+        # build the dictionnary of weight
+        loss_state_weight = {}
+
+        for name in dataset_info.state_weights:
+            loss_state_weight[name] = dataset_info.state_weights[name]
+        self.register_loss_state_buffers(
+            lm, interior_mask, loss_state_weight, squeeze_mask=True
+        )
+        self.lm = lm
+
+    def forward(
+        self,
+        prediction: NamedTensor,
+        target: NamedTensor,
+        mask: torch.Tensor,
+        reduce_spatial_dim=True,
+    ) -> torch.Tensor:
+        """
+        Computed a perceptual loss function over all the feature and batch.
+        prediction/target: (B, pred_steps, N_grid, d_f) or (B, pred_steps, W, H, d_f)
+        returns (pred_steps)
+        """
+        pred_tensor = prediction.tensor
+        target_tensor = target.tensor
+
+        # Normalize between 0 and 1
+        pred_tensor = min_max_normalization(pred_tensor)
+        target_tensor = min_max_normalization(target_tensor)
+        shape_pred = pred_tensor.shape
+
+        # The loss have the shape (pred_steps)
+        torch_loss = torch.zeros(shape_pred[1])
+
+        for t in range(shape_pred[1]):
+            pred_tensor_t = pred_tensor[:,t].permute(0, 3, 1, 2)
+            target_tensor_t = target_tensor[:,t].permute(0, 3, 1, 2)
+            # Compute Torch loss
+            torch_loss[t] = self.loss(pred_tensor_t, target_tensor_t)
+        print(torch_loss)
+        return torch_loss
