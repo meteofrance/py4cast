@@ -247,7 +247,7 @@ class PerceptualPy4CastLoss(Py4CastLoss):
         shape_pred = pred_tensor.shape
 
         # The loss have the shape (pred_steps)
-        torch_loss = torch.zeros(shape_pred[1])
+        torch_loss = torch.zeros(shape_pred[1], device=pred_tensor.device)
 
         for t in range(shape_pred[1]):
             pred_tensor_t = pred_tensor[:,t].permute(0, 3, 1, 2)
