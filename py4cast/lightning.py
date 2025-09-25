@@ -30,7 +30,7 @@ from py4cast.io.outputs import (
     save_gifs,
     save_named_tensors_to_grib,
 )
-from py4cast.losses import ScaledLoss, WeightedLoss, PerceptualPy4CastLoss
+from py4cast.losses import ScaledLoss, WeightedLoss, CombinedPerceptualLoss
 from py4cast.metrics import MetricACC, MetricPSDK, MetricPSDVar
 from py4cast.models import build_model_from_settings, get_model_kls_and_settings
 from py4cast.models import registry as model_registry
@@ -304,14 +304,10 @@ class AutoRegressiveLightning(LightningModule):
         elif loss_name == "mae":
             self.loss = WeightedLoss("L1Loss", reduction="none")
         elif loss_name == "perceptual":
-            self.loss = PerceptualPy4CastLoss(
-                "perceptual",
-                multi_scale = True,
-                resize_input = True,
-                pre_trained = True,
-                channel_iterative_mode = False,
-                in_channels = num_output_features,
-                device=str(self.device)
+            self.loss = CombinedPerceptualLoss(
+                num_output_features = num_output_features,
+                device=str(self.device),
+                reduction="none"
                 )    
         else:
             raise TypeError(f"Unknown loss function: {loss_name}")
