@@ -306,6 +306,9 @@ class AutoRegressiveLightning(LightningModule):
         elif loss_name == "perceptual":
             self.loss = PerceptualPy4CastLoss(
                 "perceptual",
+                multi_scale = True,
+                resize_input = True,
+                pre_trained = True,
                 channel_iterative_mode = False,
                 in_channels = num_output_features,
                 device=str(self.device)
