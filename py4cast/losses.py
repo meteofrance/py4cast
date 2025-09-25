@@ -236,7 +236,7 @@ class PerceptualPy4CastLoss(Py4CastLoss):
         """
         Computed a perceptual loss function over all the feature and batch.
         prediction/target: (B, pred_steps, N_grid, d_f) or (B, pred_steps, W, H, d_f)
-        returns (pred_steps)
+        returns (1, pred_steps)
         """
         pred_tensor = prediction.tensor
         target_tensor = target.tensor
@@ -255,4 +255,4 @@ class PerceptualPy4CastLoss(Py4CastLoss):
             # Compute Torch loss
             torch_loss[t] = self.loss(pred_tensor_t, target_tensor_t)
         print(torch_loss)
-        return torch_loss
+        return torch_loss.unsqueeze(0)
