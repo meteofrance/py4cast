@@ -135,9 +135,6 @@ class WeightedLoss(Py4CastLoss):
         # Retrieve the weights for each feature
         weights = self.weights(tuple(prediction.feature_names), prediction.device)
 
-        print(weights.shape)
-        print(self.lm.interior_mask_s.shape)
-
         # Apply the weights and sum over the feature dimension
         weighted_loss = torch.sum(torch_loss * weights, dim=-1)
 
@@ -242,7 +239,7 @@ class CombinedPerceptualLoss(WeightedLoss):
             pred_tensor_t = pred_tensor[:,t].permute(0, 3, 1, 2)
             target_tensor_t = target_tensor[:,t].permute(0, 3, 1, 2)
             # Compute Torch loss
-            perc_loss[t] = self.perceptual_loss(pred_tensor_t, target_tensor_t)
+            perc_loss[t] = self.perceptual_loss(pred_tensor_t*mask, target_tensor_t*mask)
 
         # Combine losses
         return (1 - self.alpha) * mse_weighted + self.alpha * perc_loss.unsqueeze(0)
