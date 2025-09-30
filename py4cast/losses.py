@@ -246,4 +246,4 @@ class CombinedPerceptualLoss(WeightedLoss):
         print("mse: ", mse_weighted)
         print("perceptual: ", perc_loss)
         # Combine losses
-        return (1 - self.alpha) * mse_weighted + self.alpha * perc_loss.unsqueeze(0)
+        return (1 - self.alpha) * mse_weighted + self.alpha * perc_loss.unsqueeze(0) * 100
