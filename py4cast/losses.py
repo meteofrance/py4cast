@@ -237,6 +237,7 @@ class CombinedPerceptualLoss(WeightedLoss):
         perc_loss = torch.zeros(shape_pred[1], device=pred_tensor.device)
 
         for t in range(shape_pred[1]):
+            # feature in second dimension
             pred_tensor_t = pred_tensor[:,t].permute(0, 3, 1, 2)
             target_tensor_t = target_tensor[:,t].permute(0, 3, 1, 2)
             # Compute Torch loss

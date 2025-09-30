@@ -801,7 +801,7 @@ class AutoRegressiveLightning(LightningModule):
         if self.logging_enabled:
             for plotter in self.train_plotters:
                 plotter.update(
-                    self, batch=batch, prediction=prediction, target=target, mask=mask
+                    self, batch=batch, prediction=prediction, target=target_masked, mask=mask
                 )
 
         return batch_loss
@@ -890,7 +890,7 @@ class AutoRegressiveLightning(LightningModule):
 
         self.val_mean_loss = mean_loss
 
-        self.validation_step_logging(batch, prediction, target, mask)
+        self.validation_step_logging(batch, prediction, target_masked, mask)
 
     def validation_step_logging(
         self,
@@ -1016,7 +1016,7 @@ class AutoRegressiveLightning(LightningModule):
                 prog_bar=False,
             )
 
-        self.test_step_logging(batch, prediction, target, mask)
+        self.test_step_logging(batch, prediction, target_masked, mask)
 
     def test_step_logging(
         self,
