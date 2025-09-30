@@ -219,6 +219,10 @@ class CombinedPerceptualLoss(WeightedLoss):
         prediction/target: (B, pred_steps, N_grid, d_f) or (B, pred_steps, W, H, d_f)
         returns (B, pred_steps)
         """
+        print("pred: ", prediction.tensor.is_nan().any())
+        print("target: ", target.tensor.is_nan().any())
+        torch.save(prediction.tensor, "pred_loss.pt")
+        torch.save(target.tensor, "target_loss.pt")
         # MSE Weighted loss (B, pred_step)
         mse_weighted = super().forward(prediction, target, mask)
 
