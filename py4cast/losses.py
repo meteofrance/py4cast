@@ -241,9 +241,9 @@ class CombinedPerceptualLoss(WeightedLoss):
             pred_tensor_t = pred_tensor[:,t].permute(0, 3, 1, 2)
             target_tensor_t = target_tensor[:,t].permute(0, 3, 1, 2)
             # Compute Torch loss
-            perc_loss[t] = self.perceptual_loss(pred_tensor_t, target_tensor_t)
+            perc_loss[t] = self.perceptual_loss(pred_tensor_t, target_tensor_t) * 100
 
         print("mse: ", mse_weighted)
         print("perceptual: ", perc_loss)
         # Combine losses
-        return (1 - self.alpha) * mse_weighted + self.alpha * perc_loss.unsqueeze(0) * 100
+        return (1 - self.alpha) * mse_weighted + self.alpha * perc_loss.unsqueeze(0)
