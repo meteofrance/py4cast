@@ -769,8 +769,9 @@ class AutoRegressiveLightning(LightningModule):
         """
         if self.mask_on_nan:
             mask = ~torch.isnan(target.tensor)
-            target_mask = torch.nan_to_num(target.tensor, nan=0)
-            return mask, target_mask
+            target_masked = target.clone()
+            target_masked.tensor = torch.nan_to_num(target_masked.tensor, nan=0)
+            return mask, target_masked
         return torch.ones_like(target.tensor), target
 
     #############################################################
@@ -787,12 +788,12 @@ class AutoRegressiveLightning(LightningModule):
 
         prediction, target = self.common_step(batch, batch_idx, phase="train")
 
-        mask, mask_target = self.get_mask_on_nan(target)
+        mask, target_masked = self.get_mask_on_nan(target)
         torch.save(mask, "mask.pt")        
         torch.save(prediction.tensor, "pred.pt")
 
         # Compute loss: mean over unrolled times and batch
-        batch_loss = torch.mean(self.loss(prediction, mask_target, mask=mask))
+        batch_loss = torch.mean(self.loss(prediction, target_masked, mask=mask))
 
         self.training_step_losses.append(batch_loss)
 
