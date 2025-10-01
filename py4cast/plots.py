@@ -268,7 +268,7 @@ class MapPlot(Plotter):
         """
         Update. Should be call by "on_{training/validation/test}_step
         """
-        pred = deepcopy(prediction).tensor  # In order to not modify the input
+        pred = deepcopy(prediction).tensor * mask # In order to not modify the input
         targ = deepcopy(target).tensor  # In order to not modify the input
         batch_copy = deepcopy(batch)
 
