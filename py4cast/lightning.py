@@ -30,7 +30,7 @@ from py4cast.io.outputs import (
     save_gifs,
     save_named_tensors_to_grib,
 )
-from py4cast.losses import ScaledLoss, WeightedLoss, CombinedPerceptualLoss
+from py4cast.losses import ScaledLoss, WeightedLoss, CombinedPerceptualLoss, CombinedLoss
 from py4cast.metrics import MetricACC, MetricPSDK, MetricPSDVar
 from py4cast.models import build_model_from_settings, get_model_kls_and_settings
 from py4cast.models import registry as model_registry
@@ -163,7 +163,7 @@ class AutoRegressiveLightning(LightningModule):
         batch_size: int = 2,
         # non-linked args
         model_name: Literal[tuple(model_registry.keys())] = "HalfUNet",
-        loss_name: Literal["mse", "mae", "perceptual"] = "mse",
+        losses: List[dict] = [{"class": WeightedLoss,"params": {"loss": "mse", "reduction": "none"}}],
         num_inter_steps: int = 1,
         num_samples_to_plot: int = 1,
         training_strategy: Literal[
@@ -296,21 +296,27 @@ class AutoRegressiveLightning(LightningModule):
             expand_to_batch(statics.grid_statics.tensor, batch_size),
             persistent=False,
         )
+
+        print(losses)
         # We need to instantiate the loss after statics had been transformed.
         # Indeed, the statics used should be in the right dimensions.
         # MSE loss, need to do reduction ourselves to get proper weighting
-        if loss_name == "mse":
-            self.loss = WeightedLoss("MSELoss", reduction="none")
-        elif loss_name == "mae":
-            self.loss = WeightedLoss("L1Loss", reduction="none")
-        elif loss_name == "perceptual":
-            self.loss = CombinedPerceptualLoss(
-                num_output_features = num_output_features,
-                device=str(self.device),
-                reduction="none"
-                )    
-        else:
-            raise TypeError(f"Unknown loss function: {loss_name}")
+        self.loss = CombinedLoss(losses)
+
+        # move this in loss
+        # if loss_name == "mse":
+        #     self.loss = WeightedLoss("MSELoss", reduction="none")
+        # elif loss_name == "mae":
+        #     self.loss = WeightedLoss("L1Loss", reduction="none")
+        # elif loss_name == "perceptual":
+        #     self.loss = CombinedPerceptualLoss(
+        #         num_output_features = num_output_features,
+        #         device=str(self.device),
+        #         reduction="none"
+        #         )    
+        # else:
+        #     raise TypeError(f"Unknown loss function: {loss_name}")
+
         self.loss.prepare(self, statics.interior_mask, dataset_info)
 
     #############################################################

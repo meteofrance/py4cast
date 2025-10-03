@@ -4,7 +4,7 @@ This module contains the loss functions used in the training of the models.
 
 from abc import ABC, abstractmethod
 from functools import lru_cache
-from typing import Tuple
+from typing import Tuple, List
 
 import lightning.pytorch as pl
 import torch
@@ -195,22 +195,45 @@ class ScaledLoss(Py4CastLoss):
         return mean_loss * self.weights(
             tuple(prediction.feature_names), prediction.device
         )
+class CombinedLoss(Py4CastLoss):
+    def __init__(self, losses_config: List[dict]):
+        self.losses = []
+        for loss_conf in losses_config:
+            loss_cls = loss_conf["class"]
+            weight = loss_conf.get("weight", 1.0)
+            kwargs = loss_conf.get("params", {})
+            self.losses.append((loss_cls(**kwargs), weight))
 
-class CombinedPerceptualLoss(WeightedLoss):
+    def prepare(
+        self,
+        lm: pl.LightningModule,
+        interior_mask: torch.Tensor,
+        dataset_info: DatasetInfo,
+        ):
+        for loss, _ in self.losses:
+            if hasattr(loss, "prepare"):
+                loss.prepare(lm, interior_mask, dataset_info)
+
+    def forward(self, prediction: NamedTensor, target: NamedTensor, mask: torch.Tensor):
+        # shape (B, pred_step)
+        total_loss = torch.zeros(prediction.tensor.shape[:2], device=prediction.tensor.device)
+        for loss, weight in self.losses:
+            total_loss += weight * loss(prediction, target, mask)
+        return total_loss
+
+class PerceptualLossPy4Cast(Py4CastLoss):
     """
     Compute a combinaison between perceptual loss and weightedloss.
     During the forward step, the perceptual loss is computed for all the feature in the same time.
     """
-    def __init__(self, num_output_features: int, alpha: float=0.5, device: str="cpu", *args, **kwargs) -> None:
-        super().__init__(loss="MSELoss", *args, **kwargs)
-        self.alpha = alpha
+    def __init__(self, num_output_features: int, *args, **kwargs) -> None:
         self.perceptual_loss = PerceptualLoss(
-            multi_scale = True,
+            multi_scale = True, # avoir du controle sur ces parametres (mettre *args et kwargs dedans)
             resize_input = True,
             pre_trained = True,
             channel_iterative_mode = False,
             in_channels = num_output_features,
-            device= device
+            device= "cpu" # le device n'est pas encore connu lors de l'init
         )
 
     def forward(self, prediction: NamedTensor, target: NamedTensor, mask: torch.Tensor):
@@ -219,13 +242,6 @@ class CombinedPerceptualLoss(WeightedLoss):
         prediction/target: (B, pred_steps, N_grid, d_f) or (B, pred_steps, W, H, d_f)
         returns (B, pred_steps)
         """
-        print("pred: ", prediction.tensor.isnan().any())
-        print("target: ", target.tensor.isnan().any())
-        torch.save(prediction.tensor, "pred_loss.pt")
-        torch.save(target.tensor, "target_loss.pt")
-        # MSE Weighted loss (B, pred_step)
-        mse_weighted = super().forward(prediction, target, mask)
-
         # Compute perceptual loss
         # Normalize between 0 and 1
         pred_tensor = min_max_normalization(prediction.tensor * mask)
@@ -241,9 +257,6 @@ class CombinedPerceptualLoss(WeightedLoss):
             pred_tensor_t = pred_tensor[:,t].permute(0, 3, 1, 2)
             target_tensor_t = target_tensor[:,t].permute(0, 3, 1, 2)
             # Compute Torch loss
-            perc_loss[t] = self.perceptual_loss(pred_tensor_t, target_tensor_t) * 100
+            perc_loss[t] = self.perceptual_loss(pred_tensor_t, target_tensor_t)
 
-        print("mse: ", mse_weighted)
-        print("perceptual: ", perc_loss)
-        # Combine losses
-        return (1 - self.alpha) * mse_weighted + self.alpha * perc_loss.unsqueeze(0)
+        return perc_loss.unsqueeze(0)
