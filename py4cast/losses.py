@@ -185,13 +185,13 @@ class GradientLoss(torch.nn.Module):
         import matplotlib.pyplot as plt
         fig = plt.figure(figsize=(30, 30))
         plt.subplot(2, 2, 1, title="x-pred")
-        plt.imshow(grad_x_pred.detach().numpy()[0,0,:,:,4])
+        plt.imshow(grad_x_pred.cpu().detach().numpy()[0,0,:,:,4])
         plt.subplot(2, 2, 2, title="y-pred")
-        plt.imshow(grad_y_pred.detach().numpy()[0,0,:,:,4])
+        plt.imshow(grad_y_pred.cpu().detach().numpy()[0,0,:,:,4])
         plt.subplot(2, 2, 3, title="x-targ")
-        plt.imshow(grad_x_target.detach().numpy()[0,0,:,:,4])
+        plt.imshow(grad_x_target.cpu().detach().numpy()[0,0,:,:,4])
         plt.subplot(2, 2, 4, title="y-targ")
-        plt.imshow(grad_y_target.detach().numpy()[0,0,:,:,4])
+        plt.imshow(grad_y_target.cpu().detach().numpy()[0,0,:,:,4])
         plt.tight_layout()
         plt.savefig(f"ex_tensors/grad.png")
 
