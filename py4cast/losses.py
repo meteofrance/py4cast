@@ -195,31 +195,6 @@ class ScaledLoss(Py4CastLoss):
         return mean_loss * self.weights(
             tuple(prediction.feature_names), prediction.device
         )
-class CombinedLoss(Py4CastLoss):
-    def __init__(self, losses_config: List[dict]):
-        self.losses = []
-        for loss_conf in losses_config:
-            LossClass = globals()[loss_conf["class"]]
-            weight = loss_conf.get("weight", 1.0)
-            kwargs = loss_conf.get("params", {})
-            self.losses.append((LossClass(**kwargs), weight))
-
-    def prepare(
-        self,
-        lm: pl.LightningModule,
-        interior_mask: torch.Tensor,
-        dataset_info: DatasetInfo,
-        ):
-        for loss, _ in self.losses:
-            if hasattr(loss, "prepare"):
-                loss.prepare(lm, interior_mask, dataset_info)
-
-    def forward(self, prediction: NamedTensor, target: NamedTensor, mask: torch.Tensor):
-        # shape (B, pred_step)
-        total_loss = torch.zeros(prediction.tensor.shape[:2], device=prediction.tensor.device)
-        for loss, weight in self.losses:
-            total_loss += weight * loss(prediction, target, mask)
-        return total_loss
 
 class PerceptualLossPy4Cast(Py4CastLoss):
     """
@@ -235,6 +210,14 @@ class PerceptualLossPy4Cast(Py4CastLoss):
             in_channels = num_output_features,
             device= "cpu" # le device n'est pas encore connu lors de l'init
         )
+    
+    def prepare(
+        self,
+        lm: pl.LightningModule,
+        interior_mask: torch.Tensor,
+        dataset_info: DatasetInfo,
+    ) -> None:
+        self.lm = lm
 
     def forward(self, prediction: NamedTensor, target: NamedTensor, mask: torch.Tensor):
         """
@@ -260,3 +243,29 @@ class PerceptualLossPy4Cast(Py4CastLoss):
             perc_loss[t] = self.perceptual_loss(pred_tensor_t, target_tensor_t)
 
         return perc_loss.unsqueeze(0)
+
+class CombinedLoss(Py4CastLoss):
+    def __init__(self, losses_config: List[dict]):
+        self.losses = []
+        for loss_conf in losses_config:
+            LossClass = globals()[loss_conf["class"]]
+            weight = loss_conf.get("weight", 1.0)
+            kwargs = loss_conf.get("params", {})
+            self.losses.append((LossClass(**kwargs), weight))
+
+    def prepare(
+        self,
+        lm: pl.LightningModule,
+        interior_mask: torch.Tensor,
+        dataset_info: DatasetInfo,
+        ):
+        for loss, _ in self.losses:
+            if hasattr(loss, "prepare"):
+                loss.prepare(lm, interior_mask, dataset_info)
+
+    def forward(self, prediction: NamedTensor, target: NamedTensor, mask: torch.Tensor):
+        # shape (B, pred_step)
+        total_loss = torch.zeros(prediction.tensor.shape[:2], device=prediction.tensor.device)
+        for loss, weight in self.losses:
+            total_loss += weight * loss(prediction, target, mask)
+        return total_loss
