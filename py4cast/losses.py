@@ -182,7 +182,7 @@ class GradientLoss(torch.nn.Module):
         grad_y_target = target[:, :, 1:, :] - target[:, :, :-1, :]
 
         #debug
-        import matplotlib as plt
+        import matplotlib.pyplot as plt
         fig = plt.figure(figsize=(30, 30))
         plt.subplot(2, 2, 1, title="x-pred")
         plt.imshow(grad_x_pred.detach().numpy()[0,0,:,:,4])
