@@ -9,6 +9,7 @@ from typing import Tuple, List
 import lightning.pytorch as pl
 import torch
 from torch.nn import MSELoss
+import torch.nn.functional as F
 
 from mfai.pytorch.losses.perceptual import PerceptualLoss
 from py4cast.datasets.base import DatasetInfo, NamedTensor
@@ -159,51 +160,6 @@ class WeightedLoss(Py4CastLoss):
 
         return time_step_mean_loss
 
-class GradientLoss(torch.nn.Module):
-    def __init__(self, mode:str='l1') -> None:
-        """
-        mode: 'l1' for |grad|, 'l2' for grad^2
-        """
-        super().__init__()
-        self.mode = mode
-
-    def forward(self, prediction: torch.tensor, target: torch.tensor) -> torch.tensor :
-        """
-        prediction: shape (B, T, H, W, F)
-        target: shape (B, T, H, W, F)
-        Return a tensor of shape (B, T, H, W, F)
-        """
-        loss = torch.zeros_like(prediction, device=prediction.device)
-
-        grad_x_pred = prediction[:, :, :, 1:] - prediction[:, :, :, :-1]
-        grad_y_pred = prediction[:, :, 1:, :] - prediction[:, :, :-1, :]
-
-        grad_x_target = target[:, :, :, 1:] - target[:, :, :, :-1]
-        grad_y_target = target[:, :, 1:, :] - target[:, :, :-1, :]
-
-        #debug
-        import matplotlib.pyplot as plt
-        fig = plt.figure(figsize=(30, 30))
-        plt.subplot(2, 2, 1, title="x-pred")
-        plt.imshow(grad_x_pred.cpu().detach().numpy()[0,0,:,:,4])
-        plt.subplot(2, 2, 2, title="y-pred")
-        plt.imshow(grad_y_pred.cpu().detach().numpy()[0,0,:,:,4])
-        plt.subplot(2, 2, 3, title="x-targ")
-        plt.imshow(grad_x_target.cpu().detach().numpy()[0,0,:,:,4])
-        plt.subplot(2, 2, 4, title="y-targ")
-        plt.imshow(grad_y_target.cpu().detach().numpy()[0,0,:,:,4])
-        plt.tight_layout()
-        plt.savefig(f"ex_tensors/grad.png")
-
-        # compute the loss
-        if self.mode == 'l1':
-            loss[:, :, :, :-1] = torch.abs(grad_x_pred - grad_x_target) 
-            loss[:, :, :-1, :] += torch.abs(grad_y_pred - grad_y_target)
-        else:
-            loss[:, :, :, :-1] = (grad_x_pred - grad_x_target)**2
-            loss[:, :, :-1, :] += (grad_y_pred - grad_y_target)**2
-        return loss
-
 class ScaledLoss(Py4CastLoss):
     def prepare(
         self,
@@ -292,6 +248,119 @@ class PerceptualLossPy4Cast(Py4CastLoss):
             perc_loss[t] = self.perceptual_loss(pred_tensor_t, target_tensor_t)
 
         return perc_loss.unsqueeze(0)
+
+class GradientLoss(torch.nn.Module):
+    def __init__(self, mode:str='l1') -> None:
+        """
+        mode: 'l1' for |grad|, 'l2' for grad^2
+        """
+        super().__init__()
+        self.mode = mode
+
+    def forward(self, prediction: torch.tensor, target: torch.tensor) -> torch.tensor :
+        """
+        prediction: shape (B, T, H, W, F)
+        target: shape (B, T, H, W, F)
+        Return a tensor of shape (B, T, H, W, F)
+        """
+        loss = torch.zeros_like(prediction, device=prediction.device)
+
+        grad_x_pred = prediction[:, :, :, 1:] - prediction[:, :, :, :-1]
+        grad_y_pred = prediction[:, :, 1:, :] - prediction[:, :, :-1, :]
+
+        grad_x_target = target[:, :, :, 1:] - target[:, :, :, :-1]
+        grad_y_target = target[:, :, 1:, :] - target[:, :, :-1, :]
+
+        #debug
+        import matplotlib.pyplot as plt
+        fig = plt.figure(figsize=(30, 30))
+        plt.subplot(2, 2, 1, title="x-pred")
+        plt.imshow(grad_x_pred.cpu().detach().numpy()[0,0,:,:,5])
+        plt.subplot(2, 2, 2, title="y-pred")
+        plt.imshow(grad_y_pred.cpu().detach().numpy()[0,0,:,:,5])
+        plt.subplot(2, 2, 3, title="x-targ")
+        plt.imshow(grad_x_target.cpu().detach().numpy()[0,0,:,:,5])
+        plt.subplot(2, 2, 4, title="y-targ")
+        plt.imshow(grad_y_target.cpu().detach().numpy()[0,0,:,:,5])
+        plt.tight_layout()
+        plt.savefig(f"ex_tensors/grad.png")
+
+        # compute the loss
+        if self.mode == 'l1':
+            loss[:, :, :, :-1] = torch.abs(grad_x_pred - grad_x_target) 
+            loss[:, :, :-1, :] += torch.abs(grad_y_pred - grad_y_target)
+        else:
+            loss[:, :, :, :-1] = (grad_x_pred - grad_x_target)**2
+            loss[:, :, :-1, :] += (grad_y_pred - grad_y_target)**2
+        return loss
+    
+
+class SobelLoss(torch.nn.Module):
+    def __init__(self, mode:str='l1') -> None:
+        """
+        mode: 'l1' for |grad|, 'l2' for grad^2
+        """
+        super().__init__()
+        self.mode = mode
+
+    def forward(self, prediction: torch.tensor, target: torch.tensor) -> torch.tensor :
+        """
+        prediction: shape (B, T, H, W, F)
+        target: shape (B, T, H, W, F)
+        Return a tensor of shape (B, T, H, W, F)
+        """
+        pred_clone = prediction.clone()
+        target_clone = target.clone()
+
+        B, T, H, W, F = prediction.shape
+
+         # Sobel kernels
+        sobel_x = torch.tensor([[-1, 0, 1],
+                                [-2, 0, 2],
+                                [-1, 0, 1]], dtype=pred_clone.dtype, device=prediction.device).view(1, 1, 3, 3)
+
+        sobel_y = torch.tensor([[-1, -2, -1],
+                                [0, 0, 0],
+                                [1, 2, 1]], dtype=pred_clone.dtype, device=prediction.device).view(1, 1, 3, 3)
+
+        # Permute & reshape to apply conv2d : [B, T, H, W, F] -> [B*T*F, 1, H, W]
+        pred_reshaped = pred_clone.permute(0, 1, 4, 2, 3).reshape(B*T*F, 1, H, W)
+        target_reshaped   = target_clone.permute(0, 1, 4, 2, 3).reshape(B*T*F, 1, H, W)
+
+        # Convolution Sobel
+        grad_x_pred = F.conv2d(pred_reshaped, sobel_x, padding=1).reshape(B, T, F, H, W).permute(0, 1, 3, 4, 2)
+        grad_y_pred = F.conv2d(pred_reshaped, sobel_y, padding=1).reshape(B, T, F, H, W).permute(0, 1, 3, 4, 2)
+        grad_x_target   = F.conv2d(target_reshaped, sobel_x, padding=1).reshape(B, T, F, H, W).permute(0, 1, 3, 4, 2)
+        grad_y_target   = F.conv2d(target_reshaped, sobel_y, padding=1).reshape(B, T, F, H, W).permute(0, 1, 3, 4, 2)
+
+        #debug
+        import matplotlib.pyplot as plt
+        fig = plt.figure(figsize=(30, 30))
+        plt.subplot(2, 3, 1, title="x-pred")
+        plt.imshow(grad_x_pred.cpu().detach().numpy()[0,0,:,:,5])
+        plt.subplot(2, 3, 2, title="y-pred")
+        plt.imshow(grad_y_pred.cpu().detach().numpy()[0,0,:,:,5])
+        plt.subplot(2, 3, 3, title="x-targ")
+        plt.imshow(grad_x_target.cpu().detach().numpy()[0,0,:,:,5])
+        plt.subplot(2, 3, 4, title="y-targ")
+        plt.imshow(grad_y_target.cpu().detach().numpy()[0,0,:,:,5])
+        grad_mag_pred = torch.sqrt(grad_x_pred**2 + grad_y_pred**2 + 1e-6)
+        grad_mag_gt   = torch.sqrt(grad_x_target**2 + grad_y_target**2 + 1e-6)
+
+        plt.subplot(2, 3, 5, title="module pred")
+        plt.imshow(grad_mag_pred.cpu().detach().numpy())
+        plt.subplot(2, 3, 5, title="module targ")
+        plt.imshow(grad_mag_gt.cpu().detach().numpy())
+        plt.tight_layout()
+        plt.savefig(f"ex_tensors/grad.png")
+
+        # compute the loss
+        if self.mode == 'l1':
+            loss = torch.abs(grad_x_pred - grad_x_target) + torch.abs(grad_y_pred - grad_y_target) 
+
+        else:
+            loss = (grad_x_pred - grad_x_target)**2 + (grad_y_pred - grad_y_target)**2
+        return loss
 
 class CombinedLoss(Py4CastLoss):
     def __init__(self, losses_config: List[dict]):
