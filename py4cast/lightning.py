@@ -30,7 +30,7 @@ from py4cast.io.outputs import (
     save_gifs,
     save_named_tensors_to_grib,
 )
-from py4cast.losses import ScaledLoss, WeightedLoss, CombinedPerceptualLoss, CombinedLoss
+from py4cast.losses import ScaledLoss, WeightedLoss, CombinedLoss
 from py4cast.metrics import MetricACC, MetricPSDK, MetricPSDVar
 from py4cast.models import build_model_from_settings, get_model_kls_and_settings
 from py4cast.models import registry as model_registry
