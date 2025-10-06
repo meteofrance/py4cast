@@ -283,6 +283,7 @@ class GradientLoss(torch.nn.Module):
         plt.imshow(grad_y_target.cpu().detach().numpy()[0,0,:,:,5])
         plt.tight_layout()
         plt.savefig(f"ex_tensors/grad.png")
+        plt.close()
 
         # compute the loss
         if self.mode == 'l1':
@@ -351,7 +352,8 @@ class SobelLoss(torch.nn.Module):
         plt.subplot(2, 3, 6, title="module targ")
         plt.imshow(grad_mag_gt.cpu().detach().numpy()[0,0,:,:,5])
         plt.tight_layout()
-        plt.savefig(f"ex_tensors/grad.png")
+        plt.savefig(f"ex_tensors/grad_sobol.png")
+        plt.close()
 
         # compute the loss
         if self.mode == 'l1':
