@@ -343,7 +343,7 @@ class SobelLoss(torch.nn.Module):
 
         # Convolution mask
         valid_mask = torch.nn.functional.conv2d(mask_reshaped, kernel_mask, padding=1)
-        valid_mask = (valid_mask == 9) # no neighbor pixel is in the mask
+        valid_mask = (valid_mask == 9).float() # no neighbor pixel is in the mask
 
         # Convolution Sobel
         grad_x_pred = torch.nn.functional.conv2d(pred_reshaped, sobel_x, padding=1) * valid_mask
