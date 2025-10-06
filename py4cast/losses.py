@@ -337,7 +337,7 @@ class SobelLoss(torch.nn.Module):
                                 [1, 2, 1]], dtype=pred_clone.dtype, device=prediction.device).view(1, 1, 3, 3)
 
         # Permute & reshape to apply conv2d : [B, T, H, W, F] -> [B*T*F, 1, H, W]
-        mask_reshaped = mask.permute(0, 1, 4, 2, 3).reshape(B*T*F, 1, H, W)
+        mask_reshaped = mask.permute(0, 1, 4, 2, 3).float().reshape(B*T*F, 1, H, W)
         pred_reshaped = pred_clone.permute(0, 1, 4, 2, 3).reshape(B*T*F, 1, H, W)
         target_reshaped   = target_clone.permute(0, 1, 4, 2, 3).reshape(B*T*F, 1, H, W)
 
