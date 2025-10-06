@@ -199,10 +199,10 @@ class CombinedLoss(Py4CastLoss):
     def __init__(self, losses_config: List[dict]):
         self.losses = []
         for loss_conf in losses_config:
-            loss_cls = loss_conf["class"]
+            LossClass = globals()[loss_conf["class"]]
             weight = loss_conf.get("weight", 1.0)
             kwargs = loss_conf.get("params", {})
-            self.losses.append((loss_cls(**kwargs), weight))
+            self.losses.append((LossClass(**kwargs), weight))
 
     def prepare(
         self,
