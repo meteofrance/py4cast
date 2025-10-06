@@ -9,7 +9,6 @@ from typing import Tuple, List
 import lightning.pytorch as pl
 import torch
 from torch.nn import MSELoss
-import torch.nn.functional as F
 
 from mfai.pytorch.losses.perceptual import PerceptualLoss
 from py4cast.datasets.base import DatasetInfo, NamedTensor
@@ -328,10 +327,10 @@ class SobelLoss(torch.nn.Module):
         target_reshaped   = target_clone.permute(0, 1, 4, 2, 3).reshape(B*T*F, 1, H, W)
 
         # Convolution Sobel
-        grad_x_pred = F.conv2d(pred_reshaped, sobel_x, padding=1).reshape(B, T, F, H, W).permute(0, 1, 3, 4, 2)
-        grad_y_pred = F.conv2d(pred_reshaped, sobel_y, padding=1).reshape(B, T, F, H, W).permute(0, 1, 3, 4, 2)
-        grad_x_target   = F.conv2d(target_reshaped, sobel_x, padding=1).reshape(B, T, F, H, W).permute(0, 1, 3, 4, 2)
-        grad_y_target   = F.conv2d(target_reshaped, sobel_y, padding=1).reshape(B, T, F, H, W).permute(0, 1, 3, 4, 2)
+        grad_x_pred = torch.nn.functional.conv2d(pred_reshaped, sobel_x, padding=1).reshape(B, T, F, H, W).permute(0, 1, 3, 4, 2)
+        grad_y_pred = torch.nn.functional.conv2d(pred_reshaped, sobel_y, padding=1).reshape(B, T, F, H, W).permute(0, 1, 3, 4, 2)
+        grad_x_target   = torch.nn.functional.conv2d(target_reshaped, sobel_x, padding=1).reshape(B, T, F, H, W).permute(0, 1, 3, 4, 2)
+        grad_y_target   = torch.nn.functional.conv2d(target_reshaped, sobel_y, padding=1).reshape(B, T, F, H, W).permute(0, 1, 3, 4, 2)
 
         #debug
         import matplotlib.pyplot as plt
