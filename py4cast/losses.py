@@ -22,7 +22,12 @@ class Py4CastLoss(ABC):
     """
 
     def __init__(self, loss: str, *args, **kwargs) -> None:
-        self.loss = getattr(torch.nn, loss)(*args, **kwargs)
+        if hasattr(torch.nn, loss):
+            self.loss = getattr(torch.nn, loss)(*args, **kwargs)
+        elif loss in globals():
+            self.loss = globals()[loss]
+        else:
+            raise NameError(f"Loss: {loss} is not defined")
 
     @abstractmethod
     def prepare(
@@ -154,6 +159,50 @@ class WeightedLoss(Py4CastLoss):
 
         return time_step_mean_loss
 
+class GradientLoss(torch.nn.Module):
+    def __init__(self, mode:str='l1') -> None:
+        """
+        mode: 'l1' for |grad|, 'l2' for grad^2
+        """
+        super().__init__()
+        self.mode = mode
+
+    def forward(self, prediction: torch.tensor, target: torch.tensor) -> torch.tensor :
+        """
+        prediction: shape (B, T, H, W, F)
+        target: shape (B, T, H, W, F)
+        Return a tensor of shape (B, T, H, W, F)
+        """
+        loss = torch.zeros_like(prediction, device=prediction.device)
+
+        grad_x_pred = prediction[:, :, :, 1:] - prediction[:, :, :, :-1]
+        grad_y_pred = prediction[:, :, 1:, :] - prediction[:, :, :-1, :]
+
+        grad_x_target = target[:, :, :, 1:] - target[:, :, :, :-1]
+        grad_y_target = target[:, :, 1:, :] - target[:, :, :-1, :]
+
+        #debug
+        import matplotlib as plt
+        fig = plt.figure(figsize=(30, 30))
+        plt.subplot(2, 2, 1, title="x-pred")
+        plt.imshow(grad_x_pred.detach().numpy()[0,0,:,:,4])
+        plt.subplot(2, 2, 2, title="y-pred")
+        plt.imshow(grad_y_pred.detach().numpy()[0,0,:,:,4])
+        plt.subplot(2, 2, 3, title="x-targ")
+        plt.imshow(grad_x_target.detach().numpy()[0,0,:,:,4])
+        plt.subplot(2, 2, 4, title="y-targ")
+        plt.imshow(grad_y_target.detach().numpy()[0,0,:,:,4])
+        plt.tight_layout()
+        plt.savefig(f"ex_tensors/grad.png")
+
+        # compute the loss
+        if self.mode == 'l1':
+            loss[:, :, :, :-1] = torch.abs(grad_x_pred - grad_x_target) 
+            loss[:, :, :-1, :] += torch.abs(grad_y_pred - grad_y_target)
+        else:
+            loss[:, :, :, :-1] = (grad_x_pred - grad_x_target)**2
+            loss[:, :, :-1, :] += (grad_y_pred - grad_y_target)**2
+        return loss
 
 class ScaledLoss(Py4CastLoss):
     def prepare(
