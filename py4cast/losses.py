@@ -25,7 +25,7 @@ class Py4CastLoss(ABC):
         if hasattr(torch.nn, loss):
             self.loss = getattr(torch.nn, loss)(*args, **kwargs)
         elif loss in globals():
-            self.loss = globals()[loss]
+            self.loss = globals()[loss](*args, **kwargs)
         else:
             raise NameError(f"Loss: {loss} is not defined")
 
