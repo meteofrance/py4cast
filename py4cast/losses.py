@@ -132,7 +132,7 @@ class WeightedLoss(Py4CastLoss):
         """
         
         # Compute Torch loss (defined in the parent class when this Mixin is used)
-        torch_loss = self.loss(prediction.tensor * mask, target.tensor * mask)
+        torch_loss = self.loss(prediction.tensor * mask, target.tensor * mask) * mask
 
         # Retrieve the weights for each feature
         weights = self.weights(tuple(prediction.feature_names), prediction.device)
@@ -183,7 +183,7 @@ class ScaledLoss(Py4CastLoss):
         """
 
         # Compute Torch loss (defined in the parent class when this Mixin is used)
-        torch_loss = self.loss(prediction.tensor * mask, target.tensor * mask)
+        torch_loss = self.loss(prediction.tensor * mask, target.tensor * mask) * mask
 
         union_mask = torch.any(mask, dim=(0, 1, 4))
 
