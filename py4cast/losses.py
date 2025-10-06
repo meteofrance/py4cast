@@ -347,9 +347,9 @@ class SobelLoss(torch.nn.Module):
         grad_mag_gt   = torch.sqrt(grad_x_target**2 + grad_y_target**2 + 1e-6)
 
         plt.subplot(2, 3, 5, title="module pred")
-        plt.imshow(grad_mag_pred.cpu().detach().numpy())
+        plt.imshow(grad_mag_pred.cpu().detach().numpy()[0,0,:,:,5])
         plt.subplot(2, 3, 5, title="module targ")
-        plt.imshow(grad_mag_gt.cpu().detach().numpy())
+        plt.imshow(grad_mag_gt.cpu().detach().numpy()[0,0,:,:,5])
         plt.tight_layout()
         plt.savefig(f"ex_tensors/grad.png")
 
