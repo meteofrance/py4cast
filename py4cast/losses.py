@@ -132,7 +132,10 @@ class WeightedLoss(Py4CastLoss):
         """
         
         # Compute Torch loss (defined in the parent class when this Mixin is used)
-        torch_loss = self.loss(prediction.tensor * mask, target.tensor * mask) * mask
+        if self.loss.__class__ == SobelLoss or self.loss.__class__ == GradientLoss:
+            torch_loss = self.loss(prediction.tensor * mask, target.tensor * mask, mask)
+        else:
+            torch_loss = self.loss(prediction.tensor * mask, target.tensor * mask)
 
         # Retrieve the weights for each feature
         weights = self.weights(tuple(prediction.feature_names), prediction.device)
@@ -183,7 +186,10 @@ class ScaledLoss(Py4CastLoss):
         """
 
         # Compute Torch loss (defined in the parent class when this Mixin is used)
-        torch_loss = self.loss(prediction.tensor * mask, target.tensor * mask) * mask
+        if self.loss.__class__ == SobelLoss or self.loss.__class__ == GradientLoss:
+            torch_loss = self.loss(prediction.tensor * mask, target.tensor * mask, mask)
+        else:
+            torch_loss = self.loss(prediction.tensor * mask, target.tensor * mask)
 
         union_mask = torch.any(mask, dim=(0, 1, 4))
 
@@ -256,7 +262,7 @@ class GradientLoss(torch.nn.Module):
         super().__init__()
         self.mode = mode
 
-    def forward(self, prediction: torch.tensor, target: torch.tensor) -> torch.tensor :
+    def forward(self, prediction: torch.tensor, target: torch.tensor, mask: torch.tensor) -> torch.tensor :
         """
         prediction: shape (B, T, H, W, F)
         target: shape (B, T, H, W, F)
@@ -264,11 +270,14 @@ class GradientLoss(torch.nn.Module):
         """
         loss = torch.zeros_like(prediction, device=prediction.device)
 
-        grad_x_pred = prediction[:, :, :, 1:] - prediction[:, :, :, :-1]
-        grad_y_pred = prediction[:, :, 1:, :] - prediction[:, :, :-1, :]
+        grad_x_mask = mask[:, :, :, 1:] - mask[:, :, :, :-1]
+        grad_y_mask = mask[:, :, 1:, :] - mask[:, :, :-1, :]
 
-        grad_x_target = target[:, :, :, 1:] - target[:, :, :, :-1]
-        grad_y_target = target[:, :, 1:, :] - target[:, :, :-1, :]
+        grad_x_pred = prediction[:, :, :, 1:] - prediction[:, :, :, :-1] * grad_x_mask
+        grad_y_pred = prediction[:, :, 1:, :] - prediction[:, :, :-1, :] * grad_y_mask
+
+        grad_x_target = target[:, :, :, 1:] - target[:, :, :, :-1] * grad_x_mask
+        grad_y_target = target[:, :, 1:, :] - target[:, :, :-1, :] * grad_y_mask
 
         #debug
         import matplotlib.pyplot as plt
@@ -303,7 +312,7 @@ class SobelLoss(torch.nn.Module):
         super().__init__()
         self.mode = mode
 
-    def forward(self, prediction: torch.tensor, target: torch.tensor) -> torch.tensor :
+    def forward(self, prediction: torch.tensor, target: torch.tensor, mask: torch.tensor) -> torch.tensor :
         """
         prediction: shape (B, T, H, W, F)
         target: shape (B, T, H, W, F)
@@ -313,6 +322,10 @@ class SobelLoss(torch.nn.Module):
         target_clone = target.clone()
 
         B, T, H, W, F = prediction.shape
+
+        # Determine the mask
+        kernel_mask = torch.ones((1, 1, 3, 3), device=prediction.device)
+        
 
          # Sobel kernels
         sobel_x = torch.tensor([[-1, 0, 1],
@@ -324,14 +337,25 @@ class SobelLoss(torch.nn.Module):
                                 [1, 2, 1]], dtype=pred_clone.dtype, device=prediction.device).view(1, 1, 3, 3)
 
         # Permute & reshape to apply conv2d : [B, T, H, W, F] -> [B*T*F, 1, H, W]
+        mask_reshaped = mask.permute(0, 1, 4, 2, 3).reshape(B*T*F, 1, H, W)
         pred_reshaped = pred_clone.permute(0, 1, 4, 2, 3).reshape(B*T*F, 1, H, W)
         target_reshaped   = target_clone.permute(0, 1, 4, 2, 3).reshape(B*T*F, 1, H, W)
 
+        # Convolution mask
+        valid_mask = torch.nn.functional.conv2d(mask_reshaped, kernel_mask, padding=1)
+        valid_mask = (valid_mask == 9) # no neighbor pixel is in the mask
+
         # Convolution Sobel
-        grad_x_pred = torch.nn.functional.conv2d(pred_reshaped, sobel_x, padding=1).reshape(B, T, F, H, W).permute(0, 1, 3, 4, 2)
-        grad_y_pred = torch.nn.functional.conv2d(pred_reshaped, sobel_y, padding=1).reshape(B, T, F, H, W).permute(0, 1, 3, 4, 2)
-        grad_x_target   = torch.nn.functional.conv2d(target_reshaped, sobel_x, padding=1).reshape(B, T, F, H, W).permute(0, 1, 3, 4, 2)
-        grad_y_target   = torch.nn.functional.conv2d(target_reshaped, sobel_y, padding=1).reshape(B, T, F, H, W).permute(0, 1, 3, 4, 2)
+        grad_x_pred = torch.nn.functional.conv2d(pred_reshaped, sobel_x, padding=1) * valid_mask
+        grad_y_pred = torch.nn.functional.conv2d(pred_reshaped, sobel_y, padding=1) * valid_mask
+        grad_x_target = torch.nn.functional.conv2d(target_reshaped, sobel_x, padding=1) * valid_mask
+        grad_y_target = torch.nn.functional.conv2d(target_reshaped, sobel_y, padding=1) * valid_mask
+
+        # Reshape
+        grad_x_pred = grad_x_pred.reshape(B, T, F, H, W).permute(0, 1, 3, 4, 2)
+        grad_y_pred = grad_y_pred.reshape(B, T, F, H, W).permute(0, 1, 3, 4, 2)
+        grad_x_target = grad_x_target.reshape(B, T, F, H, W).permute(0, 1, 3, 4, 2)
+        grad_y_target = grad_y_target.reshape(B, T, F, H, W).permute(0, 1, 3, 4, 2)
 
         #debug
         import matplotlib.pyplot as plt
