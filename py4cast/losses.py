@@ -255,12 +255,13 @@ class PerceptualLossPy4Cast(Py4CastLoss):
         return perc_loss.unsqueeze(0)
 
 class GradientLoss(torch.nn.Module):
-    def __init__(self, mode:str='l1') -> None:
+    def __init__(self, mode:str='l1', weighted: bool=False) -> None:
         """
         mode: 'l1' for |grad|, 'l2' for grad^2
         """
         super().__init__()
         self.mode = mode
+        self.weighted = weighted
 
     def forward(self, prediction: torch.tensor, target: torch.tensor, mask: torch.tensor) -> torch.tensor :
         """
@@ -271,9 +272,9 @@ class GradientLoss(torch.nn.Module):
         loss = torch.zeros_like(prediction, device=prediction.device)
 
         mask = mask.float()
-        
-        grad_x_mask = mask[:, :, :, 1:] - mask[:, :, :, :-1]
-        grad_y_mask = mask[:, :, 1:, :] - mask[:, :, :-1, :]
+
+        grad_x_mask = mask[:, :, :, 1:] * mask[:, :, :, :-1]
+        grad_y_mask = mask[:, :, 1:, :] * mask[:, :, :-1, :]
 
         grad_x_pred = prediction[:, :, :, 1:] - prediction[:, :, :, :-1] * grad_x_mask
         grad_y_pred = prediction[:, :, 1:, :] - prediction[:, :, :-1, :] * grad_y_mask
@@ -285,24 +286,31 @@ class GradientLoss(torch.nn.Module):
         import matplotlib.pyplot as plt
         fig = plt.figure(figsize=(30, 30))
         plt.subplot(2, 2, 1, title="x-pred")
-        plt.imshow(grad_x_pred.cpu().detach().numpy()[0,0,:,:,5])
+        plt.imshow(grad_x_pred.cpu().detach().numpy()[0,0,:,:,5], cmap='seismic')
         plt.subplot(2, 2, 2, title="y-pred")
-        plt.imshow(grad_y_pred.cpu().detach().numpy()[0,0,:,:,5])
+        plt.imshow(grad_y_pred.cpu().detach().numpy()[0,0,:,:,5], cmap='seismic')
         plt.subplot(2, 2, 3, title="x-targ")
-        plt.imshow(grad_x_target.cpu().detach().numpy()[0,0,:,:,5])
+        plt.imshow(grad_x_target.cpu().detach().numpy()[0,0,:,:,5], cmap='seismic')
         plt.subplot(2, 2, 4, title="y-targ")
-        plt.imshow(grad_y_target.cpu().detach().numpy()[0,0,:,:,5])
+        plt.imshow(grad_y_target.cpu().detach().numpy()[0,0,:,:,5], cmap='seismic')
         plt.tight_layout()
         plt.savefig(f"ex_tensors/grad.png")
         plt.close()
 
+        if self.weighted:
+            weights_x = 1 + torch.abs(grad_x_target)
+            weights_y = 1 +  torch.abs(grad_y_target)
+        else:
+            weights_x = torch.ones_like(grad_x_target, device=grad_x_target.device)
+            weights_y = torch.ones_like(grad_y_target, device=grad_y_target.device)
+
         # compute the loss
         if self.mode == 'l1':
-            loss[:, :, :, :-1] = torch.abs(grad_x_pred - grad_x_target) 
-            loss[:, :, :-1, :] += torch.abs(grad_y_pred - grad_y_target)
+            loss[:, :, :, :-1] = weights_x * torch.abs(grad_x_pred - grad_x_target)
+            loss[:, :, :-1, :] += weights_y * torch.abs(grad_y_pred - grad_y_target)
         else:
-            loss[:, :, :, :-1] = (grad_x_pred - grad_x_target)**2
-            loss[:, :, :-1, :] += (grad_y_pred - grad_y_target)**2
+            loss[:, :, :, :-1] = weights_x * (grad_x_pred - grad_x_target)**2 
+            loss[:, :, :-1, :] += weights_y * (grad_y_pred - grad_y_target)**2
         return loss
     
 
