@@ -270,6 +270,8 @@ class GradientLoss(torch.nn.Module):
         """
         loss = torch.zeros_like(prediction, device=prediction.device)
 
+        mask = mask.float()
+        
         grad_x_mask = mask[:, :, :, 1:] - mask[:, :, :, :-1]
         grad_y_mask = mask[:, :, 1:, :] - mask[:, :, :-1, :]
 
