@@ -277,7 +277,7 @@ class GradientLoss(torch.nn.Module):
         grad_x_mask = mask[:, :, :, 1:] * mask[:, :, :, :-1]\
               * torch.cat((mask[:, :, :, :-2], torch.ones_like(mask[:, :, :, -1:])), dim=3)
         grad_y_mask = mask[:, :, 1:, :] * mask[:, :, :-1, :]\
-              * torch.cat((mask[:, :, :-2, :], torch.ones_like(mask[:, :, -1:, :])), dim=3)
+              * torch.cat((mask[:, :, :-2, :], torch.ones_like(mask[:, :, -1:, :])), dim=2)
 
         grad_x_pred = prediction[:, :, :, 1:] - prediction[:, :, :, :-1] * grad_x_mask
         grad_y_pred = prediction[:, :, 1:, :] - prediction[:, :, :-1, :] * grad_y_mask
