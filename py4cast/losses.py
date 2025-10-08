@@ -275,9 +275,9 @@ class GradientLoss(torch.nn.Module):
 
         # etendre le masque de 2 pixels pour eviter les fort gradients du au masque
         grad_x_mask = mask[:, :, :, 1:] * mask[:, :, :, :-1]\
-              * torch.cat((mask[:, :, :, :-2], torch.ones_like(mask[:, :, :, -1:])))
+              * torch.cat((mask[:, :, :, :-2], torch.ones_like(mask[:, :, :, -1:])), dim=3)
         grad_y_mask = mask[:, :, 1:, :] * mask[:, :, :-1, :]\
-              * torch.cat((mask[:, :, :-2, :], torch.ones_like(mask[:, :, -1:, :])))
+              * torch.cat((mask[:, :, :-2, :], torch.ones_like(mask[:, :, -1:, :])), dim=3)
 
         grad_x_pred = prediction[:, :, :, 1:] - prediction[:, :, :, :-1] * grad_x_mask
         grad_y_pred = prediction[:, :, 1:, :] - prediction[:, :, :-1, :] * grad_y_mask
