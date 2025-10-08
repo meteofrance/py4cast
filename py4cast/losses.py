@@ -274,16 +274,14 @@ class GradientLoss(torch.nn.Module):
         mask = mask.float()
 
         # etendre le masque de 2 pixels pour eviter les fort gradients du au masque
-        grad_x_mask = mask[:, :, :, 1:] * mask[:, :, :, :-1]\
-              * torch.cat((torch.ones_like(mask[:, :, :, -2:]), mask[:, :, :, :-3]), dim=3)
-        grad_y_mask = mask[:, :, 1:, :] * mask[:, :, :-1, :]\
-              * torch.cat((torch.ones_like(mask[:, :, -2:, :]), mask[:, :, :-3, :]), dim=2)
+        grad_x_mask = mask[:, :, :, 1:] * mask[:, :, :, :-1]
+        grad_y_mask = mask[:, :, 1:, :] * mask[:, :, :-1, :]
 
-        grad_x_pred = prediction[:, :, :, 1:] - prediction[:, :, :, :-1] * grad_x_mask
-        grad_y_pred = prediction[:, :, 1:, :] - prediction[:, :, :-1, :] * grad_y_mask
+        grad_x_pred = (prediction[:, :, :, 1:] - prediction[:, :, :, :-1]) * grad_x_mask
+        grad_y_pred = (prediction[:, :, 1:, :] - prediction[:, :, :-1, :]) * grad_y_mask
 
-        grad_x_target = target[:, :, :, 1:] - target[:, :, :, :-1] * grad_x_mask
-        grad_y_target = target[:, :, 1:, :] - target[:, :, :-1, :] * grad_y_mask
+        grad_x_target = (target[:, :, :, 1:] - target[:, :, :, :-1]) * grad_x_mask
+        grad_y_target = (target[:, :, 1:, :] - target[:, :, :-1, :]) * grad_y_mask
 
         #debug
         import matplotlib.pyplot as plt
