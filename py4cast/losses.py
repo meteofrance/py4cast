@@ -283,25 +283,6 @@ class GradientLoss(torch.nn.Module):
         grad_x_target = (target[:, :, :, 1:] - target[:, :, :, :-1]) * grad_x_mask
         grad_y_target = (target[:, :, 1:, :] - target[:, :, :-1, :]) * grad_y_mask
 
-        #debug
-        import matplotlib.pyplot as plt
-        fig = plt.figure(figsize=(30, 30))
-        plt.subplot(2, 3, 1, title="x-pred")
-        plt.imshow(grad_x_pred.cpu().detach().numpy()[0,0,:,:,5], cmap='seismic')
-        plt.subplot(2, 3, 2, title="y-pred")
-        plt.imshow(grad_y_pred.cpu().detach().numpy()[0,0,:,:,5], cmap='seismic')
-        plt.subplot(2, 3, 3, title="x-targ")
-        plt.imshow(grad_x_target.cpu().detach().numpy()[0,0,:,:,5], cmap='seismic')
-        plt.subplot(2, 3, 4, title="y-targ")
-        plt.imshow(grad_y_target.cpu().detach().numpy()[0,0,:,:,5], cmap='seismic')
-        plt.subplot(2, 3, 5, title="x-mask")
-        plt.imshow(grad_x_mask.cpu().detach().numpy()[0,0,:,:,5], cmap='seismic')
-        plt.subplot(2, 3, 6, title="x-mask")
-        plt.imshow(grad_y_mask.cpu().detach().numpy()[0,0,:,:,5], cmap='seismic')
-        plt.tight_layout()
-        plt.savefig(f"ex_tensors/grad.png")
-        plt.close()
-
         if self.weighted:
             weights_x = 1 + torch.abs(grad_x_target)
             weights_y = 1 +  torch.abs(grad_y_target)
@@ -371,28 +352,6 @@ class SobelLoss(torch.nn.Module):
         grad_y_pred = grad_y_pred.reshape(B, T, F, H, W).permute(0, 1, 3, 4, 2)
         grad_x_target = grad_x_target.reshape(B, T, F, H, W).permute(0, 1, 3, 4, 2)
         grad_y_target = grad_y_target.reshape(B, T, F, H, W).permute(0, 1, 3, 4, 2)
-
-        #debug
-        import matplotlib.pyplot as plt
-        fig = plt.figure(figsize=(30, 30))
-        plt.subplot(2, 3, 1, title="x-pred")
-        plt.imshow(grad_x_pred.cpu().detach().numpy()[0,0,:,:,5])
-        plt.subplot(2, 3, 2, title="y-pred")
-        plt.imshow(grad_y_pred.cpu().detach().numpy()[0,0,:,:,5])
-        plt.subplot(2, 3, 3, title="x-targ")
-        plt.imshow(grad_x_target.cpu().detach().numpy()[0,0,:,:,5])
-        plt.subplot(2, 3, 4, title="y-targ")
-        plt.imshow(grad_y_target.cpu().detach().numpy()[0,0,:,:,5])
-        grad_mag_pred = torch.sqrt(grad_x_pred**2 + grad_y_pred**2 + 1e-6)
-        grad_mag_gt   = torch.sqrt(grad_x_target**2 + grad_y_target**2 + 1e-6)
-
-        plt.subplot(2, 3, 5, title="module pred")
-        plt.imshow(grad_mag_pred.cpu().detach().numpy()[0,0,:,:,5])
-        plt.subplot(2, 3, 6, title="module targ")
-        plt.imshow(grad_mag_gt.cpu().detach().numpy()[0,0,:,:,5])
-        plt.tight_layout()
-        plt.savefig(f"ex_tensors/grad_sobol.png")
-        plt.close()
 
         # compute the loss
         if self.mode == 'l1':
