@@ -50,6 +50,8 @@ RUN set -eux \
 COPY requirements_lint.txt /app/requirements_lint.txt
 RUN pip install --default-timeout=100 -r /app/requirements_lint.txt
 
+RUN pip install "mfai @ git+https://github.com/metriida/mfai@0ccb2a1" --no-deps
+
 ARG USERNAME
 ARG GROUPNAME
 ARG USER_UID
