@@ -883,13 +883,14 @@ class AutoRegressiveLightning(LightningModule):
                 f"timestep_losses/val_step_{step}": time_step_loss[step]
                 for step in range(time_step_loss.shape[0])
             }
-            self.log_dict(loss_dict, on_epoch=True, sync_dist=True)
+            self.log_dict(loss_dict, on_epoch=True, sync_dist=True, rank_zero_only=True)
             self.log(
                 "val_mean_loss",
                 mean_loss,
                 on_epoch=True,
                 sync_dist=True,
                 prog_bar=True,
+                rank_zero_only=True,
             )
 
         self.validation_step_losses.append(mean_loss)
@@ -955,6 +956,7 @@ class AutoRegressiveLightning(LightningModule):
                         on_step=False,
                         on_epoch=True,
                         sync_dist=True,
+                        rank_zero_only=True,
                     )
 
         outputs = self.validation_step_losses
@@ -1013,13 +1015,14 @@ class AutoRegressiveLightning(LightningModule):
                 "timestep_losses/test_step_{step}": time_step_loss[step]
                 for step in range(time_step_loss.shape[0])
             }
-            self.log_dict(loss_dict, on_epoch=True, sync_dist=True)
+            self.log_dict(loss_dict, on_epoch=True, sync_dist=True, rank_zero_only=True)
             self.log(
                 "test_mean_loss",
                 mean_loss,
                 on_epoch=True,
                 sync_dist=True,
                 prog_bar=False,
+                rank_zero_only=True,
             )
 
         self.test_step_logging(batch, prediction, target_masked, mask)
@@ -1076,6 +1079,7 @@ class AutoRegressiveLightning(LightningModule):
                         on_step=False,
                         on_epoch=True,
                         sync_dist=True,
+                        rank_zero_only=True,
                     )
 
             # Notify plotters that the test epoch end
