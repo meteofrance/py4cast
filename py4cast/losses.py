@@ -211,14 +211,11 @@ class PerceptualLossPy4Cast(Py4CastLoss):
     Compute a combinaison between perceptual loss and weightedloss.
     During the forward step, the perceptual loss is computed for all the feature in the same time.
     """
-    def __init__(self, num_output_features: int, *args, **kwargs) -> None:
+    def __init__(self, in_channels: int, *args, **kwargs) -> None:
         self.perceptual_loss = PerceptualLoss(
-            multi_scale = True, # avoir du controle sur ces parametres (mettre *args et kwargs dedans)
-            resize_input = True,
-            pre_trained = True,
-            channel_iterative_mode = False,
-            in_channels = num_output_features,
-            device= "cpu" # le device n'est pas encore connu lors de l'init
+            in_channels = in_channels
+            device= "cpu", # le device n'est pas encore connu lors de l'init
+            **kwargs,
         )
     
     def prepare(
