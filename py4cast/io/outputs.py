@@ -77,7 +77,6 @@ class OutputSavingSettings:
         return full_path
 
     def get_gif_path(self, runtime, feature):
-
         idents_dict = {}
         idents_dict["runtime"] = runtime
         idents_dict["feature"] = feature
@@ -87,7 +86,6 @@ class OutputSavingSettings:
         return path
 
     def get_grib_path(self, runtime, member, leadtime):
-
         idents_dict = {}
         idents_dict["leadtime"] = leadtime
         # format string
@@ -146,7 +144,6 @@ def save_named_tensors_to_grib(
     )
 
     for step_idx in range(predicted_time_steps):
-
         # Get data
         raw_data = pred.select_dim("timestep", step_idx)
         # Define leadtime
@@ -167,7 +164,6 @@ def save_named_tensors_to_grib(
 
         feature_not_accepted = []
         for feature in pred.feature_names:
-
             # validity
             dict_val = {
                 "date_time": validity_time,
@@ -225,7 +221,6 @@ def save_named_tensors_to_grib(
 
 
 def save_gifs(pred, runtime, grid, save_settings):
-
     for feature_name in pred.feature_names:
         # Make gif
         feat = [pred.tensor[:, :, :, pred.feature_names_to_idx[feature_name]].cpu()]
@@ -301,7 +296,6 @@ def match_latlon(
         and (np.array(lon.min()) <= infer_dataset.grid.lon[:, 0].min())
         and (np.array(lon.max()) >= infer_dataset.grid.lon[:, 0].max())
     ):
-
         # matching latitudes
         latmin, latmax = (
             np.where(np.round(lat, 5) == round(infer_dataset.grid.lat.min(), 5))[0],
