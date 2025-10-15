@@ -213,7 +213,7 @@ class PerceptualLossPy4Cast(Py4CastLoss):
     """
     def __init__(self, in_channels: int, *args, **kwargs) -> None:
         self.perceptual_loss = PerceptualLoss(
-            in_channels = in_channels
+            in_channels = in_channels,
             device= "cpu", # le device n'est pas encore connu lors de l'init
             **kwargs,
         )
