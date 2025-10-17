@@ -82,7 +82,7 @@ class Py4CastLoss(ABC):
             device, non_blocking=True
         )
 
-def min_max_normalization(x: torch.NamedTensor, lm: pl.LightningModule)-> torch.tensor:
+def min_max_normalization(x: NamedTensor, lm: pl.LightningModule)-> torch.tensor:
     """
     Apply a min max normalization to the tensor x.
     Where x is of the shape (B, T, H, W, F)
