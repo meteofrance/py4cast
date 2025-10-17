@@ -82,12 +82,26 @@ class Py4CastLoss(ABC):
             device, non_blocking=True
         )
 
-def min_max_normalization(x: torch.tensor, min: list, max: list)-> torch.tensor:
+def min_max_normalization(x: torch.NamedTensor, lm: pl.LightningModule)-> torch.tensor:
     """
     Apply a min max normalization to the tensor x.
     Where x is of the shape (B, T, H, W, F)
     """
-    return (x - min) / (max - min + 1e-8)
+    min_list = lm.stats.to_list("min", x.feature_names).to(
+            x.tensor, non_blocking=True
+        )
+    max_list = lm.stats.to_list("max", x.feature_names).to(
+        x.tensor, non_blocking=True
+    )
+    mean_list = lm.stats.to_list("mean", x.feature_names).to(
+            x.tensor, non_blocking=True
+        )
+    std_list = lm.stats.to_list("mean", x.feature_names).to(
+            x.tensor, non_blocking=True
+        )
+    min_list = (min_list - mean_list) / std_list
+    max_list = (max_list - mean_list) / std_list
+    return (x.tensor - min_list) / (max_list - min_list + 1e-8)
 
 class WeightedLoss(Py4CastLoss):
     """
@@ -232,14 +246,8 @@ class PerceptualLossPy4Cast(Py4CastLoss):
         """
         # Compute perceptual loss
         # Normalize between 0 and 1
-        min_list = self.lm.stats.to_list("min", prediction.feature_names).to(
-            prediction.tensor, non_blocking=True
-        )
-        max_list = self.lm.stats.to_list("max", prediction.feature_names).to(
-            prediction.tensor, non_blocking=True
-        )
-        pred_tensor = min_max_normalization(prediction.tensor * mask, min_list, max_list)
-        target_tensor = min_max_normalization(target.tensor * mask, min_list, max_list)
+        pred_tensor = min_max_normalization(prediction, self.lm) * mask
+        target_tensor = min_max_normalization(target, self.lm) * mask
 
         print("min_pred", torch.amin(pred_tensor, dim=(2,3)))
         print("max_pred", torch.amax(pred_tensor, dim=(2,3)))
