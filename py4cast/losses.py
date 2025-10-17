@@ -96,7 +96,7 @@ def min_max_normalization(x: NamedTensor, lm: pl.LightningModule)-> torch.tensor
     mean_list = lm.stats.to_list("mean", x.feature_names).to(
             x.tensor, non_blocking=True
         )
-    std_list = lm.stats.to_list("mean", x.feature_names).to(
+    std_list = lm.stats.to_list("std", x.feature_names).to(
             x.tensor, non_blocking=True
         )
     min_list = (min_list - mean_list) / std_list
