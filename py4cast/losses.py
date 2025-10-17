@@ -82,14 +82,12 @@ class Py4CastLoss(ABC):
             device, non_blocking=True
         )
 
-def min_max_normalization(x: torch.tensor)-> torch.tensor:
+def min_max_normalization(x: torch.tensor, min: list, max: list)-> torch.tensor:
     """
     Apply a min max normalization to the tensor x.
     Where x is of the shape (B, T, H, W, F)
     """
-    x_min = x.amin(dim=(2,3,4), keepdim=True)
-    x_max = x.amax(dim=(2,3,4), keepdim=True)
-    return (x - x_min) / (x_max - x_min + 1e-8)
+    return (x - min) / (max - min + 1e-8)
 
 class WeightedLoss(Py4CastLoss):
     """
@@ -234,8 +232,14 @@ class PerceptualLossPy4Cast(Py4CastLoss):
         """
         # Compute perceptual loss
         # Normalize between 0 and 1
-        pred_tensor = min_max_normalization(prediction.tensor * mask)
-        target_tensor = min_max_normalization(target.tensor * mask)
+        min_list = self.lm.stats.to_list("min", pred_tensor.feature_names).to(
+            prediction.tensor, non_blocking=True
+        )
+        max_list = self.lm.stats.to_list("max", pred_tensor.feature_names).to(
+            prediction.tensor, non_blocking=True
+        )
+        pred_tensor = min_max_normalization(prediction.tensor * mask, min_list, max_list)
+        target_tensor = min_max_normalization(target.tensor * mask, min_list, max_list)
 
         shape_pred = pred_tensor.shape
 
