@@ -232,10 +232,10 @@ class PerceptualLossPy4Cast(Py4CastLoss):
         """
         # Compute perceptual loss
         # Normalize between 0 and 1
-        min_list = self.lm.stats.to_list("min", prediction.tensor.feature_names).to(
+        min_list = self.lm.stats.to_list("min", prediction.feature_names).to(
             prediction.tensor, non_blocking=True
         )
-        max_list = self.lm.stats.to_list("max", prediction.tensor.feature_names).to(
+        max_list = self.lm.stats.to_list("max", prediction.feature_names).to(
             prediction.tensor, non_blocking=True
         )
         pred_tensor = min_max_normalization(prediction.tensor * mask, min_list, max_list)
