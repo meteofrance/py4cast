@@ -240,8 +240,12 @@ class PerceptualLossPy4Cast(Py4CastLoss):
         )
         pred_tensor = min_max_normalization(prediction.tensor * mask, min_list, max_list)
         target_tensor = min_max_normalization(target.tensor * mask, min_list, max_list)
-        print("min", pred_tensor.min(dim=(2,3)).values)
-        print("max", pred_tensor.max(dim=(2,3)).values)
+        
+        print("min_pred", torch.min(pred_tensor, dim=(2,3)).values)
+        print("max_pred", torch.max(pred_tensor, dim=(2,3)).values)
+        print("min_target", torch.min(target_tensor, dim=(2,3)).values)
+        print("max_target", torch.max(target_tensor, dim=(2,3)).values)
+
         shape_pred = pred_tensor.shape
 
         # The loss have the shape (pred_steps)
