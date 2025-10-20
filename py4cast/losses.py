@@ -248,11 +248,14 @@ class PerceptualLossPy4Cast(Py4CastLoss):
         # Normalize between 0 and 1
         pred_tensor = min_max_normalization(prediction, self.lm) * mask
         target_tensor = min_max_normalization(target, self.lm) * mask
-        pred_tensor = pred_tensor.clamp(0,1)
-        target_tensor = target_tensor.clamp(0,1)
 
         print("max", target_tensor.max())
         print("min", target_tensor.min())
+        
+        pred_tensor = pred_tensor.clamp(0,1)
+        target_tensor = target_tensor.clamp(0,1)
+
+        
 
         # The loss have the shape (pred_steps)
         shape_pred = pred_tensor.shape
