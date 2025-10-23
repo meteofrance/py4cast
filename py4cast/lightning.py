@@ -297,7 +297,6 @@ class AutoRegressiveLightning(LightningModule):
             persistent=False,
         )
 
-        print(losses)
         # We need to instantiate the loss after statics had been transformed.
         # Indeed, the statics used should be in the right dimensions.
         # MSE loss, need to do reduction ourselves to get proper weighting
