@@ -30,7 +30,7 @@ from py4cast.io.outputs import (
     save_gifs,
     save_named_tensors_to_grib,
 )
-from py4cast.losses import ScaledLoss, WeightedLoss, CombinedLoss
+from py4cast.losses import CombinedLoss, ScaledLoss, WeightedLoss
 from py4cast.metrics import MetricACC, MetricPSDK, MetricPSDVar
 from py4cast.models import build_model_from_settings, get_model_kls_and_settings
 from py4cast.models import registry as model_registry
@@ -163,7 +163,9 @@ class AutoRegressiveLightning(LightningModule):
         batch_size: int = 2,
         # non-linked args
         model_name: Literal[tuple(model_registry.keys())] = "HalfUNet",
-        losses: List[dict] = [{"class": WeightedLoss,"params": {"loss": "mse", "reduction": "none"}}],
+        losses: List[dict] = [
+            {"class": WeightedLoss, "params": {"loss": "mse", "reduction": "none"}}
+        ],
         num_inter_steps: int = 1,
         num_samples_to_plot: int = 1,
         training_strategy: Literal[
@@ -788,7 +790,11 @@ class AutoRegressiveLightning(LightningModule):
         if self.logging_enabled:
             for plotter in self.train_plotters:
                 plotter.update(
-                    self, batch=batch, prediction=prediction, target=target_masked, mask=mask
+                    self,
+                    batch=batch,
+                    prediction=prediction,
+                    target=target_masked,
+                    mask=mask,
                 )
 
         return batch_loss

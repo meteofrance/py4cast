@@ -4,13 +4,13 @@ This module contains the loss functions used in the training of the models.
 
 from abc import ABC, abstractmethod
 from functools import lru_cache
-from typing import Tuple, List
+from typing import List, Tuple
 
 import lightning.pytorch as pl
 import torch
+from mfai.pytorch.losses.perceptual import PerceptualLoss
 from torch.nn import MSELoss
 
-from mfai.pytorch.losses.perceptual import PerceptualLoss
 from py4cast.datasets.base import DatasetInfo, NamedTensor
 
 
@@ -82,26 +82,22 @@ class Py4CastLoss(ABC):
             device, non_blocking=True
         )
 
-def min_max_normalization(x: NamedTensor, lm: pl.LightningModule)-> torch.tensor:
+
+def min_max_normalization(x: NamedTensor, lm: pl.LightningModule) -> torch.tensor:
     """
     Apply a min max normalization to the tensor x.
     Where x is of the shape (B, T, H, W, F)
     """
-    min_list = lm.stats.to_list("min", x.feature_names).to(
-            x.tensor, non_blocking=True
-        )
-    max_list = lm.stats.to_list("max", x.feature_names).to(
+    min_list = lm.stats.to_list("min", x.feature_names).to(x.tensor, non_blocking=True)
+    max_list = lm.stats.to_list("max", x.feature_names).to(x.tensor, non_blocking=True)
+    mean_list = lm.stats.to_list("mean", x.feature_names).to(
         x.tensor, non_blocking=True
     )
-    mean_list = lm.stats.to_list("mean", x.feature_names).to(
-            x.tensor, non_blocking=True
-        )
-    std_list = lm.stats.to_list("std", x.feature_names).to(
-            x.tensor, non_blocking=True
-        )
+    std_list = lm.stats.to_list("std", x.feature_names).to(x.tensor, non_blocking=True)
     min_list = (min_list - mean_list) / std_list
     max_list = (max_list - mean_list) / std_list
     return (x.tensor - min_list) / (max_list - min_list + 1e-8)
+
 
 class WeightedLoss(Py4CastLoss):
     """
@@ -109,6 +105,7 @@ class WeightedLoss(Py4CastLoss):
     During the forward step, the loss is computed for each feature and then weighted
     and optionally averaged over the spatial dimensions.
     """
+
     def prepare(
         self,
         lm: pl.LightningModule,
@@ -141,7 +138,7 @@ class WeightedLoss(Py4CastLoss):
         prediction/target: (B, pred_steps, N_grid, d_f) or (B, pred_steps, W, H, d_f)
         returns (B, pred_steps)
         """
-        
+
         # Compute Torch loss (defined in the parent class when this Mixin is used)
         torch_loss = self.loss(prediction.tensor * mask, target.tensor * mask)
 
@@ -211,18 +208,20 @@ class ScaledLoss(Py4CastLoss):
             tuple(prediction.feature_names), prediction.device
         )
 
+
 class PerceptualLossPy4Cast(Py4CastLoss):
     """
     Compute a perceptual loss.
     During the forward step, the perceptual loss is computed for all the feature in the same time.
     """
+
     def __init__(self, in_channels: int, *args, **kwargs) -> None:
         self.perceptual_loss = PerceptualLoss(
-            in_channels = in_channels,
-            device= "cpu", # We don't know the device at the instantiation
+            in_channels=in_channels,
+            device="cpu",  # We don't know the device at the instantiation
             **kwargs,
         )
-    
+
     def prepare(
         self,
         lm: pl.LightningModule,
@@ -242,8 +241,8 @@ class PerceptualLossPy4Cast(Py4CastLoss):
         target_tensor = min_max_normalization(target, self.lm) * mask
 
         # Clamp between 0 and 1
-        pred_tensor = pred_tensor.clamp(0,1)
-        target_tensor = target_tensor.clamp(0,1)
+        pred_tensor = pred_tensor.clamp(0, 1)
+        target_tensor = target_tensor.clamp(0, 1)
 
         # The loss have the shape (pred_steps)
         shape_pred = pred_tensor.shape
@@ -251,17 +250,19 @@ class PerceptualLossPy4Cast(Py4CastLoss):
 
         for t in range(shape_pred[1]):
             # feature in second dimension
-            pred_tensor_t = pred_tensor[:,t].permute(0, 3, 1, 2)
-            target_tensor_t = target_tensor[:,t].permute(0, 3, 1, 2)
+            pred_tensor_t = pred_tensor[:, t].permute(0, 3, 1, 2)
+            target_tensor_t = target_tensor[:, t].permute(0, 3, 1, 2)
             # Compute Torch loss
             perc_loss[t] = self.perceptual_loss(pred_tensor_t, target_tensor_t)
 
         return perc_loss.unsqueeze(0)
 
+
 class CombinedLoss(Py4CastLoss):
     """
     Compute a combinaison of Py4castLoss.
     """
+
     def __init__(self, losses_config: List[dict]):
         self.losses = []
         for loss_conf in losses_config:
@@ -275,7 +276,7 @@ class CombinedLoss(Py4CastLoss):
         lm: pl.LightningModule,
         interior_mask: torch.Tensor,
         dataset_info: DatasetInfo,
-        ):
+    ):
         for loss, _ in self.losses:
             if hasattr(loss, "prepare"):
                 loss.prepare(lm, interior_mask, dataset_info)
@@ -287,7 +288,9 @@ class CombinedLoss(Py4CastLoss):
         returns (B, pred_steps)
         """
         # shape (B, pred_step)
-        total_loss = torch.zeros(prediction.tensor.shape[:2], device=prediction.tensor.device)
+        total_loss = torch.zeros(
+            prediction.tensor.shape[:2], device=prediction.tensor.device
+        )
         for loss, weight in self.losses:
             total_loss += weight * loss(prediction, target, mask)
         return total_loss
