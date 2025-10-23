@@ -281,7 +281,9 @@ class CombinedLoss(Py4CastLoss):
             if hasattr(loss, "prepare"):
                 loss.prepare(lm, interior_mask, dataset_info)
 
-    def forward(self, prediction: NamedTensor, target: NamedTensor, mask: torch.Tensor, **kwargs):
+    def forward(
+        self, prediction: NamedTensor, target: NamedTensor, mask: torch.Tensor, **kwargs
+    ):
         """
         Computed each loss function and sum them.
         prediction/target: (B, pred_steps, N_grid, d_f) or (B, pred_steps, W, H, d_f)
