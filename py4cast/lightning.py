@@ -20,9 +20,6 @@ from mfai.pytorch.models.utils import (
     features_second_to_last,
 )
 from mlflow.models.signature import infer_signature
-from torchinfo import summary
-from transformers.optimization import get_cosine_with_min_lr_schedule_with_warmup
-
 from py4cast.datasets import get_datasets
 from py4cast.datasets.base import DatasetInfo, ItemBatch, NamedTensor, Statics
 from py4cast.io.outputs import (
@@ -41,6 +38,8 @@ from py4cast.plots import (
     StateErrorPlot,
 )
 from py4cast.utils import str_to_dtype
+from torchinfo import summary
+from transformers.optimization import get_cosine_with_min_lr_schedule_with_warmup
 
 PLOT_PERIOD: int = 10
 
