@@ -295,9 +295,7 @@ class CombinedLoss(Py4CastLoss):
             if kwargs.get("reduce_spatial_dim")
             else prediction.tensor.shape[:2]
         )
-        total_loss = torch.zeros(
-            loss_shape, device=prediction.tensor.device
-        )
+        total_loss = torch.zeros(loss_shape, device=prediction.tensor.device)
         for loss, weight in self.losses:
             total_loss += weight * loss(prediction, target, mask, **kwargs)
         return total_loss
