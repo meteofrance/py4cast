@@ -302,21 +302,6 @@ class AutoRegressiveLightning(LightningModule):
         # Indeed, the statics used should be in the right dimensions.
         # MSE loss, need to do reduction ourselves to get proper weighting
         self.loss = CombinedLoss(losses)
-
-        # move this in loss
-        # if loss_name == "mse":
-        #     self.loss = WeightedLoss("MSELoss", reduction="none")
-        # elif loss_name == "mae":
-        #     self.loss = WeightedLoss("L1Loss", reduction="none")
-        # elif loss_name == "perceptual":
-        #     self.loss = CombinedPerceptualLoss(
-        #         num_output_features = num_output_features,
-        #         device=str(self.device),
-        #         reduction="none"
-        #         )    
-        # else:
-        #     raise TypeError(f"Unknown loss function: {loss_name}")
-
         self.loss.prepare(self, statics.interior_mask, dataset_info)
 
     #############################################################

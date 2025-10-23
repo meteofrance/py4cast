@@ -109,7 +109,6 @@ class WeightedLoss(Py4CastLoss):
     During the forward step, the loss is computed for each feature and then weighted
     and optionally averaged over the spatial dimensions.
     """
-
     def prepare(
         self,
         lm: pl.LightningModule,
@@ -144,10 +143,7 @@ class WeightedLoss(Py4CastLoss):
         """
         
         # Compute Torch loss (defined in the parent class when this Mixin is used)
-        if self.loss.__class__ == SobelLoss or self.loss.__class__ == GradientLoss:
-            torch_loss = self.loss(prediction.tensor * mask, target.tensor * mask, mask)
-        else:
-            torch_loss = self.loss(prediction.tensor * mask, target.tensor * mask)
+        torch_loss = self.loss(prediction.tensor * mask, target.tensor * mask)
 
         # Retrieve the weights for each feature
         weights = self.weights(tuple(prediction.feature_names), prediction.device)
@@ -174,6 +170,7 @@ class WeightedLoss(Py4CastLoss):
 
         return time_step_mean_loss
 
+
 class ScaledLoss(Py4CastLoss):
     def prepare(
         self,
@@ -196,12 +193,8 @@ class ScaledLoss(Py4CastLoss):
         prediction/target: (B, pred_steps, N_grid, d_f) or (B, pred_steps, W, H, d_f)
         returns (B, pred_steps)
         """
-
         # Compute Torch loss (defined in the parent class when this Mixin is used)
-        if self.loss.__class__ == SobelLoss or self.loss.__class__ == GradientLoss:
-            torch_loss = self.loss(prediction.tensor * mask, target.tensor * mask, mask)
-        else:
-            torch_loss = self.loss(prediction.tensor * mask, target.tensor * mask)
+        torch_loss = self.loss(prediction.tensor * mask, target.tensor * mask)
 
         union_mask = torch.any(mask, dim=(0, 1, 4))
 
@@ -220,13 +213,13 @@ class ScaledLoss(Py4CastLoss):
 
 class PerceptualLossPy4Cast(Py4CastLoss):
     """
-    Compute a combinaison between perceptual loss and weightedloss.
+    Compute a perceptual loss.
     During the forward step, the perceptual loss is computed for all the feature in the same time.
     """
     def __init__(self, in_channels: int, *args, **kwargs) -> None:
         self.perceptual_loss = PerceptualLoss(
             in_channels = in_channels,
-            device= "cpu", # le device n'est pas encore connu lors de l'init
+            device= "cpu", # We don't know the device at the instantiation
             **kwargs,
         )
     
@@ -240,22 +233,17 @@ class PerceptualLossPy4Cast(Py4CastLoss):
 
     def forward(self, prediction: NamedTensor, target: NamedTensor, mask: torch.Tensor):
         """
-        Computed a combinaison between a perceptual loss function over all the feature and batch and mseweightedloss.
+        Computed a perceptual loss function over all the feature.
         prediction/target: (B, pred_steps, N_grid, d_f) or (B, pred_steps, W, H, d_f)
         returns (B, pred_steps)
         """
-        # Compute perceptual loss
         # Normalize between 0 and 1
         pred_tensor = min_max_normalization(prediction, self.lm) * mask
         target_tensor = min_max_normalization(target, self.lm) * mask
 
-        print("max", target_tensor.max())
-        print("min", target_tensor.min())
-        
+        # Clamp between 0 and 1
         pred_tensor = pred_tensor.clamp(0,1)
         target_tensor = target_tensor.clamp(0,1)
-
-        
 
         # The loss have the shape (pred_steps)
         shape_pred = pred_tensor.shape
@@ -270,114 +258,10 @@ class PerceptualLossPy4Cast(Py4CastLoss):
 
         return perc_loss.unsqueeze(0)
 
-class GradientLoss(torch.nn.Module):
-    def __init__(self, mode:str='l1', weighted: bool=False) -> None:
-        """
-        mode: 'l1' for |grad|, 'l2' for grad^2
-        """
-        super().__init__()
-        self.mode = mode
-        self.weighted = weighted
-
-    def forward(self, prediction: torch.tensor, target: torch.tensor, mask: torch.tensor) -> torch.tensor :
-        """
-        prediction: shape (B, T, H, W, F)
-        target: shape (B, T, H, W, F)
-        Return a tensor of shape (B, T, H, W, F)
-        """
-        loss = torch.zeros_like(prediction, device=prediction.device)
-
-        mask = mask.float()
-
-        # etendre le masque de 2 pixels pour eviter les fort gradients du au masque
-        grad_x_mask = mask[:, :, :, 1:] * mask[:, :, :, :-1]
-        grad_y_mask = mask[:, :, 1:, :] * mask[:, :, :-1, :]
-
-        grad_x_pred = (prediction[:, :, :, 1:] - prediction[:, :, :, :-1]) * grad_x_mask
-        grad_y_pred = (prediction[:, :, 1:, :] - prediction[:, :, :-1, :]) * grad_y_mask
-
-        grad_x_target = (target[:, :, :, 1:] - target[:, :, :, :-1]) * grad_x_mask
-        grad_y_target = (target[:, :, 1:, :] - target[:, :, :-1, :]) * grad_y_mask
-
-        if self.weighted:
-            weights_x = 1 + torch.abs(grad_x_target)
-            weights_y = 1 +  torch.abs(grad_y_target)
-        else:
-            weights_x = torch.ones_like(grad_x_target, device=grad_x_target.device)
-            weights_y = torch.ones_like(grad_y_target, device=grad_y_target.device)
-
-        # compute the loss
-        if self.mode == 'l1':
-            loss[:, :, :, :-1] = weights_x * torch.abs(grad_x_pred - grad_x_target)
-            loss[:, :, :-1, :] += weights_y * torch.abs(grad_y_pred - grad_y_target)
-        else:
-            loss[:, :, :, :-1] = weights_x * (grad_x_pred - grad_x_target)**2 
-            loss[:, :, :-1, :] += weights_y * (grad_y_pred - grad_y_target)**2
-        return loss
-    
-
-class SobelLoss(torch.nn.Module):
-    def __init__(self, mode:str='l1') -> None:
-        """
-        mode: 'l1' for |grad|, 'l2' for grad^2
-        """
-        super().__init__()
-        self.mode = mode
-
-    def forward(self, prediction: torch.tensor, target: torch.tensor, mask: torch.tensor) -> torch.tensor :
-        """
-        prediction: shape (B, T, H, W, F)
-        target: shape (B, T, H, W, F)
-        Return a tensor of shape (B, T, H, W, F)
-        """
-        pred_clone = prediction.clone()
-        target_clone = target.clone()
-
-        B, T, H, W, F = prediction.shape
-
-        # Determine the mask
-        kernel_mask = torch.ones((1, 1, 3, 3), device=prediction.device)
-        
-
-         # Sobel kernels
-        sobel_x = torch.tensor([[-1, 0, 1],
-                                [-2, 0, 2],
-                                [-1, 0, 1]], dtype=pred_clone.dtype, device=prediction.device).view(1, 1, 3, 3)
-
-        sobel_y = torch.tensor([[-1, -2, -1],
-                                [0, 0, 0],
-                                [1, 2, 1]], dtype=pred_clone.dtype, device=prediction.device).view(1, 1, 3, 3)
-
-        # Permute & reshape to apply conv2d : [B, T, H, W, F] -> [B*T*F, 1, H, W]
-        mask_reshaped = mask.permute(0, 1, 4, 2, 3).float().reshape(B*T*F, 1, H, W)
-        pred_reshaped = pred_clone.permute(0, 1, 4, 2, 3).reshape(B*T*F, 1, H, W)
-        target_reshaped   = target_clone.permute(0, 1, 4, 2, 3).reshape(B*T*F, 1, H, W)
-
-        # Convolution mask
-        valid_mask = torch.nn.functional.conv2d(mask_reshaped, kernel_mask, padding=1)
-        valid_mask = (valid_mask == 9).float() # no neighbor pixel is in the mask
-
-        # Convolution Sobel
-        grad_x_pred = torch.nn.functional.conv2d(pred_reshaped, sobel_x, padding=1) * valid_mask
-        grad_y_pred = torch.nn.functional.conv2d(pred_reshaped, sobel_y, padding=1) * valid_mask
-        grad_x_target = torch.nn.functional.conv2d(target_reshaped, sobel_x, padding=1) * valid_mask
-        grad_y_target = torch.nn.functional.conv2d(target_reshaped, sobel_y, padding=1) * valid_mask
-
-        # Reshape
-        grad_x_pred = grad_x_pred.reshape(B, T, F, H, W).permute(0, 1, 3, 4, 2)
-        grad_y_pred = grad_y_pred.reshape(B, T, F, H, W).permute(0, 1, 3, 4, 2)
-        grad_x_target = grad_x_target.reshape(B, T, F, H, W).permute(0, 1, 3, 4, 2)
-        grad_y_target = grad_y_target.reshape(B, T, F, H, W).permute(0, 1, 3, 4, 2)
-
-        # compute the loss
-        if self.mode == 'l1':
-            loss = torch.abs(grad_x_pred - grad_x_target) + torch.abs(grad_y_pred - grad_y_target) 
-
-        else:
-            loss = (grad_x_pred - grad_x_target)**2 + (grad_y_pred - grad_y_target)**2
-        return loss
-
 class CombinedLoss(Py4CastLoss):
+    """
+    Compute a combinaison of Py4castLoss.
+    """
     def __init__(self, losses_config: List[dict]):
         self.losses = []
         for loss_conf in losses_config:
@@ -397,6 +281,11 @@ class CombinedLoss(Py4CastLoss):
                 loss.prepare(lm, interior_mask, dataset_info)
 
     def forward(self, prediction: NamedTensor, target: NamedTensor, mask: torch.Tensor):
+        """
+        Computed each loss function and sum them.
+        prediction/target: (B, pred_steps, N_grid, d_f) or (B, pred_steps, W, H, d_f)
+        returns (B, pred_steps)
+        """
         # shape (B, pred_step)
         total_loss = torch.zeros(prediction.tensor.shape[:2], device=prediction.tensor.device)
         for loss, weight in self.losses:
