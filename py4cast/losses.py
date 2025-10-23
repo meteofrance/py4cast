@@ -131,7 +131,7 @@ class WeightedLoss(Py4CastLoss):
         prediction: NamedTensor,
         target: NamedTensor,
         mask: torch.Tensor,
-        reduce_spatial_dim=True,
+        reduce_spatial_dim: bool = True,
     ) -> torch.Tensor:
         """
         Computed weighted loss function.
@@ -290,8 +290,13 @@ class CombinedLoss(Py4CastLoss):
         returns (B, pred_steps)
         """
         # shape (B, pred_step)
+        loss_shape = (
+            prediction.tensor.shape[:4]
+            if kwargs.get("reduce_spatial_dim")
+            else prediction.tensor.shape[:2]
+        )
         total_loss = torch.zeros(
-            prediction.tensor.shape[:2], device=prediction.tensor.device
+            loss_shape, device=prediction.tensor.device
         )
         for loss, weight in self.losses:
             total_loss += weight * loss(prediction, target, mask, **kwargs)
