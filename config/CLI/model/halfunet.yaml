@@ -1,6 +1,11 @@
 model:
   model_name: HalfUNet
-  loss_name: mse # mse or mae
+  losses:
+  - class: WeightedLoss
+    weight: 1.0
+    params:
+      loss: MSELoss #L1Loss 
+      reduction: "none"
   num_inter_steps: 1 # Number of intermediary steps (without any data)
   num_samples_to_plot: 1
   training_strategy: diff_ar # diff_ar or scaled_ar

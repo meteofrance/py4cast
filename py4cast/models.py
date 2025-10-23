@@ -16,6 +16,7 @@ from mfai.pytorch.models.base import ModelABC
 registry = {}
 registry.update(mfai_registry)
 del registry["PanguWeather"]
+del registry["ArchesWeather"]
 
 
 PLUGIN_PREFIX = "py4cast_plugin_"
