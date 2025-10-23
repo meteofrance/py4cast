@@ -119,7 +119,6 @@ class PlDataModule(LightningDataModule):
             pin_memory=self.pin_memory,
         )
 
-
     def test_dataloader(self):
         return self.test_ds.torch_dataloader(
             batch_size=self.batch_size,
