@@ -95,8 +95,9 @@ def min_max_normalization(x: NamedTensor, lm: pl.LightningModule) -> torch.tenso
         x.tensor, non_blocking=True
     )
     std_list = lm.stats.to_list("std", x.feature_names).to(x.tensor, non_blocking=True)
-    x_unnormalized = x.tensor * std_list + mean_list
-    return (x_unnormalized - min_list) / (max_list - min_list + 1e-8)
+    x_not_standardized = x.tensor * std_list + mean_list
+    x_normalized = (x_not_standardized - min_list) / (max_list - min_list + 1e-8)
+    return x_normalized.clamp(0, 1)
 
 
 class WeightedLoss(Py4CastLoss):
@@ -245,10 +246,6 @@ class PerceptualLossPy4Cast(Py4CastLoss):
         # Normalize between 0 and 1
         pred_tensor = min_max_normalization(prediction, self.lm) * mask
         target_tensor = min_max_normalization(target, self.lm) * mask
-
-        # Clamp between 0 and 1
-        pred_tensor = pred_tensor.clamp(0, 1)
-        target_tensor = target_tensor.clamp(0, 1)
 
         # Compute the perceptual loss at each timestep
         shape_pred = pred_tensor.shape
