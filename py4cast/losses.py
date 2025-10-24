@@ -9,9 +9,10 @@ from typing import Tuple
 import lightning.pytorch as pl
 import torch
 from mfai.pytorch.losses.perceptual import PerceptualLoss
+from mfai.pytorch.namedtensor import NamedTensor
 from torch.nn import MSELoss
 
-from py4cast.datasets.base import DatasetInfo, NamedTensor
+from py4cast.datasets.base import DatasetInfo
 
 
 class Py4CastLoss(ABC):
@@ -94,9 +95,8 @@ def min_max_normalization(x: NamedTensor, lm: pl.LightningModule) -> torch.tenso
         x.tensor, non_blocking=True
     )
     std_list = lm.stats.to_list("std", x.feature_names).to(x.tensor, non_blocking=True)
-    min_list = (min_list - mean_list) / std_list
-    max_list = (max_list - mean_list) / std_list
-    return (x.tensor - min_list) / (max_list - min_list + 1e-8)
+    x_unnormalized = x.tensor * std_list + mean_list
+    return (x_unnormalized - min_list) / (max_list - min_list + 1e-8)
 
 
 class WeightedLoss(Py4CastLoss):
