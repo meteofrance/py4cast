@@ -230,13 +230,15 @@ class PerceptualLossPy4Cast(Py4CastLoss):
     ) -> None:
         self.lm = lm
 
-    def forward(self, prediction: NamedTensor, target: NamedTensor, mask: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self, prediction: NamedTensor, target: NamedTensor, mask: torch.Tensor
+    ) -> torch.Tensor:
         """
         Computes a perceptual loss function over all the features.
-        
+
         Args:
             prediction/target: (B, pred_steps, N_grid, d_f) or (B, pred_steps, W, H, d_f)
-        
+
         Returns:
             Tensor (B, pred_steps)
         """
@@ -289,10 +291,10 @@ class CombinedLoss(Py4CastLoss):
     ) -> torch.Tensor:
         """
         Computes each loss function and sums them.
-        
+
         Args:
             prediction/target: (B, pred_steps, N_grid, d_f) or (B, pred_steps, W, H, d_f)
-    
+
         Returns:
                 returns (B, pred_steps)
         """
