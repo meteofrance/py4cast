@@ -230,11 +230,15 @@ class PerceptualLossPy4Cast(Py4CastLoss):
     ) -> None:
         self.lm = lm
 
-    def forward(self, prediction: NamedTensor, target: NamedTensor, mask: torch.Tensor):
+    def forward(self, prediction: NamedTensor, target: NamedTensor, mask: torch.Tensor) -> torch.Tensor:
         """
-        Computed a perceptual loss function over all the feature.
-        prediction/target: (B, pred_steps, N_grid, d_f) or (B, pred_steps, W, H, d_f)
-        returns (B, pred_steps)
+        Computes a perceptual loss function over all the features.
+        
+        Args:
+            prediction/target: (B, pred_steps, N_grid, d_f) or (B, pred_steps, W, H, d_f)
+        
+        Returns:
+            Tensor (B, pred_steps)
         """
         # Normalize between 0 and 1
         pred_tensor = min_max_normalization(prediction, self.lm) * mask
