@@ -268,7 +268,7 @@ class CombinedLoss(Py4CastLoss):
     Compute a combinaison of Py4castLoss.
     """
 
-    def __init__(self, losses_config: List[dict]):
+    def __init__(self, losses_config: list[dict]):
         self.losses = []
         for loss_conf in losses_config:
             LossClass = globals()[loss_conf["class"]]
