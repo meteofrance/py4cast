@@ -244,10 +244,9 @@ class PerceptualLossPy4Cast(Py4CastLoss):
         pred_tensor = pred_tensor.clamp(0, 1)
         target_tensor = target_tensor.clamp(0, 1)
 
-        # The loss have the shape (pred_steps)
+        # Compute the perceptual loss at each timestep
         shape_pred = pred_tensor.shape
         perc_loss = torch.zeros(shape_pred[1], device=pred_tensor.device)
-
         for t in range(shape_pred[1]):
             # feature in second dimension
             pred_tensor_t = pred_tensor[:, t].permute(0, 3, 1, 2)
