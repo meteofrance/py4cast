@@ -287,11 +287,15 @@ class CombinedLoss(Py4CastLoss):
 
     def forward(
         self, prediction: NamedTensor, target: NamedTensor, mask: torch.Tensor, **kwargs
-    ):
+    ) -> torch.Tensor:
         """
-        Computed each loss function and sum them.
-        prediction/target: (B, pred_steps, N_grid, d_f) or (B, pred_steps, W, H, d_f)
-        returns (B, pred_steps)
+        Computes each loss function and sums them.
+        
+        Args:
+            prediction/target: (B, pred_steps, N_grid, d_f) or (B, pred_steps, W, H, d_f)
+    
+        Returns:
+                returns (B, pred_steps)
         """
         # shape (B, pred_step)
         loss_shape = (
