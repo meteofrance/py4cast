@@ -4,7 +4,7 @@ This module contains the loss functions used in the training of the models.
 
 from abc import ABC, abstractmethod
 from functools import lru_cache
-from typing import List, Tuple
+from typing import Tuple
 
 import lightning.pytorch as pl
 import torch
