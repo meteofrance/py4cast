@@ -218,7 +218,7 @@ class PerceptualLossPy4Cast(Py4CastLoss):
     def __init__(self, in_channels: int, *args, **kwargs) -> None:
         self.perceptual_loss = PerceptualLoss(
             in_channels=in_channels,
-            device="cpu",  # We don't know the device at the instantiation
+            device="cpu",  # We don't know the device at instantiation
             **kwargs,
         )
 
@@ -230,11 +230,15 @@ class PerceptualLossPy4Cast(Py4CastLoss):
     ) -> None:
         self.lm = lm
 
-    def forward(self, prediction: NamedTensor, target: NamedTensor, mask: torch.Tensor):
+    def forward(self, prediction: NamedTensor, target: NamedTensor, mask: torch.Tensor) -> torch.Tensor:
         """
-        Computed a perceptual loss function over all the feature.
-        prediction/target: (B, pred_steps, N_grid, d_f) or (B, pred_steps, W, H, d_f)
-        returns (B, pred_steps)
+        Computes a perceptual loss function over all the features.
+        
+        Args:
+            prediction/target: (B, pred_steps, N_grid, d_f) or (B, pred_steps, W, H, d_f)
+        
+        Returns:
+            Tensor (B, pred_steps)
         """
         # Normalize between 0 and 1
         pred_tensor = min_max_normalization(prediction, self.lm) * mask
@@ -282,11 +286,15 @@ class CombinedLoss(Py4CastLoss):
 
     def forward(
         self, prediction: NamedTensor, target: NamedTensor, mask: torch.Tensor, **kwargs
-    ):
+    ) -> torch.Tensor:
         """
-        Computed each loss function and sum them.
-        prediction/target: (B, pred_steps, N_grid, d_f) or (B, pred_steps, W, H, d_f)
-        returns (B, pred_steps)
+        Computes each loss function and sums them.
+        
+        Args:
+            prediction/target: (B, pred_steps, N_grid, d_f) or (B, pred_steps, W, H, d_f)
+    
+        Returns:
+                returns (B, pred_steps)
         """
         # shape (B, pred_step)
         loss_shape = (
