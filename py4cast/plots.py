@@ -268,7 +268,7 @@ class MapPlot(Plotter):
         """
         Update. Should be call by "on_{training/validation/test}_step
         """
-        pred = deepcopy(prediction).tensor  # In order to not modify the input
+        pred = deepcopy(prediction).tensor * mask  # In order to not modify the input
         targ = deepcopy(target).tensor  # In order to not modify the input
         batch_copy = deepcopy(batch)
 
@@ -298,10 +298,6 @@ class MapPlot(Plotter):
             )
             prediction_rescaled = pred * std + mean
             target_rescaled = targ * std + mean
-            batch_copy.inputs.tensor = batch_copy.inputs.tensor * std + mean
-            batch_copy.forcing.tensor[:, :, :, :, :-5] = (
-                batch_copy.forcing.tensor[:, :, :, :, :-5] * std + mean
-            )  # not rescalled cos_hour, ect
 
             # Iterate over the examples
             # We assume examples are already on grid

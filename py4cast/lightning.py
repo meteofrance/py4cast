@@ -30,7 +30,7 @@ from py4cast.io.outputs import (
     save_gifs,
     save_named_tensors_to_grib,
 )
-from py4cast.losses import ScaledLoss, WeightedLoss
+from py4cast.losses import CombinedLoss, ScaledLoss, WeightedLoss
 from py4cast.metrics import MetricACC, MetricPSDK, MetricPSDVar
 from py4cast.models import build_model_from_settings, get_model_kls_and_settings
 from py4cast.models import registry as model_registry
@@ -163,7 +163,9 @@ class AutoRegressiveLightning(LightningModule):
         batch_size: int = 2,
         # non-linked args
         model_name: Literal[tuple(model_registry.keys())] = "HalfUNet",
-        loss_name: Literal["mse", "mae"] = "mse",
+        losses: List[dict] = [
+            {"class": WeightedLoss, "params": {"loss": "mse", "reduction": "none"}}
+        ],
         num_inter_steps: int = 1,
         num_samples_to_plot: int = 1,
         training_strategy: Literal[
@@ -296,15 +298,11 @@ class AutoRegressiveLightning(LightningModule):
             expand_to_batch(statics.grid_statics.tensor, batch_size),
             persistent=False,
         )
+
         # We need to instantiate the loss after statics had been transformed.
         # Indeed, the statics used should be in the right dimensions.
         # MSE loss, need to do reduction ourselves to get proper weighting
-        if loss_name == "mse":
-            self.loss = WeightedLoss("MSELoss", reduction="none")
-        elif loss_name == "mae":
-            self.loss = WeightedLoss("L1Loss", reduction="none")
-        else:
-            raise TypeError(f"Unknown loss function: {loss_name}")
+        self.loss = CombinedLoss(losses)
         self.loss.prepare(self, statics.interior_mask, dataset_info)
 
     #############################################################
@@ -546,7 +544,7 @@ class AutoRegressiveLightning(LightningModule):
         # for the desired number of ar steps.
         for i in range(batch.num_pred_steps):
             if not (phase == "inference"):
-                border_state = batch.outputs.select_tensor_dim("timestep", i)
+                border_state = batch.outputs.select_tensor_dim("timestep", i).clone()
                 if self.mask_on_nan:
                     border_state = torch.nan_to_num(border_state, nan=0)
 
@@ -580,7 +578,7 @@ class AutoRegressiveLightning(LightningModule):
                 ds = self.training_strategy == "downscaling_only"
 
                 # select the last timestep
-                last_prev_state = prev_states.select_tensor_dim("timestep", -1)
+                last_prev_state = prev_states.select_tensor_dim("timestep", -1).clone()
                 if self.mask_on_nan:
                     last_prev_state = torch.nan_to_num(last_prev_state, nan=0)
 
@@ -764,9 +762,10 @@ class AutoRegressiveLightning(LightningModule):
         """
         if self.mask_on_nan:
             mask = ~torch.isnan(target.tensor)
-            target.tensor = torch.nan_to_num(target.tensor, nan=0)
-            return mask
-        return torch.ones_like(target.tensor)
+            target_masked = target.clone()
+            target_masked.tensor = torch.nan_to_num(target_masked.tensor, nan=0)
+            return mask, target_masked
+        return torch.ones_like(target.tensor), target
 
     #############################################################
     #                          FIT/TRAIN                        #
@@ -782,10 +781,10 @@ class AutoRegressiveLightning(LightningModule):
 
         prediction, target = self.common_step(batch, batch_idx, phase="train")
 
-        mask = self.get_mask_on_nan(target)
+        mask, target_masked = self.get_mask_on_nan(target)
 
         # Compute loss: mean over unrolled times and batch
-        batch_loss = torch.mean(self.loss(prediction, target, mask=mask))
+        batch_loss = torch.mean(self.loss(prediction, target_masked, mask=mask))
 
         self.training_step_losses.append(batch_loss)
 
@@ -793,7 +792,11 @@ class AutoRegressiveLightning(LightningModule):
         if self.logging_enabled:
             for plotter in self.train_plotters:
                 plotter.update(
-                    self, batch=batch, prediction=prediction, target=target, mask=mask
+                    self,
+                    batch=batch,
+                    prediction=prediction,
+                    target=target_masked,
+                    mask=mask,
                 )
 
         return batch_loss
@@ -858,9 +861,9 @@ class AutoRegressiveLightning(LightningModule):
         with torch.no_grad():
             prediction, target = self.common_step(batch, batch_idx, phase="val_test")
 
-        mask = self.get_mask_on_nan(target)
+        mask, target_masked = self.get_mask_on_nan(target)
 
-        time_step_loss = torch.mean(self.loss(prediction, target, mask), dim=0)
+        time_step_loss = torch.mean(self.loss(prediction, target_masked, mask), dim=0)
         mean_loss = torch.mean(time_step_loss)
 
         if self.logging_enabled:
@@ -882,7 +885,7 @@ class AutoRegressiveLightning(LightningModule):
 
         self.val_mean_loss = mean_loss
 
-        self.validation_step_logging(batch, prediction, target, mask)
+        self.validation_step_logging(batch, prediction, target_masked, mask)
 
     def validation_step_logging(
         self,
@@ -988,9 +991,9 @@ class AutoRegressiveLightning(LightningModule):
         with torch.no_grad():
             prediction, target = self.common_step(batch, batch_idx, phase="val_test")
 
-        mask = self.get_mask_on_nan(target)
+        mask, target_masked = self.get_mask_on_nan(target)
 
-        time_step_loss = torch.mean(self.loss(prediction, target, mask), dim=0)
+        time_step_loss = torch.mean(self.loss(prediction, target_masked, mask), dim=0)
         mean_loss = torch.mean(time_step_loss)
 
         if self.logging_enabled:
@@ -1008,7 +1011,7 @@ class AutoRegressiveLightning(LightningModule):
                 prog_bar=False,
             )
 
-        self.test_step_logging(batch, prediction, target, mask)
+        self.test_step_logging(batch, prediction, target_masked, mask)
 
     def test_step_logging(
         self,

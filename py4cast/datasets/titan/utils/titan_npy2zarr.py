@@ -230,7 +230,6 @@ def main(batch: int = 1):
         missing_batch_dates = []
         # Iterate on each date in the batch
         for d in batch_dates:
-
             # Temporary pressure level variables
             date_p_level = {}
 
@@ -365,7 +364,6 @@ def main(batch: int = 1):
 
     zarr_ds = zarr.open_group(zarr_path, zarr_version=2)
     with xr.open_zarr(zarr_path, zarr_format=2, consolidated=True) as xr_ds:
-
         zarr_ds.attrs.put({"missing_dates": sorted([str(m) for m in missing_dates])})
         for var in xr_ds.variables:
             zarr_ds.get(var).attrs.update(var_info[var])

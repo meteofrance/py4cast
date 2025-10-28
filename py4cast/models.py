@@ -15,7 +15,9 @@ from mfai.pytorch.models.base import ModelABC
 # We init the registry with the models from mfai.
 registry = {}
 registry.update(mfai_registry)
+# Remove mfai models that expect more than x in their forward function parameters.
 del registry["PanguWeather"]
+del registry["ArchesWeather"]
 
 
 PLUGIN_PREFIX = "py4cast_plugin_"

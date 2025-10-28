@@ -8,9 +8,11 @@ from typing import Tuple
 
 import lightning.pytorch as pl
 import torch
+from mfai.pytorch.losses.perceptual import PerceptualLoss
+from mfai.pytorch.namedtensor import NamedTensor
 from torch.nn import MSELoss
 
-from py4cast.datasets.base import DatasetInfo, NamedTensor
+from py4cast.datasets.base import DatasetInfo
 
 
 class Py4CastLoss(ABC):
@@ -21,7 +23,12 @@ class Py4CastLoss(ABC):
     """
 
     def __init__(self, loss: str, *args, **kwargs) -> None:
-        self.loss = getattr(torch.nn, loss)(*args, **kwargs)
+        if hasattr(torch.nn, loss):
+            self.loss = getattr(torch.nn, loss)(*args, **kwargs)
+        elif loss in globals():
+            self.loss = globals()[loss](*args, **kwargs)
+        else:
+            raise NameError(f"Loss: {loss} is not defined")
 
     @abstractmethod
     def prepare(
@@ -77,6 +84,22 @@ class Py4CastLoss(ABC):
         )
 
 
+def min_max_normalization(x: NamedTensor, lm: pl.LightningModule) -> torch.tensor:
+    """
+    Apply a min max normalization to the tensor x.
+    Where x is of the shape (B, T, H, W, F)
+    """
+    min_list = lm.stats.to_list("min", x.feature_names).to(x.tensor, non_blocking=True)
+    max_list = lm.stats.to_list("max", x.feature_names).to(x.tensor, non_blocking=True)
+    mean_list = lm.stats.to_list("mean", x.feature_names).to(
+        x.tensor, non_blocking=True
+    )
+    std_list = lm.stats.to_list("std", x.feature_names).to(x.tensor, non_blocking=True)
+    x_not_standardized = x.tensor * std_list + mean_list
+    x_normalized = (x_not_standardized - min_list) / (max_list - min_list + 1e-8)
+    return x_normalized.clamp(0, 1)
+
+
 class WeightedLoss(Py4CastLoss):
     """
     Compute a weighted loss function with a weight for each feature.
@@ -109,13 +132,14 @@ class WeightedLoss(Py4CastLoss):
         prediction: NamedTensor,
         target: NamedTensor,
         mask: torch.Tensor,
-        reduce_spatial_dim=True,
+        reduce_spatial_dim: bool = True,
     ) -> torch.Tensor:
         """
         Computed weighted loss function.
         prediction/target: (B, pred_steps, N_grid, d_f) or (B, pred_steps, W, H, d_f)
         returns (B, pred_steps)
         """
+
         # Compute Torch loss (defined in the parent class when this Mixin is used)
         torch_loss = self.loss(prediction.tensor * mask, target.tensor * mask)
 
@@ -184,3 +208,100 @@ class ScaledLoss(Py4CastLoss):
         return mean_loss * self.weights(
             tuple(prediction.feature_names), prediction.device
         )
+
+
+class PerceptualLossPy4Cast(Py4CastLoss):
+    """
+    Compute a perceptual loss.
+    During the forward step, the perceptual loss is computed for all the feature in the same time.
+    """
+
+    def __init__(self, in_channels: int, *args, **kwargs) -> None:
+        self.perceptual_loss = PerceptualLoss(
+            in_channels=in_channels,
+            device="cpu",  # We don't know the device at instantiation
+            **kwargs,
+        )
+
+    def prepare(
+        self,
+        lm: pl.LightningModule,
+        interior_mask: torch.Tensor,
+        dataset_info: DatasetInfo,
+    ) -> None:
+        self.lm = lm
+
+    def forward(
+        self, prediction: NamedTensor, target: NamedTensor, mask: torch.Tensor
+    ) -> torch.Tensor:
+        """
+        Computes a perceptual loss function over all the features.
+
+        Args:
+            prediction/target: (B, pred_steps, N_grid, d_f) or (B, pred_steps, W, H, d_f)
+
+        Returns:
+            Tensor (B, pred_steps)
+        """
+        # Normalize between 0 and 1
+        pred_tensor = min_max_normalization(prediction, self.lm) * mask
+        target_tensor = min_max_normalization(target, self.lm) * mask
+
+        # Compute the perceptual loss at each timestep
+        shape_pred = pred_tensor.shape
+        perc_loss = torch.zeros(shape_pred[1], device=pred_tensor.device)
+        for t in range(shape_pred[1]):
+            # feature in second dimension
+            pred_tensor_t = pred_tensor[:, t].permute(0, 3, 1, 2)
+            target_tensor_t = target_tensor[:, t].permute(0, 3, 1, 2)
+            # Compute Torch loss
+            perc_loss[t] = self.perceptual_loss(pred_tensor_t, target_tensor_t)
+
+        return perc_loss.unsqueeze(0)
+
+
+class CombinedLoss(Py4CastLoss):
+    """
+    Compute a combinaison of Py4castLoss.
+    """
+
+    def __init__(self, losses_config: list[dict]):
+        self.losses = []
+        for loss_conf in losses_config:
+            LossClass = globals()[loss_conf["class"]]
+            weight = loss_conf.get("weight", 1.0)
+            kwargs = loss_conf.get("params", {})
+            self.losses.append((LossClass(**kwargs), weight))
+
+    def prepare(
+        self,
+        lm: pl.LightningModule,
+        interior_mask: torch.Tensor,
+        dataset_info: DatasetInfo,
+    ):
+        for loss, _ in self.losses:
+            if hasattr(loss, "prepare"):
+                loss.prepare(lm, interior_mask, dataset_info)
+
+    def forward(
+        self, prediction: NamedTensor, target: NamedTensor, mask: torch.Tensor, **kwargs
+    ) -> torch.Tensor:
+        """
+        Computes each loss function and sums them.
+
+        Args:
+            prediction/target: (B, pred_steps, N_grid, d_f) or (B, pred_steps, W, H, d_f)
+
+        Returns:
+                returns (B, pred_steps)
+        """
+        # shape (B, pred_step)
+        loss_shape = (
+            prediction.tensor.shape[:2]
+            if kwargs.get("reduce_spatial_dim", True)
+            else prediction.tensor.shape[:4]
+        )
+        total_loss = torch.zeros(loss_shape, device=prediction.tensor.device)
+        for loss, weight in self.losses:
+            total_loss += weight * loss(prediction, target, mask, **kwargs)
+        return total_loss
