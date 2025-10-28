@@ -15,7 +15,7 @@ from mfai.pytorch.models.base import ModelABC
 # We init the registry with the models from mfai.
 registry = {}
 registry.update(mfai_registry)
-# Remove mfai models that don't follow x only input in the forward
+# Remove mfai models that expect more than x in their forward function parameters.
 del registry["PanguWeather"]
 del registry["ArchesWeather"]
 
