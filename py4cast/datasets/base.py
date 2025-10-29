@@ -177,16 +177,19 @@ def collate_fn(items: List[Item]) -> ItemBatch:
     """
     # Here we postpone that for each batch the same dimension should be present.
     batch_of_items = {}
-
     # Iterate over inputs, outputs and forcing fields
     for field_name in (f.name for f in fields(Item)):
-        batched_tensor = collate_tensor_fn(
-            [getattr(item, field_name).tensor for item in items]
-        ).type(torch.float32)
+        if field_name == 'validity_times':
+            batched_valid_times = [getattr(item, field_name).tensor for item in items]
+            batch_of_items[field_name] = batched_valid_times
+        else:
+            batched_tensor = collate_tensor_fn(
+                [getattr(item, field_name).tensor for item in items]
+            ).type(torch.float32)
 
-        batch_of_items[field_name] = NamedTensor.expand_to_batch_like(
-            batched_tensor, getattr(items[0], field_name)
-        )
+            batch_of_items[field_name] = NamedTensor.expand_to_batch_like(
+                batched_tensor, getattr(items[0], field_name)
+            )
 
     return ItemBatch(**batch_of_items)
 
