@@ -44,12 +44,13 @@ class Item:
     inputs has shape (timestep, lat, lon, features)
     outputs has shape (timestep, lat, lon, features)
     forcing has shape (timestep, lat, lon, features)
+    valdity_times has shape (timestep)
     """
 
     inputs: NamedTensor | None
     forcing: NamedTensor | None
     outputs: NamedTensor
-    valdity_times: list[dt.datetime]
+    validity_times: list[dt.datetime]
 
     def unsqueeze_(self, dim_name: str, dim_index: int):
         """
