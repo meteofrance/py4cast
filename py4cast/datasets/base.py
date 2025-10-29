@@ -49,6 +49,7 @@ class Item:
     inputs: NamedTensor | None
     forcing: NamedTensor | None
     outputs: NamedTensor
+    valdity_times: list[dt.datetime]
 
     def unsqueeze_(self, dim_name: str, dim_index: int):
         """
@@ -517,6 +518,7 @@ class Sample:
             inputs=inputs,
             outputs=outputs,
             forcing=forcing,
+            validity_times= self.output_timestamps.validity_times,
         )
 
     def plot(self, item: Item, step: int, save_path: Path = None) -> None:
