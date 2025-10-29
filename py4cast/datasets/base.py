@@ -180,7 +180,7 @@ def collate_fn(items: List[Item]) -> ItemBatch:
     # Iterate over inputs, outputs and forcing fields
     for field_name in (f.name for f in fields(Item)):
         if field_name == 'validity_times':
-            batched_valid_times = [getattr(item, field_name).tensor for item in items]
+            batched_valid_times = [getattr(item, field_name) for item in items]
             batch_of_items[field_name] = batched_valid_times
         else:
             batched_tensor = collate_tensor_fn(
