@@ -590,6 +590,7 @@ class AutoRegressiveLightning(LightningModule):
                         + y * step_diff_std
                         + step_diff_mean
                     )
+                # TODO : ajouter if une condition si ds : predicted_state = batch.forcing ( au bon temps) y
                 else:
                     predicted_state = last_prev_state * (1 - ds) + y
 
