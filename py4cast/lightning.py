@@ -318,6 +318,7 @@ class AutoRegressiveLightning(LightningModule):
             self.psd_plot_metric = MetricPSDK(self.save_path, pred_step=max_pred_step)
             self.acc_metric = MetricACC(self.dataset_info)
             self.configure_loggers()
+            self.list_metrics = [self.acc_metric, self.psd_plot_metric, self.rmse_psd_plot_metric]
 
     def configure_loggers(self):
         layout = {
@@ -920,10 +921,7 @@ class AutoRegressiveLightning(LightningModule):
 
         if self.logging_enabled:
             # Get dict of metrics' results
-            dict_metrics = dict()
-            dict_metrics.update(self.psd_plot_metric.compute())
-            dict_metrics.update(self.rmse_psd_plot_metric.compute())
-            dict_metrics.update(self.acc_metric.compute())
+            dict_metrics = {metric.compute() for metric in self.list_metrics}
             for name, elmnt in dict_metrics.items():
                 if isinstance(elmnt, matplotlib.figure.Figure):
                     # Tensorboard logger
@@ -1040,10 +1038,7 @@ class AutoRegressiveLightning(LightningModule):
         Compute test metrics and make plots at the end of test epoch.
         """
         if self.logging_enabled:
-            dict_metrics = {}
-            dict_metrics.update(self.psd_plot_metric.compute(prefix="test"))
-            dict_metrics.update(self.rmse_psd_plot_metric.compute(prefix="test"))
-            dict_metrics.update(self.acc_metric.compute(prefix="test"))
+            dict_metrics = {metric.compute(prefix="test") for metric in self.list_metrics}
 
             for name, elmnt in dict_metrics.items():
                 if isinstance(elmnt, matplotlib.figure.Figure):
