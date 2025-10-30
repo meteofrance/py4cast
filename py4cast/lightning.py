@@ -921,7 +921,9 @@ class AutoRegressiveLightning(LightningModule):
 
         if self.logging_enabled:
             # Get dict of metrics' results
-            dict_metrics = {metric.compute() for metric in self.list_metrics}
+            dict_metrics = {}
+            for metric in self.list_metrics:
+                dict_metrics.update(metric.compute())
             for name, elmnt in dict_metrics.items():
                 if isinstance(elmnt, matplotlib.figure.Figure):
                     # Tensorboard logger
@@ -1038,7 +1040,9 @@ class AutoRegressiveLightning(LightningModule):
         Compute test metrics and make plots at the end of test epoch.
         """
         if self.logging_enabled:
-            dict_metrics = {metric.compute(prefix="test") for metric in self.list_metrics}
+            dict_metrics = {}
+            for metric in self.list_metrics:
+                dict_metrics.update(metric.compute(prefix='test'))
 
             for name, elmnt in dict_metrics.items():
                 if isinstance(elmnt, matplotlib.figure.Figure):
