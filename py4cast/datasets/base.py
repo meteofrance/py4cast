@@ -118,20 +118,21 @@ class Item:
         """
         table = []
         for attr in (f.name for f in fields(self)):
-            nt: NamedTensor = getattr(self, attr)
-            if nt is not None:
-                for feature_name in nt.feature_names:
-                    tensor = nt[feature_name]
-                    table.append(
-                        [
-                            attr,
-                            nt.names,
-                            list(nt[feature_name].shape),
-                            feature_name,
-                            tensor.min(),
-                            tensor.max(),
-                        ]
-                    )
+            if attr != "validity_times":
+                nt: NamedTensor = getattr(self, attr)
+                if nt is not None:
+                    for feature_name in nt.feature_names:
+                        tensor = nt[feature_name]
+                        table.append(
+                            [
+                                attr,
+                                nt.names,
+                                list(nt[feature_name].shape),
+                                feature_name,
+                                tensor.min(),
+                                tensor.max(),
+                            ]
+                        )
         headers = [
             "Type",
             "Dimension Names",
