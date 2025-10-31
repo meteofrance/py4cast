@@ -556,10 +556,6 @@ class AutoRegressiveLightning(LightningModule):
                             == feature_forcing_name.split("_")[1:]
                         ):
                             common_features_idx.append(i)
-                        else:
-                            raise ValueError(
-                                f"Error: The coarse data of {output_feature_name} was not provided as a forcing."
-                            )
                 self.common_features_idx = common_features_idx
 
         prev_states = batch.inputs
