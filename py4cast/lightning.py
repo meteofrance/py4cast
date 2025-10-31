@@ -616,8 +616,7 @@ class AutoRegressiveLightning(LightningModule):
                     # last_coarse_step = batch.forcing.select_tensor_dim("timestep", -1).clone()
                     # if self.mask_on_nan:
                     #     last_coarse_step = torch.nan_to_num(last_coarse_step, nan=0)
-                    print(batch.forcing.tensor.shape)
-                    print(torch.isnan(batch.forcing))
+                    print(torch.isnan(batch.forcing.tensor))
                     # ne prendre que les features en commun
                     predicted_state = (
                         batch.forcing.tensor[:, :, :, :, self.common_features_idx] + y
