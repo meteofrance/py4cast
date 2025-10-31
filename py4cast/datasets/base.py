@@ -179,7 +179,7 @@ def collate_fn(items: List[Item]) -> ItemBatch:
     batch_of_items = {}
     # Iterate over inputs, outputs and forcing fields
     for field_name in (f.name for f in fields(Item)):
-        if field_name == 'validity_times':
+        if field_name == "validity_times":
             batched_valid_times = [getattr(item, field_name) for item in items]
             batch_of_items[field_name] = batched_valid_times
         else:
@@ -522,7 +522,7 @@ class Sample:
             inputs=inputs,
             outputs=outputs,
             forcing=forcing,
-            validity_times= self.output_timestamps.validity_times,
+            validity_times=self.output_timestamps.validity_times,
         )
 
     def plot(self, item: Item, step: int, save_path: Path = None) -> None:

@@ -318,7 +318,11 @@ class AutoRegressiveLightning(LightningModule):
             self.psd_plot_metric = MetricPSDK(self.save_path, pred_step=max_pred_step)
             self.acc_metric = MetricACC(self.dataset_info)
             self.configure_loggers()
-            self.list_metrics = [self.acc_metric, self.psd_plot_metric, self.rmse_psd_plot_metric]
+            self.list_metrics = [
+                self.acc_metric,
+                self.psd_plot_metric,
+                self.rmse_psd_plot_metric,
+            ]
 
     def configure_loggers(self):
         layout = {
@@ -517,6 +521,8 @@ class AutoRegressiveLightning(LightningModule):
 
         self.original_shape = None
 
+        ds = self.training_strategy == "downscaling_only"
+
         if self.model.model_type == ModelType.GRAPH:
             # Stack original shape to reshape later
             self.original_shape = batch.inputs.tensor.shape
@@ -537,6 +543,22 @@ class AutoRegressiveLightning(LightningModule):
             self.output_feature_names = batch.outputs.feature_names
             self.output_dim_names = batch.outputs.names
             self.output_dtype = batch.outputs.tensor.dtype
+            if ds:
+                forcing_feature_names = batch.forcings.feature_names
+                # idx of common features (forcing_idx)
+                common_features_idx = []
+                for output_feature_name in self.output_feature_names:
+                    for i, feature_forcing_name in enumerate(forcing_feature_names):
+                        if (
+                            output_feature_name.split("_")[-1]
+                            == feature_forcing_name.split("_")[-1]
+                        ):
+                            common_features_idx.append(i)
+                        else:
+                            raise ValueError(
+                                f"Error: The coarse data of {output_feature_name} was not provided as a forcing."
+                            )
+                self.common_features_idx = common_features_idx
 
         prev_states = batch.inputs
         prediction_list = []
@@ -576,8 +598,6 @@ class AutoRegressiveLightning(LightningModule):
                 else:
                     y = self.model(x)
 
-                ds = self.training_strategy == "downscaling_only"
-
                 # select the last timestep
                 last_prev_state = prev_states.select_tensor_dim("timestep", -1).clone()
                 if self.mask_on_nan:
@@ -591,7 +611,17 @@ class AutoRegressiveLightning(LightningModule):
                         + y * step_diff_std
                         + step_diff_mean
                     )
-                # TODO : ajouter if une condition si ds : predicted_state = batch.forcing ( au bon temps) y
+                elif ds:
+                    # update the coarse forcing with our netwwork output
+                    # last_coarse_step = batch.forcing.select_tensor_dim("timestep", -1).clone()
+                    # if self.mask_on_nan:
+                    #     last_coarse_step = torch.nan_to_num(last_coarse_step, nan=0)
+                    print(batch.forcing.shape)
+                    print(torch.isnan(batch.forcing))
+                    # ne prendre que les features en commun
+                    predicted_state = (
+                        batch.forcing[:, :, :, :, self.common_features_idx] + y
+                    )
                 else:
                     predicted_state = last_prev_state * (1 - ds) + y
 
@@ -1042,7 +1072,7 @@ class AutoRegressiveLightning(LightningModule):
         if self.logging_enabled:
             dict_metrics = {}
             for metric in self.list_metrics:
-                dict_metrics.update(metric.compute(prefix='test'))
+                dict_metrics.update(metric.compute(prefix="test"))
 
             for name, elmnt in dict_metrics.items():
                 if isinstance(elmnt, matplotlib.figure.Figure):
