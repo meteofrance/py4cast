@@ -538,7 +538,7 @@ class AutoRegressiveLightning(LightningModule):
         # to check at inference time if the feature names are the same
         # also useful to build NamedTensor outputs with same feature and dim names
         # If model type is graph, flat the lon/lat dim before saving the dims
-        if batch_idx == 0 and phase == "train":
+        if batch_idx == 0:
             self.input_feature_names = batch.inputs.feature_names
             self.output_feature_names = batch.outputs.feature_names
             self.output_dim_names = batch.outputs.names
