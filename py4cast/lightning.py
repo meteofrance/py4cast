@@ -547,8 +547,6 @@ class AutoRegressiveLightning(LightningModule):
                 forcing_feature_names = batch.forcing.feature_names
                 # idx of common features (forcing_idx)
                 common_features_idx = []
-                print(self.output_feature_names)
-                print(forcing_feature_names)
                 for output_feature_name in self.output_feature_names:
                     for i, feature_forcing_name in enumerate(forcing_feature_names):
                         if (
@@ -616,7 +614,7 @@ class AutoRegressiveLightning(LightningModule):
                         last_coarse_step = torch.nan_to_num(last_coarse_step, nan=0)
                     # ne prendre que les features en commun
                     predicted_state = (
-                        last_coarse_step[:, :, :, :, self.common_features_idx] + y
+                        last_coarse_step[:, :, :, self.common_features_idx] + y
                     )
                 else:
                     predicted_state = last_prev_state * (1 - ds) + y
