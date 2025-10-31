@@ -63,7 +63,12 @@ def test_item():
             feature_names=[f"feature_{i}" for i in range(4)],
         )
 
-        item = Item(inputs=inputs, outputs=outputs, forcing=forcing)
+        item = Item(
+            inputs=inputs,
+            outputs=outputs,
+            forcing=forcing,
+            validity_times=validity_times,
+        )
 
     # Input and Output must have the same feature names
     with pytest.raises(ValueError):
@@ -78,7 +83,12 @@ def test_item():
             feature_names=[f"f_{i}" for i in range(5)],
         )
 
-        item = Item(inputs=inputs, outputs=outputs, forcing=forcing)
+        item = Item(
+            inputs=inputs,
+            outputs=outputs,
+            forcing=forcing,
+            validity_times=validity_times,
+        )
 
     # Input and Output must have the same dim names
     with pytest.raises(ValueError):
@@ -93,7 +103,12 @@ def test_item():
             feature_names=[f"feature_{i}" for i in range(5)],
         )
 
-        item = Item(inputs=inputs, outputs=outputs, forcing=forcing)
+        item = Item(
+            inputs=inputs,
+            outputs=outputs,
+            forcing=forcing,
+            validity_times=validity_times,
+        )
 
 
 def test_date_forcing():
