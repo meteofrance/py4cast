@@ -543,9 +543,10 @@ class AutoRegressiveLightning(LightningModule):
             self.output_feature_names = batch.outputs.feature_names
             self.output_dim_names = batch.outputs.names
             self.output_dtype = batch.outputs.tensor.dtype
+            # save the indices of the features common to the forcings and outputs in downscaling_only mode
+            # useful for reconstructing the prediction from the residual
             if ds:
                 forcing_feature_names = batch.forcing.feature_names
-                # idx of common features (forcing_idx)
                 common_features_idx = []
                 for output_feature_name in self.output_feature_names:
                     for i, feature_forcing_name in enumerate(forcing_feature_names):
@@ -608,11 +609,11 @@ class AutoRegressiveLightning(LightningModule):
                         + step_diff_mean
                     )
                 elif ds:
-                    # update the coarse forcing with our netwwork output
+                    # update the coarse forcings with our netwwork output
                     last_coarse_step = batch.forcing.select_tensor_dim("timestep", -1).clone()
                     if self.mask_on_nan:
                         last_coarse_step = torch.nan_to_num(last_coarse_step, nan=0)
-                    # ne prendre que les features en commun
+                    # only add common features
                     predicted_state = (
                         last_coarse_step[:, :, :, self.common_features_idx] + y
                     )
