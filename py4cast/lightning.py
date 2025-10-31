@@ -550,8 +550,8 @@ class AutoRegressiveLightning(LightningModule):
                 for output_feature_name in self.output_feature_names:
                     for i, feature_forcing_name in enumerate(forcing_feature_names):
                         if (
-                            output_feature_name.split("_")[-1]
-                            == feature_forcing_name.split("_")[-1]
+                            output_feature_name.split("_")[1:]
+                            == feature_forcing_name.split("_")[1:]
                         ):
                             common_features_idx.append(i)
                         else:
