@@ -33,7 +33,9 @@ def test_item():
         names=["lat", "lon", "features"],
         feature_names=[f"forcing_{i}" for i in range(2)],
     )
-    item = Item(inputs=inputs, outputs=outputs, forcing=forcing)
+
+    validity_times = [datetime.datetime(year=2023, month=1, day=1, hour=18)]
+    item = Item(inputs=inputs, outputs=outputs, forcing=forcing, validity_times=validity_times)
     print(item)
 
     # test collate_fn
