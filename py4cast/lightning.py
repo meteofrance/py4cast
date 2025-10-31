@@ -544,7 +544,7 @@ class AutoRegressiveLightning(LightningModule):
             self.output_dim_names = batch.outputs.names
             self.output_dtype = batch.outputs.tensor.dtype
             if ds:
-                forcing_feature_names = batch.forcings.feature_names
+                forcing_feature_names = batch.forcing.feature_names
                 # idx of common features (forcing_idx)
                 common_features_idx = []
                 for output_feature_name in self.output_feature_names:
