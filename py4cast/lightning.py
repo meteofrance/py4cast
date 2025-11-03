@@ -318,6 +318,11 @@ class AutoRegressiveLightning(LightningModule):
             self.psd_plot_metric = MetricPSDK(self.save_path, pred_step=max_pred_step)
             self.acc_metric = MetricACC(self.dataset_info)
             self.configure_loggers()
+            self.list_metrics = [
+                self.acc_metric,
+                self.psd_plot_metric,
+                self.rmse_psd_plot_metric,
+            ]
 
     def configure_loggers(self):
         layout = {
@@ -516,6 +521,8 @@ class AutoRegressiveLightning(LightningModule):
 
         self.original_shape = None
 
+        ds = self.training_strategy == "downscaling_only"
+
         if self.model.model_type == ModelType.GRAPH:
             # Stack original shape to reshape later
             self.original_shape = batch.inputs.tensor.shape
@@ -531,11 +538,24 @@ class AutoRegressiveLightning(LightningModule):
         # to check at inference time if the feature names are the same
         # also useful to build NamedTensor outputs with same feature and dim names
         # If model type is graph, flat the lon/lat dim before saving the dims
-        if batch_idx == 0 and phase == "train":
+        if batch_idx == 0:
             self.input_feature_names = batch.inputs.feature_names
             self.output_feature_names = batch.outputs.feature_names
             self.output_dim_names = batch.outputs.names
             self.output_dtype = batch.outputs.tensor.dtype
+            # save the indices of the features common to the forcings and outputs in downscaling_only mode
+            # useful for reconstructing the prediction from the residual
+            if ds:
+                forcing_feature_names = batch.forcing.feature_names
+                common_features_idx = []
+                for output_feature_name in self.output_feature_names:
+                    for i, feature_forcing_name in enumerate(forcing_feature_names):
+                        if (
+                            output_feature_name.split("_")[1:]
+                            == feature_forcing_name.split("_")[1:]
+                        ):
+                            common_features_idx.append(i)
+                self.common_features_idx = common_features_idx
 
         prev_states = batch.inputs
         prediction_list = []
@@ -575,8 +595,6 @@ class AutoRegressiveLightning(LightningModule):
                 else:
                     y = self.model(x)
 
-                ds = self.training_strategy == "downscaling_only"
-
                 # select the last timestep
                 last_prev_state = prev_states.select_tensor_dim("timestep", -1).clone()
                 if self.mask_on_nan:
@@ -589,6 +607,17 @@ class AutoRegressiveLightning(LightningModule):
                         last_prev_state * (1 - ds)
                         + y * step_diff_std
                         + step_diff_mean
+                    )
+                elif ds:
+                    # update the coarse forcings with our netwwork output
+                    last_coarse_step = batch.forcing.select_tensor_dim(
+                        "timestep", -1
+                    ).clone()
+                    if self.mask_on_nan:
+                        last_coarse_step = torch.nan_to_num(last_coarse_step, nan=0)
+                    # only add common features
+                    predicted_state = (
+                        last_coarse_step[:, :, :, self.common_features_idx] + y
                     )
                 else:
                     predicted_state = last_prev_state * (1 - ds) + y
@@ -919,10 +948,9 @@ class AutoRegressiveLightning(LightningModule):
 
         if self.logging_enabled:
             # Get dict of metrics' results
-            dict_metrics = dict()
-            dict_metrics.update(self.psd_plot_metric.compute())
-            dict_metrics.update(self.rmse_psd_plot_metric.compute())
-            dict_metrics.update(self.acc_metric.compute())
+            dict_metrics = {}
+            for metric in self.list_metrics:
+                dict_metrics.update(metric.compute())
             for name, elmnt in dict_metrics.items():
                 if isinstance(elmnt, matplotlib.figure.Figure):
                     # Tensorboard logger
@@ -1040,9 +1068,8 @@ class AutoRegressiveLightning(LightningModule):
         """
         if self.logging_enabled:
             dict_metrics = {}
-            dict_metrics.update(self.psd_plot_metric.compute(prefix="test"))
-            dict_metrics.update(self.rmse_psd_plot_metric.compute(prefix="test"))
-            dict_metrics.update(self.acc_metric.compute(prefix="test"))
+            for metric in self.list_metrics:
+                dict_metrics.update(metric.compute(prefix="test"))
 
             for name, elmnt in dict_metrics.items():
                 if isinstance(elmnt, matplotlib.figure.Figure):
