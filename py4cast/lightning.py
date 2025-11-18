@@ -610,7 +610,9 @@ class AutoRegressiveLightning(LightningModule):
                     )
                 elif ds:
                     # update the coarse forcings with our netwwork output
-                    last_coarse_step = batch.forcing.select_dim("timestep", i).tensor.clone()
+                    last_coarse_step = batch.forcing.select_dim(
+                        "timestep", i
+                    ).tensor.clone()
                     if self.mask_on_nan:
                         last_coarse_step = torch.nan_to_num(last_coarse_step, nan=0)
                     # only add common features
